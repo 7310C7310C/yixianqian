@@ -154,6 +154,30 @@ class UserMappingTests(unittest.TestCase):
         self.assertEqual(record["name"], "压测0001")
         self.assertEqual(record["account_status"], "pending")
 
+    def test_observer_shared_openid_merges_into_user(self):
+        tables = {
+            "users": [{
+                "record_id": "recU",
+                "fields": {
+                    "用户ID": "U-0006",
+                    "飞书用户ID": [{"text": "ou_same", "type": "text"}],
+                    "昵称": [{"text": "一二三", "type": "text"}],
+                },
+            }],
+            "observers": [{
+                "record_id": "recC",
+                "fields": {
+                    "编号": "C-003",
+                    "飞书用户ID": [{"text": "ou_same", "type": "text"}],
+                    "昵称": [{"text": "一二三", "type": "text"}],
+                },
+            }],
+        }
+        users, observers, _ = m.build_user_records(tables)
+        self.assertEqual(len(users), 1)
+        self.assertTrue(users[0]["observer_enabled"])
+        self.assertEqual(observers, [])
+
     def test_observer_status(self):
         fields = {
             "编号": "C-001",
