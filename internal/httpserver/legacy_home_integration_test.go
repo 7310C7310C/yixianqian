@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"testing"
@@ -9,7 +10,7 @@ import (
 	"github.com/7310C7310C/yixianqian/internal/db"
 )
 
-func attachTestPhoto(t *testing.T, env *profileHTTPEnv, userID int64) {
+func attachTestPhoto(t *testing.T, env *profileHTTPEnv, userID int64) string {
 	t.Helper()
 	suffix := randomHTTPDigits(t, 12)
 	mediaID := "m-home-" + suffix
@@ -32,15 +33,17 @@ func attachTestPhoto(t *testing.T, env *profileHTTPEnv, userID int64) {
 		 VALUES ($1, $2, 0, true)`, userID, mediaID); err != nil {
 		t.Fatalf("create profile photo: %v", err)
 	}
+	return mediaID
 }
 
 type legacyHomeCard struct {
-	OpenID   string `json:"openid"`
-	Nickname string `json:"nickname"`
-	IsSelf   bool   `json:"is_self"`
-	Liked    bool   `json:"liked"`
-	Praised  bool   `json:"praised"`
-	MsgCount int    `json:"msg_count"`
+	OpenID   string            `json:"openid"`
+	Nickname string            `json:"nickname"`
+	IsSelf   bool              `json:"is_self"`
+	Liked    bool              `json:"liked"`
+	Praised  bool              `json:"praised"`
+	MsgCount int               `json:"msg_count"`
+	Faces    []*legacyFaceView `json:"faces"`
 }
 
 type legacyHomePayload struct {
@@ -68,7 +71,15 @@ func TestIntegrationLegacyHomeSelfCard(t *testing.T) {
 		candidate.ID, prefix+"-候选"); err != nil {
 		t.Fatalf("update candidate: %v", err)
 	}
-	attachTestPhoto(t, env, candidate.ID)
+	mediaID := attachTestPhoto(t, env, candidate.ID)
+	centerX, centerY := 0.45, 0.38
+	boxW, boxH := 0.2, 0.24
+	if err := env.database.SetProfilePhotoFace(env.ctx, mediaID, db.ProfilePhotoFace{
+		Checked: true, HasFace: true,
+		CenterX: &centerX, CenterY: &centerY, BoxW: &boxW, BoxH: &boxH,
+	}); err != nil {
+		t.Fatalf("set face: %v", err)
+	}
 
 	query := "?nickname=" + url.QueryEscape(prefix)
 
@@ -96,6 +107,16 @@ func TestIntegrationLegacyHomeSelfCard(t *testing.T) {
 	}
 	if home.Cards[1].IsSelf || home.Cards[1].Nickname != prefix+"-候选" {
 		t.Fatalf("second home card = %+v, want candidate", home.Cards[1])
+	}
+	if len(self.Faces) != 0 {
+		t.Fatalf("self card faces = %+v, want empty", self.Faces)
+	}
+	if len(home.Cards[1].Faces) != 1 || home.Cards[1].Faces[0] == nil {
+		t.Fatalf("candidate card faces = %+v", home.Cards[1].Faces)
+	}
+	if math.Abs(home.Cards[1].Faces[0].C[0]-0.45) > 0.001 ||
+		math.Abs(home.Cards[1].Faces[0].Box[1]-0.24) > 0.001 {
+		t.Fatalf("candidate face = %+v", home.Cards[1].Faces[0])
 	}
 
 	resp = viewerClient.get("/legacy/api/cards" + query)

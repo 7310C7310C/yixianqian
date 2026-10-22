@@ -12,6 +12,7 @@ import (
 	"github.com/7310C7310C/yixianqian/internal/auth"
 	"github.com/7310C7310C/yixianqian/internal/config"
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/face"
 	"github.com/7310C7310C/yixianqian/internal/media"
 	"github.com/7310C7310C/yixianqian/internal/platform"
 )
@@ -26,6 +27,9 @@ type App struct {
 	csrf    *auth.CSRF
 	trusted []netip.Prefix
 	clock   platform.Clock
+
+	// faceProbe 在照片上传后同步运行；失败只记日志，不阻断上传。
+	faceProbe face.Probe
 
 	loginIPLimiter    *auth.Limiter
 	loginPhoneLimiter *auth.Limiter
@@ -59,6 +63,10 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	if err != nil {
 		return nil, fmt.Errorf("httpserver: trusted proxies: %w", err)
 	}
+	probe, err := face.NewPythonProbe(cfg.FaceProbeCmd, cfg.FaceProbeTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("httpserver: face probe: %w", err)
+	}
 	return &App{
 		cfg:               cfg,
 		db:                database,
@@ -68,6 +76,7 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		csrf:              auth.NewCSRF(cfg.CSRFKey(), 2*time.Hour),
 		trusted:           trusted,
 		clock:             platform.SystemClock{},
+		faceProbe:         probe,
 		loginIPLimiter:    auth.NewLimiter(20, 15*time.Minute),
 		loginPhoneLimiter: auth.NewLimiter(10, 15*time.Minute),
 		activationLimiter: auth.NewLimiter(10, time.Hour),

@@ -122,7 +122,7 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	} else if !errors.Is(selfErr, db.ErrNotFound) {
 		a.logger(r).Warn("legacy home self card failed", "error", selfErr, "user_id", user.ID)
 	}
-	cards := legacyCards(views)
+	cards := a.legacyCards(ctx, views)
 	likes, err := a.legacyLikes(ctx, user.ID, now)
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy home likes failed")
@@ -133,8 +133,9 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy home activities failed")
 		return
 	}
+	hasFace := a.legacyProfileHasFace(ctx, user.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user":              legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(r.Context(), user.ID), a.legacyObserverEnabled(r.Context(), user.ID), a.legacyViewRole(r)),
+		"user":              legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(r.Context(), user.ID), a.legacyObserverEnabled(r.Context(), user.ID), a.legacyViewRole(r), hasFace),
 		"cards":             cards,
 		"cards_total":       page.Total,
 		"likes":             likes,
@@ -176,7 +177,7 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"cards":       legacyCards(page.Cards),
+		"cards":       a.legacyCards(r.Context(), page.Cards),
 		"total":       page.Total,
 		"cards_total": page.Total,
 		"offset":      page.Offset,
@@ -203,7 +204,15 @@ func (a *App) handleLegacyProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger(r).Warn("legacy profile quota failed", "error", err, "user_id", user.ID)
 	}
-	payload := legacyProfileMap(profile, quota)
+	faces, err := a.db.FaceCentersForProfile(r.Context(), user.ID)
+	if err != nil {
+		a.logger(r).Warn("legacy profile face lookup failed", "error", err, "user_id", user.ID)
+	}
+	hasFace := a.legacyProfileHasFace(r.Context(), user.ID)
+	if a.legacyViewRole(r) == "observer" {
+		hasFace = true
+	}
+	payload := legacyProfileMap(profile, quota, hasFace, faces)
 	payload["editable"] = legacyProfileEditable(profile)
 	writeJSON(w, http.StatusOK, payload)
 }
@@ -227,7 +236,7 @@ func (a *App) handleLegacyUserMe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger(r).Warn("legacy user me quota failed", "error", err, "user_id", user.ID)
 	}
-	writeJSON(w, http.StatusOK, legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(r.Context(), user.ID), a.legacyObserverEnabled(r.Context(), user.ID), a.legacyViewRole(r)))
+	writeJSON(w, http.StatusOK, legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(r.Context(), user.ID), a.legacyObserverEnabled(r.Context(), user.ID), a.legacyViewRole(r), a.legacyProfileHasFace(r.Context(), user.ID)))
 }
 
 func (a *App) handleLegacyLikesMe(w http.ResponseWriter, r *http.Request) {
@@ -451,10 +460,22 @@ func (a *App) legacyActivities(ctx context.Context, userID int64) ([]map[string]
 	return out, nil
 }
 
-func legacyCards(items []CardView) []map[string]any {
+// legacyCards 批量取卡片人脸中心，随卡片一起返回给 v1 SPA 做照片对准。
+// 查询失败时降级为空 faces（前端居中显示），不影响卡片本身。
+func (a *App) legacyCards(ctx context.Context, items []CardView) []map[string]any {
+	ids := make([]int64, 0, len(items))
+	for _, card := range items {
+		if card.ID > 0 {
+			ids = append(ids, card.ID)
+		}
+	}
+	facesByUser, err := a.db.FaceCentersForProfiles(ctx, ids)
+	if err != nil {
+		a.log.Warn("legacy cards face lookup failed", "error", err)
+	}
 	out := make([]map[string]any, 0, len(items))
 	for _, card := range items {
-		out = append(out, legacyCardMap(card))
+		out = append(out, legacyCardMap(card, facesByUser[card.ID]))
 	}
 	return out
 }
@@ -466,7 +487,7 @@ func legacyHeight(value int) any {
 	return value
 }
 
-func legacyCardMap(card CardView) map[string]any {
+func legacyCardMap(card CardView, faces []db.ProfilePhotoFace) map[string]any {
 	return map[string]any{
 		"id":                card.ID,
 		"openid":            card.OpenID,
@@ -511,7 +532,31 @@ func legacyCardMap(card CardView) map[string]any {
 		"recommended":       card.Recommended,
 		"is_self":           card.IsSelf,
 		"record_id":         strconv.FormatInt(card.ID, 10),
-		"faces":             []any{},
+		"faces":             legacyCardFaces(card, faces),
+	}
+}
+
+// legacyCardFaces 按 photos 顺序返回每张照片的人脸数据，格式与 v1 一致：
+// {c:[x,y],box:[w,h]} 或 null（未检测/未检出）。
+func legacyCardFaces(card CardView, faces []db.ProfilePhotoFace) []any {
+	byMediaID := make(map[string]db.ProfilePhotoFace, len(faces))
+	for _, item := range faces {
+		byMediaID[item.MediaID] = item
+	}
+	out := make([]any, 0, len(card.Photos))
+	for _, photo := range card.Photos {
+		out = append(out, legacyFaceItem(byMediaID[photo.ID]))
+	}
+	return out
+}
+
+func legacyFaceItem(item db.ProfilePhotoFace) any {
+	if !item.Checked || item.CenterX == nil || item.CenterY == nil || item.BoxW == nil || item.BoxH == nil {
+		return nil
+	}
+	return map[string]any{
+		"c":   []float64{*item.CenterX, *item.CenterY},
+		"box": []float64{*item.BoxW, *item.BoxH},
 	}
 }
 
@@ -531,7 +576,7 @@ func legacyBriefMap(p db.SocialProfile) map[string]any {
 	}
 }
 
-func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quota db.LikeQuota, isAdmin, observerEnabled bool, viewRole string) map[string]any {
+func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quota db.LikeQuota, isAdmin, observerEnabled bool, viewRole string, hasFace bool) map[string]any {
 	name := profile.Nickname
 	if strings.TrimSpace(name) == "" {
 		name = viewer.Nickname
@@ -550,6 +595,8 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 	observer := accountKind == "observer" || accountStatus == "observer" || viewRole == "observer"
 	if observer {
 		accountStatus = "observer"
+		// v1 的 user_has_face 对观察员直接放行。
+		hasFace = true
 	}
 	photo := ""
 	if len(profile.Photos) > 0 {
@@ -576,7 +623,7 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 		"is_admin":        false,
 		"can_admin":       isAdmin,
 		"available_roles": legacyRoles(observerEnabled, observer),
-		"has_face":        true,
+		"has_face":        hasFace,
 		"wechat":          profile.Wechat,
 		"phone":           firstNonEmpty(profile.Phone, user.Phone),
 	}
@@ -616,7 +663,7 @@ func (a *App) legacyIsAdmin(ctx context.Context, userID int64) bool {
 	return len(roles) > 0
 }
 
-func legacyProfileMap(p db.Profile, quota db.LikeQuota) map[string]any {
+func legacyProfileMap(p db.Profile, quota db.LikeQuota, hasFace bool, faces []db.ProfilePhotoFace) map[string]any {
 	photos := make([]string, 0, len(p.Photos))
 	for _, photo := range p.Photos {
 		photos = append(photos, "/profile/photo/"+photo.MediaID)
@@ -626,6 +673,9 @@ func legacyProfileMap(p db.Profile, quota db.LikeQuota) map[string]any {
 		photo = photos[0]
 	}
 	observer := p.AccountKind == "observer" || p.AccountStatus == "observer"
+	if observer {
+		hasFace = true
+	}
 	registerTime := ""
 	if registered := profileRegisteredAt(p); registered != nil {
 		registerTime = profileTimeValue(*registered)
@@ -677,16 +727,39 @@ func legacyProfileMap(p db.Profile, quota db.LikeQuota) map[string]any {
 		"live_with_parents": p.LiveWithParents,
 		"birthday":          profileBirthdayShort(p.Birthday),
 		"photos":            photos,
-		"faces":             []any{},
+		"faces":             legacyProfileFaces(p.Photos, faces),
 		"real_name":         p.Name,
 		"wechat":            p.Wechat,
 		"phone":             p.Phone,
 		"register_time":     registerTime,
 		"id_valid":          p.IDCardValid,
 		"id_card_mask":      mask,
-		"has_face":          true,
+		"has_face":          hasFace,
 		"editable":          []any{},
 	}
+}
+
+// legacyProfileFaces 与 photos 顺序一一对应；未检测/未检出为 null。
+func legacyProfileFaces(photos []db.ProfilePhoto, faces []db.ProfilePhotoFace) []any {
+	byMediaID := make(map[string]db.ProfilePhotoFace, len(faces))
+	for _, item := range faces {
+		byMediaID[item.MediaID] = item
+	}
+	out := make([]any, 0, len(photos))
+	for _, photo := range photos {
+		out = append(out, legacyFaceItem(byMediaID[photo.MediaID]))
+	}
+	return out
+}
+
+// legacyProfileHasFace 读取真实检测结果；查询失败按 false 处理，绝不假 true。
+func (a *App) legacyProfileHasFace(ctx context.Context, userID int64) bool {
+	has, err := a.db.ProfileHasFace(ctx, userID)
+	if err != nil {
+		a.log.Warn("legacy has_face lookup failed", "error", err, "user_id", userID)
+		return false
+	}
+	return has
 }
 
 func profileHeight(p db.Profile) int {

@@ -33,6 +33,7 @@ go test ./...
 go build -buildvcs=false -trimpath   -ldflags "-X github.com/7310C7310C/yixianqian/internal/platform.Version=staging-$SHA"   -o /opt/yixianqian-next/bin/server ./cmd/server
 go build -buildvcs=false -trimpath -o /opt/yixianqian-next/bin/seed ./cmd/seed
 go build -buildvcs=false -trimpath -o /opt/yixianqian-next/bin/token ./cmd/token
+go build -buildvcs=false -trimpath -o /opt/yixianqian-next/bin/facebackfill ./cmd/facebackfill
 chown yxq:yxq /opt/yixianqian-next/bin/*
 systemctl restart yixianqian-next-test
 ```
@@ -113,6 +114,52 @@ nginx -t && systemctl reload nginx
 `/etc/nginx/conf.d/yxq-next-allow.conf` 用 `$realip_remote_addr`（realip 改写前的
 原始 peer）做 allow gate；不要改回直接用 `allow`，因为 global realip 会让
 `$remote_addr` 变成真实 client IP，导致所有外部请求 403。
+
+## 人脸检测（本地 YuNet/Haar）
+
+运行时依赖 Python 3 + OpenCV（cv2）+ Pillow/numpy。默认命令是
+`python3 tools/face_probe.py`，可用 `FACE_PROBE_CMD` 指向 v1 venv：
+
+```bash
+# 部署时把脚本与模型放到 app 工作目录（server1）
+install -d -o yxq -g yxq /opt/yixianqian-next/tools
+install -m 0644 -o yxq -g yxq \
+  /opt/yixianqian-next/src/tools/face_probe.py \
+  /opt/yixianqian-next/src/tools/face_detection_yunet.onnx \
+  /opt/yixianqian-next/tools/
+```
+
+`staging.env`（root 600）追加：
+
+```sh
+FACE_PROBE_CMD=/opt/yixianqian-test/web/backend/venv/bin/python /opt/yixianqian-next/tools/face_probe.py
+FACE_MODEL_PATH=/opt/yixianqian-next/tools/face_detection_yunet.onnx
+FACE_PROBE_TIMEOUT=8s
+```
+
+健康检查（有脸图应 `has_face=true`，纯色图应 false，均不应报错）：
+
+```bash
+/opt/yixianqian-test/web/backend/venv/bin/python \
+  /opt/yixianqian-next/tools/face_probe.py /tmp/face.jpg
+```
+
+**首次部署 migration 0005 后、对外开放前**必须补齐老照片，否则老用户
+`has_face=false` 会被 SPA 门禁拦到修改资料页：
+
+```bash
+cd /opt/yixianqian-next
+set -a; . config/staging.cli.env; set +a
+bin/facebackfill -dry-run                 # 看数量
+bin/facebackfill -limit 20                # 小批量验证
+bin/facebackfill -workers 2               # 全量（1025 张）
+bin/facebackfill -user U-0006             # 单用户补测
+bin/facebackfill -all -user U-0006        # 强制重扫
+```
+
+检测失败的照片保持 `face_checked=false`，命令以非零退出，可直接重跑；
+日志只含 media_id，不输出对象键或图片路径。腾讯云照片内容合规
+（宠物/卡通判定）尚未实现。
 
 ## 用户端 smoke
 

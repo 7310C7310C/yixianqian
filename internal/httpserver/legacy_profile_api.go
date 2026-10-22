@@ -183,6 +183,7 @@ func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Requ
 			a.logger(r).Warn("legacy profile photo cover failed", "error", err, "user_id", user.ID)
 		}
 	}
+	a.probeProfilePhotoFace(r.Context(), user.ID, photo.MediaID)
 	photos, err := a.db.ProfilePhotos(r.Context(), user.ID)
 	if err != nil {
 		a.logger(r).Warn("legacy profile photo reload failed", "error", err, "user_id", user.ID)
@@ -190,7 +191,7 @@ func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Requ
 	}
 	a.audit(r, &user.ID, "profile.photo_added", "media", photo.MediaID,
 		map[string]any{"media_id": photo.MediaID, "source": "legacy"})
-	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos))
+	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos, a.legacyProfileHasFace(r.Context(), user.ID)))
 }
 
 func legacyPhotoWantsCover(r *http.Request) bool {
@@ -265,7 +266,7 @@ func (a *App) handleLegacyProfilePhotoDelete(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		a.logger(r).Warn("legacy profile photo reload failed", "error", err, "user_id", user.ID)
 	}
-	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos))
+	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos, a.legacyProfileHasFace(r.Context(), user.ID)))
 }
 
 func (a *App) handleLegacyProfilePhotoCover(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +300,7 @@ func (a *App) handleLegacyProfilePhotoCover(w http.ResponseWriter, r *http.Reque
 	}
 	a.audit(r, &user.ID, "profile.photo_cover", "media", profile.Photos[req.Index].MediaID,
 		map[string]any{"media_id": profile.Photos[req.Index].MediaID, "source": "legacy"})
-	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos))
+	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos, a.legacyProfileHasFace(r.Context(), user.ID)))
 }
 
 func (a *App) handleLegacyPublicProfile(w http.ResponseWriter, r *http.Request) {

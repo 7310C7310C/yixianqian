@@ -53,6 +53,9 @@ func TestLoadDefaults(t *testing.T) {
 	if len(cfg.CSRFKey()) != 32 {
 		t.Fatal("csrf key must be 32 bytes")
 	}
+	if cfg.FaceProbeCmd != "python3 tools/face_probe.py" || cfg.FaceProbeTimeout != 8*time.Second {
+		t.Fatalf("face probe defaults: %q %v", cfg.FaceProbeCmd, cfg.FaceProbeTimeout)
+	}
 }
 
 func TestLoadRequiresSecrets(t *testing.T) {
@@ -195,5 +198,25 @@ func TestIsProduction(t *testing.T) {
 	cfg.AppEnv = "development"
 	if cfg.IsProduction() {
 		t.Fatal("development misdetected")
+	}
+}
+
+func TestFaceProbeConfig(t *testing.T) {
+	env := minimalEnv()
+	env["FACE_PROBE_CMD"] = "/opt/venv/bin/python tools/face_probe.py"
+	env["FACE_PROBE_TIMEOUT"] = "5s"
+	cfg, err := LoadFrom(envGetter(env))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.FaceProbeCmd != env["FACE_PROBE_CMD"] || cfg.FaceProbeTimeout != 5*time.Second {
+		t.Fatalf("face probe config: %q %v", cfg.FaceProbeCmd, cfg.FaceProbeTimeout)
+	}
+	for _, raw := range []string{"500ms", "2m", "nope"} {
+		env := minimalEnv()
+		env["FACE_PROBE_TIMEOUT"] = raw
+		if _, err := LoadFrom(envGetter(env)); err == nil {
+			t.Fatalf("expected error for FACE_PROBE_TIMEOUT=%q", raw)
+		}
 	}
 }

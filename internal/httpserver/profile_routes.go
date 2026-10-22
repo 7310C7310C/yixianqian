@@ -675,6 +675,7 @@ func (a *App) handleProfilePhotoUpload(w http.ResponseWriter, r *http.Request, a
 		a.respondProfilePhotoError(w, r, api, err)
 		return
 	}
+	a.probeProfilePhotoFace(r.Context(), user.ID, photo.MediaID)
 	photos, err := a.db.ProfilePhotos(r.Context(), user.ID)
 	if err != nil {
 		a.logger(r).Warn("reload profile photos failed", "error", err, "user_id", user.ID)

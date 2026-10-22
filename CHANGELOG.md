@@ -5,6 +5,13 @@
 
 ## 2026-10-22
 
+### 人脸检测
+- 恢复 v1 的本地人脸检测（YuNet 优先、Haar 回退）：`tools/face_probe.py` 输出 `has_face`、人脸中心与框。
+- 新增 `internal/face` 与 `FACE_PROBE_CMD`/`FACE_PROBE_TIMEOUT` 配置；上传后同步检测，超时或失败只记日志、不阻断上传。
+- `profile_photos` 新增 `face_checked`/`has_face`/`face_center_x,y`/`face_box_w,h`（migration 0005，只增列）。
+- `has_face` 与卡片 `faces` 改为真实查库；没有 checked 照片时不再默认 true，观察员保持放行。
+- 新增 `cmd/facebackfill` 批量补齐迁移照片；腾讯云照片内容合规尚未接入。
+
 ### 架构
 - 用户端沿用 v1 Vue 3 + Vant SPA；Go 提供 legacy API、session、媒体代理；管理端使用 Go SSR。
 - 新增 ADR 0007，记录用户端复用 v1 前端的决策与兼容边界。
