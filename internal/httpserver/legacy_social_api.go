@@ -32,6 +32,7 @@ func registerLegacySocial(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("GET /legacy/api/messages/reported", a.handleLegacyMessagesReported)
 
 	mux.HandleFunc("GET /legacy/api/notifications", a.handleLegacyNotificationsList)
+	mux.HandleFunc("GET /legacy/api/notifications/stream", a.handleLegacyNotificationsStream)
 	mux.HandleFunc("POST /legacy/api/notifications/{id}/read", a.handleLegacyNotificationRead)
 	mux.HandleFunc("POST /legacy/api/notifications/read-all", a.handleLegacyNotificationsReadAll)
 }

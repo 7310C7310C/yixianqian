@@ -33,7 +33,7 @@ func TestAdminTemplatesRender(t *testing.T) {
 					Roles:      []string{"super_admin"},
 					SuperAdmin: true, CanReview: true, CanManage: true, CanModerate: true, CanAdmin: true,
 				}},
-			want: []string{"管理台", "待审核用户", "待处理举报", "意见反馈", "super_admin"},
+			want: []string{"管理台", "待审核用户", "待处理举报", "待处理反馈", "super_admin"},
 		},
 		{
 			name: "users",

@@ -100,6 +100,16 @@ func TestIntegrationAdminPointsHTTP(t *testing.T) {
 	if err != nil || balance != 25 {
 		t.Fatalf("balance after add = %d err=%v", balance, err)
 	}
+	var pointsNotice int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM notifications
+		 WHERE user_id = $1 AND kind = 'points' AND body LIKE '%' || $2 || '%'`,
+		target.ID, reason).Scan(&pointsNotice); err != nil {
+		t.Fatalf("query points notification: %v", err)
+	}
+	if pointsNotice == 0 {
+		t.Fatal("admin points adjust did not notify the target user")
+	}
 	var auditCount int
 	if err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM audit_log

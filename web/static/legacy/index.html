@@ -832,6 +832,25 @@
     .gs-row-move, .gs-fly-avatar { transition: none !important; }
     .gs-pulse { animation: none !important; }
   }
+  /* 站内嵌入页（修改密码 / 管理后台）：同源 iframe 全屏 overlay，顶栏提供返回。
+     不出站、不动顶层 URL，管理台内部链接与表单都在 iframe 内导航。 */
+  .embed-overlay { position: fixed; inset: 0; z-index: 5000; display: flex; flex-direction: column; background: #f7f8fa; }
+  .embed-bar { flex: 0 0 auto; background: #fff; border-bottom: 1px solid #ffe3e8; box-shadow: 0 2px 10px rgba(50,50,51,0.04); padding-top: constant(safe-area-inset-top); padding-top: env(safe-area-inset-top); }
+  .embed-bar::before { content: ''; display: block; height: 3px; background: linear-gradient(90deg,#ff6b81 0%,#ff8fa1 55%,#ffb3bf 100%); }
+  .embed-bar-inner { display: flex; align-items: center; gap: 4px; max-width: 640px; margin: 0 auto; min-height: 52px; padding: 0 12px; }
+  .embed-bar--wide .embed-bar-inner { max-width: 1080px; }
+  .embed-back { width: 44px; height: 44px; margin-left: -8px; border: 0; background: transparent; color: #cc304e; font-size: 21px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .embed-back:active { opacity: .6; }
+  .embed-title { font-size: 16px; font-weight: 600; color: #323233; letter-spacing: .02em; }
+  .embed-frame { flex: 1 1 auto; width: 100%; min-height: 0; border: 0; display: block; background: #f7f8fa; }
+  .embed-loading { position: absolute; inset: calc(55px + env(safe-area-inset-top)) 0 0; display: flex; align-items: center; justify-content: center; background: #f7f8fa; }
+  .van-theme-dark .embed-overlay, .van-theme-dark .embed-frame, .van-theme-dark .embed-loading { background: #111; }
+  .van-theme-dark .embed-bar { background: #1c1c1e; border-bottom-color: #2c2c2e; }
+  .van-theme-dark .embed-title { color: #f5f5f5; }
+  .van-theme-dark .embed-back { color: #ff8e9b; }
+  /* 消息 tab 未读数：贴在图标右上，限制尺寸，不挤压 tab 文案 */
+  .van-tabbar-item__icon .van-badge { min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; line-height: 17px; font-weight: 600; border: 1px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+  .van-theme-dark .van-tabbar-item__icon .van-badge { border-color: #1c1c1e; }
 </style>
 </head>
 <body>
@@ -1270,7 +1289,7 @@
     <div class="section-title">账号</div>
     <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
       <van-cell v-if="!isObserver" title="👤 我的资料" is-link @click="openProfileDetail"></van-cell>
-      <van-cell title="🔑 修改密码" is-link url="/password"></van-cell>
+      <van-cell title="🔑 修改密码" is-link @click="openEmbed('/password','修改密码')"></van-cell>
       <van-cell v-if="availableRoles.length > 1" :title="'🔄 ' + (isObserver ? '切换为普通用户' : '切换为村情六处')" is-link @click="switchRole"></van-cell>
       <van-cell title="🚪 退出登录" is-link @click="legacyLogout"></van-cell>
     </van-cell-group>
@@ -3240,10 +3259,26 @@
 <van-tabbar v-model="page" :before-change="guardTabChange" fixed safe-area-inset-bottom active-color="#ff6b81" inactive-color="#969799"
   v-if="!subPages.includes(page)">
   <van-tabbar-item name="cards" icon="like-o">牵线</van-tabbar-item>
-  <van-tabbar-item name="likes" icon="chat-o">消息</van-tabbar-item>
+  <van-tabbar-item name="likes" icon="chat-o" :badge="unreadBadge">消息</van-tabbar-item>
   <van-tabbar-item name="home" icon="home-o">活动</van-tabbar-item>
   <van-tabbar-item name="profile" icon="user-o">我的</van-tabbar-item>
 </van-tabbar>
+<!-- 站内嵌入页：修改密码 / 管理后台（同源 iframe，关闭即返回原 tab） -->
+<div v-if="embedOpen" class="embed-overlay" role="dialog" aria-modal="true" :aria-label="embedTitle">
+  <div class="embed-bar" :class="{ 'embed-bar--wide': embedUrl.indexOf('/admin') === 0 }">
+    <div class="embed-bar-inner">
+      <button type="button" class="embed-back" aria-label="返回" @click="closeEmbed">
+        <van-icon name="arrow-left" />
+      </button>
+      <span class="embed-title">{{ embedTitle }}</span>
+    </div>
+  </div>
+  <div v-if="embedLoading" class="embed-loading">
+    <van-loading size="24px">加载中…</van-loading>
+  </div>
+  <iframe ref="embedFrame" class="embed-frame" :src="embedUrl" :title="embedTitle"
+    @load="onEmbedLoad"></iframe>
+</div>
 </template>
 </div>
 <script src="lib/vue.global.prod.js"></script>
@@ -3322,6 +3357,7 @@ createApp({
       isDark.value = !isDark.value;
       document.documentElement.classList.toggle('van-theme-dark', isDark.value);
       try { localStorage.setItem('yxq_dark', isDark.value ? '1' : '0'); } catch(e) {}
+      if (embedOpen.value) syncEmbedTheme();
     }
     document.documentElement.classList.toggle('van-theme-dark', isDark.value);
     // —— 返回拦截（飞书手势/物理返回）——
@@ -3367,7 +3403,7 @@ createApp({
       // 未保存离开拦截（守卫注册表）：dirty → 弹窗；提交中 → 提示并停留
       if(guardLeave(() => { history.back(); })) return;
       // 统一返回：有浮层先关浮层，无则 history.back() 让 popstate 处理页面
-      if(showPhotoViewer.value || showFilter.value || showLikeDialog.value || showFeedbackDialog.value || showReportDialog.value || showSuggestionDialog.value || showInviteDialog.value || showAdminHelp.value || showSelectPopup.value || showMultiPopup.value || signupSheetShow.value || showRedeemPanel.value || showPointsRules.value || showRedemptions.value || signinDialogShow.value){
+      if(showPhotoViewer.value || showFilter.value || showLikeDialog.value || showFeedbackDialog.value || showReportDialog.value || showSuggestionDialog.value || showInviteDialog.value || showAdminHelp.value || showSelectPopup.value || showMultiPopup.value || signupSheetShow.value || showRedeemPanel.value || showPointsRules.value || showRedemptions.value || signinDialogShow.value || embedOpen.value){
         history.back();
         return;
       }
@@ -4588,6 +4624,16 @@ createApp({
 
     // 消息-动态
     const notifications = ref([]);
+    // 未读角标：SSE 推送 / 轮询兜底 / 进入消息页时更新；0 时隐藏
+    const unreadCount = ref(0);
+    const unreadBadge = computed(() => unreadCount.value > 99 ? '99+' : (unreadCount.value > 0 ? String(unreadCount.value) : ''));
+
+    // 站内嵌入页（修改密码 / 管理后台）：同源 iframe + 返回栏，不整页跳出 SPA
+    const embedOpen = ref(false);
+    const embedUrl = ref('');
+    const embedTitle = ref('');
+    const embedLoading = ref(false);
+    const embedFrame = ref(null);
 
     // 报名名单
     const signupSheetShow = ref(false);
@@ -4920,6 +4966,7 @@ createApp({
       }
       user.value = data.user;
       if (data.user) loadPointsBalance(); // 麦穗余额：入口单元格要显示数字，静默拉，失败不打扰
+      if (data.user) loadNotifications(); // 登录后立即载入未读数，消息 tab 红点不等首次切页
       if (data.user && data.user.is_admin) setTimeout(()=>{ try{ refreshReportedCount(); }catch(e){} }, 600);
       if (data.user && data.user.is_admin) setTimeout(()=>{ try{ refreshAdminBadge(); }catch(e){} }, 900);
       if (data.register_form_url) registerFormUrl.value = data.register_form_url;
@@ -5769,9 +5816,168 @@ createApp({
       prevPage.value = from || 'likes';
       page.value = 'cards';
     }
-    async function loadNotifications() {
-      try { const data = await api('/api/notifications'); notifications.value = data.notifications || []; }
-      catch(e) {}
+    let notificationsPromise = null;
+    let readAllPromise = null;
+    let notificationStream = null;
+    let notificationPollTimer = null;
+    let notificationReconnectTimer = null;
+    let notificationSyncStarted = false;
+
+    function applyNotificationSnapshot(data) {
+      notifications.value = data.notifications || [];
+      unreadCount.value = Number(data.unread) || 0;
+    }
+    function loadNotifications() {
+      if (notificationsPromise) return notificationsPromise;
+      notificationsPromise = api('/api/notifications').then((data) => {
+        applyNotificationSnapshot(data);
+      }).catch(() => {}).then(() => {
+        notificationsPromise = null;
+      });
+      return notificationsPromise;
+    }
+    function markNotificationsRead() {
+      if (readAllPromise) return readAllPromise;
+      if (unreadCount.value <= 0) return Promise.resolve();
+      readAllPromise = api('/api/notifications/read-all', { method: 'POST' }).then((data) => {
+        unreadCount.value = Number(data.unread) || 0;
+      }).catch(() => {}).then(() => {
+        readAllPromise = null;
+      });
+      return readAllPromise;
+    }
+    function refreshNotifications() {
+      return loadNotifications().then(() => {
+        if (page.value === 'likes' && unreadCount.value > 0) return markNotificationsRead();
+      });
+    }
+    function stopNotificationPolling() {
+      if (notificationPollTimer) { clearInterval(notificationPollTimer); notificationPollTimer = null; }
+    }
+    function startNotificationPolling() {
+      if (notificationPollTimer) return;
+      notificationPollTimer = setInterval(refreshNotifications, 12000);   // 无 SSE 时 12s 轮询兜底
+    }
+    function scheduleNotificationReconnect() {
+      if (notificationReconnectTimer) return;
+      notificationReconnectTimer = setTimeout(() => {
+        notificationReconnectTimer = null;
+        if (user.value) connectNotificationStream();
+      }, 30000);
+    }
+    function connectNotificationStream() {
+      if (!user.value || notificationStream) return;
+      if (typeof EventSource === 'undefined') { startNotificationPolling(); return; }
+      let es = null;
+      try { es = new EventSource('/legacy/api/notifications/stream'); } catch (e) {
+        startNotificationPolling();
+        scheduleNotificationReconnect();
+        return;
+      }
+      notificationStream = es;
+      es.addEventListener('unread', (ev) => {
+        stopNotificationPolling();
+        let data = null;
+        try { data = JSON.parse(ev.data || '{}'); } catch (e) { return; }
+        const next = Number(data.unread) || 0;
+        const changed = next !== unreadCount.value;
+        unreadCount.value = next;
+        if (page.value === 'likes') {
+          // 正在看消息页：把新到达的通知同步进列表并置为已读
+          loadNotifications().then(() => { if (unreadCount.value > 0) markNotificationsRead(); });
+        } else if (changed && data.latest_id) {
+          loadNotifications();
+        }
+      });
+      es.onopen = stopNotificationPolling;
+      es.onerror = () => {
+        if (notificationStream !== es) return;
+        try { es.close(); } catch (e) {}
+        notificationStream = null;
+        startNotificationPolling();   // EventSource 自带重连不可靠时，先用轮询保证 badge 不落后
+        scheduleNotificationReconnect();
+      };
+    }
+    function startNotificationSync() {
+      if (!user.value) return;
+      loadNotifications();
+      if (!notificationSyncStarted) {
+        notificationSyncStarted = true;
+        connectNotificationStream();
+      }
+    }
+    function stopNotificationSync() {
+      if (notificationStream) { try { notificationStream.close(); } catch (e) {} notificationStream = null; }
+      stopNotificationPolling();
+      if (notificationReconnectTimer) { clearTimeout(notificationReconnectTimer); notificationReconnectTimer = null; }
+    }
+
+    // 站内嵌入页：/password 与 /admin 以同源 iframe 打开；返回键/浏览器返回都只关 overlay。
+    function openEmbed(url, title) {
+      embedUrl.value = url;
+      embedTitle.value = title || '';
+      embedLoading.value = true;
+      embedOpen.value = true;
+    }
+    function closeEmbed() {
+      if (!embedOpen.value) return;
+      embedOpen.value = false;
+      embedLoading.value = false;
+      embedUrl.value = '';
+      embedTitle.value = '';
+    }
+    function syncEmbedTheme() {
+      const frame = embedFrame.value;
+      if (!frame) return;
+      let doc = null;
+      try { doc = frame.contentDocument; } catch (e) { return; }
+      if (!doc) return;
+      // SSR 页面用 prefers-color-scheme 切换深色；iframe 的媒体环境与 SPA 手动
+      // 主题不一定一致，这里直接把 dark 媒体规则按 SPA 当前主题强制开关。
+      try {
+        const wantDark = isDark.value;
+        Array.from(doc.styleSheets).forEach((sheet) => {
+          let rules = null;
+          try { rules = sheet.cssRules; } catch (e) { return; }
+          if (!rules) return;
+          Array.from(rules).forEach((rule) => {
+            if (rule.type === CSSRule.MEDIA_RULE && rule.media &&
+                /prefers-color-scheme:\s*dark/i.test(rule.media.mediaText)) {
+              rule.media.mediaText = wantDark ? 'all' : 'not all';
+            }
+          });
+        });
+      } catch (e) {}
+    }
+    function onEmbedLoad() {
+      const frame = embedFrame.value;
+      if (!frame) return;
+      embedLoading.value = false;
+      let doc = null, win = null;
+      try { doc = frame.contentDocument; win = frame.contentWindow; } catch (e) { return; }
+      if (!doc || !win) return;
+      syncEmbedTheme();
+      // 隐藏 SSR 外壳的页头/页脚，保留页面内容与管理台内部导航
+      try {
+        const header = doc.querySelector('.shell-header');
+        if (header) header.style.setProperty('display', 'none', 'important');
+        const footer = doc.querySelector('.shell-footer');
+        if (footer) footer.style.setProperty('display', 'none', 'important');
+        if (doc.body) doc.body.style.setProperty('padding-top', '0', 'important');
+      } catch (e) {}
+      let path = '', search = '';
+      try { path = win.location.pathname; search = win.location.search || ''; } catch (e) { return; }
+      if (!path) return;
+      const inScope = path === '/password' || path === '/admin' || path.indexOf('/admin/') === 0;
+      if (inScope) return;
+      // 修改密码成功（303 到 / 或 /admin）、退出登录或会话失效：关闭 overlay，回到 SPA
+      closeEmbed();
+      if (path === '/login' || path === '/welcome' || path === '/activate') {
+        window.location.href = path + search;
+        return;
+      }
+      if (path === '/' || path === '/app') { vant.showToast('已完成'); return; }
+      vant.showToast('已返回');
     }
     async function openSignupSheet() {
       signupSheetShow.value = true;
@@ -6748,6 +6954,12 @@ createApp({
         isHandlingPopState=false;
         return;
       }
+      // 内嵌页（修改密码/管理后台）：系统返回只关 overlay，不切 tab、不离开 SPA
+      if(embedOpen.value){
+        closeEmbed();
+        isHandlingPopState=false;
+        return;
+      }
       // 认领面板（登录页内嵌步骤）：未提交内容 → 拦截；否则返回登录面板
       if(showClaim.value){
         if(guardOverlay('claim', () => backToLogin())){ isHandlingPopState=false; pushHistory({overlay:'claim'}); return; }
@@ -6891,7 +7103,7 @@ createApp({
       if (p === 'checkin' && gaDetailId.value) loadSigninRoster(true);
       if (p === 'home') loadActivities();
       if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
-      if (p === 'likes') { loadLikes(); loadNotifications(); refreshMyMessagesCount(); refreshReceivedCount(); }
+      if (p === 'likes') { loadLikes(); loadNotifications().then(markNotificationsRead); refreshMyMessagesCount(); refreshReceivedCount(); }
       if (p === 'profile') { checkGroupEntry(); loadPraiseState(); if (user.value && user.value.is_admin) { refreshReportedCount(); refreshAdminBadge(); } }
       // 任何页进入即验身份证/人脸照片，不达标则倒计时跳修改资料
       if(p !== 'profile_edit' && !showIdInvalidDialog.value){
@@ -6938,6 +7150,7 @@ createApp({
     watch(showPointsRules, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'pointsRules'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='pointsRules'){ ignoreNextPop=true; history.back(); } });
     watch(showRedemptions, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'redemptions'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='redemptions'){ ignoreNextPop=true; history.back(); } });
     watch(showAdminHelp, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'adminHelp'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='adminHelp'){ ignoreNextPop=true; history.back(); } });
+    watch(embedOpen, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'embed'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='embed'){ ignoreNextPop=true; history.back(); } });
     watch(signinDialogShow, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'signinDialog'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='signinDialog'){ ignoreNextPop=true; history.back(); } });
     watch(showSelectPopup, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'selectPopup'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='selectPopup'){ ignoreNextPop=true; history.back(); } });
     watch(showMultiPopup, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'multiPopup'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='multiPopup'){ ignoreNextPop=true; history.back(); } });
@@ -7302,11 +7515,14 @@ createApp({
           else if (entryHash === '#/activities') { page.value = 'home'; }
           // cards / likes / activities 已在 doLogin → loadHome 中一次性加载
           loadPraiseState();   // 点赞的今日剩余 / 我点过谁，和切到卡片页时同一份
+          startNotificationSync();   // SSE 实时红点；不可用时 12s 轮询兜底
           setTimeout(()=>{ checkIdValidForPage(page.value); }, 1000);
           setTimeout(()=>{ checkFaceValidForPage(page.value); }, 1200);
         }
       });
     });
+
+    onUnmounted(stopNotificationSync);
 
     // ===== 牌堆位置存档/恢复（刷新后回到原卡片）=====
     function saveDeckState(){
@@ -8449,10 +8665,11 @@ createApp({
     }
 
     function openAdminConsole() {
-      window.location.href = '/admin';
+      openEmbed('/admin', '管理后台');
     }
 
     async function legacyLogout() {
+      stopNotificationSync();
       try {
         const csrf = (document.cookie.match(/(?:^|; )yxq_csrf=([^;]*)/) || [])[1] || '';
         await fetch('/legacy/api/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf, 'X-Requested-With': 'XMLHttpRequest' } });
@@ -8492,7 +8709,8 @@ createApp({
       showReportDialog, reportReason, reportReasonText, reportTarget, openReportDialog, onReportBeforeClose, doReport, reportSubmitting,
       reportedMessages, loadingReported, reportedCount, openReportedMessages, loadReportedMessages, handleReported,
       showSuggestionDialog, suggestionType, suggestionText, openSuggestionDialog, onSuggestionBeforeClose, suggestionSubmitting,
-      likesData, loadingLikes, loadMyLikesCount, notifications,
+      likesData, loadingLikes, loadMyLikesCount, notifications, unreadCount, unreadBadge, markNotificationsRead,
+      embedOpen, embedUrl, embedTitle, embedLoading, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
       myLikesList, loadingMyLikes, myLikesCount, openMyLikes, openMutual, openLikedMe,
       myActivitiesList, loadingMyActivities, openMyActivities,
       myGroupsList, loadingMyGroups, openMyGroups, hasGroupEntry,

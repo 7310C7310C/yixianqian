@@ -51,6 +51,7 @@ func TestLegacySocialRoutesRequireLogin(t *testing.T) {
 		{http.MethodGet, "/legacy/api/messages/received"},
 		{http.MethodGet, "/legacy/api/messages/reported"},
 		{http.MethodGet, "/legacy/api/notifications"},
+		{http.MethodGet, "/legacy/api/notifications/stream"},
 		{http.MethodPost, "/legacy/api/notifications/1/read"},
 		{http.MethodPost, "/legacy/api/notifications/read-all"},
 	}
@@ -254,6 +255,32 @@ func TestLegacyActivityIDFromLink(t *testing.T) {
 	for link, want := range cases {
 		if got := legacyActivityIDFromLink(link); got != want {
 			t.Errorf("legacyActivityIDFromLink(%q) = %q, want %q", link, got, want)
+		}
+	}
+}
+
+func TestEmbeddedPagesAllowSameOriginFraming(t *testing.T) {
+	app := newLegacySocialTestApp(t)
+	handler := app.Handler()
+	cases := []struct {
+		path     string
+		frame    string
+		ancestor string
+	}{
+		{"/password", "SAMEORIGIN", "frame-ancestors 'self'"},
+		{"/admin", "SAMEORIGIN", "frame-ancestors 'self'"},
+		{"/admin/users", "SAMEORIGIN", "frame-ancestors 'self'"},
+		{"/", "DENY", "frame-ancestors 'none'"},
+		{"/login", "DENY", "frame-ancestors 'none'"},
+	}
+	for _, tc := range cases {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		if got := rec.Header().Get("X-Frame-Options"); got != tc.frame {
+			t.Errorf("%s X-Frame-Options = %q, want %q", tc.path, got, tc.frame)
+		}
+		if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, tc.ancestor) {
+			t.Errorf("%s CSP = %q, want contains %q", tc.path, csp, tc.ancestor)
 		}
 	}
 }

@@ -31,7 +31,7 @@ func (a *App) withSecurityHeaders(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("Content-Security-Policy", securityPolicy(r.URL.Path))
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Frame-Options", frameOptions(r.URL.Path))
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
@@ -46,13 +46,33 @@ func (a *App) withSecurityHeaders(next http.Handler) http.Handler {
 // SPA, whose Vue global build compiles in-DOM templates with new Function.
 // base-uri must allow its <base> tag; every other route keeps the strict policy.
 func securityPolicy(path string) string {
+	frameAncestors := "'none'"
+	if embeddablePage(path) {
+		// 账号安全页与管理台由用户端 SPA 以同源 iframe 内嵌；只放宽 framing，
+		// 其他 CSP 指令保持严格。
+		frameAncestors = "'self'"
+	}
 	if path == "/" || path == "/app" {
-		return "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; " +
+		return "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors " + frameAncestors + "; " +
 			"img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; " +
 			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; object-src 'none'"
 	}
-	return "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; " +
+	return "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors " + frameAncestors + "; " +
 		"img-src 'self' data:; style-src 'self'; font-src 'self' data:; script-src 'self'; object-src 'none'"
+}
+
+// embeddablePage lists server-rendered pages that the user SPA opens in a
+// same-origin iframe. Keeping the allowlist narrow avoids weakening clickjacking
+// protection for the rest of the app.
+func embeddablePage(path string) bool {
+	return path == "/password" || path == "/admin" || strings.HasPrefix(path, "/admin/")
+}
+
+func frameOptions(path string) string {
+	if embeddablePage(path) {
+		return "SAMEORIGIN"
+	}
+	return "DENY"
 }
 
 func (a *App) withClientIP(next http.Handler) http.Handler {

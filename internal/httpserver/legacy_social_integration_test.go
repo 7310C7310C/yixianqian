@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
 )
@@ -419,5 +421,57 @@ func TestIntegrationLegacySocialHTTP(t *testing.T) {
 	decode(resp, &readAll)
 	if resp.StatusCode != http.StatusOK || !readAll.OK || readAll.Unread != 0 {
 		t.Fatalf("read all status=%d resp=%+v", resp.StatusCode, readAll)
+	}
+
+	// SSE: initial snapshot, then a fresh notification arrives without a refresh.
+	streamCtx, cancelStream := context.WithTimeout(ctx, 12*time.Second)
+	defer cancelStream()
+	streamReq, err := http.NewRequestWithContext(streamCtx, http.MethodGet,
+		server.URL+"/legacy/api/notifications/stream", nil)
+	if err != nil {
+		t.Fatalf("build stream request: %v", err)
+	}
+	streamResp, err := maleClient.http.Do(streamReq)
+	if err != nil {
+		t.Fatalf("open notification stream: %v", err)
+	}
+	defer streamResp.Body.Close()
+	if streamResp.StatusCode != http.StatusOK {
+		t.Fatalf("notification stream status=%d", streamResp.StatusCode)
+	}
+	if ct := streamResp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("notification stream content-type=%q", ct)
+	}
+	reader := bufio.NewReader(streamResp.Body)
+	readStreamEvent := func() legacyNotificationStreamPayload {
+		t.Helper()
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				t.Fatalf("read notification stream: %v", err)
+			}
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var payload legacyNotificationStreamPayload
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &payload); err != nil {
+				t.Fatalf("decode notification stream: %v", err)
+			}
+			return payload
+		}
+	}
+	if initial := readStreamEvent(); initial.Unread != 0 {
+		t.Fatalf("initial stream unread=%d, want 0", initial.Unread)
+	}
+	if _, err := database.CreateNotificationOnce(ctx, db.NotificationInput{
+		UserID: male.ID, Kind: "points", Title: "麦穗有变动", Body: "管理员为你加了 5 穗",
+		DedupeKey: "legacy-social-stream-" + randomHTTPDigits(t, 8),
+	}); err != nil {
+		t.Fatalf("create stream notification: %v", err)
+	}
+	pushed := readStreamEvent()
+	if pushed.Unread != 1 || pushed.LatestID == 0 {
+		t.Fatalf("streamed notification = %+v, want unread=1 with latest id", pushed)
 	}
 }

@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -647,6 +648,8 @@ func (a *App) handleAdminPointsAdjust(w http.ResponseWriter, r *http.Request, ac
 			"balance_after": balance,
 			"reason":        reason,
 		})
+	a.adminNotifyUser(r, userID, "points", "麦穗有变动",
+		fmt.Sprintf("管理员为你调整了 %+d 穗：%s（当前余额 %d 穗）", entry.Delta, reason, balance), "")
 	http.Redirect(w, r, adminPointsUserURL(userID, values.Get("q"), "adjusted"),
 		http.StatusSeeOther)
 }
