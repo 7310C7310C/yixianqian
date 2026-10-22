@@ -20,6 +20,7 @@ func (a *App) Handler() http.Handler {
 
 	mux.HandleFunc("POST /media/upload", a.handleUploadForm)
 	mux.HandleFunc("GET /media/{id}", a.handleMedia)
+	mux.HandleFunc("POST /api/media", a.handleUploadAPI)
 
 	mux.HandleFunc("GET /healthz", a.handleHealth)
 	mux.Handle("GET /static/", staticHandler())

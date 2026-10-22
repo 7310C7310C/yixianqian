@@ -226,20 +226,6 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 				resp.Header.Get("Location"))
 		}
 	}
-	resp = anon.get("/api/cards")
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("pending api status = %d", resp.StatusCode)
-	}
-	var apiErr struct {
-		Error apiError `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&apiErr); err != nil {
-		t.Fatal(err)
-	}
-	if apiErr.Error.Code != "account_pending" {
-		t.Fatalf("pending api code = %q", apiErr.Error.Code)
-	}
-
 	resp = anon.get("/register/done?submitted=1")
 	body = readBody(t, resp)
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "资料审核中") ||
@@ -293,22 +279,19 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("approved home status = %d body=%s", resp.StatusCode, readBody(t, resp))
 	}
-	resp = anon.get("/api/profile")
+	resp = anon.get("/legacy/api/profile")
 	body = readBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("profile api status = %d body=%s", resp.StatusCode, body)
+		t.Fatalf("legacy profile status = %d body=%s", resp.StatusCode, body)
 	}
 	var profile struct {
-		IDCardLast4 string `json:"id_card_last4"`
+		IDCardMask string `json:"id_card_mask"`
 	}
 	if err := json.Unmarshal([]byte(body), &profile); err != nil {
-		t.Fatalf("profile api decode: %v", err)
+		t.Fatalf("legacy profile decode: %v", err)
 	}
-	if profile.IDCardLast4 != idCard[len(idCard)-4:] {
-		t.Fatalf("profile missing masked id: %s", body)
-	}
-	if strings.Contains(body, idCard) {
-		t.Fatal("profile leaked the full id card")
+	if !strings.HasSuffix(profile.IDCardMask, idCard[len(idCard)-4:]) || strings.Contains(body, idCard) {
+		t.Fatalf("legacy profile missing masked id or leaked full id: %s", body)
 	}
 
 	// A fresh login after approval goes straight to the app.

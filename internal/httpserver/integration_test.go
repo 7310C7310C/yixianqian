@@ -286,15 +286,13 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `id="app"`) {
 		t.Fatalf("legacy app status=%d body=%s", resp.StatusCode, body)
 	}
-	resp = client.get("/api/profile")
+	resp = client.get("/legacy/api/profile")
 	body = readBody(t, resp)
 	var profile struct {
 		UserID string `json:"user_id"`
-		Name   string `json:"name"`
 	}
-	if resp.StatusCode != http.StatusOK || json.Unmarshal([]byte(body), &profile) != nil ||
-		profile.UserID != legacy || profile.Name != "测试用户" {
-		t.Fatalf("profile api status=%d missing identity: %s", resp.StatusCode, body)
+	if resp.StatusCode != http.StatusOK || json.Unmarshal([]byte(body), &profile) != nil || profile.UserID != legacy {
+		t.Fatalf("legacy profile status=%d missing identity: %s", resp.StatusCode, body)
 	}
 
 	resp = client.get("/activate?token=" + url.QueryEscape(rawToken))

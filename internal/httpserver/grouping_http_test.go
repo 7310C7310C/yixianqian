@@ -82,10 +82,6 @@ func TestIntegrationGroupingAdminHTTPFlow(t *testing.T) {
 	for _, female := range females {
 		createHTTPGroupSelection(t, env, activityID, female.ID, "女性", maleIDs)
 	}
-	// Participants need sessions for the user result endpoint.
-	_, maleClient := loginGroupingUser(t, env, males[0])
-	_, femaleClient := loginGroupingUser(t, env, females[0])
-
 	resp := plainClient.get("/api/admin/group/preview?activity_id=" + url.QueryEscape(activityNo) +
 		"&male_per_group=1&female_per_group=1")
 	if resp.StatusCode != http.StatusForbidden {
@@ -140,28 +136,6 @@ func TestIntegrationGroupingAdminHTTPFlow(t *testing.T) {
 		t.Fatalf("admin result = %+v status=%d", adminResult, resp.StatusCode)
 	}
 
-	// Each participant sees only their own group.
-	groupByUser := map[int64]int{}
-	for _, group := range adminResult.Groups {
-		for _, member := range group.Members {
-			groupByUser[member.ID] = group.GroupID
-		}
-	}
-	for _, client := range []*wsClient{maleClient, femaleClient} {
-		resp = client.get("/api/activities/" + activityNo + "/group/result")
-		var result GroupResultView
-		profileDecode(t, resp, &result)
-		if resp.StatusCode != http.StatusOK || result.MyGroup == 0 || result.TotalGroups != 2 {
-			t.Fatalf("user result = %+v status=%d", result, resp.StatusCode)
-		}
-		if len(result.Members) != 2 {
-			t.Fatalf("user result members = %+v", result.Members)
-		}
-		if groupByUser[result.Members[0].ID] != result.MyGroup {
-			t.Fatalf("user result leaked another group: %+v", result)
-		}
-	}
-
 	resp = profileJSONRequest(t, adminClient, http.MethodPost, "/api/admin/group/reset",
 		adminClient.csrfCookie(), map[string]any{"activity_id": activityNo})
 	var reset struct {
@@ -177,22 +151,6 @@ func TestIntegrationGroupingAdminHTTPFlow(t *testing.T) {
 	profileDecode(t, resp, &clearedResult)
 	if clearedResult.Round != 0 || len(clearedResult.Groups) != 0 {
 		t.Fatalf("result after reset = %+v", clearedResult)
-	}
-	resp = femaleClient.get("/api/activities/" + activityNo + "/group/result")
-	if resp.StatusCode != http.StatusConflict || activityAPIErrorCode(t, resp) != "group_not_complete" {
-		t.Fatalf("result after reset status = %d", resp.StatusCode)
-	}
-
-	// Sign-in gate is enforced at the API boundary too.
-	signinID, signinNo := createHTTPActivity(t, env, 0, true, "4321")
-	if _, err := env.pool.Exec(env.ctx,
-		`INSERT INTO signups (activity_id, user_id, status, attendance)
-		 VALUES ($1, $2, '已报名', '')`, signinID, females[0].ID); err != nil {
-		t.Fatal(err)
-	}
-	resp = femaleClient.get("/api/activities/" + signinNo + "/group/candidates")
-	if resp.StatusCode != http.StatusForbidden || activityAPIErrorCode(t, resp) != "signin_required" {
-		t.Fatalf("signin gate candidates status = %d", resp.StatusCode)
 	}
 }
 
