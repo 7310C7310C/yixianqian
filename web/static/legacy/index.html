@@ -205,6 +205,48 @@
   .login-logo { font-size: 50px; margin-bottom: 20px; }
   .login-title { font-size: 24px; color: #323233; margin-bottom: 10px; }
   .login-desc { color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 30px; }
+  /* 已登录启动骨架：刷新/回首页时先出同版 App 轮廓，避免闪「正在登录」 */
+  .app-boot-skeleton { min-height: 100vh; background: #f7f8fa; padding-bottom: calc(60px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+  .boot-brand { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 12px; display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; color: #323233; }
+  .boot-logo { font-size: 24px; line-height: 1; }
+  .boot-wrap { max-width: 640px; margin: 0 auto; padding: 0 12px; }
+  .boot-card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .boot-shimmer { border-radius: 8px; background: linear-gradient(90deg, #f2f3f5 25%, #e8eaed 37%, #f2f3f5 63%); background-size: 400% 100%; animation: boot-shimmer 1.3s ease infinite; }
+  @keyframes boot-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+  .boot-line { height: 16px; margin-bottom: 12px; }
+  .boot-line:last-child { margin-bottom: 0; }
+  .boot-line--lg { width: 64%; height: 22px; }
+  .boot-line--md { width: 46%; }
+  .boot-line--sm { width: 30%; height: 12px; }
+  .boot-avatar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .boot-avatar { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; }
+  .boot-avatar-meta { flex: 1; min-width: 0; }
+  .boot-tabbar { position: fixed; left: 0; right: 0; bottom: 0; height: calc(60px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: #fff; border-top: 1px solid #f2f3f5; display: flex; align-items: center; box-sizing: border-box; }
+  .boot-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+  .boot-tab-icon { width: 22px; height: 22px; border-radius: 50%; background: #f2f3f5; }
+  .boot-tab-label { width: 26px; height: 9px; }
+  .van-theme-dark .app-boot-skeleton { background: #111; }
+  .van-theme-dark .boot-brand { color: #f5f5f5; }
+  .van-theme-dark .boot-card { background: #1c1c1e; box-shadow: none; }
+  .van-theme-dark .boot-shimmer { background-image: linear-gradient(90deg, #2a2a2e 25%, #3a3a3e 37%, #2a2a2e 63%); }
+  .van-theme-dark .boot-tabbar { background: #1c1c1e; border-top-color: #2c2c2e; }
+  .van-theme-dark .boot-tab-icon { background: #2c2c2e; }
+  @media (prefers-reduced-motion: reduce) {
+    .boot-shimmer { animation: none; }
+  }
+  /* 修改密码子页 */
+  .password-page { min-height: 100vh; background: #f7f8fa; }
+  .password-page .page { padding: 12px; }
+  .pw-card { max-width: 480px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 16px 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .pw-title { font-size: 18px; font-weight: 600; color: #323233; padding: 0 16px; }
+  .pw-tip { font-size: 12px; color: #969799; line-height: 1.6; padding: 6px 16px 12px; }
+  .pw-error { margin: 0 16px 10px; padding: 8px 10px; border-radius: 8px; background: #fdecec; color: #9b2c2c; font-size: 13px; line-height: 1.5; }
+  .pw-actions { padding: 20px 16px 0; }
+  .van-theme-dark .password-page { background: #111; }
+  .van-theme-dark .pw-card { background: #1c1c1e; box-shadow: none; }
+  .van-theme-dark .pw-title { color: #f5f5f5; }
+  .van-theme-dark .pw-tip { color: #a0a0a4; }
+  .van-theme-dark .pw-error { background: #3a1f22; color: #ffb3bf; }
   /* 返回导航 */
   .back-nav { background: #fff; padding: 14px 12px; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 500; color: #323233; border-bottom: 1px solid #f2f3f5; cursor: pointer; position: sticky; top: 0; z-index: 10; }
   .back-nav .van-icon { font-size: 22px; }
@@ -833,22 +875,42 @@
     .gs-row-move, .gs-fly-avatar { transition: none !important; }
     .gs-pulse { animation: none !important; }
   }
-  /* 站内嵌入页（修改密码 / 管理后台）：同源 iframe 全屏 overlay，顶栏提供返回。
-     不出站、不动顶层 URL，管理台内部链接与表单都在 iframe 内导航。 */
+  /* 站内嵌入页（仅管理后台）：同源 iframe 全屏 overlay，顶栏提供返回。
+     不出站、不动顶层 URL，管理台内部链接与表单都在 iframe 内导航。
+     返回列尺寸对齐旧 .back-nav（padding 14px、18px/500、底部 1px 分隔）；
+     3px 品牌渐变画在背景里，不占额外高度。 */
   .embed-overlay { position: fixed; inset: 0; z-index: 5000; display: flex; flex-direction: column; background: #f7f8fa; }
-  .embed-bar { flex: 0 0 auto; background: #fff; border-bottom: 1px solid #ffe3e8; box-shadow: 0 2px 10px rgba(50,50,51,0.04); padding-top: constant(safe-area-inset-top); padding-top: env(safe-area-inset-top); }
-  .embed-bar::before { content: ''; display: block; height: 3px; background: linear-gradient(90deg,#ff6b81 0%,#ff8fa1 55%,#ffb3bf 100%); }
-  .embed-bar-inner { display: flex; align-items: center; gap: 4px; max-width: 640px; margin: 0 auto; min-height: 52px; padding: 0 12px; }
+  .embed-bar { flex: 0 0 auto; padding-top: constant(safe-area-inset-top); padding-top: env(safe-area-inset-top); background-color: #fff; background-image: linear-gradient(90deg,#ff6b81 0%,#ff8fa1 55%,#ffb3bf 100%); background-repeat: no-repeat; background-size: 100% 3px; background-position: left top; border-bottom: 1px solid #f2f3f5; }
+  .embed-bar-inner { display: flex; align-items: center; gap: 8px; max-width: 640px; margin: 0 auto; padding: 14px 12px; }
   .embed-bar--wide .embed-bar-inner { max-width: 1080px; }
-  .embed-back { width: 44px; height: 44px; margin-left: -8px; border: 0; background: transparent; color: #cc304e; font-size: 21px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .embed-back { width: 44px; height: 44px; margin: -11px 0 -11px -8px; border: 0; background: transparent; color: #323233; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .embed-back:active { opacity: .6; }
-  .embed-title { font-size: 16px; font-weight: 600; color: #323233; letter-spacing: .02em; }
-  .embed-frame { flex: 1 1 auto; width: 100%; min-height: 0; border: 0; display: block; background: #f7f8fa; }
-  .embed-loading { position: absolute; inset: calc(55px + env(safe-area-inset-top)) 0 0; display: flex; align-items: center; justify-content: center; background: #f7f8fa; }
+  .embed-title { font-size: 18px; font-weight: 500; line-height: 24px; color: #323233; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .embed-body { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
+  .embed-frame { flex: 1 1 auto; width: 100%; min-height: 0; border: 0; display: block; background: #f7f8fa; opacity: 0; transition: opacity .18s ease; }
+  .embed-frame--ready { opacity: 1; }
+  .embed-loading { position: absolute; inset: 0; z-index: 2; overflow-y: auto; background: #f7f8fa; }
+  .embed-skeleton { width: 100%; max-width: 1080px; min-height: 60vh; margin: 0 auto; padding: 16px 12px 24px; box-sizing: border-box; }
+  .embed-sk-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .embed-sk-pill { width: 96px; height: 36px; border-radius: 999px; }
+  .embed-sk-card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .embed-sk-line { height: 14px; border-radius: 7px; margin-bottom: 10px; }
+  .embed-sk-line:last-child { margin-bottom: 0; }
+  .embed-sk-line--lg { width: 52%; height: 22px; }
+  .embed-sk-line--md { width: 72%; }
+  .embed-sk-line--sm { width: 38%; }
+  .embed-sk-shimmer { background: linear-gradient(90deg, #f2f3f5 25%, #e8eaed 37%, #f2f3f5 63%); background-size: 400% 100%; animation: embed-shimmer 1.3s ease infinite; }
+  @keyframes embed-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
   .van-theme-dark .embed-overlay, .van-theme-dark .embed-frame, .van-theme-dark .embed-loading { background: #111; }
-  .van-theme-dark .embed-bar { background: #1c1c1e; border-bottom-color: #2c2c2e; }
+  .van-theme-dark .embed-bar { background-color: #1c1c1e; border-bottom-color: #2c2c2e; }
   .van-theme-dark .embed-title { color: #f5f5f5; }
-  .van-theme-dark .embed-back { color: #ff8e9b; }
+  .van-theme-dark .embed-back { color: #f5f5f5; }
+  .van-theme-dark .embed-sk-card { background: #1c1c1e; box-shadow: none; }
+  .van-theme-dark .embed-sk-shimmer { background-image: linear-gradient(90deg, #2a2a2e 25%, #3a3a3e 37%, #2a2a2e 63%); }
+  @media (prefers-reduced-motion: reduce) {
+    .embed-frame { transition: none; }
+    .embed-sk-shimmer { animation: none; }
+  }
   /* 消息 tab 未读数：贴在图标右上，限制尺寸，不挤压 tab 文案 */
   .van-tabbar-item__icon .van-badge { min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; line-height: 17px; font-weight: 600; border: 1px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
   .van-theme-dark .van-tabbar-item__icon .van-badge { border-color: #1c1c1e; }
@@ -860,6 +922,46 @@
 <div v-if="loggingIn" class="login-page">
   <div class="login-logo">💕</div>
   <van-loading size="24px">{{ loginTip || '正在登录...' }}</van-loading>
+</div>
+<!-- 已登录启动骨架：同版 App 轮廓，不闪登录页 -->
+<div v-else-if="bootLoading" class="app-boot-skeleton" aria-busy="true" aria-label="正在加载">
+  <div class="boot-brand"><span class="boot-logo">💕</span><span>一线牵</span></div>
+  <div class="boot-wrap">
+    <div class="boot-card">
+      <div class="boot-shimmer boot-line boot-line--lg"></div>
+      <div class="boot-avatar-row">
+        <div class="boot-shimmer boot-avatar"></div>
+        <div class="boot-avatar-meta">
+          <div class="boot-shimmer boot-line boot-line--md"></div>
+          <div class="boot-shimmer boot-line boot-line--sm"></div>
+        </div>
+      </div>
+      <div class="boot-shimmer boot-line"></div>
+      <div class="boot-shimmer boot-line boot-line--sm"></div>
+    </div>
+    <div class="boot-card">
+      <div class="boot-shimmer boot-line"></div>
+      <div class="boot-shimmer boot-line"></div>
+      <div class="boot-shimmer boot-line boot-line--md"></div>
+    </div>
+    <div class="boot-card">
+      <div class="boot-shimmer boot-line"></div>
+      <div class="boot-shimmer boot-line boot-line--lg"></div>
+    </div>
+  </div>
+  <div class="boot-tabbar" aria-hidden="true">
+    <div class="boot-tab" v-for="n in 4" :key="n">
+      <span class="boot-tab-icon"></span>
+      <span class="boot-shimmer boot-tab-label"></span>
+    </div>
+  </div>
+</div>
+<!-- 启动加载失败 -->
+<div v-else-if="bootError" class="login-page">
+  <div class="login-logo">💔</div>
+  <div class="login-title">加载失败</div>
+  <div class="login-desc">{{ bootError }}<br>请检查网络后重试</div>
+  <van-button type="primary" color="#ff6b81" style="width:86%;max-width:340px;" @click="retryBoot">重试</van-button>
 </div>
 <!-- 未登录 -->
 <div v-else-if="!user && !gateMessage" class="login-page">
@@ -1290,7 +1392,7 @@
     <div class="section-title">账号</div>
     <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
       <van-cell v-if="!isObserver" title="👤 我的资料" is-link @click="openProfileDetail"></van-cell>
-      <van-cell title="🔑 修改密码" is-link @click="openEmbed('/password','修改密码')"></van-cell>
+      <van-cell title="🔑 修改密码" is-link @click="openPasswordPage"></van-cell>
       <van-cell v-if="availableRoles.length > 1" :title="'🔄 ' + (isObserver ? '切换为普通用户' : '切换为村情六处')" is-link @click="switchRole"></van-cell>
       <van-cell title="🚪 退出登录" is-link @click="legacyLogout"></van-cell>
     </van-cell-group>
@@ -1308,6 +1410,30 @@
     <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
       <van-cell title="📮 意见反馈" is-link @click="openSuggestionDialog"></van-cell>
     </van-cell-group>
+  </div>
+</div>
+<!-- ========== 修改密码（App 内子页，不再走 iframe） ========== -->
+<div v-else-if="page==='password'" key="password" class="password-page">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="page">
+    <div class="pw-card">
+      <div class="pw-title">修改密码</div>
+      <div class="pw-tip">新密码至少 8 位，建议混合字母与数字。</div>
+      <div v-if="passwordSubmitError" class="pw-error" role="alert">{{ passwordSubmitError }}</div>
+      <van-cell-group inset>
+        <van-field v-model="passwordForm.current" type="password" label="目前密码" placeholder="请输入目前密码"
+          autocomplete="current-password" :error-message="passwordErrors.current" :disabled="passwordSubmitting"></van-field>
+        <van-field v-model="passwordForm.password" type="password" label="新密码" placeholder="至少 8 位"
+          autocomplete="new-password" :error-message="passwordErrors.password" :disabled="passwordSubmitting"></van-field>
+        <van-field v-model="passwordForm.confirm" type="password" label="再次输入新密码" placeholder="再次输入新密码"
+          autocomplete="new-password" :error-message="passwordErrors.confirm" :disabled="passwordSubmitting"></van-field>
+      </van-cell-group>
+      <div class="pw-actions">
+        <van-button type="primary" color="#ff6b81" block round :loading="passwordSubmitting" :disabled="passwordSubmitting" @click="submitPassword">确认修改</van-button>
+      </div>
+    </div>
   </div>
 </div>
 <!-- ========== 管理员·麦穗总览 ========== -->
@@ -3264,7 +3390,7 @@
   <van-tabbar-item name="home" icon="home-o">活动</van-tabbar-item>
   <van-tabbar-item name="profile" icon="user-o">我的</van-tabbar-item>
 </van-tabbar>
-<!-- 站内嵌入页：修改密码 / 管理后台（同源 iframe，关闭即返回原 tab） -->
+<!-- 站内嵌入页：仅管理后台（同源 iframe，关闭即返回原 tab） -->
 <div v-if="embedOpen" class="embed-overlay" role="dialog" aria-modal="true" :aria-label="embedTitle">
   <div class="embed-bar" :class="{ 'embed-bar--wide': embedUrl.indexOf('/admin') === 0 }">
     <div class="embed-bar-inner">
@@ -3274,11 +3400,26 @@
       <span class="embed-title">{{ embedTitle }}</span>
     </div>
   </div>
-  <div v-if="embedLoading" class="embed-loading">
-    <van-loading size="24px">加载中…</van-loading>
+  <div class="embed-body">
+    <div v-if="embedLoading" class="embed-loading">
+      <div class="embed-skeleton" aria-hidden="true">
+        <div class="embed-sk-tabs">
+          <span v-for="n in 4" :key="n" class="embed-sk-pill embed-sk-shimmer"></span>
+        </div>
+        <div class="embed-sk-card">
+          <div class="embed-sk-line embed-sk-line--lg embed-sk-shimmer"></div>
+          <div class="embed-sk-line embed-sk-line--md embed-sk-shimmer"></div>
+          <div class="embed-sk-line embed-sk-line--sm embed-sk-shimmer"></div>
+        </div>
+        <div class="embed-sk-card">
+          <div class="embed-sk-line embed-sk-line--md embed-sk-shimmer"></div>
+          <div class="embed-sk-line embed-sk-line--sm embed-sk-shimmer"></div>
+        </div>
+      </div>
+    </div>
+    <iframe ref="embedFrame" class="embed-frame" :class="{ 'embed-frame--ready': embedReady }" :src="embedUrl" :title="embedTitle"
+      @load="onEmbedLoad"></iframe>
   </div>
-  <iframe ref="embedFrame" class="embed-frame" :src="embedUrl" :title="embedTitle"
-    @load="onEmbedLoad"></iframe>
 </div>
 </template>
 </div>
@@ -3418,7 +3559,12 @@ createApp({
     const user = ref(null);
     const isObserver = computed(() => !!(user.value && user.value.is_observer));
     const availableRoles = computed(() => (user.value && user.value.available_roles) || []);
-    const loggingIn = ref(true);
+    // 服务端在 SPA 外壳注入登录旗标：已登录刷新时直接走骨架+home，不闪登录页。
+    const SERVER_AUTHENTICATED = window.__YXQ_AUTHENTICATED__ === true;
+    const loggingIn = ref(!SERVER_AUTHENTICATED);
+    const bootLoading = ref(SERVER_AUTHENTICATED);
+    const bootError = ref('');
+    let bootEntryHash = '';
     const loginError = ref(false);
     const loginErrorMessage = ref('');
     const showPersonalGuide = ref(false);
@@ -3444,7 +3590,14 @@ createApp({
       return '🚪';
     });
     function retryGate() { window.location.reload(); }
-    const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_likes','my_activities','my_groups','user_detail','mutual','liked_me','points','points_admin','group_admin','group_detail','group_roster','checkin'];
+    const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_likes','my_activities','my_groups','user_detail','mutual','liked_me','points','points_admin','group_admin','group_detail','group_roster','checkin','password'];
+    // 修改密码：App 内子页。不在 URL/hash 留状态，返回用 history 落在 profile。
+    const passwordForm = ref({ current: '', password: '', confirm: '' });
+    const passwordErrors = ref({ current: '', password: '', confirm: '' });
+    const passwordSubmitError = ref('');
+    const passwordSubmitting = ref(false);
+    // 改密成功回 profile：就地改写 password 历史条目，避免返回又落回已提交的表单。
+    let passwordFormDone = false;
     // 四 Tab 过渡：监听 page 切换实时选动画（需在 subPages 定义后，sync 确保与 Transition 同帧）
     watch(page, (nv, ov) => { if(nv !== ov) pageTransition.value = pickTransition(nv, ov); }, {flush: 'sync'});
 
@@ -4629,11 +4782,12 @@ createApp({
     const unreadCount = ref(0);
     const unreadBadge = computed(() => unreadCount.value > 99 ? '99+' : (unreadCount.value > 0 ? String(unreadCount.value) : ''));
 
-    // 站内嵌入页（修改密码 / 管理后台）：同源 iframe + 返回栏，不整页跳出 SPA
+    // 站内嵌入页（仅管理后台）：同源 iframe + 返回栏，不整页跳出 SPA
     const embedOpen = ref(false);
     const embedUrl = ref('');
     const embedTitle = ref('');
     const embedLoading = ref(false);
+    const embedReady = ref(false);
     const embedFrame = ref(null);
 
     // 报名名单
@@ -4951,6 +5105,39 @@ createApp({
       loginError.value = true; loggingIn.value = false;
     }
     function retryLogin() { showPersonalGuide.value = false; loginError.value = false; doLogin(); }
+
+    // 启动成功后的公共收尾：入口深链、点赞状态、SSE 红点与证件/人脸检查。
+    // 已登录启动与 doLogin 成功两条路径都走这里，避免行为分叉。
+    function afterHomeReady(entryHash) {
+      if (!user.value) return;
+      if (entryHash === '#/likes') { page.value = 'likes'; }
+      else if (entryHash === '#/activities') { page.value = 'home'; }
+      loadPraiseState();   // 点赞的今日剩余 / 我点过谁，和切到卡片页时同一份
+      startNotificationSync();   // SSE 实时红点；不可用时 12s 轮询兜底
+      setTimeout(()=>{ checkIdValidForPage(page.value); }, 1000);
+      setTimeout(()=>{ checkFaceValidForPage(page.value); }, 1200);
+    }
+    // 已有服务端会话时直接拉首页数据：先展示 App 骨架，不经过登录页/iframe。
+    async function bootAuthenticated() {
+      bootError.value = '';
+      bootLoading.value = true;
+      try {
+        await loadHome();
+        // 403 门禁在 loadHome 内写入 gateMessage 后正常返回，交给 gate 页展示。
+        if (gateMessage.value) { bootLoading.value = false; return; }
+        bootLoading.value = false;
+        restoreDeck();   // 刷新后回到原卡片（与 doLogin 成功路径一致）
+        afterHomeReady(bootEntryHash);
+      } catch (e) {
+        if (e && (e.status === 401 || e.message === '未登录')) {
+          location.href = '/login?next=/';
+          return;
+        }
+        bootLoading.value = false;
+        bootError.value = (e && e.message) || '加载失败，请稍后重试';
+      }
+    }
+    function retryBoot() { bootAuthenticated(); }
 
     // 一次拉取首页全部数据（我的信息 + 卡片 + 喜欢 + 活动）
     async function loadHome() {
@@ -5913,19 +6100,64 @@ createApp({
       if (notificationReconnectTimer) { clearTimeout(notificationReconnectTimer); notificationReconnectTimer = null; }
     }
 
-    // 站内嵌入页：/password 与 /admin 以同源 iframe 打开；返回键/浏览器返回都只关 overlay。
+    // 站内嵌入页仅供管理后台使用：同源 iframe + 返回栏；返回键/浏览器返回都只关 overlay。
     function openEmbed(url, title) {
       embedUrl.value = url;
       embedTitle.value = title || '';
       embedLoading.value = true;
+      embedReady.value = false;
       embedOpen.value = true;
     }
     function closeEmbed() {
       if (!embedOpen.value) return;
       embedOpen.value = false;
       embedLoading.value = false;
+      embedReady.value = false;
       embedUrl.value = '';
       embedTitle.value = '';
+    }
+    // 管理台沿用 SSR 自己的交互，只把外壳（页头/页脚/底色/字体/token）换成旧 App 风格。
+    const EMBED_THEME_ID = 'yxq-embed-theme';
+    const EMBED_THEME_CSS = [
+      ':root{',
+      '  --shell-brand:#ff6b81;--shell-brand-strong:#cc304e;--shell-brand-deep:#ad2139;',
+      '  --shell-brand-soft:#fff0f3;--shell-brand-wash:#fff7f8;--shell-brand-line:#ffe3e8;',
+      '  --shell-primary-bg:#cc304e;--shell-primary-text:#ffffff;--shell-primary-hover:#ad2139;',
+      '  --shell-link:#cc304e;--shell-accent:#ff6b81;--shell-input-bg:#ffffff;',
+      '  --shell-bg:#f7f8fa;--shell-surface:#ffffff;--shell-surface-2:#f2f3f5;',
+      '  --shell-text:#323233;--shell-text-strong:#1f2022;--shell-muted:#6b7280;',
+      '  --shell-placeholder:#969799;--shell-border:#ebedf0;--shell-border-strong:#8a8a8e;',
+      '  --shell-divider:#f2f3f5;--shell-font-size:16px;--shell-line:1.55;',
+      '  --shell-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;',
+      '  --bg:#f7f8fa;--surface:#ffffff;--text:#323233;--muted:#6b7280;',
+      '  --border:#ebedf0;--accent:#ff6b81;--accent-strong:#cc304e;--accent-soft:#fff0f3;',
+      '  --danger:#9b2c2c;--danger-soft:#fdecec;--radius:12px;',
+      '}',
+      'html,body{background:#f7f8fa;color:#323233;font-size:16px;font-family:var(--shell-font);}',
+      'body.admin-shell{--shell-content-max:1080px;}',
+      '.shell-header,.shell-footer,.shell-skip{display:none!important;}',
+      '.shell-main{padding-top:0!important;}',
+      '@media (prefers-color-scheme: dark){',
+      '  :root{--shell-bg:#111111;--shell-surface:#1c1c1e;--shell-surface-2:#2c2c2e;',
+      '    --shell-text:#f5f5f5;--shell-text-strong:#ffffff;--shell-muted:#a0a0a4;',
+      '    --shell-border:#3a3a3e;--shell-divider:#2c2c2e;--shell-accent:#ff8e9b;',
+      '    --bg:#111111;--surface:#1c1c1e;--text:#f5f5f5;--muted:#a0a0a4;',
+      '    --border:#3a3a3e;--accent:#ff8e9b;--accent-strong:#ffb3bf;--accent-soft:#3a1f24;',
+      '    --danger:#ffa0a0;--danger-soft:#3a2323;}',
+      '  html,body{background:#111111;color:#f5f5f5;}',
+      '}'
+    ].join('\n');
+    function injectEmbedTheme(doc) {
+      if (!doc) return;
+      try {
+        let style = doc.getElementById(EMBED_THEME_ID);
+        if (!style) {
+          style = doc.createElement('style');
+          style.id = EMBED_THEME_ID;
+          (doc.head || doc.documentElement).appendChild(style);
+        }
+        if (style.textContent !== EMBED_THEME_CSS) style.textContent = EMBED_THEME_CSS;
+      } catch (e) {}
     }
     function syncEmbedTheme() {
       const frame = embedFrame.value;
@@ -5953,25 +6185,35 @@ createApp({
     function onEmbedLoad() {
       const frame = embedFrame.value;
       if (!frame) return;
-      embedLoading.value = false;
       let doc = null, win = null;
       try { doc = frame.contentDocument; win = frame.contentWindow; } catch (e) { return; }
       if (!doc || !win) return;
+      let path = '', search = '', href = '';
+      try { path = win.location.pathname; search = win.location.search || ''; href = win.location.href || ''; } catch (e) { return; }
+      if (!path || href === 'about:blank') return;
+      injectEmbedTheme(doc);
       syncEmbedTheme();
-      // 隐藏 SSR 外壳的页头/页脚，保留页面内容与管理台内部导航
+      // 兜底隐藏 SSR 外壳（注入样式已做同样的事），保留页面内容与管理台内部导航
       try {
-        const header = doc.querySelector('.shell-header');
-        if (header) header.style.setProperty('display', 'none', 'important');
-        const footer = doc.querySelector('.shell-footer');
-        if (footer) footer.style.setProperty('display', 'none', 'important');
+        ['.shell-header', '.shell-footer', '.shell-skip'].forEach((sel) => {
+          const el = doc.querySelector(sel);
+          if (el) el.style.setProperty('display', 'none', 'important');
+        });
         if (doc.body) doc.body.style.setProperty('padding-top', '0', 'important');
       } catch (e) {}
-      let path = '', search = '';
-      try { path = win.location.pathname; search = win.location.search || ''; } catch (e) { return; }
-      if (!path) return;
-      const inScope = path === '/password' || path === '/admin' || path.indexOf('/admin/') === 0;
-      if (inScope) return;
-      // 修改密码成功（303 到 / 或 /admin）、退出登录或会话失效：关闭 overlay，回到 SPA
+      // 管理台内部导航是整页跳转：离开前立刻盖回骨架，避免 iframe 白屏。
+      try {
+        if (win.__yxqEmbedBeforeUnload) win.removeEventListener('beforeunload', win.__yxqEmbedBeforeUnload);
+        win.__yxqEmbedBeforeUnload = () => { embedLoading.value = true; embedReady.value = false; };
+        win.addEventListener('beforeunload', win.__yxqEmbedBeforeUnload);
+      } catch (e) {}
+      const inScope = path === '/admin' || path.indexOf('/admin/') === 0;
+      if (inScope) {
+        embedLoading.value = false;
+        embedReady.value = true;
+        return;
+      }
+      // 退出登录或会话失效：关闭 overlay，回到 SPA 的登录入口
       closeEmbed();
       if (path === '/login' || path === '/welcome' || path === '/activate') {
         window.location.href = path + search;
@@ -6552,6 +6794,51 @@ createApp({
       }
       finally { loadingProfileDetail.value = false; }
     }
+    function openPasswordPage() {
+      passwordForm.value = { current: '', password: '', confirm: '' };
+      passwordErrors.value = { current: '', password: '', confirm: '' };
+      passwordSubmitError.value = '';
+      page.value = 'password';
+    }
+    async function submitPassword() {
+      if (passwordSubmitting.value) return;
+      const f = passwordForm.value;
+      const errs = { current: '', password: '', confirm: '' };
+      if (!f.current) errs.current = '请输入目前密码';
+      if (!f.password) errs.password = '请输入新密码';
+      else if (f.password.length < 8) errs.password = '新密码至少 8 位';
+      if (!f.confirm) errs.confirm = '请再次输入新密码';
+      else if (f.password !== f.confirm) errs.confirm = '两次输入的新密码不一致';
+      passwordErrors.value = errs;
+      passwordSubmitError.value = '';
+      if (errs.current || errs.password || errs.confirm) return;
+      passwordSubmitting.value = true;
+      try {
+        await api('/api/password', {
+          method: 'POST',
+          body: JSON.stringify({
+            current_password: f.current,
+            password: f.password,
+            password_confirm: f.confirm
+          })
+        });
+        vant.showToast('密码已更新');
+        if (page.value === 'password') passwordFormDone = true;
+        page.value = 'profile';
+      } catch (e) {
+        if (e.status === 401) { location.href = '/login?next=/'; return; }
+        const msg = e.message || '修改失败，请重试';
+        // 后端明确指出来源字段时贴在该字段下方，其余错误显示在表单顶部。
+        if (msg.includes('目前密码') || msg.includes('密码不正确')) {
+          passwordErrors.value = { ...passwordErrors.value, current: msg };
+        } else {
+          passwordSubmitError.value = msg;
+        }
+        vant.showToast(msg);
+      } finally {
+        passwordSubmitting.value = false;
+      }
+    }
     function startIdInvalidOverlay(){
       if(showIdInvalidDialog.value) return;
       showIdInvalidDialog.value = true;
@@ -6955,7 +7242,7 @@ createApp({
         isHandlingPopState=false;
         return;
       }
-      // 内嵌页（修改密码/管理后台）：系统返回只关 overlay，不切 tab、不离开 SPA
+      // 内嵌管理后台：系统返回只关 overlay，不切 tab、不离开 SPA
       if(embedOpen.value){
         closeEmbed();
         isHandlingPopState=false;
@@ -7077,7 +7364,7 @@ createApp({
         'mutual': 'likes', 'liked_me': 'likes', 'my_likes': 'likes', 'my_messages': 'likes', 'received_messages': 'likes',
         'my_activities': 'profile', 'my_groups': 'profile', 'points': 'profile', 'points_admin': 'profile',
         'group_admin': 'profile', 'group_detail': 'group_admin', 'group_roster': 'group_detail', 'checkin': 'group_admin',
-        'profile_detail': 'profile', 'profile_edit': 'profile_detail',
+        'profile_detail': 'profile', 'profile_edit': 'profile_detail', 'password': 'profile',
         'activity_detail': activityDetailFrom.value || 'home',
         'group_select': groupSelectFrom.value || 'my_groups',
         'group_result': groupResultFrom.value || 'my_groups',
@@ -7127,6 +7414,12 @@ createApp({
       if(isHandlingPopState) return;
       if(nv === ov) return;
       if(suppressPagePushOnce && nv === 'checkin'){ suppressPagePushOnce = false; return; }   // 塌缩条目已在位，不补 push
+      if(passwordFormDone){
+        passwordFormDone = false;
+        // 改密成功：当前条目就是 password，直接改写为 profile，避免多压一条可返回的旧表单。
+        try{ history.replaceState({page: nv}, '', location.pathname); }catch(e){}
+        return;
+      }
       // 四个主 tab 之间切换只是视图状态：不新增历史条目、不改 URL。
       // 新增条目会让 Safari/WebView 出现地址栏加载指示与 tabbar 闪动，返回键也会在 tab 间空转。
       if(TAB_ORDER.includes(nv) && TAB_ORDER.includes(ov)) return;
@@ -7506,21 +7799,16 @@ createApp({
     onMounted(() => {
       // 入口深链：必须在下方 replaceState 清掉 hash 前留存（机器人「报名活动」按钮 → #/activities 直达活动页）
       const entryHash = window.location.hash;
+      bootEntryHash = entryHash;
       // 在下方 replaceState 清掉 query 前，捕获引导预览参数（仅测试环境）
       try { claimEntryFlag = new URLSearchParams(location.search).get('claim') === '1'; } catch(e) { claimEntryFlag = false; }
       try{ history.replaceState({page: page.value}, '', location.pathname); }catch(e){}
       window.addEventListener('popstate', handlePopState);
-      doLogin().then(() => {
-        if (user.value) {
-          if (entryHash === '#/likes') { page.value = 'likes'; }
-          else if (entryHash === '#/activities') { page.value = 'home'; }
-          // cards / likes / activities 已在 doLogin → loadHome 中一次性加载
-          loadPraiseState();   // 点赞的今日剩余 / 我点过谁，和切到卡片页时同一份
-          startNotificationSync();   // SSE 实时红点；不可用时 12s 轮询兜底
-          setTimeout(()=>{ checkIdValidForPage(page.value); }, 1000);
-          setTimeout(()=>{ checkFaceValidForPage(page.value); }, 1200);
-        }
-      });
+      if (SERVER_AUTHENTICATED) {
+        bootAuthenticated();
+        return;
+      }
+      doLogin().then(() => { afterHomeReady(entryHash); });
     });
 
     onUnmounted(stopNotificationSync);
@@ -8680,8 +8968,10 @@ createApp({
 
     return {
       page, pageTransition, user, loggingIn, loginError, showPersonalGuide, loginTip,
+      bootLoading, bootError, retryBoot,
       showClaim, claimName, claimPhone, claiming, submitClaim, backToLogin, requestBackToLogin,
       isDark, toggleTheme,
+      passwordForm, passwordErrors, passwordSubmitError, passwordSubmitting, openPasswordPage, submitPassword,
       loginErrorMessage, retryLogin, subPages, isObserver, availableRoles, switchRole,
       pageBusy, pageBusyText,
       gateMessage, gateTitle, gateIcon, retryGate, syncMe,
@@ -8711,7 +9001,7 @@ createApp({
       reportedMessages, loadingReported, reportedCount, openReportedMessages, loadReportedMessages, handleReported,
       showSuggestionDialog, suggestionType, suggestionText, openSuggestionDialog, onSuggestionBeforeClose, suggestionSubmitting,
       likesData, loadingLikes, loadMyLikesCount, notifications, unreadCount, unreadBadge, markNotificationsRead,
-      embedOpen, embedUrl, embedTitle, embedLoading, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
+      embedOpen, embedUrl, embedTitle, embedLoading, embedReady, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
       myLikesList, loadingMyLikes, myLikesCount, openMyLikes, openMutual, openLikedMe,
       myActivitiesList, loadingMyActivities, openMyActivities,
       myGroupsList, loadingMyGroups, openMyGroups, hasGroupEntry,
