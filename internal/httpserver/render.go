@@ -1,12 +1,31 @@
 package httpserver
 
 import (
+	"context"
 	"net/http"
 )
+
+// adminAccessContextKey carries the authenticated admin's permissions to the
+// renderer so shared navigation can hide entries the role cannot use. A
+// package-private struct key avoids collisions with middleware context values.
+type adminAccessContextKey struct{}
+
+func withAdminAccess(ctx context.Context, access adminAccess) context.Context {
+	return context.WithValue(ctx, adminAccessContextKey{}, access)
+}
+
+func adminAccessFromContext(ctx context.Context) (adminAccess, bool) {
+	access, ok := ctx.Value(adminAccessContextKey{}).(adminAccess)
+	return access, ok
+}
 
 // render writes a complete HTML page. Output is buffered first; template
 // failures become a plain 500 without leaking internals.
 func (a *App) render(w http.ResponseWriter, r *http.Request, status int, page string, data PageData) {
+	if access, ok := adminAccessFromContext(r.Context()); ok {
+		data.CanPoints = containsString(access.Permissions, adminPermPointsAdjust)
+		data.CanAudit = containsString(access.Permissions, adminPermAudit)
+	}
 	data.ActiveNav = canonicalNav(data.ActiveNav)
 	if data.ActiveNav == "" {
 		data.ActiveNav = navForPage(page)
@@ -35,7 +54,7 @@ func (a *App) renderError(w http.ResponseWriter, r *http.Request, status int, ti
 // canonicalNav keeps the admin navigation names used by admin_nav.tmpl.
 func canonicalNav(name string) string {
 	switch name {
-	case "admin", "users", "activities", "matching", "reports", "suggestions", "roles":
+	case "admin", "users", "activities", "matching", "points", "reports", "suggestions", "roles", "audit":
 		return name
 	default:
 		return ""
@@ -47,18 +66,22 @@ func navForPage(page string) string {
 	switch page {
 	case "admin":
 		return "admin"
-	case "admin_users":
+	case "admin_users", "admin_user_detail":
 		return "users"
 	case "admin_activities", "admin_activity_edit", "admin_activity_detail":
 		return "activities"
 	case "admin_matching", "admin_matching_group", "admin_matching_onetoone":
 		return "matching"
+	case "admin_points":
+		return "points"
 	case "admin_reports":
 		return "reports"
 	case "admin_suggestions":
 		return "suggestions"
 	case "admin_roles":
 		return "roles"
+	case "admin_audit":
+		return "audit"
 	default:
 		return ""
 	}

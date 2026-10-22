@@ -41,6 +41,10 @@ type PageData struct {
 	ActiveNav    string
 	ActiveSubnav string
 	PageCSS      string
+	// CanPoints / CanAudit control admin navigation visibility. The renderer
+	// fills them from the admin access stored on the request context.
+	CanPoints bool
+	CanAudit  bool
 }
 
 // Templates holds one cloned template set per page so each page can define its

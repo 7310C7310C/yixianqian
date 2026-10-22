@@ -1,0 +1,96 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="card">
+  <p class="eyebrow">系统</p>
+  <div class="admin-title-row">
+    <h1>审计日志</h1>
+    <div class="admin-actions">
+      <a class="button" href="{{.Data.ExportURL}}">导出 CSV</a>
+    </div>
+  </div>
+  {{template "flash" .}}
+  <p class="hint">按创建时间倒序显示，每页 100 条，共 {{.Data.Total}} 条记录{{if .Data.PageCount}}，第 {{.Data.Page}} / {{.Data.PageCount}} 页{{end}}。</p>
+  <p class="hint">CSV 最多导出 10,000 条；密码、Token、Cookie、对象键等敏感值会以 [redacted] 替代。</p>
+  <form class="admin-audit-filter" method="get" action="/admin/audit">
+    <label>Actor
+      <input type="text" name="actor" value="{{.Data.Filter.Actor}}" placeholder="姓名 / 会员编号 / 手机">
+    </label>
+    <label>操作
+      <input type="text" name="action" value="{{.Data.Filter.Action}}" placeholder="如 admin.user.approve">
+    </label>
+    <label>对象类型
+      <input type="text" name="target_type" value="{{.Data.Filter.TargetType}}" placeholder="如 user / activity">
+    </label>
+    <label>对象 ID
+      <input type="text" name="target_id" value="{{.Data.Filter.TargetID}}" placeholder="完整匹配">
+    </label>
+    <label>开始日期
+      <input type="date" name="from" value="{{.Data.Filter.From}}">
+    </label>
+    <label>结束日期
+      <input type="date" name="to" value="{{.Data.Filter.To}}">
+    </label>
+    <div class="admin-filter-actions">
+      <button type="submit" class="button primary">筛选</button>
+      <a class="button" href="/admin/audit">重置</a>
+    </div>
+  </form>
+</section>
+
+{{if .Data.LoadError}}
+<section class="card">
+  <p class="alert alert-error">{{.Data.LoadError}}</p>
+</section>
+{{end}}
+
+<section class="card">
+  <h2>记录{{if .Data.Rows}}（本页 {{len .Data.Rows}} 条）{{end}}</h2>
+  {{if .Data.Rows}}
+  <div class="admin-table-wrap">
+    <table class="admin-table admin-audit-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>时间</th>
+          <th>操作人</th>
+          <th>操作</th>
+          <th>对象</th>
+          <th>IP</th>
+          <th>详情</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.Rows}}
+        <tr>
+          <td data-label="ID">{{.ID}}</td>
+          <td data-label="时间">{{.CreatedAt}}</td>
+          <td data-label="操作人">
+            {{if .ActorURL}}<a href="{{.ActorURL}}">{{if .ActorName}}{{.ActorName}}{{else}}—{{end}}</a>{{else if .ActorName}}{{.ActorName}}{{else}}—{{end}}
+            {{if .ActorLegacyID}}<span class="muted admin-audit-legacy">{{.ActorLegacyID}}</span>{{end}}
+          </td>
+          <td data-label="操作"><code>{{.Action}}</code></td>
+          <td data-label="对象">
+            {{if .TargetType}}<span class="pill">{{.TargetType}}</span>{{end}}
+            {{if .TargetURL}}<a href="{{.TargetURL}}">{{.TargetID}}</a>{{else if .TargetID}}{{.TargetID}}{{else}}—{{end}}
+          </td>
+          <td data-label="IP">{{if .IP}}{{.IP}}{{else}}—{{end}}</td>
+          <td data-label="详情">{{if .Metadata}}<span class="admin-audit-meta">{{.Metadata}}</span>{{else}}—{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="muted">目前没有符合条件的审计记录。</p>
+  {{end}}
+
+  {{if or .Data.PrevURL .Data.NextURL}}
+  <nav class="admin-pagination" aria-label="审计分页">
+    {{if .Data.PrevURL}}<a class="button small" href="{{.Data.PrevURL}}">上一页</a>{{end}}
+    {{if .Data.PageCount}}<span class="muted">第 {{.Data.Page}} / {{.Data.PageCount}} 页</span>{{end}}
+    {{if .Data.NextURL}}<a class="button small" href="{{.Data.NextURL}}">下一页</a>{{end}}
+  </nav>
+  {{end}}
+</section>
+{{end}}

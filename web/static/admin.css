@@ -5,12 +5,24 @@
   margin-bottom: 1rem;
 }
 
+/* The main console navigation is a grid: 3 columns on phones and one row at
+   desktop width. The activity subnav keeps the compact flex layout. */
+.admin-nav:not(.admin-subnav) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .admin-nav a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
   color: var(--text);
+  text-align: center;
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -19,6 +31,18 @@
   border-color: var(--accent);
   color: var(--accent-strong);
   font-weight: 600;
+}
+
+@media (min-width: 640px) {
+  .admin-nav:not(.admin-subnav) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .admin-nav:not(.admin-subnav) {
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+  }
 }
 
 .admin-stat-grid {
@@ -591,21 +615,18 @@
   padding: 0.4rem 0.8rem;
 }
 
-/* Mobile: keep the two nav rows compact and scrollable instead of stacking. */
+/* Mobile: keep the activity subnav compact and scrollable instead of stacking. */
 @media (max-width: 699px) {
-  .admin-shell .admin-nav {
+  .admin-shell .admin-subnav {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    margin-top: -0.35rem;
     padding-bottom: 2px;
   }
 
-  .admin-shell .admin-nav a {
+  .admin-shell .admin-subnav a {
     flex: 0 0 auto;
-  }
-
-  .admin-shell .admin-subnav {
-    margin-top: -0.35rem;
   }
 }
 
@@ -1117,5 +1138,122 @@
 
   .admin-matching-table {
     min-width: 860px;
+  }
+}
+
+/* Audit log */
+.admin-audit-filter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
+
+.admin-audit-filter label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.admin-audit-filter input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.admin-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-audit-table {
+  min-width: 960px;
+}
+
+.admin-audit-table td[data-label="详情"] {
+  min-width: 220px;
+}
+
+.admin-audit-meta {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.admin-audit-legacy {
+  margin-left: 0.3rem;
+  font-size: 0.8rem;
+}
+
+@media (min-width: 720px) {
+  .admin-audit-filter {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-filter-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Tablet and narrow laptop: audit rows become labelled cards so the
+   metadata column never forces the page to scroll sideways. */
+@media (max-width: 999px) {
+  .admin-audit-table {
+    min-width: 0;
+  }
+
+  .admin-audit-table thead {
+    display: none;
+  }
+
+  .admin-audit-table,
+  .admin-audit-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-audit-table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem 0.75rem;
+    padding: 0.7rem 0.15rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .admin-audit-table td {
+    display: block;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    border-bottom: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-audit-table td::before {
+    content: attr(data-label);
+    position: static;
+    display: inline;
+    width: auto;
+    margin-right: 0.35rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .admin-audit-table td[data-label="操作人"],
+  .admin-audit-table td[data-label="详情"] {
+    grid-column: 1 / -1;
+  }
+
+  .admin-audit-table td[data-label="详情"] {
+    min-width: 0;
   }
 }

@@ -76,7 +76,9 @@
     {{if .Data.CanModerate}}<a class="button" href="/admin/reports">举报处理</a>{{end}}
     {{if .Data.CanModerate}}<a class="button" href="/admin/suggestions">意见反馈</a>{{end}}
     {{if .Data.CanActivity}}<a class="button" href="/admin/activities">活动管理</a>{{end}}
+    {{if .Data.CanPoints}}<a class="button" href="/admin/points">麦穗管理</a>{{end}}
     {{if .Data.CanAdmin}}<a class="button" href="/admin/roles">角色权限</a>{{end}}
+    {{if .Data.CanAudit}}<a class="button" href="/admin/audit">审计日志</a>{{end}}
   </div>
 </section>
 {{end}}

@@ -4,9 +4,11 @@
   <a href="/admin/users"{{if eq .ActiveNav "users"}} aria-current="page"{{end}}>用户</a>
   <a href="/admin/activities"{{if eq .ActiveNav "activities"}} aria-current="page"{{end}}>活动</a>
   <a href="/admin/matching"{{if eq .ActiveNav "matching"}} aria-current="page"{{end}}>匹配</a>
+  {{if .CanPoints}}<a href="/admin/points"{{if eq .ActiveNav "points"}} aria-current="page"{{end}}>麦穗</a>{{end}}
   <a href="/admin/reports"{{if eq .ActiveNav "reports"}} aria-current="page"{{end}}>举报</a>
   <a href="/admin/suggestions"{{if eq .ActiveNav "suggestions"}} aria-current="page"{{end}}>反馈</a>
   <a href="/admin/roles"{{if eq .ActiveNav "roles"}} aria-current="page"{{end}}>角色</a>
+  {{if .CanAudit}}<a href="/admin/audit"{{if eq .ActiveNav "audit"}} aria-current="page"{{end}}>审计</a>{{end}}
 </nav>
 {{if eq .ActiveNav "activities"}}
 <nav class="subnav admin-nav admin-subnav" aria-label="活动管理">

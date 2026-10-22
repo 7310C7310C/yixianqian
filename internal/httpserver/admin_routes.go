@@ -113,7 +113,7 @@ func (a *App) adminHTML(permission string, next func(http.ResponseWriter, *http.
 			a.renderError(w, r, http.StatusForbidden, "权限不足", "你没有执行此操作的权限。")
 			return
 		}
-		next(w, r, access)
+		next(w, r.WithContext(withAdminAccess(r.Context(), access)), access)
 	}
 }
 
@@ -164,6 +164,8 @@ type adminHomeData struct {
 	CanModerate bool
 	CanAdmin    bool
 	CanActivity bool
+	CanPoints   bool
+	CanAudit    bool
 }
 
 func (a *App) handleAdminHome(w http.ResponseWriter, r *http.Request, access adminAccess) {
@@ -183,6 +185,8 @@ func (a *App) handleAdminHome(w http.ResponseWriter, r *http.Request, access adm
 		CanModerate: containsString(access.Permissions, adminPermContent),
 		CanAdmin:    containsString(access.Permissions, adminPermAdminManage),
 		CanActivity: containsString(access.Permissions, adminPermActivity),
+		CanPoints:   containsString(access.Permissions, adminPermPointsAdjust),
+		CanAudit:    containsString(access.Permissions, adminPermAudit),
 	}
 	a.render(w, r, http.StatusOK, "admin", PageData{
 		Title:     "管理台",
