@@ -1258,15 +1258,9 @@
     <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
       <van-cell v-if="!isObserver" title="👤 我的资料" is-link @click="openProfileDetail"></van-cell>
       <van-cell title="🔑 修改密码" is-link url="/password"></van-cell>
+      <van-cell v-if="user.can_admin" title="🛠️ 管理后台" is-link @click="openAdminConsole"></van-cell>
       <van-cell v-if="availableRoles.length > 1" :title="'🔄 ' + (isObserver ? '切换为普通用户' : '切换为村情六处')" is-link @click="switchRole"></van-cell>
       <van-cell title="🚪 退出登录" is-link @click="legacyLogout"></van-cell>
-    </van-cell-group>
-  </div>
-  <!-- 管理 -->
-  <div style="padding:0 12px;" v-if="user.is_admin">
-    <div class="section-title">管理</div>
-    <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
-      <van-cell title="🛠️ 管理后台" is-link url="/admin"></van-cell>
     </van-cell-group>
   </div>
   <!-- 帮助 -->
@@ -8419,6 +8413,10 @@ createApp({
       gaSigninBatchBusy.value = false;
     }
 
+    function openAdminConsole() {
+      window.location.href = '/admin';
+    }
+
     async function legacyLogout() {
       try {
         const csrf = (document.cookie.match(/(?:^|; )yxq_csrf=([^;]*)/) || [])[1] || '';
@@ -8434,7 +8432,7 @@ createApp({
       loginErrorMessage, retryLogin, subPages, isObserver, availableRoles, switchRole,
       pageBusy, pageBusyText,
       gateMessage, gateTitle, gateIcon, retryGate, syncMe,
-      accountStatusLabel, toggleAccountStatus, legacyLogout,
+      accountStatusLabel, toggleAccountStatus, legacyLogout, openAdminConsole,
       activities, loadingActivities, currentActivity, actionLoading, activityDetailFrom,
       isAttendancePresent, isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
