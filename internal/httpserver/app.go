@@ -12,6 +12,7 @@ import (
 	"github.com/7310C7310C/yixianqian/internal/auth"
 	"github.com/7310C7310C/yixianqian/internal/config"
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/face"
 	"github.com/7310C7310C/yixianqian/internal/media"
 	"github.com/7310C7310C/yixianqian/internal/platform"
 )
@@ -27,6 +28,9 @@ type App struct {
 	trusted []netip.Prefix
 	clock   platform.Clock
 
+	// faceProbe 在照片上传后同步运行；失败只记日志，不阻断上传。
+	faceProbe face.Probe
+
 	loginIPLimiter    *auth.Limiter
 	loginPhoneLimiter *auth.Limiter
 	activationLimiter *auth.Limiter
@@ -34,6 +38,13 @@ type App struct {
 
 	hashSem  chan struct{}
 	mediaSem chan struct{}
+	// faceSem 限制本地人脸检测并发；它独立于 mediaSem，避免慢 probe
+	// 让普通上传排队超时（429）。
+	faceSem chan struct{}
+
+	// registrationFaceProbeBudget 是注册响应前同步检测的总预算；默认
+	// maxRegistrationFaceProbeBudget，测试可缩短。
+	registrationFaceProbeBudget time.Duration
 }
 
 // New loads templates and constructs the application.
@@ -59,21 +70,28 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	if err != nil {
 		return nil, fmt.Errorf("httpserver: trusted proxies: %w", err)
 	}
+	probe, err := face.NewPythonProbe(cfg.FaceProbeCmd, cfg.FaceProbeTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("httpserver: face probe: %w", err)
+	}
 	return &App{
-		cfg:               cfg,
-		db:                database,
-		store:             store,
-		tpl:               tpl,
-		log:               logger,
-		csrf:              auth.NewCSRF(cfg.CSRFKey(), 2*time.Hour),
-		trusted:           trusted,
-		clock:             platform.SystemClock{},
-		loginIPLimiter:    auth.NewLimiter(20, 15*time.Minute),
-		loginPhoneLimiter: auth.NewLimiter(10, 15*time.Minute),
-		activationLimiter: auth.NewLimiter(10, time.Hour),
-		uploadLimiter:     auth.NewLimiter(60, time.Hour),
-		hashSem:           make(chan struct{}, cfg.MaxHashes),
-		mediaSem:          make(chan struct{}, cfg.MaxMedia),
+		cfg:                         cfg,
+		db:                          database,
+		store:                       store,
+		tpl:                         tpl,
+		log:                         logger,
+		csrf:                        auth.NewCSRF(cfg.CSRFKey(), 2*time.Hour),
+		trusted:                     trusted,
+		clock:                       platform.SystemClock{},
+		faceProbe:                   probe,
+		loginIPLimiter:              auth.NewLimiter(20, 15*time.Minute),
+		loginPhoneLimiter:           auth.NewLimiter(10, 15*time.Minute),
+		activationLimiter:           auth.NewLimiter(10, time.Hour),
+		uploadLimiter:               auth.NewLimiter(60, time.Hour),
+		hashSem:                     make(chan struct{}, cfg.MaxHashes),
+		mediaSem:                    make(chan struct{}, cfg.MaxMedia),
+		faceSem:                     make(chan struct{}, maxConcurrentFaceProbes),
+		registrationFaceProbeBudget: maxRegistrationFaceProbeBudget,
 	}, nil
 }
 

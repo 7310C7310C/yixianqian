@@ -143,9 +143,16 @@ func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Requ
 		legacyError(w, http.StatusTooManyRequests, "上传过于频繁，请稍后再试")
 		return
 	}
+	mediaReleased := false
+	releaseMedia := func() {
+		if !mediaReleased {
+			a.releaseMedia()
+			mediaReleased = true
+		}
+	}
 	select {
 	case a.mediaSem <- struct{}{}:
-		defer a.releaseMedia()
+		defer releaseMedia()
 	case <-time.After(2 * time.Second):
 		legacyError(w, http.StatusTooManyRequests, "目前上传较多，请稍后再试")
 		return
@@ -183,6 +190,10 @@ func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Requ
 			a.logger(r).Warn("legacy profile photo cover failed", "error", err, "user_id", user.ID)
 		}
 	}
+	// probe 使用独立的 faceSem，必须先把 mediaSem 释放，避免慢 probe
+	// 让其他上传排队超时（429）。
+	releaseMedia()
+	a.probeProfilePhotoFace(r.Context(), user.ID, photo.MediaID)
 	photos, err := a.db.ProfilePhotos(r.Context(), user.ID)
 	if err != nil {
 		a.logger(r).Warn("legacy profile photo reload failed", "error", err, "user_id", user.ID)
@@ -190,7 +201,7 @@ func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Requ
 	}
 	a.audit(r, &user.ID, "profile.photo_added", "media", photo.MediaID,
 		map[string]any{"media_id": photo.MediaID, "source": "legacy"})
-	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos))
+	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos, a.legacyProfileHasFace(r.Context(), user.ID)))
 }
 
 func legacyPhotoWantsCover(r *http.Request) bool {
@@ -265,7 +276,7 @@ func (a *App) handleLegacyProfilePhotoDelete(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		a.logger(r).Warn("legacy profile photo reload failed", "error", err, "user_id", user.ID)
 	}
-	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos))
+	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos, a.legacyProfileHasFace(r.Context(), user.ID)))
 }
 
 func (a *App) handleLegacyProfilePhotoCover(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +310,7 @@ func (a *App) handleLegacyProfilePhotoCover(w http.ResponseWriter, r *http.Reque
 	}
 	a.audit(r, &user.ID, "profile.photo_cover", "media", profile.Photos[req.Index].MediaID,
 		map[string]any{"media_id": profile.Photos[req.Index].MediaID, "source": "legacy"})
-	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos))
+	writeJSON(w, http.StatusOK, legacyPhotoResponse(photos, a.legacyProfileHasFace(r.Context(), user.ID)))
 }
 
 func (a *App) handleLegacyPublicProfile(w http.ResponseWriter, r *http.Request) {

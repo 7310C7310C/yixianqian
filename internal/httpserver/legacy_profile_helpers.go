@@ -373,7 +373,7 @@ func legacyPointsError(w http.ResponseWriter, err error) {
 	}
 }
 
-func legacyPhotoResponse(photos []db.ProfilePhoto) map[string]any {
+func legacyPhotoResponse(photos []db.ProfilePhoto, hasFace bool) map[string]any {
 	urls := legacyProfilePhotoURLs(photos)
 	photo := ""
 	if len(urls) > 0 {
@@ -383,7 +383,7 @@ func legacyPhotoResponse(photos []db.ProfilePhoto) map[string]any {
 		"ok":       true,
 		"photo":    photo,
 		"photos":   urls,
-		"has_face": true,
+		"has_face": hasFace,
 	}
 }
 

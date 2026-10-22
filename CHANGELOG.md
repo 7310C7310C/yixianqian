@@ -15,6 +15,23 @@
 - 空状态：数据库空 status 一律视为未知，表单渲染「保持目前状态」而不默认报名中；总览统计卡改为 auto-fit。
 - 文档更新：STATUS 记录工作台已具备能力与剩余缺口（分组/一对一控制台、麦穗、审核详情、审计导出）。
 
+### 人脸检测
+- 恢复 v1 的本地人脸检测（YuNet 优先、Haar 回退）：`tools/face_probe.py` 输出 `has_face`、人脸中心与框。
+- 新增 `internal/face` 与 `FACE_PROBE_CMD`/`FACE_PROBE_TIMEOUT` 配置；上传后检测，超时或失败只记日志、不阻断上传。
+- `profile_photos` 新增 `face_checked`/`has_face`/`face_center_x,y`/`face_box_w,h`（migration 0005，只增列）。
+- `has_face` 与卡片 `faces` 改为真实查库；没有 checked 照片时不再默认 true，观察员账号保持 v1 的 `has_face` 放行。
+- 观察员身份证**不豁免**：`id_valid` 按真实审核结果返回，不做 grandfather（PM 2026-10-22 裁定：身份证该拦者拦）。
+- 注册照片写入后补 probe：按上传顺序检测，首张有脸即停；15 秒预算内未完成的照片在注册响应后后台补齐，12MP/9 张照片最终也会 `face_checked=true`。probe 使用独立 `faceSem`，不占用 `mediaSem`，慢检测不再让并发上传 429；失败不阻断注册。
+- 人脸检测脚本在 JPEG 解码阶段用 Pillow draft 缩到最长边 1080，12MP 单张检测耗时与内存显著下降。
+- `yxq_view_role=observer` 仅影响观察员视角，不再能绕过 `has_face`；检测命令不存在/不可执行统一返回 `probe_unavailable`，不记录命令路径。
+- 卡片/资料 `faces` 补 `tb`/`lr` 为 `[0,0]`；v1 的黑边裁切未移植，黑边照片按原图构图。
+- 新增 `cmd/facebackfill` 批量补齐迁移照片；用 `pg_try_advisory_lock` 保证单实例，部署顺序要求先 migration + 全量回填、切换前验证 `unchecked=0`、U-0006 true/U-0003 false，再切 binary，详见 `docs/runbooks/staging.md`。
+- 人脸检测 venv 固定 `numpy==1.26.4` + `opencv-python-headless==4.11.0.86`（server1 无 x86-64-v2，numpy 2.x 无法 import cv2）。
+- nginx（server1 vhost + server2 relay）请求体上限由 20m 提到 96m；注册 9 张 12MP 照片的应用上限约 92MB，原 20m 会直接 413。
+- `facebackfill` 候选按 `media_id` 去重：共用同一 media 的批量账号只下载/检测一次，结果写入所有引用该媒体的 `profile_photos` 行，避免同一照片被重复 probe。
+- 部署 runbook 增加切后增量与定时增量兜底（后台 probe 重启会丢失未完成照片）；状态文档明确人脸检测未部署、全量回填未跑。
+- 腾讯云照片内容合规（宠物/卡通判定、活体）未实现，本轮不做。
+
 ### 架构
 - 用户端沿用 v1 Vue 3 + Vant SPA；Go 提供 legacy API、session、媒体代理；管理端使用 Go SSR。
 - 新增 ADR 0007，记录用户端复用 v1 前端的决策与兼容边界。

@@ -14,6 +14,16 @@
 - CI：push run 全绿；staging 以当前 main 构建。
 - 媒体：R2 私有，浏览器只走应用代理。
 
+## 人脸检测（本地，未部署）
+
+- 代码状态：本地 YuNet/Haar 检测、`has_face` 门禁、注册后补检测、`cmd/facebackfill` 已完成（`feat/face`）；**尚未部署到 staging**，线上仍是旧 binary。
+- 部署顺序：旧 binary 运行时先 `migration 0005` + 全量回填，验证 `unchecked=0`、U-0006 true / U-0003 false，再切 binary，切后立即跑增量；后台 probe 会因重启丢失，需按 runbook 配置定时增量兜底。
+- **staging 全量回填尚未执行**。在回填完成前不得切换人脸 binary，否则老照片 `face_checked=false` 会让全站被 `has_face` 门禁锁死。
+- nginx：server1 next vhost 与 server2 relay 需 `client_max_body_size 96m`（9 张 12MP 注册请求可达 ~92MB）；repo 已改，线上待部署时同步，20m 会直接 413。
+- 观察员账号豁免 `has_face`；**身份证 `id_valid` 不豁免**（PM 2026-10-22 裁定，不做 grandfather）。
+- 未实现：腾讯云照片内容合规（宠物/卡通判定、活体）；v1 黑边裁切未移植，`tb/lr` 固定 `[0,0]`。
+- 回填候选按 `media_id` 去重，共用 media 的批量账号只检测一次；staging 的 1000 张压测账号共用 media 时不会 mass probe。
+
 ## 已知缺口（不影响 A 主路径，但投产前要确认）
 
 - 管理端已具备（对照 v1）：用户审核/管理、举报/反馈、角色权限、活动列表与创建/编辑（状态、签到、分组、一对一设置）、活动工作台（海报、名单/签到、广播、快速设置）。

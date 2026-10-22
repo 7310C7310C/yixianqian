@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/7310C7310C/yixianqian/internal/auth"
 	"github.com/7310C7310C/yixianqian/internal/config"
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/face"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -27,6 +29,7 @@ type profileHTTPEnv struct {
 	pool     *pgxpool.Pool
 	server   *httptest.Server
 	store    *fakeStore
+	app      *App
 }
 
 func setupProfileHTTPEnv(t *testing.T) *profileHTTPEnv {
@@ -67,6 +70,10 @@ func setupActivitiesHTTPEnv(t *testing.T, mutate func(*config.Config)) *profileH
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 默认不启动 Python 子进程；需要验证人脸链路的测试自行替换 faceProbe。
+	app.faceProbe = face.ProbeFunc(func(context.Context, string) (face.Result, error) {
+		return face.Result{}, errors.New("face probe disabled in test env")
+	})
 	server := httptest.NewServer(app.Handler())
 	t.Cleanup(server.Close)
 
@@ -77,6 +84,7 @@ func setupActivitiesHTTPEnv(t *testing.T, mutate func(*config.Config)) *profileH
 		pool:     pool,
 		server:   server,
 		store:    store,
+		app:      app,
 	}
 }
 

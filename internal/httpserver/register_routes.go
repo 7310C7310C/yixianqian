@@ -213,7 +213,7 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		a.cleanupRegistration(r, user.ID)
 		return
 	}
-	photoCount, photoErr := a.saveRegistrationPhotos(ctx, user.ID, photos)
+	mediaIDs, photoErr := a.saveRegistrationPhotos(ctx, user.ID, photos)
 	a.releaseMedia()
 	if photoErr != nil {
 		a.cleanupRegistration(r, user.ID)
@@ -224,6 +224,10 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		a.renderRegister(w, r, status, values, message)
 		return
 	}
+	// 注册照片刚写入 profile_photos，必须补 probe：否则新用户没有任何
+	// face_checked 照片，会被 has_face 门禁锁死。此处 mediaSem 已释放，
+	// probe 只受 faceSem 与总预算约束；失败不阻断注册，留给 facebackfill。
+	a.probeRegistrationPhotos(ctx, user.ID, mediaIDs)
 
 	inviteStatus := ""
 	inviterBound := false
@@ -238,10 +242,10 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	a.notifyRegistration(ctx, r, user, input.Nickname, photoCount)
+	a.notifyRegistration(ctx, r, user, input.Nickname, len(mediaIDs))
 
 	meta := map[string]any{
-		"photos":        photoCount,
+		"photos":        len(mediaIDs),
 		"inviter_bound": inviterBound,
 	}
 	if inviteStatus != "" {
@@ -322,33 +326,36 @@ func registrationPhotoParts(files []*multipart.FileHeader) ([]*multipart.FileHea
 	return out, nil
 }
 
-func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []*multipart.FileHeader) (int, error) {
+// saveRegistrationPhotos 保存注册照片并返回 media ID 列表。调用方负责
+// mediaSem；本函数不运行 probe。
+func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []*multipart.FileHeader) ([]string, error) {
+	mediaIDs := make([]string, 0, len(files))
 	for _, header := range files {
 		file, err := header.Open()
 		if err != nil {
-			return 0, fmt.Errorf("register: open photo: %w", err)
+			return nil, fmt.Errorf("register: open photo: %w", err)
 		}
 		data, readErr := io.ReadAll(io.LimitReader(file, a.cfg.MediaMaxBytes+1))
 		closeErr := file.Close()
 		if readErr != nil {
-			return 0, fmt.Errorf("register: read photo: %w", readErr)
+			return nil, fmt.Errorf("register: read photo: %w", readErr)
 		}
 		if closeErr != nil {
-			return 0, fmt.Errorf("register: close photo: %w", closeErr)
+			return nil, fmt.Errorf("register: close photo: %w", closeErr)
 		}
 		if int64(len(data)) > a.cfg.MediaMaxBytes {
-			return 0, media.ErrFileTooLarge
+			return nil, media.ErrFileTooLarge
 		}
 
 		processed, err := media.ProcessWithLimits(data, a.cfg.MediaThumbSize,
 			a.cfg.MediaMaxDim, a.cfg.MediaMaxPixels)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		id, err := platform.NewUUID()
 		if err != nil {
-			return 0, fmt.Errorf("register: generate media id: %w", err)
+			return nil, fmt.Errorf("register: generate media id: %w", err)
 		}
 		ext := "jpg"
 		if processed.ContentType == "image/png" {
@@ -358,11 +365,11 @@ func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []
 		thumbKey := fmt.Sprintf("media/%d/%s_thumb.jpg", userID, id)
 
 		if err := a.store.Put(ctx, key, processed.Original, processed.ContentType); err != nil {
-			return 0, err
+			return nil, err
 		}
 		if err := a.store.Put(ctx, thumbKey, processed.Thumbnail, "image/jpeg"); err != nil {
 			a.removeStoredObject(ctx, key)
-			return 0, err
+			return nil, err
 		}
 		saved, err := a.db.CreateMedia(ctx, db.Media{
 			ID:           id,
@@ -379,16 +386,18 @@ func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []
 		if err != nil {
 			a.removeStoredObject(ctx, key)
 			a.removeStoredObject(ctx, thumbKey)
-			return 0, err
+			return nil, err
 		}
-		if _, err := a.db.AddProfilePhoto(ctx, userID, saved.ID); err != nil {
+		photo, err := a.db.AddProfilePhoto(ctx, userID, saved.ID)
+		if err != nil {
 			_, _ = a.db.RemoveMediaOwned(ctx, userID, saved.ID)
 			a.removeStoredObject(ctx, key)
 			a.removeStoredObject(ctx, thumbKey)
-			return 0, err
+			return nil, err
 		}
+		mediaIDs = append(mediaIDs, photo.MediaID)
 	}
-	return len(files), nil
+	return mediaIDs, nil
 }
 
 func (a *App) removeStoredObject(ctx context.Context, key string) {

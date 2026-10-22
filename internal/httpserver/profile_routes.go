@@ -642,7 +642,14 @@ func (a *App) handleProfilePhotoUpload(w http.ResponseWriter, r *http.Request, a
 	if !a.acquireMedia(w, r, api) {
 		return
 	}
-	defer a.releaseMedia()
+	mediaReleased := false
+	releaseMedia := func() {
+		if !mediaReleased {
+			a.releaseMedia()
+			mediaReleased = true
+		}
+	}
+	defer releaseMedia()
 	if err := a.parseMultipartRequest(w, r); err != nil {
 		if api {
 			status, code, message := uploadParseErrorDetails(err)
@@ -675,6 +682,10 @@ func (a *App) handleProfilePhotoUpload(w http.ResponseWriter, r *http.Request, a
 		a.respondProfilePhotoError(w, r, api, err)
 		return
 	}
+	// probe 使用独立的 faceSem，必须先把 mediaSem 释放，避免慢 probe
+	// 让其他上传排队超时（429）。
+	releaseMedia()
+	a.probeProfilePhotoFace(r.Context(), user.ID, photo.MediaID)
 	photos, err := a.db.ProfilePhotos(r.Context(), user.ID)
 	if err != nil {
 		a.logger(r).Warn("reload profile photos failed", "error", err, "user_id", user.ID)

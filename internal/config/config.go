@@ -25,6 +25,8 @@ const (
 	defaultMaxMedia      = 1
 	defaultMediaPixels   = 12_000_000
 	defaultMediaDim      = 8000
+	defaultFaceProbeCmd  = "python3 tools/face_probe.py"
+	defaultFaceProbeTime = 8 * time.Second
 )
 
 // Config holds every runtime setting. Secrets are never logged.
@@ -59,6 +61,11 @@ type Config struct {
 	MaxMedia       int
 	ActivationTTL  time.Duration
 
+	// FaceProbeCmd 是本地人脸检测命令（空格分隔，图片路径追加在末尾）。
+	// FaceProbeTimeout 是单张照片检测超时；失败只记录并放行上传。
+	FaceProbeCmd     string
+	FaceProbeTimeout time.Duration
+
 	LogLevel  slog.Level
 	LogFormat string
 }
@@ -90,6 +97,7 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		R2SecretAccessKey: get("R2_SECRET_ACCESS_KEY", ""),
 		R2Bucket:          get("R2_BUCKET", ""),
 		LogFormat:         strings.ToLower(get("LOG_FORMAT", "json")),
+		FaceProbeCmd:      get("FACE_PROBE_CMD", defaultFaceProbeCmd),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -195,6 +203,14 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	}
 	if cfg.MaxMedia < 1 || cfg.MaxMedia > 4 {
 		errs = append(errs, errors.New("config: MAX_CONCURRENT_MEDIA must be between 1 and 4"))
+	}
+	if v, err := parseDuration(getenv("FACE_PROBE_TIMEOUT"), defaultFaceProbeTime); err != nil {
+		errs = append(errs, fmt.Errorf("config: FACE_PROBE_TIMEOUT: %w", err))
+	} else {
+		cfg.FaceProbeTimeout = v
+	}
+	if cfg.FaceProbeTimeout < time.Second || cfg.FaceProbeTimeout > time.Minute {
+		errs = append(errs, errors.New("config: FACE_PROBE_TIMEOUT must be between 1s and 60s"))
 	}
 
 	trusted, err := platform.ParseTrustedProxies(get("TRUSTED_PROXY", defaultTrustedProxy))
