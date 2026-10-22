@@ -2,12 +2,6 @@
 
 /* 麦穗管理模块样式。admin.css 已提供基础表格、标签与栅格。 */
 
-/* render.go 尚未把 points 纳入 admin-shell；本页自行放宽内容宽度，
-   避免 1280px 下表格挤在 640px 容器里。 */
-.shell-main .shell-container {
-  max-width: 1080px;
-}
-
 .admin-points-tabs {
   margin-bottom: 0;
 }
