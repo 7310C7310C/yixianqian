@@ -1,0 +1,18 @@
+{{define "content"}}
+<section class="card narrow">
+  <h1>登录</h1>
+  <p class="muted">使用手机号码与密码登录。</p>
+  {{template "flash" .}}
+  <form method="post" action="/login" class="stack">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label for="phone">手机号码</label>
+    <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="username"
+           value="{{.Phone}}" placeholder="0912345678" required autofocus>
+    <label for="password">密码</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit" class="button primary">登录</button>
+  </form>
+  <p class="hint">首次使用请开启管理员提供的启用链接设定密码；还没有账号？<a href="/register">立即注册</a>。</p>
+</section>
+{{end}}

@@ -1,0 +1,100 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="card">
+  <p class="eyebrow">RBAC</p>
+  <h1>角色与权限</h1>
+  {{template "flash" .}}
+  <p class="hint">super_admin 自动拥有全部权限；最后一位最高管理员不能被移除或停用。第一版角色固定，只做指派。</p>
+</section>
+
+<section class="card">
+  <h2>角色</h2>
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th scope="col">代码</th>
+          <th scope="col">名称</th>
+          <th scope="col">人数</th>
+          <th scope="col">权限</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.Roles}}
+        <tr>
+          <td data-label="代码"><code>{{.Code}}</code></td>
+          <td data-label="名称">{{.Name}}</td>
+          <td data-label="人数">{{.UserCount}}</td>
+          <td data-label="权限">
+            {{if .Permissions}}
+            <span class="admin-perms">{{range $i, $p := .Permissions}}{{if $i}} · {{end}}<code>{{$p}}</code>{{end}}</span>
+            {{else}}<span class="muted">—</span>{{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>目前管理员</h2>
+  {{if .Data.Assignments}}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th scope="col">会员</th>
+          <th scope="col">手机</th>
+          <th scope="col">角色</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.Assignments}}
+        <tr>
+          <td data-label="会员">
+            <strong>{{.Name}}</strong>
+            <div class="muted"><code>{{if .LegacyUserID}}{{.LegacyUserID}}{{else}}#{{.UserID}}{{end}}</code></div>
+          </td>
+          <td data-label="手机">{{.Phone}}</td>
+          <td data-label="角色">
+            {{range $i, $r := .Roles}}{{if $i}}、{{end}}<code>{{$r}}</code>{{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="muted">目前没有管理员。</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>指派角色</h2>
+  {{if .Data.SuperAdmin}}
+  <form method="post" action="/admin/roles/assign" class="admin-filter">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <label for="role-user-ref">用户</label>
+    <input id="role-user-ref" name="user_ref" type="text" required
+           placeholder="U-0006、手机或用户 ID">
+    <label for="role-code">角色</label>
+    <select id="role-code" name="role" required>
+      {{range .Data.Roles}}
+      <option value="{{.Code}}">{{.Name}}（{{.Code}}）</option>
+      {{end}}
+    </select>
+    <label for="role-action">动作</label>
+    <select id="role-action" name="action">
+      <option value="assign">指派</option>
+      <option value="remove">移除</option>
+    </select>
+    <button type="submit" class="button primary">送出</button>
+  </form>
+  <p class="hint">指派对象必须是既有用户；例如把 U-0006 指派为 super_admin。</p>
+  {{else}}
+  <p class="muted">只有最高管理员可以指派或移除角色。</p>
+  {{end}}
+</section>
+{{end}}

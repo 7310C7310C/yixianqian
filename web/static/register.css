@@ -1,0 +1,332 @@
+/* 一线牵 — 公开引流页与注册表单
+   载入顺序：app.css -> shell.css -> register.css
+   品牌色沿用 shell.css 的粉红 token，全部附 literal fallback。 */
+
+.welcome-hero {
+  margin: 0 0 14px;
+  padding: 28px 18px 22px;
+  border: 1px solid #ffe3e8;
+  border-color: var(--shell-brand-line, #ffe3e8);
+  border-radius: 18px;
+  background: #fff7f8;
+  background: linear-gradient(160deg, #fff7f8 0%, #fff0f3 58%, #ffe9ee 100%);
+  text-align: center;
+}
+
+.welcome-hero .eyebrow {
+  margin-bottom: 8px;
+}
+
+.welcome-title {
+  margin: 0 0 10px;
+  color: #ad2139;
+  color: var(--shell-brand-deep, #ad2139);
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: 0.12em;
+}
+
+.welcome-lead {
+  max-width: 34em;
+  margin: 0 auto 18px;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.welcome-actions {
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.welcome-actions .button + .button {
+  margin-top: 8px;
+}
+
+.welcome-note {
+  margin: 14px 0 0;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+}
+
+.welcome-features {
+  margin: 0 0 14px;
+}
+
+.welcome-feature {
+  padding: 16px;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 14px;
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+}
+
+.welcome-feature + .welcome-feature {
+  margin-top: 10px;
+}
+
+.welcome-feature h2 {
+  margin: 4px 0 6px;
+  font-size: 17px;
+}
+
+.welcome-feature p {
+  margin: 0;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.welcome-icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  color: #cc304e;
+  color: var(--shell-brand-strong, #cc304e);
+  vertical-align: -4px;
+}
+
+.welcome-steps {
+  padding: 16px;
+  border: 1px solid #ffe3e8;
+  border-color: var(--shell-brand-line, #ffe3e8);
+  border-radius: 14px;
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+}
+
+.welcome-steps h2 {
+  margin: 0 0 8px;
+}
+
+.welcome-steps ol {
+  margin: 0 0 14px;
+  padding-left: 1.3em;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.welcome-steps li + li {
+  margin-top: 6px;
+}
+
+.welcome-footer-note {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.welcome-footer-note p {
+  margin: 0 0 4px;
+  color: #ad2139;
+  color: var(--shell-brand-deep, #ad2139);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.welcome-footer-note .hint {
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-weight: 400;
+}
+
+/* --------------------------------------------------------------------------
+   注册表单
+   -------------------------------------------------------------------------- */
+
+.register-hero {
+  padding: 6px 2px 2px;
+}
+
+.register-hero h1 {
+  margin-bottom: 8px;
+}
+
+.register-hero .muted {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.register-form {
+  margin-top: 4px;
+}
+
+.register-section h2 {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ffe3e8;
+  border-bottom-color: var(--shell-brand-line, #ffe3e8);
+}
+
+.register-field {
+  margin-top: 14px;
+}
+
+.register-field:first-of-type {
+  margin-top: 8px;
+}
+
+.register-field > label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.register-field .hint {
+  margin-top: 5px;
+}
+
+.req {
+  color: #cc304e;
+  color: var(--shell-brand-strong, #cc304e);
+  font-weight: 700;
+}
+
+.register-multi {
+  margin: 8px 0 0;
+  padding: 10px 12px 12px;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 12px;
+}
+
+.register-multi legend {
+  padding: 0 4px;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.register-multi .hint {
+  margin: 2px 0 6px;
+}
+
+.register-chips {
+  margin: 0 -3px;
+  font-size: 0;
+}
+
+.register-chips .chip {
+  display: inline-block;
+  margin: 3px;
+  padding: 6px 10px;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 999px;
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  vertical-align: top;
+  cursor: pointer;
+}
+
+.register-chips .chip input {
+  width: auto;
+  min-height: 0;
+  margin: 0 5px 0 0;
+  vertical-align: -1px;
+}
+
+.register-chips .chip:active {
+  background: #fff0f3;
+  background: var(--shell-brand-soft, #fff0f3);
+}
+
+.register-check {
+  display: block;
+  padding: 12px;
+  border: 1px solid #ffe3e8;
+  border-color: var(--shell-brand-line, #ffe3e8);
+  border-radius: 12px;
+  background: #fff7f8;
+  background: var(--shell-brand-wash, #fff7f8);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.register-check input {
+  width: auto;
+  min-height: 0;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.register-submit {
+  text-align: center;
+}
+
+.register-submit .hint {
+  margin: 0 0 10px;
+}
+
+.register-alt {
+  margin: 12px 0 0;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+}
+
+.register-done {
+  text-align: center;
+}
+
+.register-done-actions {
+  margin: 18px 0 4px;
+}
+
+.register-done-actions .button + .button {
+  margin-top: 8px;
+}
+
+.register-note {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid #ebedf0;
+  border-top-color: var(--shell-border, #ebedf0);
+  text-align: left;
+}
+
+.register-note h2 {
+  font-size: 15px;
+}
+
+.register-note p {
+  margin: 0 0 8px;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+@media (min-width: 700px) {
+  .welcome-hero {
+    padding: 40px 28px 32px;
+  }
+
+  .welcome-title {
+    font-size: 42px;
+  }
+
+  .welcome-features {
+    display: flex;
+    margin: 0 -5px 14px;
+  }
+
+  .welcome-feature {
+    flex: 1 1 0;
+    margin: 0 5px;
+  }
+
+  .welcome-feature + .welcome-feature {
+    margin-top: 0;
+  }
+}

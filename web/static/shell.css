@@ -1,0 +1,1179 @@
+/* ==========================================================================
+   一线牵 v2 — 共用 UI shell / 品牌层
+   --------------------------------------------------------------------------
+   载入顺序：app.css -> shell.css -> 各页 PageCSS（页面样式最后覆写）
+   本档只做 shell、共用元件与 app.css 品牌 token 覆写，不改页面互动逻辑。
+   规范：
+   - 不引用外部字体/CDN；只用系统字体。
+   - 关键版面用 block/flex + margin，不用 grid/gap 当唯一布局。
+   - CSS 变数都附 literal fallback，旧浏览器（B 层）仍可读。
+   - 不用 color-mix()/inset 等新语法当必要样式。
+   ========================================================================== */
+
+:root {
+  /* 品牌（沿用 v1：Vant primary #ff6b81、品牌深粉 #cc304e） */
+  --shell-brand: #ff6b81;
+  --shell-brand-strong: #cc304e;
+  --shell-brand-deep: #ad2139;
+  --shell-brand-soft: #fff0f3;
+  --shell-brand-wash: #fff7f8;
+  --shell-brand-line: #ffe3e8;
+  --shell-primary-bg: #cc304e;
+  --shell-primary-text: #ffffff;
+  --shell-primary-hover: #ad2139;
+  --shell-link: #cc304e;
+  --shell-focus: #cc304e;
+  --shell-focus-ring: rgba(255, 107, 129, 0.24);
+
+  /* 中性色（Vant 色阶；内文/次要文字皆 ≥4.5:1） */
+  --shell-bg: #f7f8fa;
+  --shell-surface: #ffffff;
+  --shell-surface-2: #f2f3f5;
+  --shell-input-bg: #ffffff;
+  --shell-text: #323233;
+  --shell-text-strong: #1f2022;
+  --shell-muted: #6b7280;
+  --shell-placeholder: #969799;
+  --shell-border: #ebedf0;
+  --shell-border-strong: #8a8a8e;
+  --shell-divider: #f2f3f5;
+
+  /* 语意色 */
+  --shell-danger: #9b2c2c;
+  --shell-danger-soft: #fdecec;
+  --shell-danger-line: #f0c9c9;
+  --shell-success: #0a6b3d;
+  --shell-success-soft: #e8f8ee;
+  --shell-success-line: #bfe8cf;
+  --shell-warning: #8a5a11;
+  --shell-warning-soft: #fff7e6;
+
+  /* 尺寸 / 间距 / 圆角 */
+  --shell-space-1: 4px;
+  --shell-space-2: 8px;
+  --shell-space-3: 12px;
+  --shell-space-4: 16px;
+  --shell-space-5: 24px;
+  --shell-space-6: 32px;
+  --shell-radius-sm: 10px;
+  --shell-radius: 12px;
+  --shell-radius-lg: 16px;
+  --shell-radius-pill: 999px;
+  --shell-tap: 44px;
+  --shell-header-h: 52px;
+  --shell-tabbar-h: 56px;
+  --shell-content-max: 640px;
+  --shell-gutter: 12px;
+
+  /* 字体 */
+  --shell-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+    sans-serif;
+  --shell-font-size: 16px;
+  --shell-line: 1.55;
+  --shell-font-xs: 12px;
+  --shell-font-sm: 13px;
+  --shell-font-base: 16px;
+  --shell-font-lg: 17px;
+  --shell-font-xl: 20px;
+  --shell-font-2xl: 24px;
+
+  /* 阴影 / 层级 */
+  --shell-shadow-card: 0 2px 12px rgba(0, 0, 0, 0.05);
+  --shell-shadow-bar: 0 -4px 16px rgba(50, 50, 51, 0.06);
+  --shell-z-header: 20;
+  --shell-z-tabbar: 30;
+  --shell-z-skip: 100;
+
+  /* app.css token 桥接：让既有元件一起变粉色 */
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --text: #323233;
+  --muted: #6b7280;
+  --border: #ebedf0;
+  --accent: #cc304e;
+  --accent-strong: #ad2139;
+  --accent-soft: #fff0f3;
+  --danger: #9b2c2c;
+  --danger-soft: #fdecec;
+  --radius: 12px;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* --------------------------------------------------------------------------
+   基础
+   -------------------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body.shell-body {
+  margin: 0;
+  background: #f7f8fa;
+  background: var(--shell-bg, #f7f8fa);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+    sans-serif;
+  font-family: var(--shell-font, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif);
+  font-size: 16px;
+  font-size: var(--shell-font-size, 16px);
+  line-height: 1.55;
+  line-height: var(--shell-line, 1.55);
+  -webkit-tap-highlight-color: rgba(255, 107, 129, 0.14);
+}
+
+body.shell-body.has-tabbar {
+  padding-bottom: 68px;
+  padding-bottom: calc(56px + constant(safe-area-inset-bottom) + 12px);
+  padding-bottom: calc(56px + env(safe-area-inset-bottom) + 12px);
+}
+
+a {
+  color: #cc304e;
+  color: var(--shell-link, #cc304e);
+  text-underline-offset: 2px;
+}
+
+a:focus,
+button:focus,
+input:focus,
+select:focus,
+textarea:focus,
+summary:focus {
+  outline: 2px solid #cc304e;
+  outline: 2px solid var(--shell-focus, #cc304e);
+  outline-offset: 2px;
+}
+
+/* 支持 :focus-visible 的浏览器：滑鼠点击不显示外框，键盘仍保留。 */
+a:focus:not(:focus-visible),
+button:focus:not(:focus-visible),
+summary:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* --------------------------------------------------------------------------
+   Skip link
+   -------------------------------------------------------------------------- */
+
+.shell-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  z-index: var(--shell-z-skip, 100);
+  padding: 8px 12px;
+  border-radius: 0 0 8px 0;
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  color: #cc304e;
+  color: var(--shell-brand-strong, #cc304e);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.shell-skip:focus {
+  left: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Header：品牌 + 账号/退出登录
+   -------------------------------------------------------------------------- */
+
+.shell-header {
+  position: relative;
+  z-index: 20;
+  z-index: var(--shell-z-header, 20);
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  border-bottom: 1px solid #ffe3e8;
+  border-bottom-color: var(--shell-brand-line, #ffe3e8);
+  padding-top: 0;
+  padding-top: constant(safe-area-inset-top);
+  padding-top: env(safe-area-inset-top);
+}
+
+.shell-header::before {
+  content: "";
+  display: block;
+  height: 3px;
+  background: #ff6b81;
+  background: linear-gradient(90deg, #ff6b81 0%, #ff8fa1 55%, #ffb3bf 100%);
+}
+
+.shell-header-inner {
+  display: block;
+  overflow: hidden;
+  max-width: 640px;
+  max-width: var(--shell-content-max, 640px);
+  margin: 0 auto;
+  padding: 0 12px;
+  padding: 0 var(--shell-gutter, 12px);
+}
+
+/* flex 为增强；不支持时沿用上面的 block + 下面 brand/account 的浮动。 */
+.shell-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  min-height: var(--shell-header-h, 52px);
+}
+
+.shell-brand {
+  display: inline-block;
+  float: left;
+  color: #cc304e;
+  color: var(--shell-brand-strong, #cc304e);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 52px;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shell-brand-mark {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 5px;
+  color: #ff6b81;
+  color: var(--shell-brand, #ff6b81);
+  vertical-align: -3px;
+}
+
+.shell-brand:hover .shell-brand-text {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.shell-account {
+  display: block;
+  float: right;
+  margin: 0;
+  padding: 0;
+}
+
+.shell-account {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
+}
+
+.shell-who {
+  max-width: 7em;
+  overflow: hidden;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-logout-form {
+  display: inline;
+  margin: 0 0 0 8px;
+}
+
+.shell-logout {
+  min-height: 44px;
+  min-height: var(--shell-tap, 44px);
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: #cc304e;
+  color: var(--shell-brand-strong, #cc304e);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.shell-logout:hover {
+  color: #ad2139;
+  color: var(--shell-brand-deep, #ad2139);
+}
+
+/* --------------------------------------------------------------------------
+   主内容
+   -------------------------------------------------------------------------- */
+
+.shell-main {
+  display: block;
+}
+
+.shell-main:focus {
+  outline: none;
+}
+
+.shell-container {
+  display: block;
+  max-width: 640px;
+  max-width: var(--shell-content-max, 640px);
+  margin: 0 auto;
+  padding: 12px 12px 24px;
+  padding: var(--shell-gutter, 12px) var(--shell-gutter, 12px) 24px;
+}
+
+/* 不用 grid/gap：以相邻 margin 取代，旧浏览器一致。 */
+.shell-container > * + * {
+  margin-top: 12px;
+}
+
+@media (min-width: 700px) {
+  .shell-container {
+    padding: 16px 16px 32px;
+  }
+
+  .shell-container > * + * {
+    margin-top: 16px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Bottom tabbar：牵线 / 消息 / 活动 / 我的
+   -------------------------------------------------------------------------- */
+
+.shell-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  z-index: var(--shell-z-tabbar, 30);
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  border-top: 1px solid #ffe3e8;
+  border-top-color: var(--shell-brand-line, #ffe3e8);
+  box-shadow: 0 -4px 16px rgba(50, 50, 51, 0.06);
+  box-shadow: var(--shell-shadow-bar, 0 -4px 16px rgba(50, 50, 51, 0.06));
+  padding-bottom: 0;
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.shell-tabbar-inner {
+  display: block;
+  max-width: 640px;
+  max-width: var(--shell-content-max, 640px);
+  margin: 0 auto;
+}
+
+.shell-tabbar-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0;
+}
+
+/* flex 为增强；不支持时 item 以 inline-block 25% 排列。 */
+.shell-tabbar-list {
+  display: flex;
+}
+
+.shell-tabbar-item {
+  display: inline-block;
+  width: 25%;
+  margin: 0;
+  padding: 0;
+  vertical-align: top;
+  font-size: 12px;
+}
+
+.shell-tab {
+  position: relative;
+  display: block;
+  min-height: 56px;
+  min-height: var(--shell-tabbar-h, 56px);
+  padding: 6px 0 5px;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.shell-tab-icon-wrap {
+  display: block;
+  width: 38px;
+  height: 24px;
+  margin: 0 auto 1px;
+  border-radius: 12px;
+}
+
+.shell-tab-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: 1px auto 0;
+}
+
+.shell-tab-label {
+  display: block;
+}
+
+/* 选中态：外框、底色、aria-current 三重提示（不依赖 JS）。 */
+.shell-tab.is-active,
+.shell-tab[aria-current="page"] {
+  color: #cc304e;
+  color: var(--shell-brand-strong, #cc304e);
+  font-weight: 600;
+}
+
+.shell-tab.is-active .shell-tab-icon-wrap,
+.shell-tab[aria-current="page"] .shell-tab-icon-wrap {
+  background: #fff0f3;
+  background: var(--shell-brand-soft, #fff0f3);
+}
+
+@media (hover: hover) {
+  .shell-tab:hover {
+    color: #ad2139;
+    color: var(--shell-brand-deep, #ad2139);
+  }
+
+  .shell-tab:hover .shell-tab-icon-wrap {
+    background: #fff7f8;
+    background: var(--shell-brand-wash, #fff7f8);
+  }
+}
+
+.shell-tab-badge {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #cc304e;
+  background: var(--shell-brand-strong, #cc304e);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   字体层级
+   -------------------------------------------------------------------------- */
+
+.shell-container h1,
+.shell-container .h1 {
+  margin: 0 0 8px;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.shell-container h2,
+.shell-container .h2 {
+  margin: 0 0 6px;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.shell-container h3,
+.shell-container .h3 {
+  margin: 0 0 4px;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #ad2139;
+  color: var(--shell-brand-deep, #ad2139);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+}
+
+.hint {
+  margin: 0;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+code {
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+  background: #fff0f3;
+  background: var(--shell-brand-soft, #fff0f3);
+  color: #ad2139;
+  color: var(--shell-brand-deep, #ad2139);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (min-width: 700px) {
+  .shell-container h1,
+  .shell-container .h1 {
+    font-size: 22px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   卡片
+   -------------------------------------------------------------------------- */
+
+.card {
+  padding: 14px 16px;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 12px;
+  border-radius: var(--shell-radius, 12px);
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shell-shadow-card, 0 2px 12px rgba(0, 0, 0, 0.05));
+}
+
+.card > :first-child {
+  margin-top: 0;
+}
+
+.card > :last-child {
+  margin-bottom: 0;
+}
+
+.card.narrow,
+.narrow {
+  width: 100%;
+  max-width: 440px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.center {
+  text-align: center;
+}
+
+@media (min-width: 700px) {
+  .card {
+    padding: 16px 18px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   按钮
+   -------------------------------------------------------------------------- */
+
+.button {
+  display: inline-block;
+  min-height: 44px;
+  min-height: var(--shell-tap, 44px);
+  padding: 10px 18px;
+  border: 1px solid #dcdee0;
+  border-color: var(--shell-border, #dcdee0);
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+
+.button:hover {
+  border-color: #cc304e;
+  border-color: var(--shell-brand-strong, #cc304e);
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+.button[disabled],
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button.primary {
+  border-color: #cc304e;
+  border-color: var(--shell-primary-bg, #cc304e);
+  background: #cc304e;
+  background: var(--shell-primary-bg, #cc304e);
+  color: #ffffff;
+  color: var(--shell-primary-text, #ffffff);
+}
+
+.button.primary:hover {
+  border-color: #ad2139;
+  border-color: var(--shell-primary-hover, #ad2139);
+  background: #ad2139;
+  background: var(--shell-primary-hover, #ad2139);
+}
+
+.button.block {
+  display: block;
+  width: 100%;
+}
+
+.button.small {
+  position: relative;
+  min-height: 38px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+/* 视觉 38px，透明命中区补到 44px。 */
+.button.small::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: 0;
+  bottom: -3px;
+  left: 0;
+}
+
+.button.danger {
+  border-color: #f0c9c9;
+  border-color: var(--shell-danger-line, #f0c9c9);
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  color: #9b2c2c;
+  color: var(--shell-danger, #9b2c2c);
+}
+
+.link-button {
+  min-height: 44px;
+  min-height: var(--shell-tap, 44px);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: #cc304e;
+  color: var(--shell-link, #cc304e);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link-button.danger {
+  color: #9b2c2c;
+  color: var(--shell-danger, #9b2c2c);
+}
+
+.inline-form {
+  display: inline;
+}
+
+/* --------------------------------------------------------------------------
+   表单
+   -------------------------------------------------------------------------- */
+
+.shell-container label,
+.card label {
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+input[type="text"],
+input[type="tel"],
+input[type="password"],
+input[type="number"],
+input[type="email"],
+input[type="search"],
+input[type="date"],
+select,
+textarea {
+  width: 100%;
+  min-height: 44px;
+  min-height: var(--shell-tap, 44px);
+  padding: 10px 12px;
+  border: 1px solid #8a8a8e;
+  border-color: var(--shell-border-strong, #8a8a8e);
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+  background: #ffffff;
+  background: var(--shell-input-bg, #ffffff);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+input[type="file"] {
+  width: 100%;
+  min-height: 44px;
+  min-height: var(--shell-tap, 44px);
+  padding: 8px;
+  border: 1px solid #8a8a8e;
+  border-color: var(--shell-border-strong, #8a8a8e);
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+  background: #ffffff;
+  background: var(--shell-input-bg, #ffffff);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font: inherit;
+  font-size: 16px;
+}
+
+input[type="text"]:focus,
+input[type="tel"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="email"]:focus,
+input[type="search"]:focus,
+input[type="date"]:focus,
+input[type="file"]:focus,
+select:focus,
+textarea:focus {
+  border-color: #cc304e;
+  border-color: var(--shell-focus, #cc304e);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 107, 129, 0.24);
+  box-shadow: 0 0 0 3px var(--shell-focus-ring, rgba(255, 107, 129, 0.24));
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #969799;
+  color: var(--shell-placeholder, #969799);
+  opacity: 1;
+}
+
+input[type="radio"],
+input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+  margin-right: 6px;
+}
+
+fieldset {
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid #f2f3f5;
+  border-color: var(--shell-divider, #f2f3f5);
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+}
+
+legend {
+  padding: 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* app.css 用 grid/gap；shell 以 block + margin 作为主要 fallback。 */
+.stack {
+  display: block;
+  margin-top: 12px;
+}
+
+.stack > * + * {
+  margin-top: 8px;
+}
+
+.stack.compact {
+  margin-top: 6px;
+}
+
+.stack.compact > * + * {
+  margin-top: 6px;
+}
+
+.form-error {
+  min-height: 1.4em;
+  margin: 6px 0 0;
+  color: #9b2c2c;
+  color: var(--shell-danger, #9b2c2c);
+  font-size: 13px;
+}
+
+/* --------------------------------------------------------------------------
+   Flash / 提示
+   -------------------------------------------------------------------------- */
+
+.alert {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.alert-error {
+  border-color: #f0c9c9;
+  border-color: var(--shell-danger-line, #f0c9c9);
+  background: #fdecec;
+  background: var(--shell-danger-soft, #fdecec);
+  color: #9b2c2c;
+  color: var(--shell-danger, #9b2c2c);
+}
+
+.alert-ok {
+  border-color: #bfe8cf;
+  border-color: var(--shell-success-line, #bfe8cf);
+  background: #e8f8ee;
+  background: var(--shell-success-soft, #e8f8ee);
+  color: #0a6b3d;
+  color: var(--shell-success, #0a6b3d);
+}
+
+.card > .alert:first-child {
+  margin-top: 0;
+}
+
+/* --------------------------------------------------------------------------
+   列表 / cell
+   -------------------------------------------------------------------------- */
+
+.shell-list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 12px;
+  border-radius: var(--shell-radius, 12px);
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  list-style: none;
+  overflow: hidden;
+}
+
+.shell-cell {
+  display: block;
+  display: flex;
+  min-height: 52px;
+  padding: 12px 14px;
+  border-top: 1px solid #f2f3f5;
+  border-top-color: var(--shell-divider, #f2f3f5);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  text-decoration: none;
+}
+
+.shell-cell:first-child {
+  border-top: 0;
+}
+
+.shell-cell-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shell-cell-title {
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.shell-cell-desc {
+  margin-top: 2px;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.shell-cell-aside {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+a.shell-cell:hover {
+  background: #fff7f8;
+  background: var(--shell-brand-wash, #fff7f8);
+}
+
+a.shell-cell:active {
+  background: #fff0f3;
+  background: var(--shell-brand-soft, #fff0f3);
+}
+
+/* --------------------------------------------------------------------------
+   Empty state
+   -------------------------------------------------------------------------- */
+
+.empty-state,
+.shell-empty {
+  max-width: 520px;
+  margin: 24px auto;
+  padding: 32px 16px;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 16px;
+  border-radius: var(--shell-radius-lg, 16px);
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  text-align: center;
+}
+
+.empty-state h2,
+.shell-empty-title {
+  margin: 0 0 4px;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.empty-icon,
+.shell-empty-icon {
+  margin: 0 0 8px;
+  font-size: 40px;
+  line-height: 1;
+}
+
+.shell-empty-text {
+  margin: 0;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.empty-state .button,
+.shell-empty .button {
+  margin-top: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Pill / badge
+   -------------------------------------------------------------------------- */
+
+.shell-pill {
+  display: inline-block;
+  margin: 0 4px 4px 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border-radius: var(--shell-radius-pill, 999px);
+  background: #fff0f3;
+  background: var(--shell-brand-soft, #fff0f3);
+  color: #ad2139;
+  color: var(--shell-brand-deep, #ad2139);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.shell-pill-muted {
+  background: #f2f3f5;
+  background: var(--shell-surface-2, #f2f3f5);
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+}
+
+.shell-badge {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #cc304e;
+  background: var(--shell-brand-strong, #cc304e);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   Footer（仅登录/启用等无 tabbar 页面使用）
+   -------------------------------------------------------------------------- */
+
+.shell-footer {
+  max-width: 640px;
+  max-width: var(--shell-content-max, 640px);
+  margin: 0 auto;
+  padding: 16px 12px 24px;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Dark mode
+   - 跟随系统；同时提供 data-theme="dark" 供日后手动切换。
+   - 色阶沿用 v1 Vant dark（#1a1a1c / #222226 / #2c2c30 / #3a3a3e）。
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --shell-brand: #ff8fa1;
+    --shell-brand-strong: #ffb3bf;
+    --shell-brand-deep: #ffd9e0;
+    --shell-brand-soft: #3a2830;
+    --shell-brand-wash: #2a1a1e;
+    --shell-brand-line: #46363c;
+    --shell-primary-bg: #ff8fa1;
+    --shell-primary-text: #2a1a1e;
+    --shell-primary-hover: #ffb3bf;
+    --shell-link: #ffb3bf;
+    --shell-focus: #ffb3bf;
+    --shell-focus-ring: rgba(255, 143, 161, 0.28);
+
+    --shell-bg: #1a1a1c;
+    --shell-surface: #222226;
+    --shell-surface-2: #2c2c30;
+    --shell-input-bg: #2c2c30;
+    --shell-text: #f5f5f5;
+    --shell-text-strong: #ffffff;
+    --shell-muted: #c8c9cc;
+    --shell-placeholder: #a0a0a4;
+    --shell-border: #3a3a3e;
+    --shell-border-strong: #7a7d82;
+    --shell-divider: #2c2c30;
+
+    --shell-danger: #ff7a85;
+    --shell-danger-soft: #3a1f22;
+    --shell-danger-line: #5a2a30;
+    --shell-success: #7ad9a2;
+    --shell-success-soft: #1c3326;
+    --shell-success-line: #2c513a;
+    --shell-warning: #e8c97a;
+    --shell-warning-soft: #2b2413;
+
+    --shell-shadow-card: none;
+    --shell-shadow-bar: 0 -4px 16px rgba(0, 0, 0, 0.35);
+
+    --bg: #1a1a1c;
+    --surface: #222226;
+    --text: #f5f5f5;
+    --muted: #c8c9cc;
+    --border: #3a3a3e;
+    --accent: #ff8fa1;
+    --accent-strong: #ffb3bf;
+    --accent-soft: #3a2830;
+    --danger: #ff7a85;
+    --danger-soft: #3a1f22;
+    --shadow: none;
+  }
+}
+
+:root[data-theme="dark"] {
+  --shell-brand: #ff8fa1;
+  --shell-brand-strong: #ffb3bf;
+  --shell-brand-deep: #ffd9e0;
+  --shell-brand-soft: #3a2830;
+  --shell-brand-wash: #2a1a1e;
+  --shell-brand-line: #46363c;
+  --shell-primary-bg: #ff8fa1;
+  --shell-primary-text: #2a1a1e;
+  --shell-primary-hover: #ffb3bf;
+  --shell-link: #ffb3bf;
+  --shell-focus: #ffb3bf;
+  --shell-focus-ring: rgba(255, 143, 161, 0.28);
+
+  --shell-bg: #1a1a1c;
+  --shell-surface: #222226;
+  --shell-surface-2: #2c2c30;
+  --shell-input-bg: #2c2c30;
+  --shell-text: #f5f5f5;
+  --shell-text-strong: #ffffff;
+  --shell-muted: #c8c9cc;
+  --shell-placeholder: #a0a0a4;
+  --shell-border: #3a3a3e;
+  --shell-border-strong: #7a7d82;
+  --shell-divider: #2c2c30;
+
+  --shell-danger: #ff7a85;
+  --shell-danger-soft: #3a1f22;
+  --shell-danger-line: #5a2a30;
+  --shell-success: #7ad9a2;
+  --shell-success-soft: #1c3326;
+  --shell-success-line: #2c513a;
+  --shell-warning: #e8c97a;
+  --shell-warning-soft: #2b2413;
+
+  --shell-shadow-card: none;
+  --shell-shadow-bar: 0 -4px 16px rgba(0, 0, 0, 0.35);
+
+  --bg: #1a1a1c;
+  --surface: #222226;
+  --text: #f5f5f5;
+  --muted: #c8c9cc;
+  --border: #3a3a3e;
+  --accent: #ff8fa1;
+  --accent-strong: #ffb3bf;
+  --accent-soft: #3a2830;
+  --danger: #ff7a85;
+  --danger-soft: #3a1f22;
+  --shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   无障碍 / 降低动态
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .button:active {
+    transform: none;
+  }
+}
+
+/* 高对比偏好（浅色）：把装饰边界提升到可辨识。 */
+@media (prefers-contrast: more) and (prefers-color-scheme: light) {
+  :root {
+    --shell-border: #8a8a8e;
+    --shell-border-strong: #6b6b70;
+    --shell-muted: #4b4f57;
+    --border: #8a8a8e;
+    --muted: #4b4f57;
+  }
+}

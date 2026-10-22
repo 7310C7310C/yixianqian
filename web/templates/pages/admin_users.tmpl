@@ -1,0 +1,122 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="card">
+  <p class="eyebrow">用户</p>
+  <h1>用户审核与管理</h1>
+  {{template "flash" .}}
+
+  {{if .Data.TempPassword}}
+  <div class="admin-temp-password" role="status">
+    <h2>临时密码（只显示这一次）</h2>
+    <p class="admin-temp-value"><code>{{.Data.TempPassword}}</code></p>
+    <p class="hint">有效至 {{.Data.TempExpiresAt}}。请立即转交用户；用户登录后必须修改密码。</p>
+  </div>
+  {{end}}
+
+  <form method="get" action="/admin/users" class="admin-filter">
+    <label for="admin-user-q">搜寻</label>
+    <input id="admin-user-q" name="q" type="search" value="{{.Data.Query}}"
+           placeholder="姓名、昵称、手机或会员编号">
+    <label for="admin-user-status">状态</label>
+    <select id="admin-user-status" name="status">
+      {{range .Data.Statuses}}
+      <option value="{{.Value}}"{{if eq $.Data.StatusFilter .Value}} selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+    <button type="submit" class="button primary">查询</button>
+  </form>
+
+  <nav class="admin-tabs" aria-label="用户状态">
+    {{range .Data.Statuses}}
+    <a href="/admin/users?status={{.Value}}"{{if eq $.Data.StatusFilter .Value}} aria-current="page"{{end}}>{{.Label}}</a>
+    {{end}}
+  </nav>
+
+  <div class="admin-counts">
+    <span>待审核 <strong>{{.Data.Counts.Pending}}</strong></span>
+    <span>已通过 <strong>{{.Data.Counts.Active}}</strong></span>
+    <span>已拒绝 <strong>{{.Data.Counts.Rejected}}</strong></span>
+    <span>已停用 <strong>{{.Data.Counts.Disabled}}</strong></span>
+    <span>全部 <strong>{{.Data.Counts.Total}}</strong></span>
+  </div>
+</section>
+
+<section class="card">
+  <h2>结果{{if .Data.Users}}（{{len .Data.Users}}）{{end}}</h2>
+  {{if .Data.Users}}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th scope="col">会员</th>
+          <th scope="col">手机</th>
+          <th scope="col">状态</th>
+          <th scope="col">管理角色</th>
+          <th scope="col">建立时间</th>
+          <th scope="col">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.Users}}
+        <tr>
+          <td data-label="会员">
+            <strong>{{.Name}}</strong>
+            {{if .Nickname}}<span class="muted">（{{.Nickname}}）</span>{{end}}
+            <div class="muted"><code>{{if .LegacyUserID}}{{.LegacyUserID}}{{else}}#{{.ID}}{{end}}</code></div>
+          </td>
+          <td data-label="手机">{{.Phone}}</td>
+          <td data-label="状态">
+            <span class="pill">{{if eq .AccountStatus "pending"}}待审核{{else if eq .AccountStatus "active"}}已通过{{else if eq .AccountStatus "rejected"}}已拒绝{{else if eq .AccountStatus "disabled"}}已停用{{else if eq .AccountStatus "matched"}}已脱单{{else if eq .AccountStatus "left"}}已退出{{else if eq .AccountStatus "observer"}}观察员{{else}}{{.AccountStatus}}{{end}}</span>
+            {{if eq .LoginStatus "disabled"}}<span class="pill pill-warn">禁止登录</span>{{end}}
+          </td>
+          <td data-label="管理角色">
+            {{if .Roles}}{{range $i, $r := .Roles}}{{if $i}}、{{end}}<code>{{$r}}</code>{{end}}{{else}}<span class="muted">—</span>{{end}}
+          </td>
+          <td data-label="建立时间"><time class="muted">{{.CreatedAt.Format "2006-01-02"}}</time></td>
+          <td data-label="操作">
+            <div class="admin-actions">
+              {{if and $.Data.CanReview (ne .AccountStatus "active")}}
+              <form method="post" action="/admin/users/{{.ID}}/approve" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="button small primary">通过</button>
+              </form>
+              {{end}}
+              {{if $.Data.CanReview}}
+              <form method="post" action="/admin/users/{{.ID}}/reject" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="button small danger">拒绝</button>
+              </form>
+              {{end}}
+              {{if and $.Data.CanManage (eq .LoginStatus "active")}}
+              <form method="post" action="/admin/users/{{.ID}}/disable" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="button small danger">停用</button>
+              </form>
+              {{end}}
+              {{if and $.Data.CanManage (eq .LoginStatus "disabled") (ne .AccountStatus "pending") (ne .AccountStatus "rejected")}}
+              <form method="post" action="/admin/users/{{.ID}}/enable" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="button small">恢复</button>
+              </form>
+              {{end}}
+              {{if $.Data.CanManage}}
+              <form method="post" action="/admin/users/{{.ID}}/temp-password" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="status_filter" value="{{$.Data.StatusFilter}}">
+                <input type="hidden" name="q" value="{{$.Data.Query}}">
+                <button type="submit" class="button small">临时密码</button>
+              </form>
+              {{end}}
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="muted">没有符合条件的用户。</p>
+  {{end}}
+</section>
+{{end}}

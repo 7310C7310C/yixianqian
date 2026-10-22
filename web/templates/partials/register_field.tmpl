@@ -1,0 +1,58 @@
+{{define "register_field"}}
+{{$field := .}}
+<div class="register-field" id="field_{{.Name}}">
+  {{if eq .Type "multi"}}
+  <fieldset class="register-multi">
+    <legend>{{.Label}}{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</legend>
+    {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+    <div class="register-chips">
+      {{range .Options}}
+      <label class="chip">
+        <input type="checkbox" name="{{$field.Name}}" value="{{.Value}}"{{if .Selected}} checked{{end}}>
+        <span>{{.Value}}</span>
+      </label>
+      {{end}}
+    </div>
+  </fieldset>
+  {{else if eq .Type "checkbox"}}
+  <label class="register-check">
+    <input type="checkbox" name="{{.Name}}" value="{{.Option}}"{{if .Checked}} checked{{end}}{{if .Required}} required{{end}}>
+    <span>{{.Label}}{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</span>
+  </label>
+  {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+  {{else if eq .Type "select"}}
+  <label for="f_{{.Name}}">{{.Label}}{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
+  <select id="f_{{.Name}}" name="{{.Name}}"{{if .Required}} required{{end}}>
+    <option value="">{{if .Required}}请选择{{else}}未填{{end}}</option>
+    {{range .Options}}
+    <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Value}}</option>
+    {{end}}
+  </select>
+  {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+  {{else if eq .Type "textarea"}}
+  <label for="f_{{.Name}}">{{.Label}}{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
+  <textarea id="f_{{.Name}}" name="{{.Name}}" rows="{{.Rows}}"{{if .MaxLength}} maxlength="{{.MaxLength}}"{{end}}{{if .Required}} required{{end}} placeholder="{{.Placeholder}}">{{.Value}}</textarea>
+  {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+  {{else if eq .Type "number"}}
+  <label for="f_{{.Name}}">{{.Label}}{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
+  <input id="f_{{.Name}}" name="{{.Name}}" type="number" inputmode="numeric"
+         {{if eq .Name "height_cm"}}min="100" max="250"{{end}}
+         value="{{.Value}}" placeholder="{{.Placeholder}}"{{if .Required}} required{{end}}>
+  {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+  {{else if eq .Type "date"}}
+  <label for="f_{{.Name}}">{{.Label}}{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
+  <input id="f_{{.Name}}" name="{{.Name}}" type="date" value="{{.Value}}"{{if .Required}} required{{end}}>
+  {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+  {{else if eq .Type "tel"}}
+  <label for="f_{{.Name}}">{{.Label}}{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
+  <input id="f_{{.Name}}" name="{{.Name}}" type="tel" inputmode="tel" autocomplete="tel"
+         value="{{.Value}}" placeholder="{{.Placeholder}}"{{if .MaxLength}} maxlength="{{.MaxLength}}"{{end}}{{if .Required}} required{{end}}>
+  {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+  {{else}}
+  <label for="f_{{.Name}}">{{.Label}}{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
+  <input id="f_{{.Name}}" name="{{.Name}}" type="text"
+         value="{{.Value}}" placeholder="{{.Placeholder}}"{{if .MaxLength}} maxlength="{{.MaxLength}}"{{end}}{{if .Required}} required{{end}}>
+  {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+  {{end}}
+</div>
+{{end}}

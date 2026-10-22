@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'CHANGELOG.md'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'CHANGELOG.md'
+concurrency:
+  # push / PR 分組；同一 ref 的新 push 仍取消舊 push。
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: true
+          cache-dependency-path: go.sum
+      - name: 下载依赖
+        run: go mod download
+      - name: 格式检查
+        run: test -z "$(gofmt -l .)" || (gofmt -l .; exit 1)
+      - name: 生成
+        run: go generate ./...
+      - name: vet
+        run: go vet ./...
+      - name: 构建
+        run: go build -trimpath ./...
+      - name: 迁移工具测试
+        run: python3 -m unittest discover -s tools -p 'test_*.py'
+
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: true
+          cache-dependency-path: go.sum
+      - name: 下载依赖
+        run: go mod download
+      # db/httpserver 需要真实 Postgres，放到 integration job；其余包可并行。
+      - name: 单元测试（无数据库）
+        run: |
+          set -euo pipefail
+          PKGS=$(go list ./... | grep -v '/internal/db$' | grep -v '/internal/httpserver$')
+          go test -race -count=1 $PKGS
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: yixianqian
+          POSTGRES_PASSWORD: yixianqian
+          POSTGRES_DB: yixianqian_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U yixianqian -d yixianqian_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://yixianqian:yixianqian@localhost:5432/yixianqian_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: true
+          cache-dependency-path: go.sum
+      - name: 下载依赖
+        run: go mod download
+      # 两个包共用一个测试库；必须 -p 1，不能并行。
+      - name: 集成测试（PostgreSQL）
+        run: go test -race -p 1 -count=1 ./internal/db ./internal/httpserver

@@ -1,0 +1,96 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="card">
+  <p class="eyebrow">{{if eq .Data.Mode "suggestions"}}反馈{{else}}内容管理{{end}}</p>
+  <h1>{{if eq .Data.Mode "suggestions"}}意见反馈{{else}}举报处理{{end}}</h1>
+  {{template "flash" .}}
+  <nav class="admin-tabs" aria-label="状态">
+    {{range .Data.Statuses}}
+    <a href="{{if eq $.Data.Mode "suggestions"}}/admin/suggestions{{else}}/admin/reports{{end}}?status={{.Value}}"
+       {{if eq $.Data.StatusFilter .Value}}aria-current="page"{{end}}>{{.Label}}</a>
+    {{end}}
+  </nav>
+</section>
+
+{{if eq .Data.Mode "suggestions"}}
+<section class="card">
+  <h2>反馈{{if .Data.Suggestions}}（{{len .Data.Suggestions}}）{{end}}</h2>
+  {{if .Data.Suggestions}}
+  <div class="admin-list">
+    {{range .Data.Suggestions}}
+    <article class="admin-item">
+      <header class="admin-item-head">
+        <strong>{{.AuthorName}}{{if not .AuthorName}}匿名{{end}}</strong>
+        {{if .Type}}<span class="pill">{{.Type}}</span>{{end}}
+        <span class="pill{{if eq .Status "待处理"}} pill-warn{{end}}">{{.Status}}</span>
+        <time class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</time>
+      </header>
+      <p class="admin-item-content">{{.Content}}</p>
+      {{if eq .Status "待处理"}}
+      <div class="admin-actions">
+        <form method="post" action="/admin/suggestions/{{.ID}}/handle" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input type="hidden" name="action" value="handle">
+          <button type="submit" class="button small primary">标记已处理</button>
+        </form>
+        <form method="post" action="/admin/suggestions/{{.ID}}/handle" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input type="hidden" name="action" value="ignore">
+          <button type="submit" class="button small">忽略</button>
+        </form>
+      </div>
+      {{end}}
+    </article>
+    {{end}}
+  </div>
+  {{else}}
+  <p class="muted">目前没有符合条件的意见反馈。</p>
+  {{end}}
+</section>
+{{else}}
+<section class="card">
+  <h2>举报{{if .Data.Reports}}（{{len .Data.Reports}}）{{end}}</h2>
+  {{if .Data.Reports}}
+  <div class="admin-list">
+    {{range .Data.Reports}}
+    <article class="admin-item">
+      <header class="admin-item-head">
+        <strong>#{{.ID}}</strong>
+        <span class="pill{{if eq .Status "待处理"}} pill-warn{{end}}">{{.Status}}</span>
+        <time class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</time>
+      </header>
+      <p class="admin-item-meta">
+        举报人：{{if .ReporterName}}{{.ReporterName}}{{else}}—{{end}}
+        · 对象：{{if .TargetName}}{{.TargetName}}{{else}}—{{end}}
+        {{if .TargetMessageID}}· 留言 #{{.TargetMessageID}}{{end}}
+      </p>
+      <p class="admin-item-content">原因：{{.Reason}}</p>
+      {{if .MessageContent}}
+      <blockquote class="admin-quote">{{.MessageContent}}</blockquote>
+      {{end}}
+      {{if .HandledAt}}<p class="hint">处理时间：{{.HandledAt.Format "2006-01-02 15:04"}}</p>{{end}}
+      {{if eq .Status "待处理"}}
+      <form method="post" action="/admin/reports/{{.ID}}/handle" class="admin-handle-form">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <label for="report-note-{{.ID}}">处理备注（选填，写入审计）</label>
+        <input id="report-note-{{.ID}}" name="note" type="text" maxlength="500">
+        <div class="admin-actions">
+          {{if .TargetMessageID}}
+          <button type="submit" name="action" value="delete" class="button small danger">删除留言并受理</button>
+          {{else}}
+          <button type="submit" name="action" value="resolve" class="button small primary">受理</button>
+          {{end}}
+          <button type="submit" name="action" value="dismiss" class="button small">驳回</button>
+        </div>
+      </form>
+      {{end}}
+    </article>
+    {{end}}
+  </div>
+  {{else}}
+  <p class="muted">目前没有符合条件的举报。</p>
+  {{end}}
+</section>
+{{end}}
+{{end}}

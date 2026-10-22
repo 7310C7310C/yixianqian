@@ -1,0 +1,25 @@
+[Unit]
+Description=Yixianqian Next (Go, staging)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=yxq
+Group=yxq
+WorkingDirectory=/opt/yixianqian-next
+EnvironmentFile=/opt/yixianqian-next/config/staging.env
+Environment=GOMAXPROCS=2
+ExecStart=/opt/yixianqian-next/bin/server
+Restart=always
+RestartSec=3
+LimitNOFILE=8192
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/yixianqian-next
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target

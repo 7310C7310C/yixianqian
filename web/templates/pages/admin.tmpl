@@ -1,0 +1,63 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="card">
+  <p class="eyebrow">管理台</p>
+  <h1>总览</h1>
+  {{template "flash" .}}
+  <p class="hint">你的角色：{{range $i, $r := .Data.Roles}}{{if $i}}、{{end}}{{$r}}{{end}}。所有管理操作都会写入审计日志。</p>
+  {{if not .Data.SuperAdmin}}<p class="hint">角色与权限指派仅限最高管理员。</p>{{end}}
+</section>
+
+<section class="card">
+  <h2>待处理事项</h2>
+  <div class="admin-stat-grid">
+    <a class="admin-stat" href="/admin/users?status=pending">
+      <span class="admin-stat-number">{{.Data.Stats.Users.Pending}}</span>
+      <span class="admin-stat-label">待审核用户</span>
+    </a>
+    <a class="admin-stat" href="/admin/reports?status=pending">
+      <span class="admin-stat-number">{{.Data.Stats.PendingReports}}</span>
+      <span class="admin-stat-label">待处理举报</span>
+    </a>
+    <a class="admin-stat" href="/admin/suggestions?status=pending">
+      <span class="admin-stat-number">{{.Data.Stats.PendingSuggestions}}</span>
+      <span class="admin-stat-label">待处理反馈</span>
+    </a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>用户概况</h2>
+  <div class="admin-stat-grid">
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Stats.Users.Total}}</span>
+      <span class="admin-stat-label">全部用户</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Stats.Users.Active}}</span>
+      <span class="admin-stat-label">已通过</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Stats.Users.Rejected}}</span>
+      <span class="admin-stat-label">已拒绝</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Stats.Users.Disabled}}</span>
+      <span class="admin-stat-label">已停用</span>
+    </div>
+  </div>
+  <p class="hint">最高管理员人数：{{.Data.Stats.SuperAdmins}}{{if eq .Data.Stats.SuperAdmins 1}}（系统必须保留至少一位）{{end}}</p>
+</section>
+
+<section class="card">
+  <h2>快速入口</h2>
+  <div class="admin-links">
+    {{if .Data.CanReview}}<a class="button" href="/admin/users?status=pending">审核用户</a>{{end}}
+    {{if .Data.CanManage}}<a class="button" href="/admin/users?status=all">用户管理</a>{{end}}
+    {{if .Data.CanModerate}}<a class="button" href="/admin/reports">举报处理</a>{{end}}
+    {{if .Data.CanModerate}}<a class="button" href="/admin/suggestions">意见反馈</a>{{end}}
+    {{if .Data.CanAdmin}}<a class="button" href="/admin/roles">角色权限</a>{{end}}
+  </div>
+</section>
+{{end}}

@@ -1,0 +1,33 @@
+{{define "content"}}
+<section class="card narrow register-done">
+  <p class="eyebrow">一线牵 · 注册</p>
+  <h1>{{.Data.Heading}}</h1>
+  <p class="muted">{{.Data.Message}}</p>
+
+  {{if .Data.PhoneMasked}}
+  <p class="hint">登录账号：{{.Data.PhoneMasked}}</p>
+  {{end}}
+
+  <div class="register-done-actions">
+    {{if .Data.CanEnter}}
+    <a class="button primary block" href="/cards">进入一线牵</a>
+    <a class="button block" href="/profile">查看我的资料</a>
+    {{else if .Data.LoggedIn}}
+    <p class="hint">审核通过后，主页与站内通知会显示最新状态；也可稍后重新登录查看。</p>
+    <form method="post" action="/logout" class="stack">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit" class="button block">退出登录</button>
+    </form>
+    {{else}}
+    <a class="button primary block" href="/login">登录查看审核状态</a>
+    <a class="button block" href="/register">重新填写注册资料</a>
+    {{end}}
+  </div>
+
+  <div class="register-note">
+    <h2>接下来</h2>
+    <p>小天使/管理员会核对你的资料与照片。若资料有误或需要补件，请联络小天使并备注「真实姓名」。</p>
+    <p class="hint">一线牵不会在页面显示你的身份证全号，也请勿把密码提供给他人。</p>
+  </div>
+</section>
+{{end}}

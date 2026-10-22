@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+bin/
+dist/
+coverage.out
+*.log
+.DS_Store
+
+# Python migration tool cache/reports
+__pycache__/
+*.pyc
+migration-report-*.json

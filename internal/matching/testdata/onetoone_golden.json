@@ -1,0 +1,1239 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "female_lists": {
+          "f0": [
+            [
+              "m0",
+              34.2
+            ],
+            [
+              "m1",
+              34.2
+            ]
+          ],
+          "f1": [
+            [
+              "m0",
+              34.2
+            ],
+            [
+              "m1",
+              34.2
+            ]
+          ]
+        },
+        "male_lists": {
+          "m0": [
+            [
+              "f0",
+              1,
+              34.2
+            ],
+            [
+              "f1",
+              2,
+              34.2
+            ]
+          ],
+          "m1": [
+            [
+              "f0",
+              1,
+              34.2
+            ],
+            [
+              "f1",
+              2,
+              34.2
+            ]
+          ]
+        },
+        "male_quota": {
+          "m0": 2,
+          "m1": 2
+        }
+      },
+      "female_chats": 2,
+      "kind": "offline",
+      "name": "offline_equal_2x2_k2",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "male",
+          "id": "m1"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        }
+      ],
+      "profiles": {},
+      "selections": {}
+    },
+    {
+      "expected": {
+        "female_lists": {
+          "f0": [
+            [
+              "m0",
+              62.2
+            ],
+            [
+              "m1",
+              34.2
+            ]
+          ],
+          "f1": [
+            [
+              "m0",
+              34.2
+            ],
+            [
+              "m2",
+              34.2
+            ]
+          ]
+        },
+        "male_lists": {
+          "m0": [
+            [
+              "f0",
+              1,
+              62.2
+            ],
+            [
+              "f1",
+              2,
+              34.2
+            ]
+          ],
+          "m1": [
+            [
+              "f0",
+              1,
+              34.2
+            ]
+          ],
+          "m2": [
+            [
+              "f1",
+              1,
+              34.2
+            ]
+          ]
+        },
+        "male_quota": {
+          "m0": 2,
+          "m1": 1,
+          "m2": 1
+        }
+      },
+      "female_chats": 2,
+      "kind": "offline",
+      "name": "offline_non_divisible_3x2_k2",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "male",
+          "id": "m1"
+        },
+        {
+          "gender": "male",
+          "id": "m2"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        }
+      ],
+      "profiles": {},
+      "selections": {
+        "m0": [
+          {
+            "id": "f0",
+            "priority": 1
+          }
+        ]
+      }
+    },
+    {
+      "expected": {
+        "female_lists": {
+          "f0": [
+            [
+              "m0",
+              90.2
+            ]
+          ],
+          "f1": [
+            [
+              "m1",
+              90.2
+            ]
+          ]
+        },
+        "male_lists": {
+          "m0": [
+            [
+              "f0",
+              1,
+              90.2
+            ]
+          ],
+          "m1": [
+            [
+              "f1",
+              1,
+              90.2
+            ]
+          ]
+        },
+        "male_quota": {
+          "m0": 1,
+          "m1": 1
+        }
+      },
+      "female_chats": 1,
+      "kind": "offline",
+      "name": "offline_mutual_preference",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "male",
+          "id": "m1"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        }
+      ],
+      "profiles": {},
+      "selections": {
+        "f0": [
+          {
+            "id": "m0",
+            "priority": 1
+          }
+        ],
+        "f1": [
+          {
+            "id": "m1",
+            "priority": 1
+          }
+        ],
+        "m0": [
+          {
+            "id": "f0",
+            "priority": 1
+          }
+        ],
+        "m1": [
+          {
+            "id": "f1",
+            "priority": 1
+          }
+        ]
+      }
+    },
+    {
+      "expected": {
+        "female_lists": {
+          "f0": [
+            [
+              "m0",
+              90.2
+            ],
+            [
+              "m1",
+              86.2
+            ]
+          ]
+        },
+        "male_lists": {
+          "m0": [
+            [
+              "f0",
+              1,
+              90.2
+            ]
+          ],
+          "m1": [
+            [
+              "f0",
+              1,
+              86.2
+            ]
+          ],
+          "m2": []
+        },
+        "male_quota": {
+          "m0": 1,
+          "m1": 1,
+          "m2": 0
+        }
+      },
+      "female_chats": 2,
+      "kind": "offline",
+      "name": "offline_female_top_k",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "male",
+          "id": "m1"
+        },
+        {
+          "gender": "male",
+          "id": "m2"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        }
+      ],
+      "profiles": {},
+      "selections": {
+        "f0": [
+          {
+            "id": "m0",
+            "priority": 1
+          },
+          {
+            "id": "m1",
+            "priority": 2
+          }
+        ],
+        "m0": [
+          {
+            "id": "f0",
+            "priority": 1
+          }
+        ],
+        "m1": [
+          {
+            "id": "f0",
+            "priority": 1
+          }
+        ],
+        "m2": [
+          {
+            "id": "f0",
+            "priority": 1
+          }
+        ]
+      }
+    },
+    {
+      "expected": {
+        "female_lists": {
+          "f0": [
+            [
+              "m0",
+              34.2
+            ]
+          ],
+          "f1": [
+            [
+              "m0",
+              34.2
+            ]
+          ],
+          "f2": [
+            [
+              "m0",
+              34.2
+            ]
+          ],
+          "f3": [
+            [
+              "m1",
+              34.2
+            ]
+          ],
+          "f4": [
+            [
+              "m1",
+              34.2
+            ]
+          ]
+        },
+        "male_lists": {
+          "m0": [
+            [
+              "f0",
+              1,
+              34.2
+            ],
+            [
+              "f1",
+              2,
+              34.2
+            ],
+            [
+              "f2",
+              3,
+              34.2
+            ]
+          ],
+          "m1": [
+            [
+              "f3",
+              1,
+              34.2
+            ],
+            [
+              "f4",
+              2,
+              34.2
+            ]
+          ]
+        },
+        "male_quota": {
+          "m0": 3,
+          "m1": 2
+        }
+      },
+      "female_chats": 1,
+      "kind": "offline",
+      "name": "offline_every_female",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "male",
+          "id": "m1"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        },
+        {
+          "gender": "female",
+          "id": "f2"
+        },
+        {
+          "gender": "female",
+          "id": "f3"
+        },
+        {
+          "gender": "female",
+          "id": "f4"
+        }
+      ],
+      "profiles": {},
+      "selections": {}
+    },
+    {
+      "expected": {
+        "female_lists": {
+          "f0": [
+            [
+              "m0",
+              65.8
+            ],
+            [
+              "m4",
+              34.2
+            ]
+          ],
+          "f1": [
+            [
+              "m0",
+              78.6
+            ],
+            [
+              "m2",
+              54.0
+            ]
+          ],
+          "f2": [
+            [
+              "m3",
+              62.2
+            ],
+            [
+              "m1",
+              32.2
+            ]
+          ]
+        },
+        "male_lists": {
+          "m0": [
+            [
+              "f1",
+              1,
+              78.6
+            ],
+            [
+              "f0",
+              2,
+              65.8
+            ]
+          ],
+          "m1": [
+            [
+              "f2",
+              1,
+              32.2
+            ]
+          ],
+          "m2": [
+            [
+              "f1",
+              1,
+              54.0
+            ]
+          ],
+          "m3": [
+            [
+              "f2",
+              1,
+              62.2
+            ]
+          ],
+          "m4": [
+            [
+              "f0",
+              1,
+              34.2
+            ]
+          ]
+        },
+        "male_quota": {
+          "m0": 2,
+          "m1": 1,
+          "m2": 1,
+          "m3": 1,
+          "m4": 1
+        }
+      },
+      "female_chats": 2,
+      "kind": "offline",
+      "name": "offline_similarity_and_priority",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "male",
+          "id": "m1"
+        },
+        {
+          "gender": "male",
+          "id": "m2"
+        },
+        {
+          "gender": "male",
+          "id": "m3"
+        },
+        {
+          "gender": "male",
+          "id": "m4"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        },
+        {
+          "gender": "female",
+          "id": "f2"
+        }
+      ],
+      "profiles": {
+        "f0": {
+          "church": "南头堂",
+          "city": "厦门",
+          "education": "本科",
+          "hobbies": [
+            "看书",
+            "爬山"
+          ],
+          "mbti": [
+            "E",
+            "N"
+          ],
+          "sports": [
+            "羽毛球",
+            "跑步"
+          ],
+          "traits": [
+            "性格沉稳"
+          ]
+        },
+        "f1": {
+          "church": "",
+          "city": "深圳",
+          "education": "硕士",
+          "hobbies": [
+            "游泳"
+          ],
+          "mbti": [
+            "I",
+            "S"
+          ],
+          "sports": [
+            "篮球"
+          ],
+          "traits": [
+            "积极乐观"
+          ]
+        },
+        "f2": {
+          "church": "",
+          "city": "广州",
+          "education": "大专",
+          "hobbies": [
+            "看书"
+          ],
+          "mbti": [
+            "E"
+          ],
+          "sports": [],
+          "traits": [
+            "喜欢安静"
+          ]
+        },
+        "m0": {
+          "church": "南头堂",
+          "city": "厦门",
+          "education": "本科",
+          "hobbies": [
+            "看书",
+            "跑步"
+          ],
+          "mbti": [
+            "E",
+            "N"
+          ],
+          "sports": [
+            "羽毛球"
+          ],
+          "traits": [
+            "性格沉稳"
+          ]
+        },
+        "m1": {
+          "church": "南头堂",
+          "city": "深圳",
+          "education": "硕士",
+          "hobbies": [
+            "看书"
+          ],
+          "mbti": [
+            "I",
+            "S"
+          ],
+          "sports": [
+            "篮球"
+          ],
+          "traits": [
+            "积极乐观"
+          ]
+        },
+        "m2": {
+          "church": "",
+          "city": "厦门",
+          "education": "本科",
+          "hobbies": [
+            "游泳"
+          ],
+          "mbti": [
+            "E",
+            "S"
+          ],
+          "sports": [
+            "篮球",
+            "跑步"
+          ],
+          "traits": [
+            "喜欢安静"
+          ]
+        }
+      },
+      "selections": {
+        "f1": [
+          {
+            "id": "m0",
+            "priority": 1
+          },
+          {
+            "id": "m2",
+            "priority": 3
+          }
+        ],
+        "m0": [
+          {
+            "id": "f0",
+            "priority": 1
+          },
+          {
+            "id": "f1",
+            "priority": 2
+          }
+        ],
+        "m3": [
+          {
+            "id": "f2",
+            "priority": 1
+          }
+        ]
+      }
+    },
+    {
+      "expected": {
+        "female_lists": {
+          "f0": [
+            [
+              "m0",
+              34.2
+            ],
+            [
+              "m2",
+              34.2
+            ],
+            [
+              "m3",
+              34.2
+            ]
+          ],
+          "f1": [
+            [
+              "m2",
+              62.2
+            ],
+            [
+              "m0",
+              34.2
+            ],
+            [
+              "m1",
+              34.2
+            ]
+          ],
+          "f2": [
+            [
+              "m0",
+              34.2
+            ],
+            [
+              "m1",
+              34.2
+            ],
+            [
+              "m3",
+              34.2
+            ]
+          ]
+        },
+        "male_lists": {
+          "m0": [
+            [
+              "f0",
+              1,
+              34.2
+            ],
+            [
+              "f1",
+              2,
+              34.2
+            ],
+            [
+              "f2",
+              3,
+              34.2
+            ]
+          ],
+          "m1": [
+            [
+              "f1",
+              1,
+              34.2
+            ],
+            [
+              "f2",
+              2,
+              34.2
+            ]
+          ],
+          "m2": [
+            [
+              "f1",
+              1,
+              62.2
+            ],
+            [
+              "f0",
+              2,
+              34.2
+            ]
+          ],
+          "m3": [
+            [
+              "f0",
+              1,
+              34.2
+            ],
+            [
+              "f2",
+              2,
+              34.2
+            ]
+          ]
+        },
+        "male_quota": {
+          "m0": 3,
+          "m1": 2,
+          "m2": 2,
+          "m3": 2
+        }
+      },
+      "female_chats": 3,
+      "kind": "offline",
+      "name": "offline_empty_profiles",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "male",
+          "id": "m1"
+        },
+        {
+          "gender": "male",
+          "id": "m2"
+        },
+        {
+          "gender": "male",
+          "id": "m3"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        },
+        {
+          "gender": "female",
+          "id": "f2"
+        }
+      ],
+      "profiles": {},
+      "selections": {
+        "m2": [
+          {
+            "id": "f1",
+            "priority": 1
+          }
+        ]
+      }
+    },
+    {
+      "expected": {
+        "f0": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f1": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f2": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f3": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f4": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f5": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f6": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f7": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f8": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f9": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "m0": [
+          [
+            "f0",
+            1
+          ],
+          [
+            "f1",
+            2
+          ],
+          [
+            "f2",
+            3
+          ],
+          [
+            "f7",
+            4
+          ],
+          [
+            "f3",
+            5
+          ],
+          [
+            "f4",
+            6
+          ],
+          [
+            "f5",
+            7
+          ],
+          [
+            "f6",
+            8
+          ],
+          [
+            "f8",
+            9
+          ],
+          [
+            "f9",
+            10
+          ]
+        ]
+      },
+      "female_chats": 10,
+      "kind": "online",
+      "name": "online_priority_and_surprise",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        },
+        {
+          "gender": "female",
+          "id": "f2"
+        },
+        {
+          "gender": "female",
+          "id": "f3"
+        },
+        {
+          "gender": "female",
+          "id": "f4"
+        },
+        {
+          "gender": "female",
+          "id": "f5"
+        },
+        {
+          "gender": "female",
+          "id": "f6"
+        },
+        {
+          "gender": "female",
+          "id": "f7"
+        },
+        {
+          "gender": "female",
+          "id": "f8"
+        },
+        {
+          "gender": "female",
+          "id": "f9"
+        }
+      ],
+      "profiles": {},
+      "selections": {
+        "f7": [
+          {
+            "id": "m0",
+            "priority": 1
+          }
+        ],
+        "m0": [
+          {
+            "id": "f0",
+            "priority": 1
+          },
+          {
+            "id": "f1",
+            "priority": 2
+          },
+          {
+            "id": "f2",
+            "priority": 3
+          },
+          {
+            "id": "f3",
+            "priority": 4
+          },
+          {
+            "id": "f4",
+            "priority": 5
+          },
+          {
+            "id": "f5",
+            "priority": 6
+          },
+          {
+            "id": "f6",
+            "priority": 7
+          }
+        ]
+      }
+    },
+    {
+      "expected": {
+        "f0": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f1": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f2": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "m0": [
+          [
+            "f0",
+            1
+          ],
+          [
+            "f1",
+            2
+          ],
+          [
+            "f2",
+            3
+          ]
+        ]
+      },
+      "female_chats": 10,
+      "kind": "online",
+      "name": "online_zero_choices",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        },
+        {
+          "gender": "female",
+          "id": "f2"
+        }
+      ],
+      "profiles": {},
+      "selections": {
+        "f0": [
+          {
+            "id": "m0",
+            "priority": 1
+          }
+        ],
+        "f1": [
+          {
+            "id": "m0",
+            "priority": 3
+          }
+        ]
+      }
+    },
+    {
+      "expected": {
+        "f0": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "f1": [
+          [
+            "m0",
+            1
+          ]
+        ],
+        "m0": [
+          [
+            "f0",
+            1
+          ],
+          [
+            "f1",
+            2
+          ]
+        ]
+      },
+      "female_chats": 10,
+      "kind": "online",
+      "name": "online_similarity_ties",
+      "participants": [
+        {
+          "gender": "male",
+          "id": "m0"
+        },
+        {
+          "gender": "female",
+          "id": "f0"
+        },
+        {
+          "gender": "female",
+          "id": "f1"
+        }
+      ],
+      "profiles": {
+        "f0": {
+          "church": "南头堂",
+          "city": "厦门",
+          "education": "本科",
+          "hobbies": [
+            "看书",
+            "爬山"
+          ],
+          "mbti": [
+            "E",
+            "N"
+          ],
+          "sports": [
+            "羽毛球",
+            "跑步"
+          ],
+          "traits": [
+            "性格沉稳"
+          ]
+        },
+        "f1": {
+          "church": "",
+          "city": "深圳",
+          "education": "硕士",
+          "hobbies": [
+            "游泳"
+          ],
+          "mbti": [
+            "I",
+            "S"
+          ],
+          "sports": [
+            "篮球"
+          ],
+          "traits": [
+            "积极乐观"
+          ]
+        },
+        "m0": {
+          "church": "南头堂",
+          "city": "厦门",
+          "education": "本科",
+          "hobbies": [
+            "看书",
+            "跑步"
+          ],
+          "mbti": [
+            "E",
+            "N"
+          ],
+          "sports": [
+            "羽毛球"
+          ],
+          "traits": [
+            "性格沉稳"
+          ]
+        }
+      },
+      "selections": {}
+    }
+  ]
+}
