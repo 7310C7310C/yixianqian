@@ -1,0 +1,141 @@
+@import url("/static/admin.css");
+
+/* 麦穗管理模块样式。admin.css 已提供基础表格、标签与栅格。 */
+
+/* render.go 尚未把 points 纳入 admin-shell；本页自行放宽内容宽度，
+   避免 1280px 下表格挤在 640px 容器里。 */
+.shell-main .shell-container {
+  max-width: 1080px;
+}
+
+.admin-points-tabs {
+  margin-bottom: 0;
+}
+
+.admin-points-tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.4rem 0.8rem;
+}
+
+.admin-points-filters,
+.admin-points-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
+
+.admin-points-filters label,
+.admin-points-form label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.admin-points-filters input,
+.admin-points-filters select,
+.admin-points-form input,
+.admin-points-form select,
+.admin-points-form textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.admin-points-form textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.admin-points-actions {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 180px;
+}
+
+.admin-points-action {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.admin-points-action input,
+.admin-points-action select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.admin-points-action .button {
+  width: 100%;
+}
+
+.admin-points-number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.admin-points-delta-pos {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.admin-points-delta-neg {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.admin-points-table {
+  min-width: 860px;
+}
+
+.admin-points-table td {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 720px) {
+  .admin-points-filters {
+    grid-template-columns: minmax(0, 2fr) minmax(9rem, 1fr) minmax(9rem, 1fr) auto;
+    align-items: end;
+  }
+
+  .admin-points-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    align-items: end;
+  }
+
+  .admin-points-form .admin-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 639px) {
+  .admin-points-table {
+    min-width: 0;
+  }
+
+  .admin-points-actions {
+    min-width: 0;
+  }
+
+  .admin-points-action .button {
+    min-height: 44px;
+  }
+}
