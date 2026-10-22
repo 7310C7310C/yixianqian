@@ -4914,24 +4914,42 @@ createApp({
 
     const BASE_PATH = '/legacy';
     async function api(url, options = {}) {
-      const csrf = (document.cookie.match(/(?:^|; )yxq_csrf=([^;]*)/) || [])[1] || '';
-      const baseHeaders = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
-      if (csrf) baseHeaders['X-CSRF-Token'] = csrf;
-      const controller = new AbortController();
-      // 管理读端点最慢 p99 约 10s（fresh 读多表），15s 上限会把最终成功的请求误判为超时；
-      // 放宽到 30s 覆盖 p99.9。文案与重试语义不变（超时不会触发自动重试）。
-      const timeout = setTimeout(()=> controller.abort(), 30000);
-      try {
-        const resp = await fetch(BASE_PATH + url, {
-          credentials: 'same-origin',
-          headers: { ...baseHeaders, ...(options.headers||{}) },
-          signal: controller.signal,
-          ...options
-        });
+      // 单次请求；每次重新读 CSRF、新建 controller/超时，避免复用已 abort 的 controller。
+      const attempt = async () => {
+        const csrf = (document.cookie.match(/(?:^|; )yxq_csrf=([^;]*)/) || [])[1] || '';
+        const baseHeaders = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+        if (csrf) baseHeaders['X-CSRF-Token'] = csrf;
+        const controller = new AbortController();
+        // 管理读端点最慢 p99 约 10s（fresh 读多表），15s 上限会把最终成功的请求误判为超时；
+        // 放宽到 30s 覆盖 p99.9；超时直接报错，不参与 GET 重试。
+        const timeout = setTimeout(()=> controller.abort(), 30000);
+        let resp;
+        try {
+          resp = await fetch(BASE_PATH + url, {
+            credentials: 'same-origin',
+            headers: { ...baseHeaders, ...(options.headers||{}) },
+            signal: controller.signal,
+            ...options
+          });
+        } catch(e) {
+          clearTimeout(timeout);
+          if (e.name==='AbortError') {
+            const err = new Error('请求超时，请检查网络后重试');
+            err.timeout = true;
+            throw err;
+          }
+          // fetch 网络层失败（DNS/连接重置等），打标记供 GET 重试判断
+          e.network = true;
+          throw e;
+        }
         clearTimeout(timeout);
         const contentType = resp.headers.get('Content-Type') || '';
         if (!contentType.includes('application/json')) {
-          throw new Error('服务器返回了非预期的响应，请稍后重试');
+          // 反代超时等会返回 HTML；带 status/nonJson 标记供 GET 重试判断
+          const err = new Error('服务器返回了非预期的响应，请稍后重试');
+          err.status = resp.status;
+          err.nonJson = true;
+          throw err;
         }
         const data = await resp.json();
         if (!resp.ok) {
@@ -4942,10 +4960,24 @@ createApp({
           throw err;
         }
         return data;
-      } catch(e) {
-        clearTimeout(timeout);
-        if (e.name==='AbortError') throw new Error('请求超时，请检查网络后重试');
-        throw e;
+      };
+
+      const method = String(options.method || 'GET').toUpperCase();
+      try {
+        return await attempt();
+      } catch(first) {
+        // 仅 GET 重试一次；网络错误、502/503/504、非 JSON 响应可重试，超时不重试。
+        const retryable = first.network === true
+          || first.nonJson === true
+          || first.status === 502 || first.status === 503 || first.status === 504;
+        if (method !== 'GET' || first.timeout || !retryable) throw first;
+        await new Promise(r => setTimeout(r, 300));
+        try {
+          return await attempt();
+        } catch(second) {
+          // 二次失败仍抛第一次的错误，保留原文案/status/code
+          throw first;
+        }
       }
     }
 

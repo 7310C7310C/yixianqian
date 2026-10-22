@@ -90,8 +90,9 @@ tar -czhf /tmp/next-cert.tgz -C /etc/letsencrypt/live/next.nantou.love fullchain
 systemctl reload nginx
 ```
 
-server2 的 443 vhost 使用 `/etc/nginx/snippets/relay-proxy.conf`，
-以 `proxy_ssl_name $host` + `proxy_ssl_verify on` 连 server1:443。
+server2 的 next 443 vhost 使用 `/etc/nginx/snippets/relay-next-proxy.conf`，
+以 `proxy_ssl_name $host` + `proxy_ssl_verify on` 连 server1:443；其他 vhost
+继续使用共用的 `/etc/nginx/snippets/relay-proxy.conf`，不要覆盖。
 
 ## 回滚
 
@@ -122,10 +123,17 @@ nginx -t && systemctl reload nginx
 test -z "$(find /etc/nginx -type f -perm -0002 -print -quit)"
 
 # server2
+install -D -m 0644 deploy/nginx/snippets/relay-next-proxy.conf /etc/nginx/snippets/relay-next-proxy.conf
 install -m 0644 deploy/nginx/relay-next.conf /etc/nginx/sites-available/
 ln -sf /etc/nginx/sites-available/relay-next.conf /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 ```
+
+relay-next 的代理参数在 `deploy/nginx/snippets/relay-next-proxy.conf` 中维护：
+上游 TLS session 复用（`proxy_ssl_session_reuse on`）、连接超时 20s，以及 SNI
+与证书校验（`proxy_ssl_server_name` / `proxy_ssl_verify`）。这是 next 专用
+snippet；**不要改动 5 个 vhost 共用的 `/etc/nginx/snippets/relay-proxy.conf`**，
+v1 生产 relay（app.nantou.love 等）继续使用原配置。
 
 安装后必须核对 server1 vhost 与 server2 relay 的请求体上限。注册最多 9 张
 12MP 照片，应用层上限为 `9*MEDIA_MAX_BYTES+2MB`（默认 92MB）；20m 会让 nginx
