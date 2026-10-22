@@ -38,9 +38,10 @@ type adminActivityEditPageData struct {
 	IsNew    bool
 	Error    string
 	Statuses []string
-	// StatusUnknown is set when the stored status is not in the option list so
-	// the form can offer an explicit "keep current" choice instead of silently
-	// submitting the first option.
+	// StatusKeep is set when the stored status is empty or not in the option
+	// list so the form offers an explicit "keep current" choice instead of
+	// silently submitting the first option.
+	StatusKeep    bool
 	StatusUnknown string
 }
 
@@ -51,6 +52,8 @@ type adminActivityBroadcastForm struct {
 	IncludeSignups   bool
 	IncludeObservers bool
 	Preview          bool
+	PreviewToken     string
+	PreviewCount     int
 }
 
 type adminActivityDetailPageData struct {
@@ -58,6 +61,7 @@ type adminActivityDetailPageData struct {
 	Roster                    []db.AdminActivityRosterEntry
 	Stats                     db.AdminActivitySigninStats
 	Statuses                  []string
+	StatusKeep                bool
 	StatusUnknown             string
 	RosterAllCount            int
 	RosterFilteredCount       int
@@ -69,7 +73,9 @@ type adminActivityDetailPageData struct {
 	RosterPrevURL             string
 	RosterNextURL             string
 	RosterClearURL            string
+	RosterReturnTo            string
 	RosterNotice              string
+	RosterNoticeUserID        int64
 	SignupAudienceCount       int
 	ObserverAudienceCount     int
 	AudienceTotal             int
@@ -79,6 +85,7 @@ type adminActivityDetailPageData struct {
 	BroadcastIncludeSignups   bool
 	BroadcastIncludeObservers bool
 	BroadcastPreview          bool
+	BroadcastPreviewToken     string
 	BroadcastPreviewCount     int
 	BroadcastNotice           string
 	BroadcastError            string
@@ -154,7 +161,8 @@ func (a *App) renderAdminActivityEdit(w http.ResponseWriter, r *http.Request, ac
 	data := adminActivityEditPageData{Activity: activity, IsNew: activity == nil, Error: errMessage, Statuses: adminActivityStatuses}
 	if activity == nil {
 		data.Activity = &db.Activity{Status: newStatus}
-	} else if activity.Status != "" && !adminActivityStatusKnown(activity.Status) {
+	} else if activity.Status == "" || !adminActivityStatusKnown(activity.Status) {
+		data.StatusKeep = true
 		data.StatusUnknown = activity.Status
 	}
 	subnav := ""
@@ -213,6 +221,17 @@ func adminActivityURL(activityID int64, notice string) string {
 	return fmt.Sprintf("/admin/activities/%d?notice=%s", activityID, url.QueryEscape(notice))
 }
 
+// normalizeAdminRosterAttendance accepts only the filter values the roster
+// supports; anything else is treated as "all".
+func normalizeAdminRosterAttendance(raw string) string {
+	switch strings.TrimSpace(raw) {
+	case "checked", "unchecked", "late", "absent":
+		return strings.TrimSpace(raw)
+	default:
+		return ""
+	}
+}
+
 // adminActivityRosterHref keeps the roster filter and page in the URL so the
 // browser can return to the list (and the #roster anchor) after a redirect.
 func adminActivityRosterHref(activityID int64, query, attendance string, page int) string {
@@ -220,7 +239,7 @@ func adminActivityRosterHref(activityID int64, query, attendance string, page in
 	if query != "" {
 		values.Set("q", query)
 	}
-	if attendance != "" && attendance != "all" {
+	if attendance = normalizeAdminRosterAttendance(attendance); attendance != "" {
 		values.Set("attendance", attendance)
 	}
 	if page > 1 {
@@ -233,16 +252,47 @@ func adminActivityRosterHref(activityID int64, query, attendance string, page in
 	return target + "#roster"
 }
 
-// adminActivityMemberHref redirects to the exact roster row. The roster query
-// keeps the notice next to the list instead of at the top of the page.
-func adminActivityMemberHref(activityID int64, notice string, page int, userID int64) string {
+// adminActivityMemberHref redirects to the exact roster row while preserving
+// the search, attendance filter and page the admin was looking at.
+func adminActivityMemberHref(activityID int64, notice, query, attendance string, page int, userID int64) string {
 	values := url.Values{}
 	values.Set("notice", notice)
 	values.Set("roster", "attendance")
+	if query != "" {
+		values.Set("q", query)
+	}
+	if attendance = normalizeAdminRosterAttendance(attendance); attendance != "" {
+		values.Set("attendance", attendance)
+	}
 	if page > 1 {
 		values.Set("page", strconv.Itoa(page))
 	}
-	return fmt.Sprintf("/admin/activities/%d?%s#member-%d", activityID, values.Encode(), userID)
+	if userID > 0 {
+		values.Set("updated", strconv.FormatInt(userID, 10))
+	}
+	target := fmt.Sprintf("/admin/activities/%d?%s", activityID, values.Encode())
+	if userID > 0 {
+		target += fmt.Sprintf("#member-%d", userID)
+	}
+	return target
+}
+
+// adminActivityRosterNoticeHref puts the notice next to the roster when the
+// updated member no longer matches the active filter.
+func adminActivityRosterNoticeHref(activityID int64, notice, query, attendance string, page int) string {
+	values := url.Values{}
+	values.Set("notice", notice)
+	values.Set("roster", "attendance")
+	if query != "" {
+		values.Set("q", query)
+	}
+	if attendance = normalizeAdminRosterAttendance(attendance); attendance != "" {
+		values.Set("attendance", attendance)
+	}
+	if page > 1 {
+		values.Set("page", strconv.Itoa(page))
+	}
+	return fmt.Sprintf("/admin/activities/%d?%s#roster", activityID, values.Encode())
 }
 
 // adminActivityBroadcastHref pins the send result to the broadcast card.
@@ -304,17 +354,45 @@ func filterAdminRoster(roster []db.AdminActivityRosterEntry, query, attendance s
 	return out
 }
 
-func (a *App) adminRosterPageForUser(ctx context.Context, activityID, userID int64) int {
-	roster, err := a.db.AdminActivityRoster(ctx, activityID)
-	if err != nil {
-		return 1
+// adminRosterReturnState is the filter context a roster action must preserve
+// across its POST/redirect/get cycle.
+type adminRosterReturnState struct {
+	Query      string
+	Attendance string
+	Page       int
+}
+
+func adminRosterReturnFromRequest(r *http.Request, activityID int64) adminRosterReturnState {
+	state := adminRosterReturnState{
+		Query:      strings.TrimSpace(r.PostFormValue("q")),
+		Attendance: normalizeAdminRosterAttendance(r.PostFormValue("attendance")),
+		Page:       parseAdminRosterPage(r.PostFormValue("page")),
 	}
-	for i, entry := range roster {
-		if entry.UserID == userID {
-			return i/adminRosterPageSize + 1
+	// Old pages (or non-browser clients) may only send return_to.
+	if state.Query == "" && state.Attendance == "" && state.Page <= 1 {
+		if parsed, ok := parseAdminRosterReturnTo(r.PostFormValue("return_to"), activityID); ok {
+			return parsed
 		}
 	}
-	return 1
+	return state
+}
+
+func parseAdminRosterReturnTo(raw string, activityID int64) (adminRosterReturnState, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return adminRosterReturnState{}, false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "" || parsed.Host != "" ||
+		parsed.Path != fmt.Sprintf("/admin/activities/%d", activityID) {
+		return adminRosterReturnState{}, false
+	}
+	values := parsed.Query()
+	return adminRosterReturnState{
+		Query:      strings.TrimSpace(values.Get("q")),
+		Attendance: normalizeAdminRosterAttendance(values.Get("attendance")),
+		Page:       parseAdminRosterPage(values.Get("page")),
+	}, true
 }
 
 // adminActivityByPath resolves the numeric id from the route. It writes the
@@ -346,8 +424,7 @@ func (a *App) handleAdminActivityDetail(w http.ResponseWriter, r *http.Request, 
 	form := adminActivityBroadcastFormFromRequest(r)
 	// Default to the signup audience on a fresh workbench page; explicit
 	// preview/send submissions always carry their own checkbox state.
-	if query.Get("preview") == "" && query.Get("include_signups") == "" &&
-		query.Get("include_observers") == "" {
+	if query.Get("include_signups") == "" && query.Get("include_observers") == "" {
 		form.IncludeSignups = true
 	}
 	notice := query.Get("notice")
@@ -370,7 +447,6 @@ func adminActivityBroadcastFormFromRequest(r *http.Request) adminActivityBroadca
 		Body:             strings.TrimSpace(r.FormValue("broadcast_body")),
 		IncludeSignups:   r.FormValue("include_signups") == "1",
 		IncludeObservers: r.FormValue("include_observers") == "1",
-		Preview:          r.FormValue("preview") == "1" || r.FormValue("broadcast_action") == "preview",
 	}
 }
 
@@ -403,16 +479,9 @@ func (a *App) renderAdminActivityDetail(w http.ResponseWriter, r *http.Request, 
 		}
 		form.Key = key
 	}
-	previewCount := 0
-	if form.Preview {
-		previewCount = len(adminBroadcastRecipients(audience, form.IncludeSignups, form.IncludeObservers))
-	}
 	query := r.URL.Query()
 	rosterQuery := strings.TrimSpace(query.Get("q"))
-	rosterAttendance := strings.TrimSpace(query.Get("attendance"))
-	if rosterAttendance == "all" {
-		rosterAttendance = ""
-	}
+	rosterAttendance := normalizeAdminRosterAttendance(query.Get("attendance"))
 	filteredRoster := filterAdminRoster(roster, rosterQuery, rosterAttendance)
 	page := parseAdminRosterPage(query.Get("page"))
 	pageCount := (len(filteredRoster) + adminRosterPageSize - 1) / adminRosterPageSize
@@ -441,15 +510,30 @@ func (a *App) renderAdminActivityDetail(w http.ResponseWriter, r *http.Request, 
 	if page < pageCount {
 		nextURL = adminActivityRosterHref(activity.ID, rosterQuery, rosterAttendance, page+1)
 	}
+	statusKeep := activity.Status == "" || !adminActivityStatusKnown(activity.Status)
 	statusUnknown := ""
-	if activity.Status != "" && !adminActivityStatusKnown(activity.Status) {
+	if statusKeep {
 		statusUnknown = activity.Status
+	}
+	rosterNoticeUserID := int64(0)
+	if rosterNotice != "" {
+		if raw := strings.TrimSpace(query.Get("updated")); raw != "" {
+			if userID, err := strconv.ParseInt(raw, 10, 64); err == nil {
+				for _, entry := range rosterPage {
+					if entry.UserID == userID {
+						rosterNoticeUserID = userID
+						break
+					}
+				}
+			}
+		}
 	}
 	data := adminActivityDetailPageData{
 		Activity:                  &activity,
 		Roster:                    rosterPage,
 		Stats:                     stats[activity.ID],
 		Statuses:                  adminActivityStatuses,
+		StatusKeep:                statusKeep,
 		StatusUnknown:             statusUnknown,
 		RosterAllCount:            len(roster),
 		RosterFilteredCount:       len(filteredRoster),
@@ -461,7 +545,9 @@ func (a *App) renderAdminActivityDetail(w http.ResponseWriter, r *http.Request, 
 		RosterPrevURL:             prevURL,
 		RosterNextURL:             nextURL,
 		RosterClearURL:            adminActivityRosterHref(activity.ID, "", "", 1),
+		RosterReturnTo:            adminActivityRosterHref(activity.ID, rosterQuery, rosterAttendance, page),
 		RosterNotice:              rosterNotice,
+		RosterNoticeUserID:        rosterNoticeUserID,
 		SignupAudienceCount:       len(audience.SignupUserIDs),
 		ObserverAudienceCount:     len(audience.ObserverUserIDs),
 		AudienceTotal:             len(adminBroadcastRecipients(audience, true, true)),
@@ -471,7 +557,8 @@ func (a *App) renderAdminActivityDetail(w http.ResponseWriter, r *http.Request, 
 		BroadcastIncludeSignups:   form.IncludeSignups,
 		BroadcastIncludeObservers: form.IncludeObservers,
 		BroadcastPreview:          form.Preview,
-		BroadcastPreviewCount:     previewCount,
+		BroadcastPreviewToken:     form.PreviewToken,
+		BroadcastPreviewCount:     form.PreviewCount,
 		BroadcastNotice:           broadcastNotice,
 		BroadcastError:            errMessage,
 	}
@@ -585,7 +672,14 @@ func (a *App) handleAdminActivityAttendance(w http.ResponseWriter, r *http.Reque
 		a.renderError(w, r, http.StatusBadRequest, "操作失败", "用户识别码格式不正确。")
 		return
 	}
-	state := db.Attendance(strings.TrimSpace(r.PostFormValue("attendance")))
+	// New forms post the new state as attendance_state and keep the current
+	// attendance filter in the hidden attendance field. The fallback keeps
+	// older clients and the API-shaped tests working.
+	stateRaw := r.PostFormValue("attendance")
+	if r.PostForm.Has("attendance_state") {
+		stateRaw = r.PostFormValue("attendance_state")
+	}
+	state := db.Attendance(strings.TrimSpace(stateRaw))
 	updated, err := a.db.AdminSetActivityAttendance(r.Context(), activity.ID, userID, state)
 	if err != nil {
 		switch {
@@ -606,8 +700,33 @@ func (a *App) handleAdminActivityAttendance(w http.ResponseWriter, r *http.Reque
 	if updated == "" {
 		notice = "已取消该用户的签到。"
 	}
-	page := a.adminRosterPageForUser(r.Context(), activity.ID, userID)
-	http.Redirect(w, r, adminActivityMemberHref(activity.ID, notice, page, userID), http.StatusSeeOther)
+	ret := adminRosterReturnFromRequest(r, activity.ID)
+	roster, err := a.db.AdminActivityRoster(r.Context(), activity.ID)
+	if err != nil {
+		a.logger(r).Error("reload admin activity roster failed", "error", err, "activity_id", activity.ID)
+		http.Redirect(w, r, adminActivityRosterNoticeHref(activity.ID, notice, ret.Query, ret.Attendance, 1), http.StatusSeeOther)
+		return
+	}
+	filtered := filterAdminRoster(roster, ret.Query, ret.Attendance)
+	page, found := 1, false
+	for i, entry := range filtered {
+		if entry.UserID == userID {
+			page, found = i/adminRosterPageSize+1, true
+			break
+		}
+	}
+	if found {
+		http.Redirect(w, r, adminActivityMemberHref(activity.ID, notice, ret.Query, ret.Attendance, page, userID), http.StatusSeeOther)
+		return
+	}
+	// The updated member no longer matches the attendance filter (for example
+	// signing in while filtering to 未签到). Keep the search, drop the filter,
+	// return to the first page and show a notice instead of jumping to an
+	// anchor that is no longer rendered.
+	if ret.Attendance != "" {
+		notice = "签到状态已更新；该会员已不符合当前出席筛选，已清除筛选并回到第一页。"
+	}
+	http.Redirect(w, r, adminActivityRosterNoticeHref(activity.ID, notice, ret.Query, "", 1), http.StatusSeeOther)
 }
 
 func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Request, access adminAccess) {
@@ -620,11 +739,21 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 	}
 	form := adminActivityBroadcastFormFromRequest(r)
 	action := strings.TrimSpace(r.PostFormValue("broadcast_action"))
-	previewOnly := action == "preview" || (action == "" && form.Preview)
 	form.Preview = false
+	if action != "preview" && action != "send" {
+		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
+			"请先预览收件人数，确认对象后再发送。", "", "", "")
+		return
+	}
 	if !form.IncludeSignups && !form.IncludeObservers {
 		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
 			"请至少选择一个收件人群组。", "", "", "")
+		return
+	}
+	if !validBroadcastKey(form.Key) {
+		form.Key = ""
+		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
+			"广播请求已过期，请重新整理页面后再试。", "", "", "")
 		return
 	}
 	audience, err := a.db.AdminActivityBroadcastAudience(r.Context(), activity.ID,
@@ -635,23 +764,62 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	recipients := adminBroadcastRecipients(audience, form.IncludeSignups, form.IncludeObservers)
-	if len(recipients) == 0 {
-		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
-			"当前没有符合条件的收件人，未发送。", "", "", "")
-		return
-	}
-	if previewOnly {
-		// Keep the preview count next to the form instead of using the flash
-		// area at the top of the page.
+	if action == "preview" {
+		if len(recipients) == 0 {
+			a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
+				"当前没有符合条件的收件人，未发送。", "", "", "")
+			return
+		}
+		// Keep the preview count next to the form and sign the exact audience
+		// so a later send cannot silently target a different set.
+		token, err := signAdminBroadcastPreview(a.cfg.SessionSecret, adminBroadcastPreviewClaims{
+			Version:          adminBroadcastPreviewVersion,
+			ActivityID:       activity.ID,
+			Key:              form.Key,
+			IncludeSignups:   form.IncludeSignups,
+			IncludeObservers: form.IncludeObservers,
+			Count:            len(recipients),
+			Fingerprint:      adminBroadcastFingerprint(recipients),
+			IssuedAt:         a.clock.Now().Unix(),
+		})
+		if err != nil {
+			a.logger(r).Error("sign broadcast preview failed", "error", err, "activity_id", activity.ID)
+			a.renderError(w, r, http.StatusInternalServerError, "系统暂时无法处理", "请稍后再试。")
+			return
+		}
 		form.Preview = true
+		form.PreviewToken = token
+		form.PreviewCount = len(recipients)
 		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusOK, "", "", "", "")
 		return
 	}
 	// Sending is a second, explicit step after the preview so an accidental
 	// click cannot reach every signup and observer on the site.
-	if action != "send" {
+	claims, err := verifyAdminBroadcastPreview(a.cfg.SessionSecret,
+		r.PostFormValue("broadcast_preview_token"), a.clock.Now())
+	if err != nil {
 		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
-			"请先预览收件人数，确认对象后再发送。", "", "", "")
+			"发送前必须先预览收件人；预览已失效，请重新预览。", "", "", "")
+		return
+	}
+	if claims.ActivityID != activity.ID || claims.Key != form.Key {
+		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
+			"预览与当前广播不一致，请重新预览后再发送。", "", "", "")
+		return
+	}
+	if claims.IncludeSignups != form.IncludeSignups || claims.IncludeObservers != form.IncludeObservers {
+		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
+			"收件人群组在预览后已变更，请重新预览后再发送。", "", "", "")
+		return
+	}
+	if len(recipients) != claims.Count || adminBroadcastFingerprint(recipients) != claims.Fingerprint {
+		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
+			"收件人名单在预览后已变化，请重新预览后再发送。", "", "", "")
+		return
+	}
+	if len(recipients) == 0 {
+		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
+			"当前没有符合条件的收件人，未发送。", "", "", "")
 		return
 	}
 	if form.Title == "" {
@@ -667,12 +835,6 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 	if len([]rune(form.Body)) > adminBroadcastBodyMax {
 		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
 			"通知内容过长。", "", "", "")
-		return
-	}
-	if !validBroadcastKey(form.Key) {
-		form.Key = ""
-		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
-			"广播请求已过期，请重新提交。", "", "", "")
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)

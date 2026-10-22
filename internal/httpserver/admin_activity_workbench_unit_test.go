@@ -33,6 +33,52 @@ func TestValidBroadcastKey(t *testing.T) {
 	}
 }
 
+func TestAdminBroadcastPreviewToken(t *testing.T) {
+	secret := strings.Repeat("s", 32)
+	claims := adminBroadcastPreviewClaims{
+		Version:          adminBroadcastPreviewVersion,
+		ActivityID:       5,
+		Key:              "123e4567-e89b-42d3-a456-426614174000",
+		IncludeSignups:   true,
+		IncludeObservers: false,
+		Count:            2,
+		Fingerprint:      adminBroadcastFingerprint([]int64{7, 9}),
+		IssuedAt:         time.Now().Unix(),
+	}
+	token, err := signAdminBroadcastPreview(secret, claims)
+	if err != nil {
+		t.Fatalf("sign preview: %v", err)
+	}
+	got, err := verifyAdminBroadcastPreview(secret, token, time.Now())
+	if err != nil {
+		t.Fatalf("verify preview: %v", err)
+	}
+	if got.ActivityID != claims.ActivityID || got.Key != claims.Key ||
+		got.IncludeSignups != claims.IncludeSignups || got.IncludeObservers != claims.IncludeObservers ||
+		got.Count != claims.Count || got.Fingerprint != claims.Fingerprint {
+		t.Fatalf("verified claims = %+v, want %+v", got, claims)
+	}
+	if _, err := verifyAdminBroadcastPreview(strings.Repeat("t", 32), token, time.Now()); err == nil {
+		t.Fatal("token verified with a different secret")
+	}
+	tampered := "A" + token
+	if _, err := verifyAdminBroadcastPreview(secret, tampered, time.Now()); err == nil {
+		t.Fatal("tampered token verified")
+	}
+	expired := claims
+	expired.IssuedAt = time.Now().Add(-adminBroadcastPreviewTTL - time.Minute).Unix()
+	expiredToken, err := signAdminBroadcastPreview(secret, expired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := verifyAdminBroadcastPreview(secret, expiredToken, time.Now()); err == nil {
+		t.Fatal("expired token verified")
+	}
+	if adminBroadcastFingerprint([]int64{7, 9}) == adminBroadcastFingerprint([]int64{7, 10}) {
+		t.Fatal("fingerprint did not change with the recipient set")
+	}
+}
+
 func TestAdminBroadcastRecipients(t *testing.T) {
 	audience := db.AdminActivityBroadcastAudience{
 		SignupUserIDs:   []int64{1, 2, 3},
@@ -138,9 +184,22 @@ func TestAdminActivityRosterPaginationURLs(t *testing.T) {
 	if got := adminActivityRosterHref(5, "", "", 1); got != "/admin/activities/5#roster" {
 		t.Fatalf("clear href = %q", got)
 	}
-	member := adminActivityMemberHref(5, "签到状态已更新。", 2, 7)
-	if !strings.HasSuffix(member, "#member-7") || !strings.Contains(member, "page=2") {
-		t.Fatalf("member href = %q", member)
+	member := adminActivityMemberHref(5, "签到状态已更新。", "张三", "unchecked", 2, 7)
+	for _, want := range []string{"#member-7", "page=2", "attendance=unchecked", "q=%E5%BC%A0%E4%B8%89", "updated=7"} {
+		if !strings.Contains(member, want) {
+			t.Fatalf("member href = %q, missing %q", member, want)
+		}
+	}
+	noticeHref := adminActivityRosterNoticeHref(5, "已清除筛选。", "张三", "", 1)
+	if !strings.HasSuffix(noticeHref, "#roster") || strings.Contains(noticeHref, "member-") ||
+		!strings.Contains(noticeHref, "q=%E5%BC%A0%E4%B8%89") || strings.Contains(noticeHref, "attendance=") {
+		t.Fatalf("notice href = %q", noticeHref)
+	}
+	if got := normalizeAdminRosterAttendance("all"); got != "" {
+		t.Fatalf("normalize(all) = %q", got)
+	}
+	if got := normalizeAdminRosterAttendance("bogus"); got != "" {
+		t.Fatalf("normalize(bogus) = %q", got)
 	}
 }
 
@@ -174,10 +233,14 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 		RosterPage:            1,
 		RosterPageCount:       1,
 		RosterClearURL:        "/admin/activities/5#roster",
+		RosterReturnTo:        "/admin/activities/5#roster",
 		SignupAudienceCount:   1,
 		ObserverAudienceCount: 1,
 		AudienceTotal:         2,
 		BroadcastKey:          posterID,
+		BroadcastPreview:      true,
+		BroadcastPreviewToken: "signed-preview-token",
+		BroadcastPreviewCount: 2,
 	}
 	var buf bytes.Buffer
 	if err := tpl.Render(&buf, "admin_activity_detail", PageData{
@@ -194,6 +257,10 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 		`id="member-7"`, `type="text" name="signin_code"`, `formnovalidate`,
 		`观察员（全站）`, `href="#broadcast"`, `action="/admin/activities/5#roster"`,
 		`<option value="已满员"`, `name="broadcast_action" value="preview"`,
+		`name="broadcast_preview_token" value="signed-preview-token"`,
+		`name="attendance_state" value="按时"`, `name="attendance" value=""`,
+		`name="q" value=""`, `name="page" value="1"`, `name="return_to" value="/admin/activities/5#roster"`,
+		`确认发送？`, `回到顶部`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("detail template missing %q", want)
@@ -209,6 +276,7 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 	unknown.Status = "历史状态"
 	unknownDetail := detail
 	unknownDetail.Activity = &unknown
+	unknownDetail.StatusKeep = true
 	unknownDetail.StatusUnknown = "历史状态"
 	buf.Reset()
 	if err := tpl.Render(&buf, "admin_activity_detail", PageData{
@@ -242,6 +310,28 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 		if !strings.Contains(editHTML, want) {
 			t.Fatalf("edit template missing %q", want)
 		}
+	}
+
+	// An empty stored status is treated like an unknown one: the form offers
+	// keep-current instead of defaulting to 报名中.
+	empty := activity
+	empty.Status = ""
+	buf.Reset()
+	if err := tpl.Render(&buf, "admin_activity_edit", PageData{
+		Title: "活动编辑", User: user, CSRFToken: "csrf-value",
+		Data: adminActivityEditPageData{
+			Activity: &empty, Statuses: adminActivityStatuses, StatusKeep: true,
+		},
+		ActiveNav: "activities",
+	}); err != nil {
+		t.Fatalf("render empty status edit: %v", err)
+	}
+	emptyHTML := buf.String()
+	if !strings.Contains(emptyHTML, `<option value="" selected>保持目前状态（未设置）</option>`) {
+		t.Fatalf("empty status lost keep-current option")
+	}
+	if strings.Contains(emptyHTML, `<option value="报名中" selected>`) {
+		t.Fatalf("empty status silently defaulted to 报名中")
 	}
 
 	buf.Reset()

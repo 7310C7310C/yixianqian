@@ -30,7 +30,7 @@
               </div>
             </div>
           </td>
-          <td data-label="状态"><span class="pill">{{.Status}}</span></td>
+          <td data-label="状态">{{if .Status}}<span class="pill">{{.Status}}</span>{{else}}<span class="pill pill-muted">状态未设置</span>{{end}}</td>
           <td data-label="报名">{{.SignupCount}}{{if gt .MaxSignup 0}} / {{.MaxSignup}}{{else}} / 不限{{end}}</td>
           <td data-label="签到">
             <span class="pill{{if not .SigninEnabled}} pill-muted{{end}}">{{if .SigninEnabled}}开启{{else}}关闭{{end}}</span>

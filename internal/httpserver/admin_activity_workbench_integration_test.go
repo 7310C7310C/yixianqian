@@ -248,13 +248,16 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantPreview := "去重后 <strong>" + strconv.Itoa(1+observerCount) + "</strong> 人"
+	// Preview state is never put in the URL: a GET with preview parameters only
+	// renders the normal form.
 	resp = client.get(workbenchPath + "?preview=1&include_signups=1&include_observers=1")
-	preview := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(preview, wantPreview) {
-		t.Fatalf("broadcast preview status=%d want=%q body=%s", resp.StatusCode, wantPreview, preview)
+	fresh := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || strings.Contains(fresh, "broadcast_preview_token") ||
+		strings.Contains(fresh, "确认发送？") {
+		t.Fatalf("GET must not expose a preview: status=%d", resp.StatusCode)
 	}
-	key := broadcastKeyFromHTML(t, preview)
-	// The in-page preview button posts the same form without sending.
+	key := broadcastKeyFromHTML(t, fresh)
+	// The preview button posts the form and receives a signed audience token.
 	resp = client.postForm(workbenchPath+"/broadcast", url.Values{
 		"csrf_token":       {csrf},
 		"broadcast_key":    {key},
@@ -262,28 +265,36 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 		"broadcast_action": {"preview"},
 	})
 	previewBody := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(previewBody, "去重后 <strong>1</strong> 人") {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(previewBody, "去重后 <strong>1</strong> 人") ||
+		!strings.Contains(previewBody, "确认发送给 1 人") {
 		t.Fatalf("post preview status=%d body=%s", resp.StatusCode, previewBody)
 	}
+	signupPreviewToken := broadcastPreviewTokenFromHTML(t, previewBody)
 	if got := notificationCount(t, ctx, pool, signupUser.ID, "activity_broadcast"); got != 0 {
 		t.Fatalf("preview sent notifications: %d", got)
 	}
+
+	// Observer-only preview counts only the global observer audience.
+	resp = client.postForm(workbenchPath+"/broadcast", url.Values{
+		"csrf_token":        {csrf},
+		"broadcast_key":     {key},
+		"include_observers": {"1"},
+		"broadcast_action":  {"preview"},
+	})
+	observerPreview := readBody(t, resp)
+	wantObserver := "去重后 <strong>" + strconv.Itoa(observerCount) + "</strong> 人"
+	if resp.StatusCode != http.StatusOK || !strings.Contains(observerPreview, wantObserver) ||
+		strings.Contains(observerPreview, "去重后 <strong>"+strconv.Itoa(1+observerCount)+"</strong>") {
+		t.Fatalf("observer preview status=%d want=%q body=%s", resp.StatusCode, wantObserver, observerPreview)
+	}
+
 	resp = client.postForm(workbenchPath+"/broadcast", url.Values{
 		"broadcast_key": {key}, "include_signups": {"1"}, "broadcast_title": {"无 CSRF"},
 	})
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("broadcast without csrf status = %d", resp.StatusCode)
 	}
-	broadcastValues := url.Values{
-		"csrf_token":        {csrf},
-		"broadcast_key":     {key},
-		"include_signups":   {"1"},
-		"include_observers": {"1"},
-		"broadcast_title":   {"活动广播测试"},
-		"broadcast_body":    {"请准时参加。"},
-		"broadcast_action":  {"send"},
-	}
-	// A direct send without the preview step is rejected before any write.
+	// Sending without a preview token is rejected before any write.
 	resp = client.postForm(workbenchPath+"/broadcast", url.Values{
 		"csrf_token":        {csrf},
 		"broadcast_key":     {key},
@@ -291,13 +302,58 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 		"include_observers": {"1"},
 		"broadcast_title":   {"未预览"},
 		"broadcast_body":    {"不应发送。"},
+		"broadcast_action":  {"send"},
 	})
 	noPreview := readBody(t, resp)
-	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(noPreview, "请先预览收件人数") {
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(noPreview, "必须先预览收件人") {
 		t.Fatalf("send without preview status=%d body=%s", resp.StatusCode, noPreview)
 	}
 	if got := notificationCount(t, ctx, pool, signupUser.ID, "activity_broadcast"); got != 0 {
 		t.Fatalf("send without preview wrote notifications: %d", got)
+	}
+	// Changing the audience after preview must be rejected, not silently sent
+	// to the new set.
+	resp = client.postForm(workbenchPath+"/broadcast", url.Values{
+		"csrf_token":              {csrf},
+		"broadcast_key":           {key},
+		"broadcast_preview_token": {signupPreviewToken},
+		"include_signups":         {"1"},
+		"include_observers":       {"1"},
+		"broadcast_title":         {"改受众"},
+		"broadcast_body":          {"不应发送。"},
+		"broadcast_action":        {"send"},
+	})
+	changedAudience := readBody(t, resp)
+	if resp.StatusCode != http.StatusBadRequest ||
+		!strings.Contains(changedAudience, "收件人群组在预览后已变更") {
+		t.Fatalf("changed audience status=%d body=%s", resp.StatusCode, changedAudience)
+	}
+	if got := notificationCount(t, ctx, pool, signupUser.ID, "activity_broadcast"); got != 0 {
+		t.Fatalf("changed audience wrote notifications: %d", got)
+	}
+
+	// Re-preview the combined audience, then send with that token.
+	resp = client.postForm(workbenchPath+"/broadcast", url.Values{
+		"csrf_token":        {csrf},
+		"broadcast_key":     {key},
+		"include_signups":   {"1"},
+		"include_observers": {"1"},
+		"broadcast_action":  {"preview"},
+	})
+	combinedPreview := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(combinedPreview, wantPreview) {
+		t.Fatalf("combined preview status=%d want=%q", resp.StatusCode, wantPreview)
+	}
+	previewToken := broadcastPreviewTokenFromHTML(t, combinedPreview)
+	broadcastValues := url.Values{
+		"csrf_token":              {csrf},
+		"broadcast_key":           {key},
+		"broadcast_preview_token": {previewToken},
+		"include_signups":         {"1"},
+		"include_observers":       {"1"},
+		"broadcast_title":         {"活动广播测试"},
+		"broadcast_body":          {"请准时参加。"},
+		"broadcast_action":        {"send"},
 	}
 	resp = client.postForm(workbenchPath+"/broadcast", broadcastValues)
 	if resp.StatusCode != http.StatusSeeOther {
@@ -520,6 +576,104 @@ func TestIntegrationAdminActivityListQuickSettingsAndRedirects(t *testing.T) {
 	}
 }
 
+func TestIntegrationAdminActivityAttendanceFilterContext(t *testing.T) {
+	database, pool, server, ctx := newMessagesHTTPEnv(t)
+	manager := createMessageUser(t, ctx, database, pool, "筛选管理员")
+	users := make([]db.User, 0, 8)
+	ids := []int64{manager.ID}
+	for i := 0; i < 8; i++ {
+		user := createMessageUser(t, ctx, database, pool, "筛选用户"+strconv.Itoa(i+1))
+		users = append(users, user)
+		ids = append(ids, user.ID)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = ANY($1)`, ids) })
+	if changed, err := database.AssignAdminRole(ctx, manager.ID, "activity_manager", true); err != nil || !changed {
+		t.Fatalf("assign activity_manager: changed=%v err=%v", changed, err)
+	}
+	activity := createWorkbenchActivity(t, ctx, database, pool, "签到筛选上下文测试")
+	for _, user := range users {
+		if _, err := database.SignupActivity(ctx, user.ID, activity.ActivityNo); err != nil {
+			t.Fatalf("signup %d: %v", user.ID, err)
+		}
+	}
+	if _, err := database.AdminSetActivityAttendance(ctx, activity.ID, users[0].ID, db.AttendanceOnTime); err != nil {
+		t.Fatalf("seed checked attendance: %v", err)
+	}
+
+	client := loginMessageClient(t, database, server, manager)
+	workbenchPath := "/admin/activities/" + strconv.FormatInt(activity.ID, 10)
+	csrf := client.pageCSRF(workbenchPath)
+	q := "筛选用户"
+	filtered := workbenchPath + "?q=" + url.QueryEscape(q) + "&attendance=unchecked"
+	resp := client.get(filtered)
+	body := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || strings.Count(body, `id="member-`) != 7 {
+		t.Fatalf("unchecked roster rows = %d, status=%d", strings.Count(body, `id="member-`), resp.StatusCode)
+	}
+
+	// Signing in while filtering to 未签到 removes the row from the filter. The
+	// redirect keeps q, drops attendance, returns to page 1 and does not jump
+	// to an anchor that is no longer rendered.
+	resp = client.postForm(workbenchPath+"/attendance", url.Values{
+		"csrf_token":       {csrf},
+		"user_id":          {strconv.FormatInt(users[1].ID, 10)},
+		"attendance_state": {string(db.AttendanceOnTime)},
+		"q":                {q},
+		"attendance":       {"unchecked"},
+		"page":             {"1"},
+		"return_to":        {filtered},
+	})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("attendance status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	location := resp.Header.Get("Location")
+	if strings.Contains(location, "attendance=unchecked") || strings.Contains(location, "member-") ||
+		!strings.Contains(location, "q="+url.QueryEscape(q)) || !strings.Contains(location, "#roster") {
+		t.Fatalf("filter-clearing redirect = %q", location)
+	}
+	resp = client.get(location)
+	cleared := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(cleared, "已清除筛选并回到第一页") ||
+		!strings.Contains(cleared, `value="`+q+`"`) {
+		t.Fatalf("cleared-filter page missing notice or q: status=%d", resp.StatusCode)
+	}
+	if state, err := database.GetAttendance(ctx, activity.ID, users[1].ID); err != nil || state != db.AttendanceOnTime {
+		t.Fatalf("attendance = %q err=%v", state, err)
+	}
+
+	// Updating a member that still matches the filter preserves q, attendance
+	// and the row anchor, and shows the notice inside the target row.
+	checkedFilter := workbenchPath + "?q=" + url.QueryEscape(q) + "&attendance=checked"
+	resp = client.postForm(workbenchPath+"/attendance", url.Values{
+		"csrf_token":       {csrf},
+		"user_id":          {strconv.FormatInt(users[1].ID, 10)},
+		"attendance_state": {string(db.AttendanceLate)},
+		"q":                {q},
+		"attendance":       {"checked"},
+		"page":             {"1"},
+		"return_to":        {checkedFilter},
+	})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("checked attendance status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	location = resp.Header.Get("Location")
+	for _, want := range []string{
+		"attendance=checked", "q=" + url.QueryEscape(q), "updated=" + strconv.FormatInt(users[1].ID, 10),
+		"#member-" + strconv.FormatInt(users[1].ID, 10),
+	} {
+		if !strings.Contains(location, want) {
+			t.Fatalf("preserved redirect = %q, missing %q", location, want)
+		}
+	}
+	resp = client.get(location)
+	rowPage := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(rowPage, "签到状态已更新。") ||
+		!strings.Contains(rowPage, `class="alert alert-ok admin-row-notice"`) ||
+		!strings.Contains(rowPage, `id="member-`+strconv.FormatInt(users[1].ID, 10)+`"`) {
+		t.Fatalf("row notice/link missing: status=%d", resp.StatusCode)
+	}
+}
+
 func createWorkbenchActivity(t *testing.T, ctx context.Context, database *db.DB, pool *pgxpool.Pool, name string) db.Activity {
 	t.Helper()
 	start := time.Now().Add(-time.Hour)
@@ -556,13 +710,25 @@ func notificationCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, us
 	return count
 }
 
-var broadcastKeyRE = regexp.MustCompile(`name="broadcast_key" value="([^"]+)"`)
+var (
+	broadcastKeyRE          = regexp.MustCompile(`name="broadcast_key" value="([^"]+)"`)
+	broadcastPreviewTokenRE = regexp.MustCompile(`name="broadcast_preview_token" value="([^"]+)"`)
+)
 
 func broadcastKeyFromHTML(t *testing.T, body string) string {
 	t.Helper()
 	m := broadcastKeyRE.FindStringSubmatch(body)
 	if len(m) != 2 {
 		t.Fatalf("broadcast key not found in workbench HTML")
+	}
+	return m[1]
+}
+
+func broadcastPreviewTokenFromHTML(t *testing.T, body string) string {
+	t.Helper()
+	m := broadcastPreviewTokenRE.FindStringSubmatch(body)
+	if len(m) != 2 {
+		t.Fatalf("broadcast preview token not found in workbench HTML")
 	}
 	return m[1]
 }

@@ -7,7 +7,7 @@
     <div>
       <p class="eyebrow">活动工作台</p>
       <h1>{{.Data.Activity.Name}}</h1>
-      <p class="hint"><code>{{.Data.Activity.ActivityNo}}</code> · <span class="pill">{{.Data.Activity.Status}}</span></p>
+      <p class="hint"><code>{{.Data.Activity.ActivityNo}}</code> · <span class="pill">{{if .Data.Activity.Status}}{{.Data.Activity.Status}}{{else}}状态未设置{{end}}</span></p>
     </div>
     <div class="admin-actions">
       <a class="button" href="/admin/activities/{{$activityID}}/edit">编辑资料</a>
@@ -104,7 +104,7 @@
     <span>已签到 <strong>{{.Data.Stats.CheckedInCount}}</strong> 人</span>
     {{if .Data.RosterHasFilter}}<span>筛选结果 <strong>{{.Data.RosterFilteredCount}}</strong> / {{.Data.RosterAllCount}} 人</span>{{end}}
   </p>
-  {{if .Data.RosterNotice}}<div class="alert alert-ok" role="status">{{.Data.RosterNotice}}</div>{{end}}
+  {{if and .Data.RosterNotice (eq .Data.RosterNoticeUserID 0)}}<div class="alert alert-ok" role="status">{{.Data.RosterNotice}}</div>{{end}}
   <form method="get" action="/admin/activities/{{$activityID}}#roster" class="admin-roster-filter" role="search">
     <label>搜索<input type="search" name="q" value="{{.Data.RosterQuery}}" placeholder="姓名、昵称、编号或手机后四位"></label>
     <label>出席
@@ -133,6 +133,7 @@
             {{if .Nickname}}<div class="muted">昵称：{{.Nickname}}</div>{{end}}
             {{if .LegacyUserID}}<div class="muted"><code class="admin-member-id">{{.LegacyUserID}}</code></div>{{end}}
             {{if .PhoneMasked}}<div class="muted">手机：{{.PhoneMasked}}</div>{{end}}
+            {{if and $.Data.RosterNotice (eq .UserID $.Data.RosterNoticeUserID)}}<div class="alert alert-ok admin-row-notice" role="status">{{$.Data.RosterNotice}}</div>{{end}}
           </td>
           <td data-label="性别" class="admin-roster-gender">{{if .Gender}}{{.Gender}}{{else}}—{{end}}</td>
           <td data-label="报名时间">{{.SignupAt.Format "2006-01-02 15:04"}}</td>
@@ -142,26 +143,42 @@
               <form method="post" action="/admin/activities/{{$activityID}}/attendance">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
-                <input type="hidden" name="attendance" value="按时">
+                <input type="hidden" name="attendance_state" value="按时">
+                <input type="hidden" name="q" value="{{$.Data.RosterQuery}}">
+                <input type="hidden" name="attendance" value="{{$.Data.RosterAttendance}}">
+                <input type="hidden" name="page" value="{{$.Data.RosterPage}}">
+                <input type="hidden" name="return_to" value="{{$.Data.RosterReturnTo}}">
                 <button type="submit" class="button small" title="按时签到">按时</button>
               </form>
               <form method="post" action="/admin/activities/{{$activityID}}/attendance">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
-                <input type="hidden" name="attendance" value="迟到">
+                <input type="hidden" name="attendance_state" value="迟到">
+                <input type="hidden" name="q" value="{{$.Data.RosterQuery}}">
+                <input type="hidden" name="attendance" value="{{$.Data.RosterAttendance}}">
+                <input type="hidden" name="page" value="{{$.Data.RosterPage}}">
+                <input type="hidden" name="return_to" value="{{$.Data.RosterReturnTo}}">
                 <button type="submit" class="button small" title="标记迟到">迟到</button>
               </form>
               <form method="post" action="/admin/activities/{{$activityID}}/attendance">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
-                <input type="hidden" name="attendance" value="未到">
+                <input type="hidden" name="attendance_state" value="未到">
+                <input type="hidden" name="q" value="{{$.Data.RosterQuery}}">
+                <input type="hidden" name="attendance" value="{{$.Data.RosterAttendance}}">
+                <input type="hidden" name="page" value="{{$.Data.RosterPage}}">
+                <input type="hidden" name="return_to" value="{{$.Data.RosterReturnTo}}">
                 <button type="submit" class="button small" title="标记未到">未到</button>
               </form>
               {{if .Attendance}}
               <form method="post" action="/admin/activities/{{$activityID}}/attendance">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
-                <input type="hidden" name="attendance" value="">
+                <input type="hidden" name="attendance_state" value="">
+                <input type="hidden" name="q" value="{{$.Data.RosterQuery}}">
+                <input type="hidden" name="attendance" value="{{$.Data.RosterAttendance}}">
+                <input type="hidden" name="page" value="{{$.Data.RosterPage}}">
+                <input type="hidden" name="return_to" value="{{$.Data.RosterReturnTo}}">
                 <button type="submit" class="button small danger" title="取消签到">取消签到</button>
               </form>
               {{end}}
@@ -228,6 +245,7 @@
   <form method="post" action="/admin/activities/{{$activityID}}/broadcast" class="admin-broadcast stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="broadcast_key" value="{{.Data.BroadcastKey}}">
+    {{if .Data.BroadcastPreviewToken}}<input type="hidden" name="broadcast_preview_token" value="{{.Data.BroadcastPreviewToken}}">{{end}}
     <label class="admin-check"><input type="checkbox" name="include_signups" value="1"{{if .Data.BroadcastIncludeSignups}} checked{{end}}> 报名者（本活动有效报名）</label>
     <label class="admin-check"><input type="checkbox" name="include_observers" value="1"{{if .Data.BroadcastIncludeObservers}} checked{{end}}> 观察员（全站）</label>
     <p class="hint">观察员是启用观察员身份的全站账号，不限于本活动；勾选后会收到全站范围的通知。</p>
@@ -256,8 +274,8 @@
     <input type="hidden" name="start_at" value="{{if .Data.Activity.StartAt}}{{.Data.Activity.StartAt.Format "2006-01-02T15:04"}}{{end}}">
     <input type="hidden" name="end_at" value="{{if .Data.Activity.EndAt}}{{.Data.Activity.EndAt.Format "2006-01-02T15:04"}}{{end}}">
     <label>活动状态
-      <select name="status" required>
-        {{if .Data.StatusUnknown}}<option value="{{.Data.StatusUnknown}}" selected>保持目前状态（{{.Data.StatusUnknown}}）</option>{{end}}
+      <select name="status">
+        {{if .Data.StatusKeep}}<option value="{{.Data.StatusUnknown}}" selected>保持目前状态{{if .Data.StatusUnknown}}（{{.Data.StatusUnknown}}）{{else}}（未设置）{{end}}</option>{{end}}
         {{$current := .Data.Activity.Status}}
         {{range .Data.Statuses}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
       </select>
@@ -275,4 +293,8 @@
     </div>
   </form>
 </section>
+
+<nav class="admin-back-top" aria-label="返回顶部">
+  <a class="button" href="#main">回到顶部</a>
+</nav>
 {{end}}

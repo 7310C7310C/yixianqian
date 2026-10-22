@@ -18,8 +18,8 @@
     </div>
     <label>食宿<input type="text" name="food" maxlength="200" value="{{.Data.Activity.Food}}"></label>
     <label>状态
-      <select name="status" required>
-        {{if .Data.StatusUnknown}}<option value="{{.Data.StatusUnknown}}" selected>保持目前状态（{{.Data.StatusUnknown}}）</option>{{end}}
+      <select name="status">
+        {{if .Data.StatusKeep}}<option value="{{.Data.StatusUnknown}}" selected>保持目前状态{{if .Data.StatusUnknown}}（{{.Data.StatusUnknown}}）{{else}}（未设置）{{end}}</option>{{end}}
         {{$current := .Data.Activity.Status}}
         {{range .Data.Statuses}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
       </select>

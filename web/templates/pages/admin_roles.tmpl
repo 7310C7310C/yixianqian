@@ -11,7 +11,7 @@
 <section class="card">
   <h2>角色</h2>
   <div class="admin-table-wrap">
-    <table class="admin-table">
+    <table class="admin-table admin-roles-table">
       <thead>
         <tr>
           <th scope="col">代码</th>
@@ -74,23 +74,28 @@
 <section class="card">
   <h2>指派角色</h2>
   {{if .Data.SuperAdmin}}
-  <form method="post" action="/admin/roles/assign" class="admin-filter">
+  <form method="post" action="/admin/roles/assign" class="admin-role-form">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <label for="role-user-ref">用户</label>
-    <input id="role-user-ref" name="user_ref" type="text" required
-           placeholder="U-0006、手机或用户 ID">
-    <label for="role-code">角色</label>
-    <select id="role-code" name="role" required>
-      {{range .Data.Roles}}
-      <option value="{{.Code}}">{{.Name}}（{{.Code}}）</option>
-      {{end}}
-    </select>
-    <label for="role-action">动作</label>
-    <select id="role-action" name="action">
-      <option value="assign">指派</option>
-      <option value="remove">移除</option>
-    </select>
-    <button type="submit" class="button primary">送出</button>
+    <label for="role-user-ref">用户
+      <input id="role-user-ref" name="user_ref" type="text" required
+             placeholder="U-0006、手机或用户 ID">
+    </label>
+    <label for="role-code">角色
+      <select id="role-code" name="role" required>
+        {{range .Data.Roles}}
+        <option value="{{.Code}}">{{.Name}}（{{.Code}}）</option>
+        {{end}}
+      </select>
+    </label>
+    <label for="role-action">动作
+      <select id="role-action" name="action">
+        <option value="assign">指派</option>
+        <option value="remove">移除</option>
+      </select>
+    </label>
+    <div class="admin-role-form-actions">
+      <button type="submit" class="button primary">送出</button>
+    </div>
   </form>
   <p class="hint">指派对象必须是既有用户；例如把 U-0006 指派为 super_admin。</p>
   {{else}}
