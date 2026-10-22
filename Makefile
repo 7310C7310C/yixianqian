@@ -2,10 +2,13 @@ GO      ?= go
 VERSION ?= dev
 USER_ID ?=
 TEST_DATABASE_URL ?=
+BASE_URL ?=
+SESSION_COOKIE ?=
+ACTIVITY_ID ?= 1
 
 LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSION)
 
-.PHONY: all tidy generate fmt fmt-check vet test test-integration test-migration build run seed token ci
+.PHONY: all tidy generate fmt fmt-check vet test test-integration test-migration test-broadcast-ui build run seed token ci
 
 all: ci
 
@@ -33,6 +36,12 @@ test-integration:
 
 test-migration:
 	python3 -m unittest discover -s tools -p 'test_*.py' -v
+
+test-broadcast-ui:
+	@test -n "$(BASE_URL)" || (echo "BASE_URL is required"; exit 1)
+	@test -n "$(SESSION_COOKIE)" || (echo "SESSION_COOKIE is required"; exit 1)
+	@BASE_URL="$(BASE_URL)" SESSION_COOKIE="$(SESSION_COOKIE)" ACTIVITY_ID="$(ACTIVITY_ID)" \
+		python3 tools/browser/admin_broadcast_layout.py
 
 build:
 	mkdir -p bin

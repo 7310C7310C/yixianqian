@@ -242,7 +242,7 @@
     <p>收件人群组：{{if .Data.BroadcastIncludeSignups}}报名者{{end}}{{if and .Data.BroadcastIncludeSignups .Data.BroadcastIncludeObservers}} + {{end}}{{if .Data.BroadcastIncludeObservers}}观察员（全站）{{end}}；去重后 <strong>{{.Data.BroadcastPreviewCount}}</strong> 人。发送后无法撤回，但重复提交不会重复发送。</p>
   </div>
   {{end}}
-  <form method="post" action="/admin/activities/{{$activityID}}/broadcast" class="admin-broadcast stack">
+  <form method="post" action="/admin/activities/{{$activityID}}/broadcast#broadcast" class="admin-broadcast stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="broadcast_key" value="{{.Data.BroadcastKey}}">
     {{if .Data.BroadcastPreviewToken}}<input type="hidden" name="broadcast_preview_token" value="{{.Data.BroadcastPreviewToken}}">{{end}}

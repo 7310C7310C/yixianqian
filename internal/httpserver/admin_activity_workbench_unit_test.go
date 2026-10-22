@@ -256,6 +256,7 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 		`enctype="multipart/form-data"`, `name="broadcast_key"`,
 		`id="member-7"`, `type="text" name="signin_code"`, `formnovalidate`,
 		`观察员（全站）`, `href="#broadcast"`, `action="/admin/activities/5#roster"`,
+		`action="/admin/activities/5/broadcast#broadcast"`,
 		`<option value="已满员"`, `name="broadcast_action" value="preview"`,
 		`name="broadcast_preview_token" value="signed-preview-token"`,
 		`name="attendance_state" value="按时"`, `name="attendance" value=""`,

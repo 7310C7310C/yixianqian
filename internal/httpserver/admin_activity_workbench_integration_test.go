@@ -269,6 +269,13 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 		!strings.Contains(previewBody, "确认发送给 1 人") {
 		t.Fatalf("post preview status=%d body=%s", resp.StatusCode, previewBody)
 	}
+	// The preview response is rendered on POST, so the form action must carry
+	// the #broadcast fragment or the browser lands at the top of the page with
+	// the confirmation card far below the viewport.
+	broadcastFormAction := `action="` + workbenchPath + `/broadcast#broadcast"`
+	if !strings.Contains(previewBody, broadcastFormAction) {
+		t.Fatalf("preview form action lost the #broadcast anchor: %s", previewBody)
+	}
 	signupPreviewToken := broadcastPreviewTokenFromHTML(t, previewBody)
 	if got := notificationCount(t, ctx, pool, signupUser.ID, "activity_broadcast"); got != 0 {
 		t.Fatalf("preview sent notifications: %d", got)
@@ -307,6 +314,11 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 	noPreview := readBody(t, resp)
 	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(noPreview, "必须先预览收件人") {
 		t.Fatalf("send without preview status=%d body=%s", resp.StatusCode, noPreview)
+	}
+	// Error re-renders must keep the anchor too, otherwise the alert is hidden
+	// offscreen just like the old preview bug.
+	if !strings.Contains(noPreview, broadcastFormAction) || !strings.Contains(noPreview, `role="alert"`) {
+		t.Fatalf("error render lost the #broadcast anchor or alert: %s", noPreview)
 	}
 	if got := notificationCount(t, ctx, pool, signupUser.ID, "activity_broadcast"); got != 0 {
 		t.Fatalf("send without preview wrote notifications: %d", got)
