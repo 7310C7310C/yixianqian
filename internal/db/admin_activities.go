@@ -32,6 +32,220 @@ type AdminActivityInput struct {
 	EndAt           *time.Time
 }
 
+// ErrInvalidAttendance reports an attendance value outside the allowed set.
+var ErrInvalidAttendance = errors.New("db: invalid attendance state")
+
+// AdminActivityRosterEntry is the admin-only roster row. PhoneMasked is already
+// masked inside the DB layer so the raw phone never reaches handlers/templates.
+type AdminActivityRosterEntry struct {
+	UserID       int64
+	LegacyUserID string
+	Name         string
+	Nickname     string
+	Gender       string
+	PhoneMasked  string
+	SignupAt     time.Time
+	Attendance   Attendance
+}
+
+// AdminActivitySigninStats summarises one activity's signups and check-ins.
+type AdminActivitySigninStats struct {
+	SignupCount    int
+	CheckedInCount int
+}
+
+// AdminActivityBroadcastAudience lists the two independent recipient sets.
+// Cross-set duplicates are kept so the handler can show and dedupe both counts.
+type AdminActivityBroadcastAudience struct {
+	SignupUserIDs   []int64
+	ObserverUserIDs []int64
+}
+
+// maskPhone keeps the first three and last four digits for staff recognition.
+func maskPhone(phone string) string {
+	phone = strings.TrimSpace(phone)
+	runes := []rune(phone)
+	switch {
+	case len(runes) >= 8:
+		return string(runes[:3]) + "****" + string(runes[len(runes)-4:])
+	case len(runes) >= 4:
+		return string(runes[:1]) + "***" + string(runes[len(runes)-1:])
+	case len(runes) == 0:
+		return ""
+	default:
+		return "***"
+	}
+}
+
+func normalAttendance(state Attendance) (Attendance, bool) {
+	state = Attendance(strings.TrimSpace(string(state)))
+	switch state {
+	case "", AttendanceOnTime, AttendanceLate, AttendanceAbsent:
+		return state, true
+	}
+	return "", false
+}
+
+// AdminActivityRoster returns the active roster with privacy-safe fields.
+func (d *DB) AdminActivityRoster(ctx context.Context, activityID int64) ([]AdminActivityRosterEntry, error) {
+	rows, err := d.pool.Query(ctx, `
+		SELECT s.user_id, COALESCE(u.legacy_user_id, ''), u.name,
+		       COALESCE(NULLIF(s.nickname, ''), NULLIF(u.nickname, ''), u.name),
+		       COALESCE(u.gender, ''), u.phone, s.created_at, COALESCE(s.attendance, '')
+		  FROM signups s
+		  JOIN users u ON u.id = s.user_id
+		 WHERE s.activity_id = $1 AND s.status = $2
+		 ORDER BY s.created_at, s.id`, activityID, SignupStatusSigned)
+	if err != nil {
+		return nil, fmt.Errorf("db: list activity roster: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]AdminActivityRosterEntry, 0)
+	for rows.Next() {
+		var entry AdminActivityRosterEntry
+		var phone, attendance string
+		if err := rows.Scan(&entry.UserID, &entry.LegacyUserID, &entry.Name,
+			&entry.Nickname, &entry.Gender, &phone, &entry.SignupAt, &attendance); err != nil {
+			return nil, fmt.Errorf("db: scan activity roster: %w", err)
+		}
+		entry.PhoneMasked = maskPhone(phone)
+		entry.Attendance = Attendance(strings.TrimSpace(attendance))
+		out = append(out, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: iterate activity roster: %w", err)
+	}
+	return out, nil
+}
+
+// AdminActivitySigninStats groups active signups and check-ins by activity.
+func (d *DB) AdminActivitySigninStats(ctx context.Context) (map[int64]AdminActivitySigninStats, error) {
+	rows, err := d.pool.Query(ctx, `
+		SELECT activity_id,
+		       count(*),
+		       count(*) FILTER (WHERE attendance IN ($2, $3))
+		  FROM signups
+		 WHERE status = $1
+		 GROUP BY activity_id`,
+		SignupStatusSigned, string(AttendanceOnTime), string(AttendanceLate))
+	if err != nil {
+		return nil, fmt.Errorf("db: load activity signin stats: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int64]AdminActivitySigninStats)
+	for rows.Next() {
+		var activityID int64
+		var stats AdminActivitySigninStats
+		if err := rows.Scan(&activityID, &stats.SignupCount, &stats.CheckedInCount); err != nil {
+			return nil, fmt.Errorf("db: scan activity signin stats: %w", err)
+		}
+		out[activityID] = stats
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: iterate activity signin stats: %w", err)
+	}
+	return out, nil
+}
+
+// AdminSetActivityAttendance updates one active signup. A cancelled signup is
+// history and is never rewritten; an empty state clears the check-in.
+func (d *DB) AdminSetActivityAttendance(ctx context.Context, activityID, userID int64, state Attendance) (Attendance, error) {
+	state, ok := normalAttendance(state)
+	if !ok {
+		return "", ErrInvalidAttendance
+	}
+	var stored string
+	err := d.pool.QueryRow(ctx, `
+		UPDATE signups SET attendance = $3
+		 WHERE activity_id = $1 AND user_id = $2 AND status = $4
+		 RETURNING COALESCE(attendance, '')`,
+		activityID, userID, string(state), SignupStatusSigned).Scan(&stored)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotSignedUp
+	}
+	if err != nil {
+		return "", fmt.Errorf("db: set activity attendance: %w", err)
+	}
+	return Attendance(strings.TrimSpace(stored)), nil
+}
+
+// SetActivityPoster links an uploaded media row to the activity. An empty
+// mediaID clears the poster.
+func (d *DB) SetActivityPoster(ctx context.Context, activityID int64, mediaID string) error {
+	tag, err := d.pool.Exec(ctx, `
+		UPDATE activities SET poster_media_id = NULLIF($2, ''), updated_at = now()
+		 WHERE id = $1`, activityID, strings.TrimSpace(mediaID))
+	if err != nil {
+		return fmt.Errorf("db: set activity poster: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrActivityNotFound
+	}
+	return nil
+}
+
+// AdminActivityBroadcastAudience resolves the two recipient sets. Signups are
+// limited to active/matched accounts; observers need the observer flag and an
+// active/observer account. The sets stay separate for preview counts.
+func (d *DB) AdminActivityBroadcastAudience(ctx context.Context, activityID int64, includeSignups, includeObservers bool) (AdminActivityBroadcastAudience, error) {
+	out := AdminActivityBroadcastAudience{
+		SignupUserIDs:   make([]int64, 0),
+		ObserverUserIDs: make([]int64, 0),
+	}
+	if includeSignups {
+		rows, err := d.pool.Query(ctx, `
+			SELECT DISTINCT u.id
+			  FROM signups s
+			  JOIN users u ON u.id = s.user_id
+			 WHERE s.activity_id = $1 AND s.status = $2
+			   AND u.status = $3
+			   AND u.account_status IN ($4, $5)
+			 ORDER BY u.id`,
+			activityID, SignupStatusSigned, "active", "active", "matched")
+		if err != nil {
+			return out, fmt.Errorf("db: list activity broadcast signups: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var userID int64
+			if err := rows.Scan(&userID); err != nil {
+				return out, fmt.Errorf("db: scan activity broadcast signup: %w", err)
+			}
+			out.SignupUserIDs = append(out.SignupUserIDs, userID)
+		}
+		if err := rows.Err(); err != nil {
+			return out, fmt.Errorf("db: iterate activity broadcast signups: %w", err)
+		}
+		rows.Close()
+	}
+	if includeObservers {
+		rows, err := d.pool.Query(ctx, `
+			SELECT id FROM users
+			 WHERE observer_enabled = true
+			   AND status = $1
+			   AND account_status IN ($2, $3)
+			 ORDER BY id`, "active", "active", "observer")
+		if err != nil {
+			return out, fmt.Errorf("db: list activity broadcast observers: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var userID int64
+			if err := rows.Scan(&userID); err != nil {
+				return out, fmt.Errorf("db: scan activity broadcast observer: %w", err)
+			}
+			out.ObserverUserIDs = append(out.ObserverUserIDs, userID)
+		}
+		if err := rows.Err(); err != nil {
+			return out, fmt.Errorf("db: iterate activity broadcast observers: %w", err)
+		}
+		rows.Close()
+	}
+	return out, nil
+}
+
 func (in AdminActivityInput) clean() AdminActivityInput {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Description = strings.TrimSpace(in.Description)

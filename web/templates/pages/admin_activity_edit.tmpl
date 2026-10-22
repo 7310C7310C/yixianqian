@@ -42,6 +42,7 @@
     {{if not .Data.IsNew}}<p class="hint">当前报名人数：{{.Data.Activity.CurrentSignup}}（由报名流程维护，不在此修改）</p>{{end}}
     <div class="admin-actions">
       <button type="submit" class="button primary">{{if .Data.IsNew}}创建活动{{else}}保存修改{{end}}</button>
+      {{if not .Data.IsNew}}<a class="button" href="/admin/activities/{{.Data.Activity.ID}}">返回工作台</a>{{end}}
       <a class="button" href="/admin/activities">取消</a>
     </div>
   </form>

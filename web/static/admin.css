@@ -276,15 +276,20 @@
   }
 
   .admin-table td {
-    display: grid;
-    grid-template-columns: minmax(5.5rem, 32%) minmax(0, 1fr);
-    gap: 0.5rem;
-    padding: 0.3rem 0;
+    position: relative;
+    display: block;
+    min-height: 2rem;
+    padding: 0.3rem 0 0.3rem 34%;
     border-bottom: 0;
+    overflow-wrap: anywhere;
   }
 
   .admin-table td::before {
     content: attr(data-label);
+    position: absolute;
+    left: 0;
+    top: 0.3rem;
+    width: 31%;
     color: var(--muted);
     font-size: 0.8rem;
   }
@@ -322,4 +327,198 @@
 .pill-warn {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+/* Admin activity workbench */
+.admin-subnav {
+  margin-top: -0.55rem;
+}
+
+.admin-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-title-row h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-title-row .admin-actions {
+  margin-top: 0;
+}
+
+.admin-activity-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.admin-activity-cell strong {
+  overflow-wrap: anywhere;
+}
+
+.admin-thumb {
+  width: 56px;
+  height: 42px;
+  flex: none;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.pill-muted {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.admin-activity-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-activity-item {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  overflow-wrap: anywhere;
+}
+
+.admin-activity-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.admin-poster {
+  margin-top: 0.75rem;
+}
+
+.admin-poster img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.admin-placeholder {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.admin-broadcast {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  margin-top: 0.75rem;
+}
+
+.admin-broadcast.stack {
+  display: grid;
+  align-items: stretch;
+}
+
+.admin-broadcast label.admin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.admin-broadcast.stack > label:not(.admin-check) {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.admin-broadcast input:not([type="checkbox"]),
+.admin-broadcast textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.admin-broadcast textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.admin-broadcast.stack .admin-actions,
+.admin-broadcast.stack .hint {
+  margin-top: 0;
+}
+
+@media (min-width: 640px) {
+  .admin-activity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.admin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.admin-roster-table th,
+.admin-roster-table td {
+  padding: 0.5rem 0.35rem;
+}
+
+.admin-roster-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.admin-roster-actions .button {
+  min-height: 30px;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.admin-member-id {
+  overflow-wrap: anywhere;
+}
+
+.admin-roster-gender {
+  white-space: nowrap;
+}
+
+@media (max-width: 639px) {
+  .admin-roster-table td {
+    padding: 0.3rem 0 0.3rem 34%;
+  }
+
+  .admin-roster-table td::before {
+    top: 0.3rem;
+  }
 }

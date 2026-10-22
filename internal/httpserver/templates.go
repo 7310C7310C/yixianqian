@@ -37,9 +37,10 @@ type PageData struct {
 	// Data is an optional page-specific payload. Feature modules should use
 	// this instead of growing PageData for every page, which keeps parallel
 	// work from conflicting in this shared file.
-	Data      any
-	ActiveNav string
-	PageCSS   string
+	Data         any
+	ActiveNav    string
+	ActiveSubnav string
+	PageCSS      string
 }
 
 // Templates holds one cloned template set per page so each page can define its

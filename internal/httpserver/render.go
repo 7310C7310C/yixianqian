@@ -35,7 +35,7 @@ func (a *App) renderError(w http.ResponseWriter, r *http.Request, status int, ti
 // canonicalNav keeps the admin navigation names used by admin_nav.tmpl.
 func canonicalNav(name string) string {
 	switch name {
-	case "admin", "users", "reports", "suggestions", "roles":
+	case "admin", "users", "activities", "reports", "suggestions", "roles":
 		return name
 	default:
 		return ""
@@ -49,8 +49,14 @@ func navForPage(page string) string {
 		return "admin"
 	case "admin_users":
 		return "users"
+	case "admin_activities", "admin_activity_edit", "admin_activity_detail":
+		return "activities"
 	case "admin_reports":
 		return "reports"
+	case "admin_suggestions":
+		return "suggestions"
+	case "admin_roles":
+		return "roles"
 	default:
 		return ""
 	}

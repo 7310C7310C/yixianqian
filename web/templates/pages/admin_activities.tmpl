@@ -2,12 +2,14 @@
 {{template "admin_nav" .}}
 
 <section class="card">
-  <p class="eyebrow">活动</p>
-  <h1>活动管理</h1>
-  {{template "flash" .}}
-  <div class="admin-actions">
+  <div class="admin-title-row">
+    <div>
+      <p class="eyebrow">活动</p>
+      <h1>活动管理</h1>
+    </div>
     <a class="button primary" href="/admin/activities/new">新建活动</a>
   </div>
+  {{template "flash" .}}
 </section>
 
 <section class="card">
@@ -19,12 +21,34 @@
       <tbody>
       {{range .Data.Activities}}
         <tr>
-          <td data-label="活动"><strong>{{.Name}}</strong><div class="muted"><code>{{.ActivityNo}}</code></div></td>
-          <td data-label="状态"><span class="pill">{{.Status}}</span>{{if .GroupStatus}} <span class="pill">{{.GroupStatus}}</span>{{end}}</td>
-          <td data-label="报名">{{.CurrentSignup}}{{if gt .MaxSignup 0}} / {{.MaxSignup}}{{else}} / 不限{{end}}</td>
-          <td data-label="签到">{{if .SigninEnabled}}开启{{else}}关闭{{end}}</td>
-          <td data-label="分组/一对一">{{if .GroupEnabled}}分组{{end}}{{if .OnetooneEnabled}} 一对一{{end}}{{if and (not .GroupEnabled) (not .OnetooneEnabled)}}—{{end}}</td>
-          <td data-label="操作"><a class="button small" href="/admin/activities/{{.ID}}/edit">编辑</a></td>
+          <td data-label="活动">
+            <div class="admin-activity-cell">
+              {{if .PosterMediaID}}<img class="admin-thumb" src="/admin/activities/{{.ID}}/poster?size=thumb" alt="{{.Name}} 海报" loading="lazy">{{end}}
+              <div>
+                <strong>{{.Name}}</strong>
+                <div class="muted"><code>{{.ActivityNo}}</code></div>
+              </div>
+            </div>
+          </td>
+          <td data-label="状态"><span class="pill">{{.Status}}</span></td>
+          <td data-label="报名">{{.SignupCount}}{{if gt .MaxSignup 0}} / {{.MaxSignup}}{{else}} / 不限{{end}}</td>
+          <td data-label="签到">
+            <span class="pill{{if not .SigninEnabled}} pill-muted{{end}}">{{if .SigninEnabled}}开启{{else}}关闭{{end}}</span>
+            <div class="muted">已签到 {{.CheckedInCount}} / 报名 {{.SignupCount}}</div>
+          </td>
+          <td data-label="分组/一对一">
+            {{if .GroupEnabled}}<span class="pill">分组</span>{{end}}
+            {{if .GroupStatus}}<span class="muted">{{.GroupStatus}}</span>{{end}}
+            {{if .OnetooneEnabled}}<span class="pill">一对一</span>{{end}}
+            {{if .OnetooneStatus}}<span class="muted">{{.OnetooneStatus}}</span>{{end}}
+            {{if and (not .GroupEnabled) (not .OnetooneEnabled)}}<span class="muted">—</span>{{end}}
+          </td>
+          <td data-label="操作">
+            <div class="admin-actions">
+              <a class="button primary small" href="/admin/activities/{{.ID}}">工作台</a>
+              <a class="button small" href="/admin/activities/{{.ID}}/edit">编辑</a>
+            </div>
+          </td>
         </tr>
       {{end}}
       </tbody>

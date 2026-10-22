@@ -57,10 +57,13 @@ type AdminUserCounts struct {
 
 // AdminStats is the dashboard summary. Pending counts exclude resolved rows.
 type AdminStats struct {
-	Users              AdminUserCounts
-	PendingReports     int64
-	PendingSuggestions int64
-	SuperAdmins        int64
+	Users               AdminUserCounts
+	PendingReports      int64
+	PendingSuggestions  int64
+	SuperAdmins         int64
+	ActivityTotal       int64
+	ActivityOpen        int64
+	ActivitySignupTotal int64
 }
 
 // AdminRole is one role with its permission catalogue and member count.
@@ -190,10 +193,15 @@ func (d *DB) AdminStats(ctx context.Context) (AdminStats, error) {
 		   (SELECT count(*) FROM suggestions WHERE status = $1),
 		   (SELECT count(*) FROM admin_user_roles ur
 		     JOIN admin_roles r ON r.id = ur.role_id
-		     WHERE r.code = $2)`,
-		ReportStatusPending, adminSuperAdminRoleCode).
+		     WHERE r.code = $2),
+		   (SELECT count(*) FROM activities WHERE status <> $5),
+		   (SELECT count(*) FROM activities WHERE status = $3),
+		   (SELECT count(*) FROM signups WHERE status = $4)`,
+		ReportStatusPending, adminSuperAdminRoleCode,
+		ActivityStatusOpen, SignupStatusSigned, ActivityStatusCancelled).
 		Scan(&s.Users.Pending, &s.Users.Active, &s.Users.Rejected, &s.Users.Disabled,
-			&s.Users.Total, &s.PendingReports, &s.PendingSuggestions, &s.SuperAdmins)
+			&s.Users.Total, &s.PendingReports, &s.PendingSuggestions, &s.SuperAdmins,
+			&s.ActivityTotal, &s.ActivityOpen, &s.ActivitySignupTotal)
 	if err != nil {
 		return AdminStats{}, fmt.Errorf("db: load admin stats: %w", err)
 	}

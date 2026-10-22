@@ -51,6 +51,24 @@
 </section>
 
 <section class="card">
+  <h2>活动概况</h2>
+  <div class="admin-stat-grid">
+    <a class="admin-stat" href="/admin/activities">
+      <span class="admin-stat-number">{{.Data.Stats.ActivityTotal}}</span>
+      <span class="admin-stat-label">活动总数</span>
+    </a>
+    <a class="admin-stat" href="/admin/activities">
+      <span class="admin-stat-number">{{.Data.Stats.ActivityOpen}}</span>
+      <span class="admin-stat-label">报名中</span>
+    </a>
+    <a class="admin-stat" href="/admin/activities">
+      <span class="admin-stat-number">{{.Data.Stats.ActivitySignupTotal}}</span>
+      <span class="admin-stat-label">有效报名人次</span>
+    </a>
+  </div>
+</section>
+
+<section class="card">
   <h2>快速入口</h2>
   <div class="admin-links">
     {{if .Data.CanReview}}<a class="button" href="/admin/users?status=pending">审核用户</a>{{end}}
