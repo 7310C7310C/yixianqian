@@ -12,7 +12,9 @@
 
 同一 `飞书用户ID` 同时出现在 users 与 observers 时，不建立重复用户：保留 users row，
 并设 `observer_enabled=true`；`legacy_user_id` 使用 U-xxx，C-xxx 仅作观察员记录对账。
-管理员身份由 `admin_user_roles` 迁移（U-0006 为 `super_admin`），不由 observers 表推导。
+管理员身份由 `admin_user_roles` 迁移（U-0006 为 `super_admin`，U-0001 为 `admin`），不由 observers 表推导。
+旧 `ADMIN_OPEN_IDS` 不在 Bitable 导出中，需按 v1 `local_config` 的清单人工映射；
+迁移后必须逐一核对 `admin_user_roles` 与 `/admin` 权限。
 | likes | 132 | 发起/目标 open_id、昵称、用户ID、喜欢类型、状态、附言、归属月份 |
 | activities | 6 | 活动ID、名称、描述、地点、条件、上限/当前人数、费用、食宿、状态、海报、分组/一对一/签到开关与状态、签到码、时间 |
 | signups | 248 | 活动ID、报名人 open_id/昵称、状态、签到状态、报名时间 |
