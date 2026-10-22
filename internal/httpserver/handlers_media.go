@@ -136,7 +136,13 @@ func (a *App) allowUpload(w http.ResponseWriter, r *http.Request, userID int64, 
 }
 
 func (a *App) receiveUpload(r *http.Request, user db.User) (db.Media, error) {
-	file, header, err := r.FormFile("file")
+	return a.receiveUploadField(r, user, "file")
+}
+
+// receiveUploadField is the shared upload pipeline; callers that embed a file
+// input in a larger form can pick their own field name.
+func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (db.Media, error) {
+	file, header, err := r.FormFile(field)
 	if err != nil {
 		return db.Media{}, errNoFile
 	}

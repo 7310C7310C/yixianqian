@@ -6,9 +6,17 @@
   <h1>{{if .Data.IsNew}}新建活动{{else}}编辑活动{{end}}</h1>
   {{template "flash" .}}
   {{if .Data.Error}}<div class="alert alert-error" role="alert">{{.Data.Error}}</div>{{end}}
-  <form method="post" action="{{if .Data.IsNew}}/admin/activities{{else}}/admin/activities/{{.Data.Activity.ID}}{{end}}" class="stack">
+  <form method="post" action="{{if .Data.IsNew}}/admin/activities{{else}}/admin/activities/{{.Data.Activity.ID}}{{end}}" enctype="multipart/form-data" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <label>活动名称<input type="text" name="name" required maxlength="100" value="{{.Data.Activity.Name}}"></label>
+    {{if .Data.Activity.PosterMediaID}}
+    <div class="admin-poster">
+      <img src="/admin/activities/{{.Data.Activity.ID}}/poster?size=thumb" alt="{{.Data.Activity.Name}} 海报">
+    </div>
+    <p class="hint">当前海报：{{.Data.PosterName}}</p>
+    {{end}}
+    <label>活动海报（可选）<input type="file" name="poster" accept="image/jpeg,image/png"></label>
+    <p class="hint">可选，只接受 JPEG/PNG，最大 {{.MediaMaxMB}} MB；{{if .Data.IsNew}}不选择则不上传海报{{else}}不选择则保留当前海报{{end}}。</p>
     <label>活动描述<textarea name="description" rows="4" maxlength="2000">{{.Data.Activity.Description}}</textarea></label>
     <label>地点<input type="text" name="location" maxlength="200" value="{{.Data.Activity.Location}}"></label>
     <label>参加条件<input type="text" name="condition" maxlength="500" value="{{.Data.Activity.Condition}}"></label>

@@ -43,6 +43,9 @@ type adminActivityEditPageData struct {
 	// silently submitting the first option.
 	StatusKeep    bool
 	StatusUnknown string
+	// PosterName is the sanitized original filename of the current poster.
+	// The template never receives the object key.
+	PosterName string
 }
 
 type adminActivityBroadcastForm struct {
@@ -158,36 +161,185 @@ func (a *App) handleAdminActivityEdit(w http.ResponseWriter, r *http.Request, ac
 
 func (a *App) renderAdminActivityEdit(w http.ResponseWriter, r *http.Request, access adminAccess,
 	activity *db.Activity, errMessage, newStatus string) {
+	a.renderAdminActivityEditStatus(w, r, access, activity, http.StatusOK, errMessage, newStatus)
+}
+
+func (a *App) renderAdminActivityEditStatus(w http.ResponseWriter, r *http.Request, access adminAccess,
+	activity *db.Activity, status int, errMessage, newStatus string) {
 	data := adminActivityEditPageData{Activity: activity, IsNew: activity == nil, Error: errMessage, Statuses: adminActivityStatuses}
 	if activity == nil {
 		data.Activity = &db.Activity{Status: newStatus}
-	} else if activity.Status == "" || !adminActivityStatusKnown(activity.Status) {
-		data.StatusKeep = true
-		data.StatusUnknown = activity.Status
+	} else {
+		if activity.PosterMediaID != nil {
+			poster, err := a.db.GetActivityPoster(r.Context(), strconv.FormatInt(activity.ID, 10))
+			switch {
+			case err == nil:
+				data.PosterName = poster.OriginalName
+			case errors.Is(err, db.ErrNotFound):
+				// A dangling pointer is ignored; the page simply shows no name.
+			default:
+				a.logger(r).Warn("load admin activity poster name failed", "error", err, "activity_id", activity.ID)
+			}
+		}
+		if activity.Status == "" || !adminActivityStatusKnown(activity.Status) {
+			data.StatusKeep = true
+			data.StatusUnknown = activity.Status
+		}
 	}
 	subnav := ""
 	if data.IsNew {
 		subnav = "new"
 	}
-	a.render(w, r, http.StatusOK, "admin_activity_edit", PageData{
+	mediaMaxMB := int(a.cfg.MediaMaxBytes / (1 << 20))
+	if mediaMaxMB < 1 {
+		mediaMaxMB = 1
+	}
+	a.render(w, r, status, "admin_activity_edit", PageData{
 		Title: "活动编辑", User: &access.User, Data: data,
 		PageCSS: "admin.css", ActiveNav: "activities", ActiveSubnav: subnav,
+		MediaMaxMB: mediaMaxMB,
 	})
 }
 
+// parseAdminActivityRequest accepts both the legacy urlencoded form and
+// multipart/form-data with an optional poster. Multipart bodies must be parsed
+// before the CSRF field can be read. On failure it renders the edit form and
+// reports false; multipart callers still own temp-file cleanup.
+func (a *App) parseAdminActivityRequest(w http.ResponseWriter, r *http.Request, access adminAccess,
+	activity *db.Activity, newStatus string) (multipart, ok bool) {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
+		if err := r.ParseForm(); err != nil {
+			a.renderError(w, r, http.StatusBadRequest, "操作失败", "表单格式不正确，请重新整理后再试。")
+			return false, false
+		}
+		if !a.formCSRFValid(r) {
+			a.renderError(w, r, http.StatusForbidden, "操作被拒绝", "表单已过期，请重新整理后再试。")
+			return false, false
+		}
+		return false, true
+	}
+	if err := a.parseMultipartRequest(w, r); err != nil {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+		status, _, message := uploadParseErrorDetails(err)
+		a.renderAdminActivityEditStatus(w, r, access, activity, status, message, newStatus)
+		return true, false
+	}
+	if !a.formCSRFValid(r) {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+		a.renderAdminActivityEditStatus(w, r, access, activity, http.StatusForbidden,
+			"表单已过期，请重新整理后再试。", newStatus)
+		return true, false
+	}
+	return true, true
+}
+
+// adminActivityPosterSelected reports whether the multipart form carries a
+// non-empty poster part. Browsers omit empty file inputs, so an empty selection
+// never reaches the upload path.
+func adminActivityPosterSelected(r *http.Request) bool {
+	if r.MultipartForm == nil {
+		return false
+	}
+	for _, header := range r.MultipartForm.File["poster"] {
+		if strings.TrimSpace(header.Filename) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// uploadAdminActivityPoster runs the guarded poster upload path shared by the
+// create and edit forms. Failures are rendered on the form page.
+func (a *App) uploadAdminActivityPoster(w http.ResponseWriter, r *http.Request, access adminAccess,
+	activity *db.Activity, newStatus string) (db.Media, bool) {
+	if !a.allowUpload(w, r, access.User.ID, false) {
+		return db.Media{}, false
+	}
+	if !a.acquireMedia(w, r, false) {
+		return db.Media{}, false
+	}
+	defer a.releaseMedia()
+	saved, err := a.receiveUploadField(r, access.User, "poster")
+	if err != nil {
+		status, _, message := uploadErrorDetails(err)
+		if status >= http.StatusInternalServerError {
+			a.logger(r).Error("admin activity poster upload failed", "error", err)
+		}
+		a.renderAdminActivityEditStatus(w, r, access, activity, status, message, newStatus)
+		return db.Media{}, false
+	}
+	return saved, true
+}
+
+// rollbackAdminActivityPoster removes a media row and its objects after the
+// surrounding activity write failed. Cleanup uses a detached context so a
+// canceled request cannot leave an orphan row behind.
+func (a *App) rollbackAdminActivityPoster(r *http.Request, userID int64, saved db.Media) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
+	defer cancel()
+	removed, err := a.db.RemoveMediaOwned(ctx, userID, saved.ID)
+	if err != nil {
+		if !errors.Is(err, db.ErrNotFound) {
+			a.logger(r).Warn("rollback activity poster media row failed", "error", err, "media_id", saved.ID)
+		}
+		removed = saved
+	}
+	a.removeObject(r, removed.ObjectKey)
+	if removed.ThumbKey != "" {
+		a.removeObject(r, removed.ThumbKey)
+	}
+}
+
 func (a *App) handleAdminActivityCreate(w http.ResponseWriter, r *http.Request, access adminAccess) {
-	if !a.adminFormPost(w, r) {
+	multipart, ok := a.parseAdminActivityRequest(w, r, access, nil, "报名中")
+	if !ok {
 		return
+	}
+	if multipart && r.MultipartForm != nil {
+		defer func() { _ = r.MultipartForm.RemoveAll() }()
 	}
 	in, err := a.parseAdminActivityForm(r, nil)
 	if err != nil {
 		a.renderAdminActivityEdit(w, r, access, nil, err.Error(), "报名中")
 		return
 	}
+	var poster *db.Media
+	if multipart && adminActivityPosterSelected(r) {
+		saved, ok := a.uploadAdminActivityPoster(w, r, access, nil, "报名中")
+		if !ok {
+			return
+		}
+		poster = &saved
+	}
 	activity, err := a.db.CreateActivity(r.Context(), in)
 	if err != nil {
+		if poster != nil {
+			a.rollbackAdminActivityPoster(r, access.User.ID, *poster)
+		}
 		a.logger(r).Error("create admin activity failed", "error", err)
 		a.renderAdminActivityEdit(w, r, access, nil, "创建失败，请稍后再试。", "报名中")
+		return
+	}
+	if poster != nil {
+		if err := a.db.SetActivityPoster(r.Context(), activity.ID, poster.ID); err != nil {
+			a.logger(r).Error("link admin activity poster failed", "error", err, "activity_id", activity.ID)
+			if err := a.db.DeleteActivity(r.Context(), activity.ID); err != nil {
+				a.logger(r).Warn("rollback created activity failed", "error", err, "activity_id", activity.ID)
+			}
+			a.rollbackAdminActivityPoster(r, access.User.ID, *poster)
+			a.renderAdminActivityEditStatus(w, r, access, nil, http.StatusInternalServerError,
+				"海报保存失败，请稍后再试。", "报名中")
+			return
+		}
+		a.audit(r, &access.User.ID, "admin.activity.poster", "activity", activity.ActivityNo,
+			map[string]any{"media_id": poster.ID, "source": "create"})
+		a.audit(r, &access.User.ID, "admin.activity.create", "activity", activity.ActivityNo, nil)
+		http.Redirect(w, r, adminActivityURL(activity.ID, "活动已创建，海报已上传。")+"#poster", http.StatusSeeOther)
 		return
 	}
 	a.audit(r, &access.User.ID, "admin.activity.create", "activity", activity.ActivityNo, nil)
@@ -199,21 +351,49 @@ func (a *App) handleAdminActivityUpdate(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	if !a.adminFormPost(w, r) {
+	multipart, ok := a.parseAdminActivityRequest(w, r, access, &existing, "")
+	if !ok {
 		return
+	}
+	if multipart && r.MultipartForm != nil {
+		defer func() { _ = r.MultipartForm.RemoveAll() }()
 	}
 	in, err := a.parseAdminActivityForm(r, &existing)
 	if err != nil {
 		a.renderAdminActivityEdit(w, r, access, &existing, err.Error(), "")
 		return
 	}
+	var poster *db.Media
+	if multipart && adminActivityPosterSelected(r) {
+		saved, ok := a.uploadAdminActivityPoster(w, r, access, &existing, "")
+		if !ok {
+			return
+		}
+		poster = &saved
+	}
 	updated, err := a.db.UpdateActivity(r.Context(), existing.ID, in)
 	if err != nil {
+		if poster != nil {
+			a.rollbackAdminActivityPoster(r, access.User.ID, *poster)
+		}
 		a.logger(r).Error("update admin activity failed", "error", err)
 		a.renderAdminActivityEdit(w, r, access, &existing, "保存失败，请稍后再试。", "")
 		return
 	}
 	a.audit(r, &access.User.ID, "admin.activity.update", "activity", updated.ActivityNo, nil)
+	if poster != nil {
+		if err := a.db.SetActivityPoster(r.Context(), updated.ID, poster.ID); err != nil {
+			a.logger(r).Error("link admin activity poster failed", "error", err, "activity_id", updated.ID)
+			a.rollbackAdminActivityPoster(r, access.User.ID, *poster)
+			a.renderAdminActivityEditStatus(w, r, access, &updated, http.StatusInternalServerError,
+				"海报保存失败，请稍后再试。", "")
+			return
+		}
+		a.audit(r, &access.User.ID, "admin.activity.poster", "activity", updated.ActivityNo,
+			map[string]any{"media_id": poster.ID, "source": "edit"})
+		http.Redirect(w, r, adminActivityURL(updated.ID, "活动已保存，海报已更新。")+"#poster", http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, adminActivityURL(updated.ID, "活动已保存。"), http.StatusSeeOther)
 }
 

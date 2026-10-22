@@ -186,6 +186,9 @@ func TestIntegrationAdminActivityPoster(t *testing.T) {
 	if poster.ObjectKey != objectKey || poster.ThumbKey != thumbKey {
 		t.Fatalf("poster object = %+v", poster)
 	}
+	if poster.OriginalName != "poster.png" {
+		t.Fatalf("poster original name = %q", poster.OriginalName)
+	}
 	if err := d.SetActivityPoster(ctx, activity.ID, ""); err != nil {
 		t.Fatalf("clear poster: %v", err)
 	}

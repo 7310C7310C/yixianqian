@@ -186,6 +186,20 @@ func (d *DB) SetActivityPoster(ctx context.Context, activityID int64, mediaID st
 	return nil
 }
 
+// DeleteActivity removes an activity row. The admin create flow only uses it
+// to roll back a freshly created activity whose poster could not be linked;
+// such a row has no signups, so the signup cascade is never exercised.
+func (d *DB) DeleteActivity(ctx context.Context, id int64) error {
+	tag, err := d.pool.Exec(ctx, `DELETE FROM activities WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("db: delete activity: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrActivityNotFound
+	}
+	return nil
+}
+
 // AdminActivityBroadcastAudience resolves the two recipient sets. Signups are
 // limited to active/matched accounts; observers need the observer flag and an
 // active/observer account. The sets stay separate for preview counts.
