@@ -1258,9 +1258,15 @@
     <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
       <van-cell v-if="!isObserver" title="👤 我的资料" is-link @click="openProfileDetail"></van-cell>
       <van-cell title="🔑 修改密码" is-link url="/password"></van-cell>
-      <van-cell v-if="user.can_admin" title="🛠️ 管理后台" is-link @click="openAdminConsole"></van-cell>
       <van-cell v-if="availableRoles.length > 1" :title="'🔄 ' + (isObserver ? '切换为普通用户' : '切换为村情六处')" is-link @click="switchRole"></van-cell>
       <van-cell title="🚪 退出登录" is-link @click="legacyLogout"></van-cell>
+    </van-cell-group>
+  </div>
+  <!-- 管理 -->
+  <div style="padding:0 12px;" v-if="user.can_admin">
+    <div class="section-title">管理</div>
+    <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
+      <van-cell title="🛠️ 管理后台" is-link @click="openAdminConsole"></van-cell>
     </van-cell-group>
   </div>
   <!-- 帮助 -->
@@ -3330,7 +3336,9 @@ createApp({
     }
     function pushHistory(state){
       if(isHandlingPopState) return;
-      try{ history.pushState(state, '', location.pathname + '#' + (state.page || state.overlay || 'h5')); }catch(e){}
+      // 不带 hash：Safari/部分浏览器会把 hash 变化当锚点导航，导致 tabbar 闪动与进度条。
+      // 页面/浮层状态已存在 history.state，back/forward 仍由 popstate 消费。
+      try{ history.pushState(state, '', location.pathname); }catch(e){}
     }
     function handleBack(){
       // 次序托盘/未保存弹窗打开：返回只关浮层、停留（不触发离开拦截）

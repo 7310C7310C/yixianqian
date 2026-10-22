@@ -108,7 +108,21 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy home cards failed")
 		return
 	}
-	cards := legacyCards(page.Cards)
+	// v1 /api/home 把「他人视角的自己」置顶，供前端显示「这是你」并隐藏自操作。
+	// /legacy/api/cards 保持纯候选池，不插入本人卡。
+	views := page.Cards
+	if selfProfile, selfErr := a.db.GetSocialProfile(ctx, user.ID); selfErr == nil {
+		selfView := buildCardView(selfProfile, false, false, 0, now)
+		selfView.IsSelf = true
+		views = append([]CardView{selfView}, views...)
+		if page.Limit > 0 && len(views) > page.Limit {
+			views = views[:page.Limit]
+		}
+		page.Total++
+	} else if !errors.Is(selfErr, db.ErrNotFound) {
+		a.logger(r).Warn("legacy home self card failed", "error", selfErr, "user_id", user.ID)
+	}
+	cards := legacyCards(views)
 	likes, err := a.legacyLikes(ctx, user.ID, now)
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy home likes failed")

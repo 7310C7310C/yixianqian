@@ -28,6 +28,8 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 		`const APP_VERSION = 'legacy';`,
 		`src="lib/vue.global.prod.js"`,
 		`src="lib/vant.min.js"`,
+		`history.pushState(state, '', location.pathname);`,
+		`<div class="section-title">管理</div>`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("legacy index missing %q", want)
@@ -35,6 +37,23 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 	}
 	if strings.Contains(html, "lf1-cdn-tos") || strings.Contains(html, "h5-js-sdk") {
 		t.Fatal("legacy index still references the Feishu SDK")
+	}
+	if strings.Contains(html, `location.pathname + '#' + (state.page`) {
+		t.Fatal("legacy pushHistory still appends a hash")
+	}
+
+	// 管理后台是独立 section（账号之后、帮助之前），不再放在账号 cell group 内。
+	accountIdx := strings.Index(html, "<!-- 账号 -->")
+	adminIdx := strings.Index(html, `<div class="section-title">管理</div>`)
+	adminCellIdx := strings.Index(html, `title="🛠️ 管理后台"`)
+	helpIdx := strings.Index(html, "<!-- 帮助 -->")
+	if accountIdx < 0 || adminIdx < 0 || adminCellIdx < 0 || helpIdx < 0 {
+		t.Fatalf("admin section markers missing: account=%d admin=%d cell=%d help=%d",
+			accountIdx, adminIdx, adminCellIdx, helpIdx)
+	}
+	if !(accountIdx < adminIdx && adminIdx < adminCellIdx && adminCellIdx < helpIdx) {
+		t.Fatalf("admin section order wrong: account=%d admin=%d cell=%d help=%d",
+			accountIdx, adminIdx, adminCellIdx, helpIdx)
 	}
 }
 
