@@ -35,7 +35,7 @@ func (a *App) handleAdminActivitiesPage(w http.ResponseWriter, r *http.Request, 
 	}
 	a.render(w, r, http.StatusOK, "admin_activities", PageData{
 		Title: "活动管理", User: &access.User,
-		Data: adminActivitiesPageData{Activities: activities},
+		Data:    adminActivitiesPageData{Activities: activities},
 		PageCSS: "admin.css", ActiveNav: "activities",
 		Notice: r.URL.Query().Get("notice"),
 	})
@@ -158,7 +158,7 @@ func (a *App) parseAdminActivityForm(r *http.Request) (db.AdminActivityInput, er
 		Food: r.PostFormValue("food"), Status: status,
 		GroupEnabled: r.PostFormValue("group_enabled") == "1", MalePerGroup: male, FemalePerGroup: female,
 		OnetooneEnabled: r.PostFormValue("onetoone_enabled") == "1",
-		SigninEnabled: r.PostFormValue("signin_enabled") == "1", SigninCode: r.PostFormValue("signin_code"),
+		SigninEnabled:   r.PostFormValue("signin_enabled") == "1", SigninCode: r.PostFormValue("signin_code"),
 		PublishAt: publish, StartAt: start, EndAt: end,
 	}, nil
 }
@@ -175,4 +175,3 @@ func parseAdminActivityTime(raw string) (*time.Time, error) {
 	}
 	return &t, nil
 }
-
