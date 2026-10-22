@@ -241,13 +241,16 @@
   }
   /* 修改密码子页 */
   .password-page { min-height: 100vh; background: #f7f8fa; }
-  .password-page .page { padding: 12px; }
+  /* 返回列固定：从「我的」滚到下方再进入时，内容不能停在上页滚动位置、也不能被页头遮住 */
+  .password-page .back-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 10; padding-top: calc(14px + constant(safe-area-inset-top)); padding-top: calc(14px + env(safe-area-inset-top)); box-sizing: border-box; }
+  .password-page .page { padding: 12px; padding-top: calc(68px + constant(safe-area-inset-top)); padding-top: calc(68px + env(safe-area-inset-top)); box-sizing: border-box; }
   .pw-card { max-width: 480px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 16px 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
   .pw-title { font-size: 18px; font-weight: 600; color: #323233; padding: 0 16px; }
   .pw-tip { font-size: 12px; color: #969799; line-height: 1.6; padding: 6px 16px 12px; }
   .pw-error { margin: 0 16px 10px; padding: 8px 10px; border-radius: 8px; background: #fdecec; color: #9b2c2c; font-size: 13px; line-height: 1.5; }
   .pw-actions { padding: 20px 16px 0; }
   .van-theme-dark .password-page { background: #111; }
+  .van-theme-dark .password-page .back-nav { background: #1c1c1e; border-bottom-color: #2c2c2e; }
   .van-theme-dark .pw-card { background: #1c1c1e; box-shadow: none; }
   .van-theme-dark .pw-title { color: #f5f5f5; }
   .van-theme-dark .pw-tip { color: #a0a0a4; }
@@ -888,8 +891,11 @@
   .embed-bar { flex: 0 0 auto; padding-top: constant(safe-area-inset-top); padding-top: env(safe-area-inset-top); background-color: #fff; background-image: linear-gradient(90deg,#ff6b81 0%,#ff8fa1 55%,#ffb3bf 100%); background-repeat: no-repeat; background-size: 100% 3px; background-position: left top; border-bottom: 1px solid #f2f3f5; }
   .embed-bar-inner { display: flex; align-items: center; gap: 8px; max-width: 640px; margin: 0 auto; padding: 14px 12px; }
   .embed-bar--wide .embed-bar-inner { max-width: 1080px; }
-  .embed-back { width: 44px; height: 44px; margin: -11px 0 -11px -8px; border: 0; background: transparent; color: #323233; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .embed-back { display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px; min-width: 44px; min-height: 44px; margin: -11px 0; padding: 0; border: 0; background: transparent; color: #323233; font-size: 18px; font-weight: 500; line-height: 24px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .embed-back .van-icon { font-size: 22px; }
+  .embed-back-text { font-size: 18px; font-weight: 500; line-height: 24px; color: inherit; }
   .embed-back:active { opacity: .6; }
+  .embed-bar-sep { flex: 0 0 auto; width: 1px; height: 16px; margin: 0 2px; background: #ebedf0; }
   .embed-title { font-size: 18px; font-weight: 500; line-height: 24px; color: #323233; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .embed-body { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
   .embed-frame { flex: 1 1 auto; width: 100%; min-height: 0; border: 0; display: block; background: #f7f8fa; opacity: 0; transition: opacity .18s ease; }
@@ -910,6 +916,7 @@
   .van-theme-dark .embed-bar { background-color: #1c1c1e; border-bottom-color: #2c2c2e; }
   .van-theme-dark .embed-title { color: #f5f5f5; }
   .van-theme-dark .embed-back { color: #f5f5f5; }
+  .van-theme-dark .embed-bar-sep { background: #3a3a3e; }
   .van-theme-dark .embed-sk-card { background: #1c1c1e; box-shadow: none; }
   .van-theme-dark .embed-sk-shimmer { background-image: linear-gradient(90deg, #2a2a2e 25%, #3a3a3e 37%, #2a2a2e 63%); }
   @media (prefers-reduced-motion: reduce) {
@@ -3401,7 +3408,9 @@
     <div class="embed-bar-inner">
       <button type="button" class="embed-back" aria-label="返回" @click="closeEmbed">
         <van-icon name="arrow-left" />
+        <span class="embed-back-text">返回</span>
       </button>
+      <span class="embed-bar-sep" aria-hidden="true"></span>
       <span class="embed-title">{{ embedTitle }}</span>
     </div>
   </div>
@@ -6823,6 +6832,12 @@ createApp({
       passwordErrors.value = { current: '', password: '', confirm: '' };
       passwordSubmitError.value = '';
       page.value = 'password';
+      // 从「我的」滚到下方再进子页：同步清零文档滚动，避免首屏停在上页位置被固定返回列遮住
+      nextTick(() => {
+        try { window.scrollTo(0, 0); } catch (e) {}
+        const scroller = document.scrollingElement;
+        if (scroller) scroller.scrollTop = 0;
+      });
     }
     async function submitPassword() {
       if (passwordSubmitting.value) return;
