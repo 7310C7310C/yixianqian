@@ -70,8 +70,24 @@ def _error(code: str) -> dict:
     return _result(False, None, None, 0, 0, code)
 
 
+def _target_size(width: int, height: int, max_side: int = MAX_DETECT_SIDE) -> tuple[int, int]:
+    """返回按最长边限制缩放后的尺寸；不放大图片。"""
+    if width <= 0 or height <= 0 or max_side <= 0:
+        return max(1, width), max(1, height)
+    longest = max(width, height)
+    if longest <= max_side:
+        return width, height
+    scale = max_side / float(longest)
+    return max(1, int(width * scale + 0.5)), max(1, int(height * scale + 0.5))
+
+
 def _load_image(cv2, path: str):
-    """读取 JPEG/PNG，按 EXIF 方向校正，返回 (BGR ndarray, 宽, 高)。"""
+    """读取 JPEG/PNG，按 EXIF 方向校正，返回 (BGR ndarray, 原图宽, 原图高)。
+
+    ndarray 的最长边不超过 MAX_DETECT_SIDE：JPEG 用 Pillow 的 draft 在解码
+    阶段就按 1/2、1/4、1/8 缩小，避免 12MP 原图完整解码；其余格式再缩图。
+    坐标换算一律基于 ndarray 尺寸，因此比例与原图一致。
+    """
     if not os.path.isfile(path):
         raise ProbeError("file_not_found")
     try:
@@ -83,12 +99,24 @@ def _load_image(cv2, path: str):
         if img is None:
             raise ProbeError("decode_failed")
         height, width = img.shape[:2]
+        target_w, target_h = _target_size(width, height)
+        if (target_w, target_h) != (width, height):
+            img = cv2.resize(img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
         return img, width, height
 
     try:
         with Image.open(path) as raw:
+            width, height = raw.size
+            target_w, target_h = _target_size(width, height)
+            if (target_w, target_h) != (width, height):
+                # draft 只对 JPEG 生效；非 JPEG 会忽略后由 thumbnail 兜底。
+                try:
+                    raw.draft("RGB", (target_w, target_h))
+                except Exception:
+                    pass
             image = ImageOps.exif_transpose(raw).convert("RGB")
-            width, height = image.size
+            if max(image.size) > MAX_DETECT_SIDE:
+                image.thumbnail((MAX_DETECT_SIDE, MAX_DETECT_SIDE), Image.LANCZOS)
             array = np.asarray(image)
     except Exception:
         # Pillow 解码失败时再尝试 OpenCV，兼容少数 EXIF/ICC 异常图片。
@@ -96,6 +124,9 @@ def _load_image(cv2, path: str):
         if img is None:
             raise ProbeError("decode_failed")
         height, width = img.shape[:2]
+        target_w, target_h = _target_size(width, height)
+        if (target_w, target_h) != (width, height):
+            img = cv2.resize(img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
         return img, width, height
     return cv2.cvtColor(array, cv2.COLOR_RGB2BGR), width, height
 
@@ -208,14 +239,8 @@ def detect(path: str, model: str = "") -> dict:
     if width < 40 or height < 40:
         return _result(False, None, None, width, height)
 
+    # _load_image 已把检测图缩到 MAX_DETECT_SIDE 内；宽高仍返回原图尺寸。
     detect_image = image
-    if max(width, height) > MAX_DETECT_SIDE:
-        scale = MAX_DETECT_SIDE / float(max(width, height))
-        detect_image = cv2.resize(
-            image,
-            (max(1, int(width * scale)), max(1, int(height * scale))),
-            interpolation=cv2.INTER_LINEAR,
-        )
 
     kind, detector = _make_detector(cv2, _resolve_model(model))
     if kind == "none":

@@ -143,6 +143,40 @@ func TestIntegrationProfilePhotoFace(t *testing.T) {
 
 }
 
+func TestIntegrationFaceBackfillAdvisoryLock(t *testing.T) {
+	ctx, database, _, _ := faceTestSetup(t)
+
+	first, acquired, err := database.TryFaceBackfillLock(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired || first == nil {
+		t.Fatal("first backfill lock should be acquired")
+	}
+	defer first.Release(ctx)
+
+	second, acquired, err := database.TryFaceBackfillLock(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acquired || second != nil {
+		if second != nil {
+			second.Release(ctx)
+		}
+		t.Fatal("second backfill lock must not be acquired concurrently")
+	}
+
+	first.Release(ctx)
+	third, acquired, err := database.TryFaceBackfillLock(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired || third == nil {
+		t.Fatal("lock should be acquirable after release")
+	}
+	third.Release(ctx)
+}
+
 func TestIntegrationSetProfilePhotoFaceNotFound(t *testing.T) {
 	ctx, database, _, _ := faceTestSetup(t)
 	err := database.SetProfilePhotoFace(ctx, "missing-media", ProfilePhotoFace{Checked: true})

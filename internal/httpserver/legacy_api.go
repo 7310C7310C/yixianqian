@@ -682,6 +682,8 @@ func legacyProfileMap(p db.Profile, quota db.LikeQuota, hasFace bool, faces []db
 	if len(photos) > 0 {
 		photo = photos[0]
 	}
+	// 观察员沿用 v1 的 has_face 放行；id_valid 不做 observer 特殊处理。
+	// PM 2026-10-22 裁定身份证该拦者拦，不 grandfather。
 	observer := p.AccountKind == "observer" || p.AccountStatus == "observer"
 	if observer {
 		hasFace = true

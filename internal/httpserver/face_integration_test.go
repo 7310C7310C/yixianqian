@@ -3,12 +3,16 @@ package httpserver
 import (
 	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"math"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -27,6 +31,7 @@ type legacyFaceView struct {
 
 type legacyFaceProfile struct {
 	HasFace bool              `json:"has_face"`
+	IDValid bool              `json:"id_valid"`
 	Photos  []string          `json:"photos"`
 	Faces   []*legacyFaceView `json:"faces"`
 }
@@ -136,6 +141,11 @@ func TestIntegrationLegacyFaceUploadAndProfile(t *testing.T) {
 	if !observerProfile.HasFace {
 		t.Fatal("observer should bypass the face gate")
 	}
+	// PM 2026-10-22 裁定：身份证不做 observer 特殊处理，observer 只豁免
+	// has_face；id_valid 仍按真实审核结果，不做 grandfather。
+	if observerProfile.IDValid {
+		t.Fatal("observer must not be grandfathered for id_valid")
+	}
 }
 
 func TestIntegrationLegacyFaceWriteFailureDoesNotBlockUpload(t *testing.T) {
@@ -173,10 +183,35 @@ func TestIntegrationLegacyFaceWriteFailureDoesNotBlockUpload(t *testing.T) {
 	}
 }
 
-// registerFaceUser 走完整注册表单，返回新用户与仍带 session 的客户端。
+// registerFaceUser 走完整注册表单（3 张照片），返回新用户与手机号。
 func registerFaceUser(t *testing.T, env *profileHTTPEnv, seq string) (dbUserID int64, phone string) {
 	t.Helper()
+	return registerFaceUserPhotos(t, env, seq, 3)
+}
+
+// registerFaceUserPhotos 用指定张数照片走完整注册表单。
+func registerFaceUserPhotos(t *testing.T, env *profileHTTPEnv, seq string, photos int) (dbUserID int64, phone string) {
+	t.Helper()
+	photo := testJPEG(t)
+	payload := make([][]byte, 0, photos)
+	for i := 0; i < photos; i++ {
+		payload = append(payload, photo)
+	}
+	return registerFaceUserPayload(t, env, seq, payload)
+}
+
+// registerFaceUserPayload 用给定图片走完整注册表单。
+func registerFaceUserPayload(t *testing.T, env *profileHTTPEnv, seq string, payload [][]byte) (dbUserID int64, phone string) {
+	t.Helper()
+	return registerFaceUserPayloadTimeout(t, env, seq, payload, 15*time.Second)
+}
+
+// registerFaceUserPayloadTimeout 允许大图集成测试放宽 HTTP 客户端超时；
+// 服务端同步预算仍由 App 控制。
+func registerFaceUserPayloadTimeout(t *testing.T, env *profileHTTPEnv, seq string, payload [][]byte, timeout time.Duration) (dbUserID int64, phone string) {
+	t.Helper()
 	anon := newWSClient(t, env.server.URL)
+	anon.http.Timeout = timeout
 	if resp := anon.get("/register"); resp.StatusCode != http.StatusOK {
 		t.Fatalf("register page status = %d body=%s", resp.StatusCode, readBody(t, resp))
 	}
@@ -185,8 +220,7 @@ func registerFaceUser(t *testing.T, env *profileHTTPEnv, seq string) (dbUserID i
 	birthday := "1990-01-01"
 	fields := validRegisterValues(t, phone, makeTestIDCard(t, "19900101", seq), birthday)
 	fields.Set("csrf_token", csrf)
-	resp := postRegisterMultipart(t, anon, fields,
-		[][]byte{testJPEG(t), testJPEG(t), testJPEG(t)})
+	resp := postRegisterMultipart(t, anon, fields, payload)
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("register status = %d body=%s", resp.StatusCode, readBody(t, resp))
 	}
@@ -200,6 +234,55 @@ func registerFaceUser(t *testing.T, env *profileHTTPEnv, seq string) (dbUserID i
 		_, _ = env.pool.Exec(cleanupCtx, `DELETE FROM users WHERE phone = $1`, phone)
 	})
 	return user.ID, phone
+}
+
+// waitProfilePhotoChecked 只断言已检测张数（不限制 has_face，适合真实
+// 检测器可能误报的测试）。
+func waitProfilePhotoChecked(t *testing.T, env *profileHTTPEnv, userID int64, wantTotal, wantChecked int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var total, checked int
+	for {
+		if err := env.pool.QueryRow(env.ctx,
+			`SELECT count(*), count(*) FILTER (WHERE face_checked)
+			   FROM profile_photos WHERE user_id = $1`, userID).
+			Scan(&total, &checked); err != nil {
+			t.Fatal(err)
+		}
+		if total == wantTotal && checked == wantChecked {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("photos total=%d checked=%d, want %d/%d",
+				total, checked, wantTotal, wantChecked)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// waitProfilePhotoState 轮询注册照片的检测状态，供后台补检测断言使用。
+func waitProfilePhotoState(t *testing.T, env *profileHTTPEnv, userID int64, wantTotal, wantChecked, wantWithFace int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	var total, checked, withFace int
+	for {
+		if err := env.pool.QueryRow(env.ctx,
+			`SELECT count(*),
+			        count(*) FILTER (WHERE face_checked),
+			        count(*) FILTER (WHERE has_face)
+			   FROM profile_photos WHERE user_id = $1`, userID).
+			Scan(&total, &checked, &withFace); err != nil {
+			t.Fatal(err)
+		}
+		if total == wantTotal && checked == wantChecked && withFace == wantWithFace {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("photos total=%d checked=%d has_face=%d, want %d/%d/%d",
+				total, checked, withFace, wantTotal, wantChecked, wantWithFace)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func TestIntegrationRegistrationProbesPhotos(t *testing.T) {
@@ -218,45 +301,168 @@ func TestIntegrationRegistrationProbesPhotos(t *testing.T) {
 	})
 
 	userID, _ := registerFaceUser(t, env, "002")
+	// 首张有脸后同步阶段会停止，剩余两张由后台补齐；最终仍应 3/3。
+	waitProfilePhotoState(t, env, userID, 3, 3, 3)
 	if got := atomic.LoadInt32(&calls); got != 3 {
 		t.Fatalf("probe calls = %d, want 3", got)
-	}
-	var total, checked, withFace int
-	if err := env.pool.QueryRow(env.ctx,
-		`SELECT count(*),
-		        count(*) FILTER (WHERE face_checked),
-		        count(*) FILTER (WHERE has_face)
-		   FROM profile_photos WHERE user_id = $1`, userID).
-		Scan(&total, &checked, &withFace); err != nil {
-		t.Fatal(err)
-	}
-	if total != 3 || checked != 3 || withFace != 3 {
-		t.Fatalf("photos total=%d checked=%d has_face=%d, want 3/3/3", total, checked, withFace)
 	}
 	if has, err := env.database.ProfileHasFace(env.ctx, userID); err != nil || !has {
 		t.Fatalf("ProfileHasFace = %v err=%v, want true", has, err)
 	}
 
 	// 无脸结果也必须落 face_checked=true，但 has_face 保持 false。
+	atomic.StoreInt32(&calls, 0)
 	env.app.faceProbe = face.ProbeFunc(func(context.Context, string) (face.Result, error) {
+		atomic.AddInt32(&calls, 1)
 		return face.Result{HasFace: false, Width: 800, Height: 600}, nil
 	})
 	noFaceID, _ := registerFaceUser(t, env, "003")
-	if err := env.pool.QueryRow(env.ctx,
-		`SELECT count(*),
-		        count(*) FILTER (WHERE face_checked),
-		        count(*) FILTER (WHERE has_face)
-		   FROM profile_photos WHERE user_id = $1`, noFaceID).
-		Scan(&total, &checked, &withFace); err != nil {
-		t.Fatal(err)
-	}
-	if total != 3 || checked != 3 || withFace != 0 {
-		t.Fatalf("no-face photos total=%d checked=%d has_face=%d, want 3/3/0",
-			total, checked, withFace)
+	waitProfilePhotoState(t, env, noFaceID, 3, 3, 0)
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Fatalf("no-face probe calls = %d, want 3", got)
 	}
 	if has, err := env.database.ProfileHasFace(env.ctx, noFaceID); err != nil || has {
 		t.Fatalf("ProfileHasFace = %v err=%v, want false", has, err)
 	}
+}
+
+// 注册 9 张、只有靠后的照片有脸，且同步预算不够：注册不能被阻塞，
+// 后台必须继续检查剩余照片并最终得到 has_face=true。
+func TestIntegrationRegistrationProbesRemainingPhotosInBackground(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+
+	const photos = 9
+	var calls int32
+	env.app.faceProbe = face.ProbeFunc(func(ctx context.Context, _ string) (face.Result, error) {
+		n := atomic.AddInt32(&calls, 1)
+		select {
+		case <-time.After(120 * time.Millisecond):
+		case <-ctx.Done():
+			return face.Result{}, ctx.Err()
+		}
+		if n == photos {
+			return face.Result{
+				HasFace: true,
+				Center:  []float64{0.5, 0.4},
+				Box:     []float64{0.2, 0.3},
+				Width:   800,
+				Height:  600,
+			}, nil
+		}
+		return face.Result{HasFace: false, Width: 800, Height: 600}, nil
+	})
+	// 同步预算只够一张多一点，剩余必须由后台补齐。
+	env.app.registrationFaceProbeBudget = 250 * time.Millisecond
+
+	photo := testJPEG(t)
+	payload := make([][]byte, 0, photos)
+	for i := 0; i < photos; i++ {
+		payload = append(payload, photo)
+	}
+	userID, _ := registerFaceUserPayloadTimeout(t, env, "010", payload, 60*time.Second)
+	waitProfilePhotoState(t, env, userID, photos, photos, 1)
+	if has, err := env.database.ProfileHasFace(env.ctx, userID); err != nil || !has {
+		t.Fatalf("ProfileHasFace = %v err=%v, want true", has, err)
+	}
+}
+
+// 无脸时同步预算内没检查完的照片也必须由后台补齐（全量 checked）。
+func TestIntegrationRegistrationProbesNoFaceAllPhotos(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+
+	const photos = 9
+	env.app.faceProbe = face.ProbeFunc(func(ctx context.Context, _ string) (face.Result, error) {
+		select {
+		case <-time.After(20 * time.Millisecond):
+		case <-ctx.Done():
+			return face.Result{}, ctx.Err()
+		}
+		return face.Result{HasFace: false, Width: 800, Height: 600}, nil
+	})
+	env.app.registrationFaceProbeBudget = 100 * time.Millisecond
+
+	photo := testJPEG(t)
+	payload := make([][]byte, 0, photos)
+	for i := 0; i < photos; i++ {
+		payload = append(payload, photo)
+	}
+	userID, _ := registerFaceUserPayloadTimeout(t, env, "011", payload, 60*time.Second)
+	waitProfilePhotoState(t, env, userID, photos, photos, 0)
+	if has, err := env.database.ProfileHasFace(env.ctx, userID); err != nil || has {
+		t.Fatalf("ProfileHasFace = %v err=%v, want false", has, err)
+	}
+}
+
+// 检测命令不可用时注册仍必须成功，照片保持 unchecked 供 backfill 重试。
+func TestIntegrationRegistrationProbeFailureDoesNotBlock(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	env.app.faceProbe = face.ProbeFunc(func(context.Context, string) (face.Result, error) {
+		return face.Result{}, face.ErrProbeUnavailable
+	})
+
+	userID, _ := registerFaceUser(t, env, "012")
+	waitProfilePhotoState(t, env, userID, 3, 0, 0)
+}
+
+// testLargeJPEG 生成指定尺寸的 JPEG，用于真实 probe 的 12MP 边界测试。
+func testLargeJPEG(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.SetRGBA(x, y, color.RGBA{R: uint8(x % 251), G: uint8(y % 241), B: 128, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 82}); err != nil {
+		t.Fatalf("encode large jpeg: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// 需要真实 cv2 的运行环境；CI 默认跳过。用法：
+//
+//	FACE_PROBE_TEST_CMD='/opt/yixianqian-next/venv/bin/python tools/face_probe.py' \
+//	FACE_MODEL_PATH=/opt/yixianqian-next/tools/face_detection_yunet.onnx \
+//	TEST_DATABASE_URL=... go test ./internal/httpserver -run TestIntegrationRegistrationProbesTwelveMegapixel -v
+//
+// 场景一：3 张 4000x3000（MEDIA_MAX_PIXELS 上限）必须在注册响应前全部
+// checked，直接覆盖 Reviewer B1 的 12MP timeout。
+// 场景二：9 张 4000x3000 无脸图，默认 15s 同步预算后由后台补齐，最终
+// 全部 checked，证明大图不会漏检。
+func TestIntegrationRegistrationProbesTwelveMegapixelPhotos(t *testing.T) {
+	cmd := os.Getenv("FACE_PROBE_TEST_CMD")
+	if cmd == "" {
+		t.Skip("FACE_PROBE_TEST_CMD not set")
+	}
+	probe, err := face.NewPythonProbe(cmd, 30*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	large := testLargeJPEG(t, 4000, 3000)
+
+	t.Run("three_photos_checked_before_response", func(t *testing.T) {
+		env := setupProfileHTTPEnv(t)
+		env.app.faceProbe = probe
+		payload := [][]byte{large, large, large}
+		start := time.Now()
+		userID, _ := registerFaceUserPayloadTimeout(t, env, "013", payload, 120*time.Second)
+		t.Logf("3x12MP registration elapsed=%s", time.Since(start))
+		waitProfilePhotoChecked(t, env, userID, 3, 3, 10*time.Second)
+	})
+
+	t.Run("nine_photos_checked_in_background", func(t *testing.T) {
+		env := setupProfileHTTPEnv(t)
+		env.app.faceProbe = probe
+		payload := make([][]byte, 0, 9)
+		for i := 0; i < 9; i++ {
+			payload = append(payload, large)
+		}
+		start := time.Now()
+		userID, _ := registerFaceUserPayloadTimeout(t, env, "014", payload, 120*time.Second)
+		t.Logf("9x12MP registration elapsed=%s", time.Since(start))
+		waitProfilePhotoChecked(t, env, userID, 9, 9, 90*time.Second)
+	})
 }
 
 func TestIntegrationViewRoleCookieCannotBypassFaceGate(t *testing.T) {

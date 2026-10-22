@@ -72,6 +72,21 @@ func run() error {
 		return err
 	}
 
+	// 单实例保护：两批 backfill 同时跑会重复下载 R2、重复占 CPU，并与线上
+	// probe 抢资源。拿不到 advisory lock 直接退出，已预约的业务不受影响。
+	lock, acquired, err := database.TryFaceBackfillLock(ctx)
+	if err != nil {
+		return err
+	}
+	if !acquired {
+		return errors.New("另一个 facebackfill 实例正在运行（advisory lock 被占用）；请等待其结束")
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		lock.Release(releaseCtx)
+	}()
+
 	candidates, err := database.ListFaceBackfillCandidates(ctx, *limit, *includeChecked, strings.TrimSpace(*legacyUser))
 	if err != nil {
 		return err

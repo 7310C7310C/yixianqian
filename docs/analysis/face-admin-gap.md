@@ -1,5 +1,9 @@
 # 人脸/身份证与管理后台差距分析（v1 vs A）
 
+> 历史文件（2026-10-22）：本文是 face 分支前的缺口审计快照，不代表当前裁定。
+> observer 身份证的最终裁定是「不豁免、该拦者拦、不做 grandfather」，以
+> `docs/runbooks/staging.md`「门禁与已知限制」与 `CHANGELOG.md` 为准。
+>
 > 分析日期：2026-10-22
 > 范围：v1 用户端/管理端现状、A（v2）staging 现状、管理后台功能与信息架构。
 > 约束：只读分析，未修改任何产品代码、STATUS/INDEX/Charter。

@@ -38,6 +38,15 @@ class FaceProbeLogicTest(unittest.TestCase):
         self.assertIsNone(payload["box"])
         self.assertEqual(payload["error"], "decode_failed")
 
+    def test_target_size_downscales_longest_side(self):
+        self.assertEqual(probe._target_size(4000, 3000), (1080, 810))
+        self.assertEqual(probe._target_size(3000, 4000), (810, 1080))
+        self.assertEqual(probe._target_size(800, 600), (800, 600))
+
+    def test_target_size_never_upscales(self):
+        self.assertEqual(probe._target_size(10, 400), (10, 400))
+        self.assertEqual(probe._target_size(0, 0), (1, 1))
+
     def test_complete_boxes_filters_heavy_crop(self):
         boxes = [
             [0.0, 0.0, 100.0, 100.0, 0.9],  # 完整

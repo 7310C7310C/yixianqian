@@ -9,11 +9,14 @@
 - 恢复 v1 的本地人脸检测（YuNet 优先、Haar 回退）：`tools/face_probe.py` 输出 `has_face`、人脸中心与框。
 - 新增 `internal/face` 与 `FACE_PROBE_CMD`/`FACE_PROBE_TIMEOUT` 配置；上传后检测，超时或失败只记日志、不阻断上传。
 - `profile_photos` 新增 `face_checked`/`has_face`/`face_center_x,y`/`face_box_w,h`（migration 0005，只增列）。
-- `has_face` 与卡片 `faces` 改为真实查库；没有 checked 照片时不再默认 true，观察员账号保持 v1 放行。
-- 注册照片写入后补 probe，避免新用户被 `has_face` 门禁锁死；probe 使用独立 `faceSem`，不占用 `mediaSem`，慢检测不再让并发上传 429。
+- `has_face` 与卡片 `faces` 改为真实查库；没有 checked 照片时不再默认 true，观察员账号保持 v1 的 `has_face` 放行。
+- 观察员身份证**不豁免**：`id_valid` 按真实审核结果返回，不做 grandfather（PM 2026-10-22 裁定：身份证该拦者拦）。
+- 注册照片写入后补 probe：按上传顺序检测，首张有脸即停；15 秒预算内未完成的照片在注册响应后后台补齐，12MP/9 张照片最终也会 `face_checked=true`。probe 使用独立 `faceSem`，不占用 `mediaSem`，慢检测不再让并发上传 429；失败不阻断注册。
+- 人脸检测脚本在 JPEG 解码阶段用 Pillow draft 缩到最长边 1080，12MP 单张检测耗时与内存显著下降。
 - `yxq_view_role=observer` 仅影响观察员视角，不再能绕过 `has_face`；检测命令不存在/不可执行统一返回 `probe_unavailable`，不记录命令路径。
 - 卡片/资料 `faces` 补 `tb`/`lr` 为 `[0,0]`；v1 的黑边裁切未移植，黑边照片按原图构图。
-- 新增 `cmd/facebackfill` 批量补齐迁移照片；部署顺序要求先 migration + 全量回填、再切 binary，详见 `docs/runbooks/staging.md`。
+- 新增 `cmd/facebackfill` 批量补齐迁移照片；用 `pg_try_advisory_lock` 保证单实例，部署顺序要求先 migration + 全量回填、切换前验证 `unchecked=0`、U-0006 true/U-0003 false，再切 binary，详见 `docs/runbooks/staging.md`。
+- 人脸检测 venv 固定 `numpy==1.26.4` + `opencv-python-headless==4.11.0.86`（server1 无 x86-64-v2，numpy 2.x 无法 import cv2）。
 - 腾讯云照片内容合规（宠物/卡通判定、活体）未实现，本轮不做。
 
 ### 架构

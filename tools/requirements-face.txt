@@ -1,0 +1,9 @@
+# 本地人脸检测运行时依赖（server1 实测可用组合）。
+#
+# 不要放宽 numpy 到 2.x：numpy 2.x 的 wheel 需要 x86-64-v2 指令集，
+# server1 的 QEMU CPU 不支援，import cv2 会报
+# "NumPy was built with baseline optimizations: (X86_V2)"。
+# opencv-python-headless 也固定 4.11.0.86，避免新 wheel 再引入 v2 依赖。
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+Pillow>=10,<13

@@ -145,11 +145,36 @@ install -m 0644 -o yxq -g yxq \
   /opt/yixianqian-next/src/tools/face_detection_yunet.LICENSE \
   /opt/yixianqian-next/tools/
 python3 -m venv /opt/yixianqian-next/venv
+# 必须按 repo 的 requirements-face.txt 固定版本：
+#   numpy==1.26.4
+#   opencv-python-headless==4.11.0.86
+# numpy 2.x 的 wheel 需要 x86-64-v2，server1 的 QEMU CPU 不支援，
+# import cv2 会直接 RuntimeError。
 /opt/yixianqian-next/venv/bin/pip install --no-cache-dir \
-  'opencv-python-headless>=4.8,<5' 'numpy>=1.26,<3' 'Pillow>=10,<13'
+  -r /opt/yixianqian-next/src/tools/requirements-face.txt
 chown -R yxq:yxq /opt/yixianqian-next/venv /opt/yixianqian-next/tools
-runuser -u yxq -- /opt/yixianqian-next/venv/bin/python -c \
-  'import cv2, numpy, PIL; print(cv2.__version__)'
+# import smoke：失败必须当场停下修依赖，不能继续 backfill/切换。
+runuser -u yxq -- /opt/yixianqian-next/venv/bin/python -c '
+import sys
+try:
+    import cv2, numpy, PIL
+except Exception as exc:
+    sys.stderr.write("人脸检测 venv 不可用（检查 tools/requirements-face.txt 的 numpy/cv2 pin）: %r\n" % (exc,))
+    raise SystemExit(1)
+print("cv2", cv2.__version__, "numpy", numpy.__version__, "PIL", PIL.__version__)
+' || { echo "人脸检测 venv smoke 失败：停止部署" >&2; exit 1; }
+```
+
+再跑一次真实检测脚本，确认模型可加载（无脸图返回 `has_face=false` 且无
+`error` 字段；输出 `opencv_unavailable`/`detector_unavailable` 都不能上线）：
+
+```bash
+# 任意一张测试图；没有现成图时用上游 v1 的测试图或先上传一张
+runuser -u yxq -- bash -c '
+  cd /opt/yixianqian-next
+  . ./venv/bin/activate
+  python tools/face_probe.py /path/to/test.jpg
+'
 ```
 
 `staging.env`（root 600）追加：
@@ -169,20 +194,49 @@ FACE_PROBE_TIMEOUT=8s
 
 ### 切换顺序（关键）
 
-migration 0005 只加列；旧 binary 不认识这些列，仍按旧逻辑返回 `has_face`，
-所以**先在旧 binary 运行时完成 migration + 全量回填，再切新 binary**。顺序不能反：
+migration 0005 只加列；**前提是当前运行的旧 binary 必须是 pre-0005**（不读
+`face_*` 列）。如果旧 binary 已经会读这些列，migration 一落库就会开始门禁，
+回填前存在全站锁死窗口；这种情况必须先回滚到 pre-0005 binary。
+
+顺序不能反：先建置、装依赖、在旧 binary 运行时完成 migration + 全量回填并
+验证，最后才切换 binary。
 
 1. 建置 `bin/server.next` 与 `bin/facebackfill`（见“建置与部署”），备份 `bin/server.prev`；
-2. 安装 venv/tools/model，确认 `FACE_*` 已写入 `staging.env`；
-3. 生成 `facebackfill.cli.env`（含 DB/R2/FACE_*）；
+2. 安装 venv/tools/model，跑 import/cv2 smoke 与一次真实 `face_probe.py`（见上节），失败即停；
+3. 确认 `FACE_*` 已写入 `staging.env`，生成 `facebackfill.cli.env`（含 DB/R2/FACE_*）；
 4. `facebackfill -dry-run`：它会执行 `database.Migrate`，把 0005 落在旧 binary 运行期间，并打印待处理数量；
-5. 旧 binary 继续服务时跑**全量回填**（`-workers 2`，约 1028 张、25-30 分钟）；
-6. 回填成功且有脸用户已落库后，才 `mv bin/server.next bin/server && systemctl restart yixianqian-next-test`；
-7. 切后跑一次**增量回填**（不带 `-all`），补上第 5 步期间旧 binary 接收的新照片；
-8. 验证 U-0006 `has_face=true`、U-0003 `has_face=false`，再走用户端 smoke。
+5. 旧 binary 继续服务时跑**全量回填**（`-workers 2`；以实测为准，预留 30-45 分钟）；
+6. **切换前验证**（任何一项不满足都不得 `mv/restart`）：
+   - `unchecked=0`；
+   - U-0006 `has_face=true`、U-0003 `has_face=false`；
+7. 验证通过后才 `mv bin/server.next bin/server && systemctl restart yixianqian-next-test`；
+8. 切后跑一次**增量回填**（不带 `-all`），补上第 5 步期间旧 binary 接收的新照片；
+9. 再走用户端 smoke（登录、`/legacy/api/profile`）。
 
-任何一步失败：保持旧 binary 运行，修复后重跑；不要在回填未完成时切 binary。
-回填失败的照片保持 `face_checked=false`（可重跑），不影响旧 binary。
+验证 SQL（server1，peer auth）：
+
+```bash
+runuser -u yxq -- psql -d yixianqian_staging -Atc \
+  "SELECT count(*) FROM profile_photos WHERE NOT face_checked;"
+# 期望 0；非 0 表示仍有照片未检测，先修 probe/重跑回填，不要切 binary
+
+runuser -u yxq -- psql -d yixianqian_staging -Atc \
+  "SELECT u.legacy_user_id,
+          COALESCE(bool_or(pp.has_face) FILTER (WHERE pp.face_checked), false)
+     FROM users u
+     LEFT JOIN profile_photos pp ON pp.user_id = u.id
+    WHERE u.legacy_user_id IN ('U-0006','U-0003')
+    GROUP BY u.legacy_user_id ORDER BY 1;"
+# 期望：U-0003|f，U-0006|t
+```
+
+任何一步失败：切换前保持旧 binary 运行，修复后重跑；切换后失败则回滚
+`bin/server.prev` 并重启。不要在回填未完成时切 binary。回填失败的照片保持
+`face_checked=false`（可重跑），不影响旧 binary。
+
+`facebackfill` 自带 `pg_try_advisory_lock` 单实例保护：同一时间只允许一个
+实例；第二个会直接以非零退出（“advisory lock 被占用”），不会重复下载/检测。
+`-dry-run` 也会拿锁，看到该错误说明已有回填在跑，等它结束即可。
 
 批量命令需要 DB、R2 与 FACE_* 三组变量；`staging.cli.env` 只有 DB/session，
 且 `staging.env` 的值含 `&` 与空格，不能直接 `source`。先生成 yxq 可读的
@@ -213,7 +267,7 @@ runuser -u yxq -- bash -c '
   exec bin/facebackfill -dry-run          # 先跑：应用 migration + 看数量
 '
 # 小批量验证：-limit 20
-# 全量（1028 张，2 workers 约 25-30 分钟）：-workers 2
+# 全量（1028 张，2 workers；以实测为准，预留 30-45 分钟）：-workers 2
 # 切 binary 后的增量补齐（只扫 face_checked=false）：不带参数
 # 单用户补测：-user U-0006
 # 强制重扫：-all -user U-0006
@@ -226,7 +280,10 @@ runuser -u yxq -- bash -c '
 
 - 账号本身为 observer 时沿用 v1 的 `has_face` 放行；普通用户不豁免。
   `yxq_view_role=observer` 只是观察员 UI 视角，**不会**让 `has_face` 变 true。
-- 观察员是否继续豁免尚未由 PM 最终裁定；当前保留现状。
+- **observer 的身份证不豁免**：`id_valid` 仍按真实审核结果返回，未通过者
+  和普通用户一样被 ID gate 拦截。PM 2026-10-22 裁定：“身份证不用特殊处理，
+  该拦者拦”；不做 grandfather，也不为 observer 伪造 `id_valid=true`。
+- observer 账号若 `has_face=true` 但 `id_valid=false`，属于预期行为。
 - 卡片/资料照片的 `faces` 只回传 `{c,box,tb:[0,0],lr:[0,0]}`。v1 的黑边
   裁切（识别上下黑边并改写缓存图）**未移植**，黑边照片按原图构图显示。
 - 腾讯云照片内容合规（宠物/卡通判定、活体）**未实现**，本轮不做；
