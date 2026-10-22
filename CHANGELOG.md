@@ -7,10 +7,14 @@
 
 ### 人脸检测
 - 恢复 v1 的本地人脸检测（YuNet 优先、Haar 回退）：`tools/face_probe.py` 输出 `has_face`、人脸中心与框。
-- 新增 `internal/face` 与 `FACE_PROBE_CMD`/`FACE_PROBE_TIMEOUT` 配置；上传后同步检测，超时或失败只记日志、不阻断上传。
+- 新增 `internal/face` 与 `FACE_PROBE_CMD`/`FACE_PROBE_TIMEOUT` 配置；上传后检测，超时或失败只记日志、不阻断上传。
 - `profile_photos` 新增 `face_checked`/`has_face`/`face_center_x,y`/`face_box_w,h`（migration 0005，只增列）。
-- `has_face` 与卡片 `faces` 改为真实查库；没有 checked 照片时不再默认 true，观察员保持放行。
-- 新增 `cmd/facebackfill` 批量补齐迁移照片；腾讯云照片内容合规尚未接入。
+- `has_face` 与卡片 `faces` 改为真实查库；没有 checked 照片时不再默认 true，观察员账号保持 v1 放行。
+- 注册照片写入后补 probe，避免新用户被 `has_face` 门禁锁死；probe 使用独立 `faceSem`，不占用 `mediaSem`，慢检测不再让并发上传 429。
+- `yxq_view_role=observer` 仅影响观察员视角，不再能绕过 `has_face`；检测命令不存在/不可执行统一返回 `probe_unavailable`，不记录命令路径。
+- 卡片/资料 `faces` 补 `tb`/`lr` 为 `[0,0]`；v1 的黑边裁切未移植，黑边照片按原图构图。
+- 新增 `cmd/facebackfill` 批量补齐迁移照片；部署顺序要求先 migration + 全量回填、再切 binary，详见 `docs/runbooks/staging.md`。
+- 腾讯云照片内容合规（宠物/卡通判定、活体）未实现，本轮不做。
 
 ### 架构
 - 用户端沿用 v1 Vue 3 + Vant SPA；Go 提供 legacy API、session、媒体代理；管理端使用 Go SSR。

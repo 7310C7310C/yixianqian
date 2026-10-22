@@ -2,6 +2,7 @@ package face
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,5 +114,38 @@ func TestSafeErrorCodeStripsUnsafeChars(t *testing.T) {
 	got := safeErrorCode("decode/\nfailed<script>")
 	if strings.ContainsAny(got, "/\n<> ") {
 		t.Fatalf("unsafe code = %q", got)
+	}
+}
+
+func TestPythonProbeUnavailableDoesNotLeakCommandPath(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing-python")
+	probe, err := NewPythonProbe(missing+" tools/face_probe.py", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = probe.Probe(context.Background(), "/tmp/photo.jpg")
+	if !errors.Is(err, ErrProbeUnavailable) {
+		t.Fatalf("error = %v, want ErrProbeUnavailable", err)
+	}
+	if strings.Contains(err.Error(), missing) || strings.Contains(err.Error(), "missing-python") {
+		t.Fatalf("error leaked command path: %v", err)
+	}
+}
+
+func TestPythonProbeNotExecutableIsUnavailable(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "not-executable.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	probe, err := NewPythonProbe(script, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = probe.Probe(context.Background(), "/tmp/photo.jpg")
+	if !errors.Is(err, ErrProbeUnavailable) {
+		t.Fatalf("error = %v, want ErrProbeUnavailable", err)
+	}
+	if strings.Contains(err.Error(), script) {
+		t.Fatalf("error leaked command path: %v", err)
 	}
 }

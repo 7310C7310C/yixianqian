@@ -38,6 +38,9 @@ type App struct {
 
 	hashSem  chan struct{}
 	mediaSem chan struct{}
+	// faceSem 限制本地人脸检测并发；它独立于 mediaSem，避免慢 probe
+	// 让普通上传排队超时（429）。
+	faceSem chan struct{}
 }
 
 // New loads templates and constructs the application.
@@ -83,6 +86,7 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		uploadLimiter:     auth.NewLimiter(60, time.Hour),
 		hashSem:           make(chan struct{}, cfg.MaxHashes),
 		mediaSem:          make(chan struct{}, cfg.MaxMedia),
+		faceSem:           make(chan struct{}, maxConcurrentFaceProbes),
 	}, nil
 }
 

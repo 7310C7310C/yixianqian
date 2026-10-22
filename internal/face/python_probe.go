@@ -90,9 +90,29 @@ func (p *PythonProbe) Probe(ctx context.Context, imagePath string) (Result, erro
 		}
 	}
 	if err != nil {
+		if probeUnavailable(err) {
+			// exec.Error / PathError 会带命令绝对路径，不能进日志。
+			return Result{}, ErrProbeUnavailable
+		}
 		return Result{}, fmt.Errorf("face: probe failed: %w", err)
 	}
 	return Result{}, errors.New("face: probe returned invalid json")
+}
+
+// probeUnavailable 把“命令不存在/不可执行”归一成固定错误码，避免把
+// FACE_PROBE_CMD 的绝对路径写进日志。
+func probeUnavailable(err error) bool {
+	if errors.Is(err, exec.ErrNotFound) ||
+		errors.Is(err, os.ErrNotExist) ||
+		errors.Is(err, os.ErrPermission) {
+		return true
+	}
+	var execErr *exec.Error
+	if errors.As(err, &execErr) {
+		return true
+	}
+	var pathErr *os.PathError
+	return errors.As(err, &pathErr)
 }
 
 // safeErrorCode 只保留脚本错误码的安全字符，防止日志注入或意外带出路径。

@@ -5,10 +5,20 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
 	"github.com/7310C7310C/yixianqian/internal/face"
 )
+
+// maxConcurrentFaceProbes 限制同时运行的本地人脸检测数。probe 是 CPU/IO
+// 密集的子进程，但不该占用 mediaSem：上传解码完成后再检测，慢 probe
+// 不会让其他上传排队到 429。
+const maxConcurrentFaceProbes = 2
+
+// maxRegistrationFaceProbeBudget 是注册照片补检测的总时间上限；注册流程
+// 不能因为某个大图 probe 长时间不返回而卡住。
+const maxRegistrationFaceProbeBudget = 15 * time.Second
 
 // probeProfilePhotoFace 在照片上传成功后同步运行本地人脸检测，并把结果写入
 // profile_photos。任何失败都只记日志并放行上传；此时 face_checked 保持
@@ -19,18 +29,27 @@ func (a *App) probeProfilePhotoFace(ctx context.Context, userID int64, mediaID s
 	if a.faceProbe == nil {
 		return
 	}
-	media, err := a.db.GetMediaForUser(ctx, mediaID, userID)
-	if err != nil {
-		a.log.Warn("face probe media lookup failed", "error", err, "media_id", mediaID)
-		return
-	}
-
 	timeout := a.cfg.FaceProbeTimeout
 	if timeout <= 0 {
 		timeout = face.DefaultTimeout
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+
+	// 人脸检测使用独立信号量，且只在上传的 mediaSem 释放后调用。
+	select {
+	case a.faceSem <- struct{}{}:
+		defer releaseGate(a.faceSem)
+	case <-probeCtx.Done():
+		a.log.Warn("face probe skipped: busy", "media_id", mediaID)
+		return
+	}
+
+	media, err := a.db.GetMediaForUser(probeCtx, mediaID, userID)
+	if err != nil {
+		a.log.Warn("face probe media lookup failed", "error", err, "media_id", mediaID)
+		return
+	}
 
 	obj, err := a.store.Get(probeCtx, media.ObjectKey)
 	if err != nil {
@@ -72,8 +91,33 @@ func (a *App) probeProfilePhotoFace(ctx context.Context, userID int64, mediaID s
 		row.CenterX, row.CenterY = &centerX, &centerY
 		row.BoxW, row.BoxH = &boxW, &boxH
 	}
-	if err := a.db.SetProfilePhotoFace(ctx, mediaID, row); err != nil {
+	if err := a.db.SetProfilePhotoFace(probeCtx, mediaID, row); err != nil {
 		a.log.Warn("face probe result persist failed", "error", err, "media_id", mediaID)
+	}
+}
+
+// probeRegistrationPhotos 在注册照片写入 DB 后补检测。调用方必须先释放
+// mediaSem；本函数只使用 faceSem，且有总时间上限，失败只记日志并留给
+// facebackfill 重试，不阻断注册。
+func (a *App) probeRegistrationPhotos(ctx context.Context, userID int64, mediaIDs []string) {
+	if a.faceProbe == nil || len(mediaIDs) == 0 {
+		return
+	}
+	timeout := a.cfg.FaceProbeTimeout
+	if timeout <= 0 {
+		timeout = face.DefaultTimeout
+	}
+	budget := time.Duration(len(mediaIDs)) * timeout
+	if budget > maxRegistrationFaceProbeBudget {
+		budget = maxRegistrationFaceProbeBudget
+	}
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
+	defer cancel()
+	for _, mediaID := range mediaIDs {
+		if probeCtx.Err() != nil {
+			return
+		}
+		a.probeProfilePhotoFace(probeCtx, userID, mediaID)
 	}
 }
 

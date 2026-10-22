@@ -97,11 +97,14 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger(r).Warn("legacy home quota failed", "error", err, "user_id", user.ID)
 	}
+	// 观察员视角只影响卡片筛选；不要改写 viewer 本身，否则账号状态会被
+	// cookie 污染（例如 has_face 误判为 observer 放行）。
+	pageViewer := viewer
 	if a.legacyViewRole(r) == "observer" {
-		viewer.AccountKind = "observer"
-		viewer.AccountStatus = "observer"
+		pageViewer.AccountKind = "observer"
+		pageViewer.AccountStatus = "observer"
 	}
-	page, err := a.buildCardsPageData(ctx, viewer, r.URL.Query(), now, 100)
+	page, err := a.buildCardsPageData(ctx, pageViewer, r.URL.Query(), now, 100)
 	if errors.Is(err, errGenderMissing) {
 		page = CardsPageData{}
 	} else if err != nil {
@@ -208,10 +211,9 @@ func (a *App) handleLegacyProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger(r).Warn("legacy profile face lookup failed", "error", err, "user_id", user.ID)
 	}
+	// has_face 只来自数据库检测结果与账号本身的 observer 状态，
+	// yxq_view_role 只是 UI 视角，不能用来绕过人脸门禁。
 	hasFace := a.legacyProfileHasFace(r.Context(), user.ID)
-	if a.legacyViewRole(r) == "observer" {
-		hasFace = true
-	}
 	payload := legacyProfileMap(profile, quota, hasFace, faces)
 	payload["editable"] = legacyProfileEditable(profile)
 	writeJSON(w, http.StatusOK, payload)
@@ -554,9 +556,13 @@ func legacyFaceItem(item db.ProfilePhotoFace) any {
 	if !item.Checked || item.CenterX == nil || item.CenterY == nil || item.BoxW == nil || item.BoxH == nil {
 		return nil
 	}
+	// v1 的 faces 还带 tb/lr（黑边比例）。黑边裁切尚未移植，这里返回
+	// [0,0] 表示无黑边，前端会按原图构图；不要声称与 v1 的黑边裁切一致。
 	return map[string]any{
 		"c":   []float64{*item.CenterX, *item.CenterY},
 		"box": []float64{*item.BoxW, *item.BoxH},
+		"tb":  []float64{0, 0},
+		"lr":  []float64{0, 0},
 	}
 }
 
@@ -592,10 +598,14 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 	if accountStatus == "" {
 		accountStatus = viewer.AccountStatus
 	}
-	observer := accountKind == "observer" || accountStatus == "observer" || viewRole == "observer"
+	// 账号本身是 observer 时沿用 v1 的放行语义（是否继续豁免待 PM 裁定）；
+	// viewRole 只是观察员视角，不得影响 has_face。
+	accountObserver := accountKind == "observer" || accountStatus == "observer"
+	observer := accountObserver || viewRole == "observer"
 	if observer {
 		accountStatus = "observer"
-		// v1 的 user_has_face 对观察员直接放行。
+	}
+	if accountObserver {
 		hasFace = true
 	}
 	photo := ""

@@ -14,6 +14,10 @@ const DefaultCommand = "python3 tools/face_probe.py"
 // DefaultTimeout 是单张照片检测的默认超时。
 const DefaultTimeout = 8 * time.Second
 
+// ErrProbeUnavailable 表示检测命令不存在或无法启动。调用方只应记录固定
+// 错误码，不得把命令路径写进日志。
+var ErrProbeUnavailable = errors.New("face: probe_unavailable")
+
 // Result 是 tools/face_probe.py 的输出。Center 与 Box 为相对原图的比例
 // （0~1）；无脸或检测失败时为 nil。Error 是脚本返回的固定错误码，
 // 不包含图片路径或凭证。
