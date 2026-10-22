@@ -6,8 +6,8 @@
     <div>
       <p class="eyebrow">活动</p>
       <h1>活动管理</h1>
+      <p class="hint">共 {{len .Data.Activities}} 个活动；点「工作台」管理名单、签到、海报与广播。</p>
     </div>
-    <a class="button primary" href="/admin/activities/new">新建活动</a>
   </div>
   {{template "flash" .}}
 </section>
@@ -16,8 +16,8 @@
   <h2>活动列表</h2>
   {{if .Data.Activities}}
   <div class="admin-table-wrap">
-    <table class="admin-table">
-      <thead><tr><th>活动</th><th>状态</th><th>报名</th><th>签到</th><th>分组/一对一</th><th>操作</th></tr></thead>
+    <table class="admin-table admin-activities-table">
+      <thead><tr><th scope="col">活动</th><th scope="col">状态</th><th scope="col">报名</th><th scope="col">签到</th><th scope="col">分组/一对一</th><th scope="col">操作</th></tr></thead>
       <tbody>
       {{range .Data.Activities}}
         <tr>
@@ -54,6 +54,12 @@
       </tbody>
     </table>
   </div>
-  {{else}}<p class="muted">暂无活动。</p>{{end}}
+  {{else}}
+  <div class="empty-state admin-empty">
+    <h2>还没有活动</h2>
+    <p class="shell-empty-text">创建第一个活动后，就能在工作台管理报名、签到、海报与广播。</p>
+    <a class="button primary" href="/admin/activities/new">新建活动</a>
+  </div>
+  {{end}}
 </section>
 {{end}}

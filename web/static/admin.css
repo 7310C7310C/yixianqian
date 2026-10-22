@@ -148,8 +148,8 @@
 }
 
 .admin-actions .button {
-  min-height: 34px;
-  padding: 0.3rem 0.65rem;
+  min-height: 44px;
+  padding: 0.5rem 0.8rem;
 }
 
 .admin-temp-password {
@@ -297,8 +297,8 @@
 
 /* Minimal component shims: admin pages load app.css + admin.css only. */
 .button.small {
-  min-height: 36px;
-  padding: 0.35rem 0.7rem;
+  min-height: 44px;
+  padding: 0.45rem 0.7rem;
   font-size: 0.85rem;
 }
 
@@ -380,7 +380,7 @@
 
 .admin-activity-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
@@ -499,9 +499,9 @@
 }
 
 .admin-roster-actions .button {
-  min-height: 30px;
-  padding: 0.2rem 0.35rem;
-  font-size: 0.78rem;
+  min-height: 44px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.82rem;
   white-space: nowrap;
 }
 
@@ -520,5 +520,339 @@
 
   .admin-roster-table td::before {
     top: 0.3rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Admin shell / workbench polish (Task: Reviewer FAIL P1 fixes)
+   -------------------------------------------------------------------------- */
+
+/* Admin pages use a wider container on desktop; the user SPA keeps 640px. */
+.admin-shell {
+  --shell-content-max: 1080px;
+}
+
+.admin-shell section[id] {
+  scroll-margin-top: 12px;
+}
+
+.admin-shell .card h2 {
+  margin-bottom: 0.6rem;
+}
+
+.admin-shell .admin-nav {
+  gap: 0.35rem;
+}
+
+.admin-shell .admin-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.4rem 0.8rem;
+}
+
+/* Mobile: keep the two nav rows compact and scrollable instead of stacking. */
+@media (max-width: 699px) {
+  .admin-shell .admin-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+
+  .admin-shell .admin-nav a {
+    flex: 0 0 auto;
+  }
+
+  .admin-shell .admin-subnav {
+    margin-top: -0.35rem;
+  }
+}
+
+.admin-summary {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.admin-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.admin-jump a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-jump a:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+/* Form controls: block labels, full-width fields, 44px tap height. */
+.admin-shell .stack > label,
+.admin-shell fieldset > label {
+  display: block;
+}
+
+.admin-shell .stack > label > input:not([type="checkbox"]):not([type="radio"]),
+.admin-shell .stack > label > select,
+.admin-shell .stack > label > textarea,
+.admin-shell fieldset > label > input:not([type="checkbox"]):not([type="radio"]),
+.admin-shell fieldset > label > select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.admin-shell label.admin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  font-weight: 600;
+}
+
+.admin-shell label.admin-check input {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+}
+
+.admin-shell input[type="datetime-local"] {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.admin-shell input[type="datetime-local"]:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.filter-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+}
+
+.filter-range > label {
+  display: block;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .filter-range,
+  .filter-range.three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .filter-range.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.admin-roster-filter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
+
+.admin-roster-filter label {
+  display: block;
+}
+
+.admin-roster-filter input,
+.admin-roster-filter select {
+  width: 100%;
+}
+
+@media (min-width: 720px) {
+  .admin-roster-filter {
+    grid-template-columns: minmax(0, 2fr) minmax(140px, 1fr) auto auto;
+    align-items: end;
+  }
+}
+
+/* List table: keep status, counts and actions on one line at 1280. */
+.admin-activities-table {
+  min-width: 900px;
+}
+
+.admin-activities-table th,
+.admin-activities-table td {
+  white-space: nowrap;
+}
+
+.admin-activities-table .admin-activity-cell {
+  min-width: 260px;
+  white-space: normal;
+}
+
+.admin-activities-table .admin-activity-cell strong {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.admin-activities-table .admin-actions {
+  flex-wrap: nowrap;
+  margin-top: 0;
+}
+
+.admin-roster-table {
+  min-width: 720px;
+}
+
+.admin-roster-table td:last-child {
+  min-width: 250px;
+}
+
+.admin-roster-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+}
+
+.admin-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-empty {
+  margin: 1rem auto 0;
+  padding: 1.25rem 1rem;
+}
+
+.admin-roster-row {
+  scroll-margin-top: 72px;
+}
+
+.admin-roster-row:target {
+  background: var(--accent-soft);
+}
+
+.admin-roster-row:target td {
+  border-bottom-color: var(--accent);
+}
+
+.admin-upload-empty {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.admin-upload-empty strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.admin-confirm {
+  margin-top: 0.75rem;
+}
+
+.admin-confirm strong {
+  display: block;
+}
+
+.admin-confirm p {
+  margin: 0.25rem 0 0;
+}
+
+@media (min-width: 1000px) {
+  .admin-activity-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .admin-activities-table,
+  .admin-roster-table {
+    min-width: 0;
+  }
+
+  .admin-activities-table th,
+  .admin-activities-table td {
+    white-space: normal;
+  }
+
+  .admin-activities-table .admin-actions {
+    flex-wrap: wrap;
+  }
+
+  .admin-roster-table td:last-child {
+    min-width: 0;
+  }
+
+  .admin-roster-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .admin-roster-actions .button {
+    width: 100%;
+  }
+
+  /* Compact card rows: the generic stacked table spends ~314px per member,
+     which makes on-site check-in impractical on a phone. */
+  .admin-roster-table tr.admin-roster-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem 0.75rem;
+    padding: 0.7rem 0.15rem;
+    grid-auto-flow: row dense;
+  }
+
+  .admin-roster-table td {
+    min-height: 0;
+    padding: 0;
+  }
+
+  .admin-roster-table td::before {
+    position: static;
+    display: inline;
+    width: auto;
+    margin-right: 0.35rem;
+  }
+
+  .admin-roster-table td[data-label="会员"],
+  .admin-roster-table td[data-label="报名时间"],
+  .admin-roster-table td[data-label="签到操作"] {
+    grid-column: 1 / -1;
+  }
+
+  .admin-roster-table td[data-label="签到操作"]::before {
+    display: none;
   }
 }

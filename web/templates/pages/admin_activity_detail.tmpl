@@ -1,5 +1,6 @@
 {{define "content"}}
 {{template "admin_nav" .}}
+{{$activityID := .Data.Activity.ID}}
 
 <section class="card">
   <div class="admin-title-row">
@@ -9,18 +10,25 @@
       <p class="hint"><code>{{.Data.Activity.ActivityNo}}</code> · <span class="pill">{{.Data.Activity.Status}}</span></p>
     </div>
     <div class="admin-actions">
-      <a class="button" href="/admin/activities">返回列表</a>
-      <a class="button" href="/admin/activities/{{.Data.Activity.ID}}/edit">编辑资料</a>
+      <a class="button" href="/admin/activities/{{$activityID}}/edit">编辑资料</a>
     </div>
   </div>
   {{template "flash" .}}
-  <nav class="admin-tabs" aria-label="活动页面">
-    <a href="/admin/activities/{{.Data.Activity.ID}}" aria-current="page">工作台</a>
-    <a href="/admin/activities/{{.Data.Activity.ID}}/edit">编辑资料</a>
+  <p class="admin-counts admin-summary">
+    <span>报名 <strong>{{.Data.Stats.SignupCount}}</strong>{{if gt .Data.Activity.MaxSignup 0}} / {{.Data.Activity.MaxSignup}}{{else}} / 不限{{end}}</span>
+    <span>已签到 <strong>{{.Data.Stats.CheckedInCount}}</strong> 人</span>
+    <span>广播对象 <strong>{{.Data.AudienceTotal}}</strong> 人</span>
+  </p>
+  <nav class="admin-jump" aria-label="页内导航">
+    <a href="#summary">基本资料</a>
+    <a href="#poster">海报</a>
+    <a href="#roster">报名/签到名单</a>
+    <a href="#broadcast">站内广播</a>
+    <a href="#settings">快速设置</a>
   </nav>
 </section>
 
-<section class="card">
+<section class="card" id="summary">
   <h2>基本资料</h2>
   <div class="admin-activity-grid">
     <div class="admin-activity-item">
@@ -52,14 +60,6 @@
       <span>{{if .Data.Activity.Food}}{{.Data.Activity.Food}}{{else}}—{{end}}</span>
     </div>
     <div class="admin-activity-item">
-      <span class="admin-activity-label">报名人数</span>
-      <span>{{.Data.Stats.SignupCount}}{{if gt .Data.Activity.MaxSignup 0}} / {{.Data.Activity.MaxSignup}}{{else}} / 不限{{end}}</span>
-    </div>
-    <div class="admin-activity-item">
-      <span class="admin-activity-label">已签到</span>
-      <span>{{.Data.Stats.CheckedInCount}} 人</span>
-    </div>
-    <div class="admin-activity-item">
       <span class="admin-activity-label">签到状态</span>
       <span>{{if .Data.Activity.SigninEnabled}}开启{{else}}关闭{{end}}</span>
     </div>
@@ -74,41 +74,60 @@
   </div>
 </section>
 
-<section class="card">
+<section class="card" id="poster">
   <h2>海报</h2>
   {{if .Data.Activity.PosterMediaID}}
   <div class="admin-poster">
-    <img src="/admin/activities/{{.Data.Activity.ID}}/poster?size=thumb" alt="{{.Data.Activity.Name}} 海报">
+    <img src="/admin/activities/{{$activityID}}/poster?size=thumb" alt="{{.Data.Activity.Name}} 海报">
   </div>
-  <p><a href="/admin/activities/{{.Data.Activity.ID}}/poster">查看原图</a></p>
+  <p><a href="/admin/activities/{{$activityID}}/poster">查看原图</a></p>
   {{else}}
-  <p class="muted">尚未上传海报。</p>
+  <div class="admin-upload-empty">
+    <strong>还没有海报</strong>
+    <p class="hint">上传后会在用户端活动列表与详情中显示。</p>
+  </div>
   {{end}}
-  <form method="post" action="/admin/activities/{{.Data.Activity.ID}}/poster" enctype="multipart/form-data" class="stack">
+  <form method="post" action="/admin/activities/{{$activityID}}/poster" enctype="multipart/form-data" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <label>选择图片<input type="file" name="file" accept="image/jpeg,image/png" required></label>
     <p class="hint">只接受 JPEG/PNG，最大 {{.MediaMaxMB}} MB。上传后会经应用私有代理显示，不暴露存储路径。</p>
     <div class="admin-actions">
-      <button type="submit" class="button primary">上传/替换海报</button>
+      <button type="submit" class="button primary">{{if .Data.Activity.PosterMediaID}}替换海报{{else}}上传海报{{end}}</button>
     </div>
   </form>
 </section>
 
-<section class="card">
+<section class="card" id="roster">
   <h2>报名/签到名单</h2>
   <p class="admin-counts">
     <span>有效报名 <strong>{{.Data.Stats.SignupCount}}</strong> 人</span>
     <span>已签到 <strong>{{.Data.Stats.CheckedInCount}}</strong> 人</span>
+    {{if .Data.RosterHasFilter}}<span>筛选结果 <strong>{{.Data.RosterFilteredCount}}</strong> / {{.Data.RosterAllCount}} 人</span>{{end}}
   </p>
+  {{if .Data.RosterNotice}}<div class="alert alert-ok" role="status">{{.Data.RosterNotice}}</div>{{end}}
+  <form method="get" action="/admin/activities/{{$activityID}}#roster" class="admin-roster-filter" role="search">
+    <label>搜索<input type="search" name="q" value="{{.Data.RosterQuery}}" placeholder="姓名、昵称、编号或手机后四位"></label>
+    <label>出席
+      <select name="attendance">
+        <option value="all"{{if eq .Data.RosterAttendance ""}} selected{{end}}>全部</option>
+        <option value="checked"{{if eq .Data.RosterAttendance "checked"}} selected{{end}}>已签到</option>
+        <option value="unchecked"{{if eq .Data.RosterAttendance "unchecked"}} selected{{end}}>未签到</option>
+        <option value="late"{{if eq .Data.RosterAttendance "late"}} selected{{end}}>迟到</option>
+        <option value="absent"{{if eq .Data.RosterAttendance "absent"}} selected{{end}}>未到</option>
+      </select>
+    </label>
+    <button type="submit" class="button">筛选</button>
+    {{if .Data.RosterHasFilter}}<a class="button" href="{{.Data.RosterClearURL}}">清除</a>{{end}}
+  </form>
   {{if .Data.Roster}}
   <div class="admin-table-wrap">
     <table class="admin-table admin-roster-table">
       <thead>
-        <tr><th>会员</th><th>性别</th><th>报名时间</th><th>出席</th><th>签到操作</th></tr>
+        <tr><th scope="col">会员</th><th scope="col">性别</th><th scope="col">报名时间</th><th scope="col">出席</th><th scope="col">签到操作</th></tr>
       </thead>
       <tbody>
       {{range .Data.Roster}}
-        <tr>
+        <tr class="admin-roster-row" id="member-{{.UserID}}">
           <td data-label="会员">
             <strong>{{.Name}}</strong>
             {{if .Nickname}}<div class="muted">昵称：{{.Nickname}}</div>{{end}}
@@ -120,26 +139,26 @@
           <td data-label="出席">{{if .Attendance}}{{.Attendance}}{{else}}未签到{{end}}</td>
           <td data-label="签到操作">
             <div class="admin-roster-actions">
-              <form method="post" action="/admin/activities/{{$.Data.Activity.ID}}/attendance">
+              <form method="post" action="/admin/activities/{{$activityID}}/attendance">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
                 <input type="hidden" name="attendance" value="按时">
                 <button type="submit" class="button small" title="按时签到">按时</button>
               </form>
-              <form method="post" action="/admin/activities/{{$.Data.Activity.ID}}/attendance">
+              <form method="post" action="/admin/activities/{{$activityID}}/attendance">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
                 <input type="hidden" name="attendance" value="迟到">
                 <button type="submit" class="button small" title="标记迟到">迟到</button>
               </form>
-              <form method="post" action="/admin/activities/{{$.Data.Activity.ID}}/attendance">
+              <form method="post" action="/admin/activities/{{$activityID}}/attendance">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
                 <input type="hidden" name="attendance" value="未到">
                 <button type="submit" class="button small" title="标记未到">未到</button>
               </form>
               {{if .Attendance}}
-              <form method="post" action="/admin/activities/{{$.Data.Activity.ID}}/attendance">
+              <form method="post" action="/admin/activities/{{$activityID}}/attendance">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
                 <input type="hidden" name="attendance" value="">
@@ -153,12 +172,29 @@
       </tbody>
     </table>
   </div>
+  {{if gt .Data.RosterPageCount 1}}
+  <nav class="admin-pagination" aria-label="名单分页">
+    {{if .Data.RosterPrevURL}}<a class="button" href="{{.Data.RosterPrevURL}}">上一页</a>{{end}}
+    <span class="hint">第 {{.Data.RosterPage}} / {{.Data.RosterPageCount}} 页 · 共 {{.Data.RosterFilteredCount}} 人</span>
+    {{if .Data.RosterNextURL}}<a class="button" href="{{.Data.RosterNextURL}}">下一页</a>{{end}}
+  </nav>
+  {{end}}
+  {{else if gt .Data.RosterAllCount 0}}
+  <div class="empty-state admin-empty">
+    <h2>没有符合条件的报名者</h2>
+    <p class="shell-empty-text">试试清除搜索关键字或切换出席筛选。</p>
+    <a class="button" href="{{.Data.RosterClearURL}}">清除筛选</a>
+  </div>
   {{else}}
-  <p class="muted">暂无有效报名。用户报名后会显示在这里。</p>
+  <div class="empty-state admin-empty">
+    <h2>暂无有效报名</h2>
+    <p class="shell-empty-text">用户报名后会显示在这里；可以先分享活动或检查活动状态。</p>
+    <a class="button" href="/admin/activities">返回活动列表</a>
+  </div>
   {{end}}
 </section>
 
-<section class="card">
+<section class="card" id="grouping">
   <h2>分组 / 一对一</h2>
   <div class="admin-activity-grid">
     <div class="admin-activity-item">
@@ -173,33 +209,41 @@
   <p class="admin-placeholder">匹配控制台尚未在本期交付，本页不提供假操作。开关可在下方快速设置中调整。</p>
 </section>
 
-<section class="card">
+<section class="card" id="broadcast">
   <h2>站内广播</h2>
   <p class="hint">只发送站内通知，不经过飞书；同一份广播重复提交不会重复发送。</p>
   <p class="admin-counts">
     <span>报名者 <strong>{{.Data.SignupAudienceCount}}</strong> 人</span>
-    <span>观察员 <strong>{{.Data.ObserverAudienceCount}}</strong> 人</span>
+    <span>观察员（全站） <strong>{{.Data.ObserverAudienceCount}}</strong> 人</span>
     <span>去重后合计 <strong>{{.Data.AudienceTotal}}</strong> 人</span>
   </p>
-  {{if .Data.BroadcastPreview}}<p class="alert alert-ok" role="status">本次预计发送 {{.Data.BroadcastPreviewCount}} 人。</p>{{end}}
-  <form method="post" action="/admin/activities/{{.Data.Activity.ID}}/broadcast" class="admin-broadcast stack">
+  {{if .Data.BroadcastNotice}}<div class="alert alert-ok" role="status">{{.Data.BroadcastNotice}}</div>{{end}}
+  {{if .Data.BroadcastError}}<div class="alert alert-error" role="alert">{{.Data.BroadcastError}}</div>{{end}}
+  {{if .Data.BroadcastPreview}}
+  <div class="alert alert-ok admin-confirm" role="status">
+    <strong>确认发送？</strong>
+    <p>收件人群组：{{if .Data.BroadcastIncludeSignups}}报名者{{end}}{{if and .Data.BroadcastIncludeSignups .Data.BroadcastIncludeObservers}} + {{end}}{{if .Data.BroadcastIncludeObservers}}观察员（全站）{{end}}；去重后 <strong>{{.Data.BroadcastPreviewCount}}</strong> 人。发送后无法撤回，但重复提交不会重复发送。</p>
+  </div>
+  {{end}}
+  <form method="post" action="/admin/activities/{{$activityID}}/broadcast" class="admin-broadcast stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="broadcast_key" value="{{.Data.BroadcastKey}}">
-    <label class="admin-check"><input type="checkbox" name="include_signups" value="1"{{if .Data.BroadcastIncludeSignups}} checked{{end}}> 报名者</label>
-    <label class="admin-check"><input type="checkbox" name="include_observers" value="1"{{if .Data.BroadcastIncludeObservers}} checked{{end}}> 观察员</label>
-    <label>通知标题<input name="broadcast_title" maxlength="100" required value="{{.Data.BroadcastTitle}}"></label>
+    <label class="admin-check"><input type="checkbox" name="include_signups" value="1"{{if .Data.BroadcastIncludeSignups}} checked{{end}}> 报名者（本活动有效报名）</label>
+    <label class="admin-check"><input type="checkbox" name="include_observers" value="1"{{if .Data.BroadcastIncludeObservers}} checked{{end}}> 观察员（全站）</label>
+    <p class="hint">观察员是启用观察员身份的全站账号，不限于本活动；勾选后会收到全站范围的通知。</p>
+    <label>通知标题<input type="text" name="broadcast_title" maxlength="100" required value="{{.Data.BroadcastTitle}}"></label>
     <label>通知内容<textarea name="broadcast_body" rows="4" maxlength="2000">{{.Data.BroadcastBody}}</textarea></label>
     <div class="admin-actions">
-      <button type="submit" name="broadcast_action" value="preview" class="button small">预览收件人数</button>
-      <button type="submit" class="button primary">发送站内广播</button>
+      <button type="submit" name="broadcast_action" value="preview" class="button" formnovalidate>{{if .Data.BroadcastPreview}}重新预览{{else}}预览收件人{{end}}</button>
+      {{if .Data.BroadcastPreview}}<button type="submit" name="broadcast_action" value="send" class="button primary">确认发送给 {{.Data.BroadcastPreviewCount}} 人</button>{{end}}
     </div>
   </form>
 </section>
 
-<section class="card">
+<section class="card" id="settings">
   <h2>快速设置</h2>
   <p class="hint">保存后返回工作台；名称、描述、时间等完整资料请使用「编辑资料」。</p>
-  <form method="post" action="/admin/activities/{{.Data.Activity.ID}}" class="stack">
+  <form method="post" action="/admin/activities/{{$activityID}}" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="name" value="{{.Data.Activity.Name}}">
     <input type="hidden" name="description" value="{{.Data.Activity.Description}}">
@@ -212,17 +256,18 @@
     <input type="hidden" name="start_at" value="{{if .Data.Activity.StartAt}}{{.Data.Activity.StartAt.Format "2006-01-02T15:04"}}{{end}}">
     <input type="hidden" name="end_at" value="{{if .Data.Activity.EndAt}}{{.Data.Activity.EndAt.Format "2006-01-02T15:04"}}{{end}}">
     <label>活动状态
-      <select name="status">
+      <select name="status" required>
+        {{if .Data.StatusUnknown}}<option value="{{.Data.StatusUnknown}}" selected>保持目前状态（{{.Data.StatusUnknown}}）</option>{{end}}
         {{$current := .Data.Activity.Status}}
         {{range .Data.Statuses}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
       </select>
     </label>
     <label class="admin-check"><input type="checkbox" name="signin_enabled" value="1"{{if .Data.Activity.SigninEnabled}} checked{{end}}> 开启现场签到</label>
-    <label>4 位签到码<input name="signin_code" maxlength="4" value="{{.Data.Activity.SigninCode}}" placeholder="例如 0123"></label>
+    <label>4 位签到码<input type="text" name="signin_code" maxlength="4" inputmode="numeric" value="{{.Data.Activity.SigninCode}}" placeholder="例如 0123"></label>
     <label class="admin-check"><input type="checkbox" name="group_enabled" value="1"{{if .Data.Activity.GroupEnabled}} checked{{end}}> 开启分组</label>
     <div class="filter-range">
-      <label>每组男生<input name="male_per_group" type="number" min="0" value="{{.Data.Activity.MalePerGroup}}"></label>
-      <label>每组女生<input name="female_per_group" type="number" min="0" value="{{.Data.Activity.FemalePerGroup}}"></label>
+      <label>每组男生<input type="number" name="male_per_group" min="0" value="{{.Data.Activity.MalePerGroup}}"></label>
+      <label>每组女生<input type="number" name="female_per_group" min="0" value="{{.Data.Activity.FemalePerGroup}}"></label>
     </div>
     <label class="admin-check"><input type="checkbox" name="onetoone_enabled" value="1"{{if .Data.Activity.OnetooneEnabled}} checked{{end}}> 开启一对一</label>
     <div class="admin-actions">

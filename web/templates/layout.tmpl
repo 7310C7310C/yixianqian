@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="/static/shell.css?v=1">
   {{if .PageCSS}}<link rel="stylesheet" href="/static/{{.PageCSS}}">{{end}}
 </head>
-<body class="shell-body">
+<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}">
   <a class="shell-skip" href="#main">跳至主要内容</a>
 
   <header class="shell-header">

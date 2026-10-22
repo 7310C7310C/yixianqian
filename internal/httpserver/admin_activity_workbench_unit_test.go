@@ -75,6 +75,75 @@ func TestAdminActivityNavMapping(t *testing.T) {
 	}
 }
 
+func TestAdminActivityStatusesCoverDatabaseStatuses(t *testing.T) {
+	for _, status := range []string{
+		db.ActivityStatusOpen, db.ActivityStatusNotStarted, db.ActivityStatusFull,
+		db.ActivityStatusFinished, db.ActivityStatusCancelled, adminActivityStatusDraft,
+	} {
+		if !adminActivityStatusKnown(status) {
+			t.Fatalf("status %q missing from adminActivityStatuses", status)
+		}
+	}
+	if adminActivityStatusKnown("历史状态") {
+		t.Fatal("unknown status should not be treated as known")
+	}
+}
+
+func TestFilterAdminRoster(t *testing.T) {
+	roster := []db.AdminActivityRosterEntry{
+		{UserID: 1, Name: "张三", Nickname: "小张", LegacyUserID: "U-0001", PhoneMasked: "138****1111", Attendance: db.AttendanceOnTime},
+		{UserID: 2, Name: "李四", Nickname: "阿四", LegacyUserID: "U-0002", PhoneMasked: "139****2222", Attendance: db.AttendanceLate},
+		{UserID: 3, Name: "王五", LegacyUserID: "U-0003", PhoneMasked: "137****3333", Attendance: db.AttendanceAbsent},
+		{UserID: 4, Name: "赵六", LegacyUserID: "U-0004", PhoneMasked: "136****4444"},
+	}
+	cases := []struct {
+		name       string
+		query      string
+		attendance string
+		wantIDs    []int64
+	}{
+		{"all", "", "", []int64{1, 2, 3, 4}},
+		{"name", "张", "", []int64{1}},
+		{"nickname", "阿四", "", []int64{2}},
+		{"legacy id", "u-0004", "", []int64{4}},
+		{"masked phone", "3333", "", []int64{3}},
+		{"checked", "", "checked", []int64{1, 2}},
+		{"unchecked", "", "unchecked", []int64{4}},
+		{"late", "", "late", []int64{2}},
+		{"absent", "", "absent", []int64{3}},
+		{"query and filter", "张", "checked", []int64{1}},
+		{"no match", "不存在", "", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := filterAdminRoster(roster, tc.query, tc.attendance)
+			if len(got) != len(tc.wantIDs) {
+				t.Fatalf("filter(%q, %q) len = %d, want %d", tc.query, tc.attendance, len(got), len(tc.wantIDs))
+			}
+			for i, want := range tc.wantIDs {
+				if got[i].UserID != want {
+					t.Fatalf("filter(%q, %q)[%d] = %d, want %d", tc.query, tc.attendance, i, got[i].UserID, want)
+				}
+			}
+		})
+	}
+}
+
+func TestAdminActivityRosterPaginationURLs(t *testing.T) {
+	href := adminActivityRosterHref(5, "张三", "checked", 2)
+	want := "/admin/activities/5?attendance=checked&page=2&q=%E5%BC%A0%E4%B8%89#roster"
+	if href != want {
+		t.Fatalf("roster href = %q, want %q", href, want)
+	}
+	if got := adminActivityRosterHref(5, "", "", 1); got != "/admin/activities/5#roster" {
+		t.Fatalf("clear href = %q", got)
+	}
+	member := adminActivityMemberHref(5, "签到状态已更新。", 2, 7)
+	if !strings.HasSuffix(member, "#member-7") || !strings.Contains(member, "page=2") {
+		t.Fatalf("member href = %q", member)
+	}
+}
+
 func TestAdminActivityTemplatesRender(t *testing.T) {
 	tpl, err := LoadTemplates()
 	if err != nil {
@@ -100,6 +169,11 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 		Roster:                roster,
 		Stats:                 db.AdminActivitySigninStats{SignupCount: 1, CheckedInCount: 1},
 		Statuses:              adminActivityStatuses,
+		RosterAllCount:        1,
+		RosterFilteredCount:   1,
+		RosterPage:            1,
+		RosterPageCount:       1,
+		RosterClearURL:        "/admin/activities/5#roster",
 		SignupAudienceCount:   1,
 		ObserverAudienceCount: 1,
 		AudienceTotal:         2,
@@ -117,6 +191,9 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 		"活动工作台", "报名/签到名单", "张三", "138****1234", "按时签到",
 		"站内广播", "快速设置", "匹配控制台尚未在本期交付",
 		`enctype="multipart/form-data"`, `name="broadcast_key"`,
+		`id="member-7"`, `type="text" name="signin_code"`, `formnovalidate`,
+		`观察员（全站）`, `href="#broadcast"`, `action="/admin/activities/5#roster"`,
+		`<option value="已满员"`, `name="broadcast_action" value="preview"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("detail template missing %q", want)
@@ -124,6 +201,47 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 	}
 	if strings.Contains(html, "13812341234") {
 		t.Fatal("detail template leaked the raw phone")
+	}
+
+	// An unknown stored status must render an explicit keep-current option
+	// instead of silently falling back to the first select option.
+	unknown := activity
+	unknown.Status = "历史状态"
+	unknownDetail := detail
+	unknownDetail.Activity = &unknown
+	unknownDetail.StatusUnknown = "历史状态"
+	buf.Reset()
+	if err := tpl.Render(&buf, "admin_activity_detail", PageData{
+		Title: "活动工作台", User: user, CSRFToken: "csrf-value", Data: unknownDetail,
+		ActiveNav: "activities", MediaMaxMB: 10,
+	}); err != nil {
+		t.Fatalf("render unknown status: %v", err)
+	}
+	if got := buf.String(); !strings.Contains(got, `<option value="历史状态" selected>保持目前状态（历史状态）</option>`) {
+		t.Fatalf("unknown status lost its keep-current option")
+	}
+
+	// Edit page: text inputs carry a type, datetime-local fields exist, and the
+	// current status is selected from the complete list.
+	editActivity := activity
+	editActivity.Status = db.ActivityStatusFull
+	buf.Reset()
+	if err := tpl.Render(&buf, "admin_activity_edit", PageData{
+		Title: "活动编辑", User: user, CSRFToken: "csrf-value",
+		Data:      adminActivityEditPageData{Activity: &editActivity, Statuses: adminActivityStatuses},
+		ActiveNav: "activities",
+	}); err != nil {
+		t.Fatalf("render edit: %v", err)
+	}
+	editHTML := buf.String()
+	for _, want := range []string{
+		`type="text" name="name"`, `type="text" name="fee"`,
+		`type="text" name="signin_code"`, `type="datetime-local" name="publish_at"`,
+		`<option value="已满员" selected>已满员</option>`,
+	} {
+		if !strings.Contains(editHTML, want) {
+			t.Fatalf("edit template missing %q", want)
+		}
 	}
 
 	buf.Reset()

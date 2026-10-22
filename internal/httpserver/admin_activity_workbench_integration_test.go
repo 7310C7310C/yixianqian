@@ -95,6 +95,11 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 	if _, err := database.SignupActivity(ctx, signupUser.ID, activity.ActivityNo); err != nil {
 		t.Fatalf("signup: %v", err)
 	}
+	// Simulate a full activity: roster/quick-setting writes must never reset it.
+	if _, err := pool.Exec(ctx, `UPDATE activities SET status = $2 WHERE id = $1`,
+		activity.ID, db.ActivityStatusFull); err != nil {
+		t.Fatalf("set full status: %v", err)
+	}
 	if _, err := pool.Exec(ctx,
 		`UPDATE users SET account_kind = 'observer', account_status = 'observer', observer_enabled = true
 		  WHERE id = $1`, observer.ID); err != nil {
@@ -120,8 +125,21 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("attendance status = %d body=%s", resp.StatusCode, readBody(t, resp))
 	}
+	attendanceLocation := resp.Header.Get("Location")
+	if !strings.HasSuffix(attendanceLocation, "#member-"+strconv.FormatInt(signupUser.ID, 10)) {
+		t.Fatalf("attendance redirect = %q, want member anchor", attendanceLocation)
+	}
+	resp = client.get(attendanceLocation)
+	attendanceBody := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(attendanceBody, "签到状态已更新") ||
+		!strings.Contains(attendanceBody, `id="member-`+strconv.FormatInt(signupUser.ID, 10)+`"`) {
+		t.Fatalf("attendance result missing near roster: status=%d", resp.StatusCode)
+	}
 	if state, err := database.GetAttendance(ctx, activity.ID, signupUser.ID); err != nil || state != db.AttendanceOnTime {
 		t.Fatalf("attendance = %q err=%v", state, err)
+	}
+	if reloaded, err := database.GetActivity(ctx, strconv.FormatInt(activity.ID, 10)); err != nil || reloaded.Status != db.ActivityStatusFull {
+		t.Fatalf("attendance changed status: %+v err=%v", reloaded, err)
 	}
 	var auditCount int
 	if err := pool.QueryRow(ctx,
@@ -151,6 +169,24 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 	}
 	if state, err := database.GetAttendance(ctx, activity.ID, signupUser.ID); err != nil || state != "" {
 		t.Fatalf("cleared attendance = %q err=%v", state, err)
+	}
+
+	// Roster search and attendance filtering are server-side and keep the row
+	// anchor available for the post-check-in redirect flow.
+	filterQuery := url.Values{}
+	filterQuery.Set("q", signupUser.Name)
+	resp = client.get(workbenchPath + "?" + filterQuery.Encode())
+	filtered := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(filtered, signupUser.Name) ||
+		!strings.Contains(filtered, `id="member-`+strconv.FormatInt(signupUser.ID, 10)+`"`) {
+		t.Fatalf("roster search failed: status=%d", resp.StatusCode)
+	}
+	filterQuery.Set("q", "不存在的会员")
+	resp = client.get(workbenchPath + "?" + filterQuery.Encode())
+	missing := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || strings.Contains(missing, signupUser.Name) ||
+		!strings.Contains(missing, "没有符合条件的报名者") {
+		t.Fatalf("roster search did not filter: status=%d body=%s", resp.StatusCode, missing)
 	}
 
 	// Poster upload: CSRF is checked after multipart parsing.
@@ -211,7 +247,7 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 		    AND account_status IN ('active', 'observer')`).Scan(&observerCount); err != nil {
 		t.Fatal(err)
 	}
-	wantPreview := "本次预计发送 " + strconv.Itoa(1+observerCount) + " 人"
+	wantPreview := "去重后 <strong>" + strconv.Itoa(1+observerCount) + "</strong> 人"
 	resp = client.get(workbenchPath + "?preview=1&include_signups=1&include_observers=1")
 	preview := readBody(t, resp)
 	if resp.StatusCode != http.StatusOK || !strings.Contains(preview, wantPreview) {
@@ -226,7 +262,7 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 		"broadcast_action": {"preview"},
 	})
 	previewBody := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(previewBody, "本次预计发送 1 人") {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(previewBody, "去重后 <strong>1</strong> 人") {
 		t.Fatalf("post preview status=%d body=%s", resp.StatusCode, previewBody)
 	}
 	if got := notificationCount(t, ctx, pool, signupUser.ID, "activity_broadcast"); got != 0 {
@@ -245,10 +281,35 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 		"include_observers": {"1"},
 		"broadcast_title":   {"活动广播测试"},
 		"broadcast_body":    {"请准时参加。"},
+		"broadcast_action":  {"send"},
+	}
+	// A direct send without the preview step is rejected before any write.
+	resp = client.postForm(workbenchPath+"/broadcast", url.Values{
+		"csrf_token":        {csrf},
+		"broadcast_key":     {key},
+		"include_signups":   {"1"},
+		"include_observers": {"1"},
+		"broadcast_title":   {"未预览"},
+		"broadcast_body":    {"不应发送。"},
+	})
+	noPreview := readBody(t, resp)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(noPreview, "请先预览收件人数") {
+		t.Fatalf("send without preview status=%d body=%s", resp.StatusCode, noPreview)
+	}
+	if got := notificationCount(t, ctx, pool, signupUser.ID, "activity_broadcast"); got != 0 {
+		t.Fatalf("send without preview wrote notifications: %d", got)
 	}
 	resp = client.postForm(workbenchPath+"/broadcast", broadcastValues)
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("broadcast status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	if loc := resp.Header.Get("Location"); !strings.HasSuffix(loc, "#broadcast") || !strings.Contains(loc, "broadcast=sent") {
+		t.Fatalf("broadcast redirect = %q", loc)
+	}
+	resp = client.get(resp.Header.Get("Location"))
+	sentBody := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(sentBody, "广播已发送") {
+		t.Fatalf("broadcast result not shown near card: status=%d", resp.StatusCode)
 	}
 	if got := notificationCount(t, ctx, pool, signupUser.ID, "activity_broadcast"); got != 1 {
 		t.Fatalf("signup broadcast count = %d, want 1", got)
@@ -400,6 +461,31 @@ func TestIntegrationAdminActivityListQuickSettingsAndRedirects(t *testing.T) {
 		!updated.GroupEnabled || updated.MalePerGroup != 3 || updated.FemalePerGroup != 2 ||
 		!updated.OnetooneEnabled {
 		t.Fatalf("quick settings not applied: %+v", updated)
+	}
+
+	// Full activities keep their status when the quick form omits it: a
+	// grouping/check-in change must never silently reopen registration.
+	if _, err := pool.Exec(ctx, `UPDATE activities SET status = $2 WHERE id = $1`,
+		activity.ID, db.ActivityStatusFull); err != nil {
+		t.Fatal(err)
+	}
+	resp = client.postForm("/admin/activities/"+strconv.FormatInt(activity.ID, 10), url.Values{
+		"csrf_token":       {csrf},
+		"name":             {activity.Name},
+		"max_signup":       {strconv.Itoa(activity.MaxSignup)},
+		"male_per_group":   {"0"},
+		"female_per_group": {"0"},
+		"group_enabled":    {"1"},
+	})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("quick update without status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	preserved, err := database.GetActivity(ctx, strconv.FormatInt(activity.ID, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preserved.Status != db.ActivityStatusFull || !preserved.GroupEnabled {
+		t.Fatalf("status was not preserved: %+v", preserved)
 	}
 
 	// Creating an activity redirects to its new workbench.
