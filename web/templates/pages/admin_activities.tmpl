@@ -1,0 +1,35 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="card">
+  <p class="eyebrow">活动</p>
+  <h1>活动管理</h1>
+  {{template "flash" .}}
+  <div class="admin-actions">
+    <a class="button primary" href="/admin/activities/new">新建活动</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>活动列表</h2>
+  {{if .Data.Activities}}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>活动</th><th>状态</th><th>报名</th><th>签到</th><th>分组/一对一</th><th>操作</th></tr></thead>
+      <tbody>
+      {{range .Data.Activities}}
+        <tr>
+          <td data-label="活动"><strong>{{.Name}}</strong><div class="muted"><code>{{.ActivityNo}}</code></div></td>
+          <td data-label="状态"><span class="pill">{{.Status}}</span>{{if .GroupStatus}} <span class="pill">{{.GroupStatus}}</span>{{end}}</td>
+          <td data-label="报名">{{.CurrentSignup}}{{if gt .MaxSignup 0}} / {{.MaxSignup}}{{else}} / 不限{{end}}</td>
+          <td data-label="签到">{{if .SigninEnabled}}开启{{else}}关闭{{end}}</td>
+          <td data-label="分组/一对一">{{if .GroupEnabled}}分组{{end}}{{if .OnetooneEnabled}} 一对一{{end}}{{if and (not .GroupEnabled) (not .OnetooneEnabled)}}—{{end}}</td>
+          <td data-label="操作"><a class="button small" href="/admin/activities/{{.ID}}/edit">编辑</a></td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}<p class="muted">暂无活动。</p>{{end}}
+</section>
+{{end}}

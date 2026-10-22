@@ -38,6 +38,11 @@ func registerAdminRoutes(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/reports/{id}/handle", a.adminHTML(adminPermContent, a.handleAdminReportHandle))
 	mux.HandleFunc("GET /admin/suggestions", a.adminHTML(adminPermContent, a.handleAdminSuggestionsPage))
 	mux.HandleFunc("POST /admin/suggestions/{id}/handle", a.adminHTML(adminPermContent, a.handleAdminSuggestionHandle))
+	mux.HandleFunc("GET /admin/activities", a.adminHTML(adminPermActivity, a.handleAdminActivitiesPage))
+	mux.HandleFunc("GET /admin/activities/new", a.adminHTML(adminPermActivity, a.handleAdminActivityNew))
+	mux.HandleFunc("GET /admin/activities/{id}/edit", a.adminHTML(adminPermActivity, a.handleAdminActivityEdit))
+	mux.HandleFunc("POST /admin/activities", a.adminHTML(adminPermActivity, a.handleAdminActivityCreate))
+	mux.HandleFunc("POST /admin/activities/{id}", a.adminHTML(adminPermActivity, a.handleAdminActivityUpdate))
 	mux.HandleFunc("GET /admin/roles", a.adminHTML(adminPermAdminManage, a.handleAdminRolesPage))
 	mux.HandleFunc("POST /admin/roles/assign", a.adminHTML(adminPermAdminManage, a.handleAdminRoleAssign))
 
@@ -153,6 +158,7 @@ type adminHomeData struct {
 	CanManage   bool
 	CanModerate bool
 	CanAdmin    bool
+	CanActivity bool
 }
 
 func (a *App) handleAdminHome(w http.ResponseWriter, r *http.Request, access adminAccess) {
@@ -171,6 +177,7 @@ func (a *App) handleAdminHome(w http.ResponseWriter, r *http.Request, access adm
 		CanManage:   containsString(access.Permissions, adminPermUserManage),
 		CanModerate: containsString(access.Permissions, adminPermContent),
 		CanAdmin:    containsString(access.Permissions, adminPermAdminManage),
+		CanActivity: containsString(access.Permissions, adminPermActivity),
 	}
 	a.render(w, r, http.StatusOK, "admin", PageData{
 		Title:     "管理台",

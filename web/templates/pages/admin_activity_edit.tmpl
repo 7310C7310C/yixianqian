@@ -1,0 +1,49 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="card">
+  <p class="eyebrow">活动</p>
+  <h1>{{if .Data.IsNew}}新建活动{{else}}编辑活动{{end}}</h1>
+  {{template "flash" .}}
+  {{if .Data.Error}}<div class="alert alert-error" role="alert">{{.Data.Error}}</div>{{end}}
+  <form method="post" action="{{if .Data.IsNew}}/admin/activities{{else}}/admin/activities/{{.Data.Activity.ID}}{{end}}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <label>活动名称<input name="name" required maxlength="100" value="{{.Data.Activity.Name}}"></label>
+    <label>活动描述<textarea name="description" rows="4" maxlength="2000">{{.Data.Activity.Description}}</textarea></label>
+    <label>地点<input name="location" maxlength="200" value="{{.Data.Activity.Location}}"></label>
+    <label>参加条件<input name="condition" maxlength="500" value="{{.Data.Activity.Condition}}"></label>
+    <div class="filter-range">
+      <label>报名上限（0=不限）<input name="max_signup" type="number" min="0" value="{{.Data.Activity.MaxSignup}}"></label>
+      <label>费用<input name="fee" maxlength="100" value="{{.Data.Activity.Fee}}"></label>
+    </div>
+    <label>食宿<input name="food" maxlength="200" value="{{.Data.Activity.Food}}"></label>
+    <label>状态
+      <select name="status">
+        {{$current := .Data.Activity.Status}}
+        {{range .Data.Statuses}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <div class="filter-range">
+      <label>发布时间<input name="publish_at" type="datetime-local" value="{{if .Data.Activity.PublishAt}}{{.Data.Activity.PublishAt.Format "2006-01-02T15:04"}}{{end}}"></label>
+      <label>开始时间<input name="start_at" type="datetime-local" value="{{if .Data.Activity.StartAt}}{{.Data.Activity.StartAt.Format "2006-01-02T15:04"}}{{end}}"></label>
+      <label>结束时间<input name="end_at" type="datetime-local" value="{{if .Data.Activity.EndAt}}{{.Data.Activity.EndAt.Format "2006-01-02T15:04"}}{{end}}"></label>
+    </div>
+    <fieldset>
+      <legend>分组/一对一/签到</legend>
+      <label><input type="checkbox" name="group_enabled" value="1"{{if .Data.Activity.GroupEnabled}} checked{{end}}> 开启分组</label>
+      <div class="filter-range">
+        <label>每组男生<input name="male_per_group" type="number" min="0" value="{{.Data.Activity.MalePerGroup}}"></label>
+        <label>每组女生<input name="female_per_group" type="number" min="0" value="{{.Data.Activity.FemalePerGroup}}"></label>
+      </div>
+      <label><input type="checkbox" name="onetoone_enabled" value="1"{{if .Data.Activity.OnetooneEnabled}} checked{{end}}> 开启一对一</label>
+      <label><input type="checkbox" name="signin_enabled" value="1"{{if .Data.Activity.SigninEnabled}} checked{{end}}> 开启现场签到</label>
+      <label>4 位签到码<input name="signin_code" maxlength="4" value="{{.Data.Activity.SigninCode}}" placeholder="例如 0123"></label>
+    </fieldset>
+    {{if not .Data.IsNew}}<p class="hint">当前报名人数：{{.Data.Activity.CurrentSignup}}（由报名流程维护，不在此修改）</p>{{end}}
+    <div class="admin-actions">
+      <button type="submit" class="button primary">{{if .Data.IsNew}}创建活动{{else}}保存修改{{end}}</button>
+      <a class="button" href="/admin/activities">取消</a>
+    </div>
+  </form>
+</section>
+{{end}}
