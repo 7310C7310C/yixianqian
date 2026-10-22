@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"io/fs"
 	"net/http"
 	"sync"
@@ -10,6 +11,13 @@ import (
 
 // legacyIndexPath is the v1 Vue SPA entrypoint bundled with the binary.
 const legacyIndexPath = "static/legacy/index.html"
+
+// SPA 外壳带一个固定的启动旗标，供内嵌的 Vue 应用判断页面是否由已登录
+// 用户请求。这里只替换该字面量，不写入任何账号资料。
+var (
+	legacyAuthFlagOff = []byte("window.__YXQ_AUTHENTICATED__=false;")
+	legacyAuthFlagOn  = []byte("window.__YXQ_AUTHENTICATED__=true;")
+)
 
 var (
 	legacyIndexOnce sync.Once
@@ -40,6 +48,7 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	// The SPA reads yxq_csrf for write requests. Sessions created before the
 	// legacy UI existed may not have the cookie yet.
 	a.ensureCSRF(w, r)
+	body = bytes.Replace(body, legacyAuthFlagOff, legacyAuthFlagOn, 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)

@@ -196,7 +196,7 @@ func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 // temporary password still has to be replaced.
 func passwordChangePathAllowed(path string) bool {
 	switch path {
-	case "/password", "/logout", "/healthz", "/favicon.ico":
+	case "/password", "/logout", "/healthz", "/favicon.ico", "/legacy/api/password":
 		return true
 	}
 	return strings.HasPrefix(path, "/static/")

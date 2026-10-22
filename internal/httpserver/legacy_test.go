@@ -24,6 +24,7 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 	html := string(body)
 	for _, want := range []string{
 		`<base href="/static/legacy/">`,
+		`window.__YXQ_AUTHENTICATED__=false;`,
 		`const BASE_PATH = '/legacy';`,
 		`const APP_VERSION = 'legacy';`,
 		`src="lib/vue.global.prod.js"`,
@@ -113,7 +114,8 @@ func TestLegacyAppServesHTMLForSignedInUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := "U-0006"
-	user := &db.User{ID: 6, LegacyUserID: &legacy, Name: "测试用户"}
+	phone := "13800000006"
+	user := &db.User{ID: 6, LegacyUserID: &legacy, Name: "测试用户", Phone: phone}
 	req := httptest.NewRequest(http.MethodGet, "/app", nil)
 	req = req.WithContext(withUser(req.Context(), user))
 	rec := httptest.NewRecorder()
@@ -124,7 +126,19 @@ func TestLegacyAppServesHTMLForSignedInUser(t *testing.T) {
 	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("cache-control = %q", got)
 	}
-	if !strings.Contains(rec.Body.String(), `<base href="/static/legacy/">`) {
+	body := rec.Body.String()
+	if !strings.Contains(body, `window.__YXQ_AUTHENTICATED__=true;`) {
+		t.Fatal("served body is missing the authenticated flag")
+	}
+	if strings.Contains(body, `window.__YXQ_AUTHENTICATED__=false;`) {
+		t.Fatal("served body still contains the anonymous flag")
+	}
+	for _, sensitive := range []string{user.Name, user.Phone, legacy} {
+		if strings.Contains(body, sensitive) {
+			t.Fatalf("served body leaked account data %q", sensitive)
+		}
+	}
+	if !strings.Contains(body, `<base href="/static/legacy/">`) {
 		t.Fatal("served body is not the legacy SPA")
 	}
 	if rec.Header().Values("Set-Cookie") == nil {

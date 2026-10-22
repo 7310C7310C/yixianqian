@@ -1421,68 +1421,17 @@ func (a *App) handlePasswordSubmit(w http.ResponseWriter, r *http.Request) {
 	current := r.PostFormValue("current_password")
 	password := r.PostFormValue("password")
 	confirm := r.PostFormValue("password_confirm")
-	if current == "" || password == "" {
-		renderPassword(http.StatusBadRequest, "请输入目前密码与新密码。")
+	if failure := a.applyPasswordChange(w, r, user, mustChange, current, password, confirm); failure != nil {
+		switch failure.Status {
+		case 0:
+			// 请求已取消，无需写响应。
+		case http.StatusTooManyRequests:
+			a.renderError(w, r, failure.Status, "系统繁忙", failure.Message)
+		default:
+			renderPassword(failure.Status, failure.Message)
+		}
 		return
 	}
-	if password != confirm {
-		renderPassword(http.StatusBadRequest, "两次输入的新密码不一致。")
-		return
-	}
-	if password == current {
-		renderPassword(http.StatusBadRequest, "新密码不能与目前密码相同。")
-		return
-	}
-	if err := auth.ValidatePassword(password); err != nil {
-		renderPassword(http.StatusBadRequest, passwordPolicyMessage(err))
-		return
-	}
-	hash, err := a.db.GetPasswordHash(r.Context(), user.ID)
-	if errors.Is(err, db.ErrNotFound) {
-		renderPassword(http.StatusConflict, "尚未设定密码，请使用启用链接。")
-		return
-	}
-	if err != nil {
-		a.logger(r).Error("load password hash failed", "error", err)
-		renderPassword(http.StatusInternalServerError, "系统暂时无法处理，请稍后再试。")
-		return
-	}
-	if !a.acquireHash(w, r) {
-		return
-	}
-	valid, verifyErr := auth.VerifyPassword(current, hash)
-	var newHash string
-	var hashErr error
-	if verifyErr == nil && valid {
-		newHash, hashErr = auth.HashPassword(password)
-	}
-	a.releaseHash()
-	if verifyErr != nil {
-		a.logger(r).Error("verify current password failed", "error", verifyErr)
-		renderPassword(http.StatusInternalServerError, "系统暂时无法处理，请稍后再试。")
-		return
-	}
-	if !valid {
-		renderPassword(http.StatusBadRequest, "目前密码不正确。")
-		return
-	}
-	if hashErr != nil {
-		a.logger(r).Error("hash new password failed", "error", hashErr)
-		renderPassword(http.StatusInternalServerError, "系统暂时无法处理，请稍后再试。")
-		return
-	}
-	var sessionID int64
-	if sess, ok := currentSession(r); ok {
-		sessionID = sess.ID
-	}
-	if err := a.db.ChangePassword(r.Context(), user.ID, newHash, sessionID); err != nil {
-		a.logger(r).Error("change password failed", "error", err)
-		renderPassword(http.StatusInternalServerError, "系统暂时无法处理，请稍后再试。")
-		return
-	}
-	a.rotateCSRF(w, r)
-	a.audit(r, &user.ID, "auth.password.change", "user", strconv.FormatInt(user.ID, 10),
-		map[string]any{"forced": mustChange})
 	roles, _ := a.db.UserAdminRoles(r.Context(), user.ID)
 	dest := "/"
 	if len(roles) > 0 {

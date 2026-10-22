@@ -29,6 +29,7 @@ func registerLegacyAPI(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("GET /legacy/api/points/me", a.handleLegacyPointsMe)
 	mux.HandleFunc("GET /legacy/api/praise/me", a.handleLegacyPraiseMe)
 	mux.HandleFunc("POST /legacy/api/client-events", a.handleLegacyClientEvents)
+	mux.HandleFunc("POST /legacy/api/password", a.handleLegacyPasswordChange)
 	mux.HandleFunc("GET /legacy/api/version", a.handleLegacyVersion)
 }
 
@@ -303,6 +304,45 @@ func (a *App) handleLegacyClientEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	_, _ = io.Copy(io.Discard, r.Body)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+type legacyPasswordChangeRequest struct {
+	CurrentPassword string `json:"current_password"`
+	Password        string `json:"password"`
+	PasswordConfirm string `json:"password_confirm"`
+}
+
+// handleLegacyPasswordChange 供内嵌的 v1 SPA 修改密码；核心校验与 SSR 共用
+// applyPasswordChange，成功时保持当前会话并返回 JSON。
+func (a *App) handleLegacyPasswordChange(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.legacyActor(w, r)
+	if !ok {
+		return
+	}
+	if !a.legacyWriteCSRF(w, r) {
+		return
+	}
+	var req legacyPasswordChangeRequest
+	if !legacyDecodeJSONBody(w, r, &req) {
+		return
+	}
+	mustChange, _, err := a.db.GetCredentialState(r.Context(), user.ID)
+	if errors.Is(err, db.ErrNotFound) {
+		legacyError(w, http.StatusConflict, "尚未设定密码，请使用启用链接。")
+		return
+	}
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy password credential state failed")
+		return
+	}
+	failure := a.applyPasswordChange(w, r, user, mustChange, req.CurrentPassword, req.Password, req.PasswordConfirm)
+	if failure != nil {
+		if failure.Status != 0 {
+			legacyError(w, failure.Status, failure.Message)
+		}
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

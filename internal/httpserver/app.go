@@ -127,6 +127,19 @@ func (a *App) acquireHash(w http.ResponseWriter, r *http.Request) bool {
 	return a.acquireGate(w, r, a.hashSem, 2*time.Second)
 }
 
+// acquireHashQuiet 只做 Argon2 并发限流，不直接写响应，方便共用调用方
+// 按 HTML 或 legacy JSON 自己渲染失败结果。
+func (a *App) acquireHashQuiet(r *http.Request) (ok, busy bool) {
+	select {
+	case a.hashSem <- struct{}{}:
+		return true, false
+	case <-time.After(2 * time.Second):
+		return false, true
+	case <-r.Context().Done():
+		return false, false
+	}
+}
+
 func (a *App) releaseHash() { releaseGate(a.hashSem) }
 
 func (a *App) acquireMedia(w http.ResponseWriter, r *http.Request, api bool) bool {
