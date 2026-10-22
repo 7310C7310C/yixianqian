@@ -154,7 +154,7 @@
 
 - 已完成：Go/Postgres/R2、activation/login/session/media、testapp 迁移、staging relay、用户端功能 API 与管理端。
 - 用户端复用 v1 Vue 3 + Vant SPA；Go 提供兼容 API、session 与媒体代理；管理端使用 Go SSR。
-- 用户端已完成 staging 首轮整合（v1 SPA 四 tab、主要 legacy API、退出登录与修改密码）。
+- 当前 staging 状态与已知缺口见 `docs/STATUS.md`；本文件不写实时进度。
 - 旧 `yixianqian-deploy` skill 不适用；v2 部署使用 `yixianqian-deploy-v2`。
 
 ## 10. 变更记录

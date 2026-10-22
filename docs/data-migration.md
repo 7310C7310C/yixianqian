@@ -2,6 +2,7 @@
 
 > 目的：把 testapp 的 Bitable/Drive/SQLite 资料，无损转换到 v2 PostgreSQL + R2。
 > 本文件是 schema 与 migration 的设计依据；实作以 migration SQL 为准。
+> 表中的笔数是 2026-10-19 testapp export 基线，不是 staging 当前笔数；staging 测试数据会增加/修改行数，对账以 migration report/DB 为准。
 
 ## 1. 来源盘点（testapp）
 

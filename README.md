@@ -194,6 +194,8 @@ go run ./cmd/token -phone 13900000000 -name 王小明
 
 | 文档 | 用途 |
 |---|---|
+| `docs/INDEX.md` | 文档权威顺序、每份文件的 owner 与更新规则；AI 先读这份 |
+| `docs/STATUS.md` | 当前 staging/生产状态与已知缺口；唯一进度来源 |
 | `docs/PROJECT_CHARTER.md` | 使命、最高原则、范围、架构硬约束；冲突时以此为准 |
 | `docs/product-spec.md` | 用户端/管理端 Must-Have 与验收勾选 |
 | `docs/milestones.md` | 里程碑与完成定义 |

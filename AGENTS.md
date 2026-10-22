@@ -57,6 +57,17 @@ go run ./cmd/token -legacy-user-id U-0006
 - 用户端浏览器范围：iOS 14.5+/Safari 14.1+、Chrome/WebView 84+、Firefox 74+；
   不维护第二套完整用户 UI，低于范围只提供登录/管理端基本可用性。
 
+## 文档治理（AI 读取顺序与更新责任）
+
+- 先读 `docs/INDEX.md`，再读 `docs/STATUS.md`，之后才按索引读 Charter/ADR/spec。
+- 权威顺序：`docs/PROJECT_CHARTER.md` > `docs/adr/*` > `docs/STATUS.md` > `docs/product-spec.md` > 其他 docs > README/CHANGELOG。
+- **没有自动更新**：不存在后台 prompt/定时任务改项目 docs；只有任务书明确授权的 agent 才能写入。
+- 不允许 agent 自行修改 `PROJECT_CHARTER`、`product-spec` 勾选、`STATUS` 或 ADR 状态；只能向 Lead/PM 提案。
+- 谁维护：Lead 维护 INDEX/STATUS/README/AGENTS/milestones；Dev Lead 维护 runbook；Analyst/Dev Lead 维护 data-migration；产品范围与验收由 PM 决定。
+- 任务若改变用户可见行为、schema、部署或验收，任务书必须写“要更新哪些 docs”；Lead 合并前检查。
+- 代码与 docs 冲突时先停下报告，不得用代码默认覆盖 Charter。历史文档必须加 `> 历史文件（日期/原因）`，否则删除。
+- `docs/STATUS.md` 是唯一“当前进度”来源；README 与 `product-spec.md` 不作为实时状态。
+
 ## 变更后必跑
 - 集成到 `main` 后、push 前，必須在整合後的樹上跑 `make ci`（`gofmt`/vet/`go test -p 1`/build/迁移测试）；不可只測 feature branch 就 push。
 - **push 後 CI 閉環（不可跳過）**：

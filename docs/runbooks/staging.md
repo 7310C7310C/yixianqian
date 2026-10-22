@@ -57,7 +57,7 @@ sudo -u yxq bash -c 'set -a; . /opt/yixianqian-next/config/staging.cli.env; set 
 # stdout 是一条 activation URL；在浏览器打开设定密码
 ```
 
-`seed` 默认 U-0006 / 13800000006；可用 `-legacy-id`、`-phone`、`-name` 覆盖。
+`seed` 的本地默认手机号以 `cmd/seed` 为准；staging 的 U-0006 是 `13800138000`。可用 `-legacy-id`、`-phone`、`-name` 覆盖。
 若账号已有密码，seed 不再发 token；用 `cmd/token` 对其他账号发 token。
 
 ## 凭证

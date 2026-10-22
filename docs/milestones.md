@@ -2,6 +2,9 @@
 
 > 本文件把「成品」拆成可验收的里程碑。完成与否以 `docs/product-spec.md`
 > 勾选与 staging 实测为准，不以「程式写完」为准。
+>
+> **当前状态以 `docs/STATUS.md` 为准（2026-10-22）。** 本文件只定义阶段，
+> 不承担实时进度；过时的“进行中”字样不得当作当前状态。
 
 ## M0 — 基础（已完成，仅为地基）
 
@@ -10,7 +13,7 @@
 - 安全修复：realip/allow、Argon2/图片并发、nginx 权限、disabled login。
 - **不是产品完成**。
 
-## M1 — Schema 与 testapp 迁移（进行中）
+## M1 — Schema 与 testapp 迁移（已完成，以 staging 对账为准）
 
 - `0002_domain.sql`：users/profile/media/likes/praise/messages/activities/
   signups/group/onetoone/points/invites/notifications/RBAC/jobs/audit。
@@ -68,7 +71,7 @@
 - Schema 先行；不同功能用独立 worktree，避免互相覆盖。
 - 每个 PR：CI 绿、测试、reviewer；跨模组变更加 auditor。
 - 不在生产做实验；所有验收在 staging。
-- 旧 `yixianqian-deploy` skill 不适用；新 skill 待立。
+- 旧 `yixianqian-deploy` skill 不适用；v2 使用 `yixianqian-deploy-v2`。
 
 ## 现行方向
 
