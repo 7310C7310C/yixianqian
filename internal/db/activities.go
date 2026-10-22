@@ -95,6 +95,7 @@ type Activity struct {
 	OnetooneStatus  string
 	OnetooneEnabled bool
 	SigninEnabled   bool
+	SigninCode      string
 	PublishAt       *time.Time
 	StartAt         *time.Time
 	EndAt           *time.Time
@@ -134,7 +135,7 @@ type ActivitySignup struct {
 const activityColumns = `id, legacy_record_id, activity_no, name, description, location,
 	condition, max_signup, current_signup, fee, food, status, poster_media_id,
 	group_status, male_per_group, female_per_group, group_enabled,
-	onetoone_status, onetoone_enabled, signin_enabled, publish_at, start_at,
+	onetoone_status, onetoone_enabled, signin_enabled, signin_code, publish_at, start_at,
 	end_at, created_at, updated_at`
 
 func qualifiedActivityColumns(alias string) string {
@@ -145,7 +146,7 @@ func qualifiedActivityColumns(alias string) string {
 		prefix + `fee, ` + prefix + `food, ` + prefix + `status, ` + prefix + `poster_media_id, ` +
 		prefix + `group_status, ` + prefix + `male_per_group, ` + prefix + `female_per_group, ` +
 		prefix + `group_enabled, ` + prefix + `onetoone_status, ` + prefix + `onetoone_enabled, ` +
-		prefix + `signin_enabled, ` + prefix + `publish_at, ` + prefix + `start_at, ` +
+		prefix + `signin_enabled, ` + prefix + `signin_code, ` + prefix + `publish_at, ` + prefix + `start_at, ` +
 		prefix + `end_at, ` + prefix + `created_at, ` + prefix + `updated_at`
 }
 
@@ -156,7 +157,7 @@ func scanActivity(row rowScanner) (Activity, error) {
 	err := row.Scan(&a.ID, &a.LegacyRecordID, &a.ActivityNo, &a.Name, &a.Description,
 		&a.Location, &a.Condition, &a.MaxSignup, &a.CurrentSignup, &a.Fee, &a.Food,
 		&a.Status, &a.PosterMediaID, &a.GroupStatus, &a.MalePerGroup, &a.FemalePerGroup,
-		&a.GroupEnabled, &a.OnetooneStatus, &a.OnetooneEnabled, &a.SigninEnabled,
+		&a.GroupEnabled, &a.OnetooneStatus, &a.OnetooneEnabled, &a.SigninEnabled, &a.SigninCode,
 		&a.PublishAt, &a.StartAt, &a.EndAt, &a.CreatedAt, &a.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Activity{}, ErrActivityNotFound
