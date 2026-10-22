@@ -935,3 +935,187 @@
     width: 100%;
   }
 }
+
+/* Matching consoles */
+.admin-matching-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-matching-stat {
+  display: block;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow-wrap: anywhere;
+}
+
+.admin-matching-stat strong {
+  display: block;
+  color: var(--accent-strong);
+  font-size: 1.2rem;
+}
+
+.admin-matching-stat span {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.admin-matching-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.admin-matching-form label,
+.admin-matching-search {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.admin-matching-form input,
+.admin-matching-search input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.admin-matching-search {
+  margin-top: 0.75rem;
+}
+
+.admin-matching-blockers {
+  margin: 0.4rem 0 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.admin-matching-status {
+  min-height: 1.4rem;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.admin-matching-status.is-error {
+  color: var(--danger);
+}
+
+.admin-matching-status.is-ok {
+  color: var(--accent-strong);
+}
+
+.admin-matching-status code {
+  font-size: 0.8rem;
+}
+
+.admin-matching-groups,
+.admin-matching-people,
+.admin-matching-roster,
+.admin-matching-roster-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.admin-matching-group,
+.admin-matching-person {
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow-wrap: anywhere;
+}
+
+.admin-matching-group h3,
+.admin-matching-roster h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.admin-matching-members,
+.admin-matching-roster-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-matching-member,
+.admin-matching-roster-item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.admin-matching-member a,
+.admin-matching-roster-item a {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.admin-matching-person summary {
+  cursor: pointer;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.admin-matching-pairs {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.admin-matching-pairs li {
+  margin: 0.2rem 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 640px) {
+  .admin-matching-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-matching-form .admin-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1000px) {
+  .admin-matching-roster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-matching-groups,
+  .admin-matching-people {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-matching-table {
+    min-width: 860px;
+  }
+}

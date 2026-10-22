@@ -1,10 +1,12 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,6 +29,10 @@ func registerGroupingAdminRoutes(a *App, mux *http.ServeMux) {
 		a.adminAPI(adminPermMatchingRun, a.apiAdminGroupResult))
 	mux.HandleFunc("GET /api/admin/group/latest_round",
 		a.adminAPI(adminPermMatchingRun, a.apiAdminGroupLatestRound))
+	mux.HandleFunc("GET /api/admin/group/roster",
+		a.adminAPI(adminPermMatchingRun, a.apiAdminGroupRoster))
+	mux.HandleFunc("GET /api/admin/group/chat-overview",
+		a.adminAPI(adminPermMatchingRun, a.apiAdminGroupChatOverview))
 }
 
 type adminGroupPayload struct {
@@ -245,4 +251,252 @@ func (a *App) apiAdminGroupLatestRound(w http.ResponseWriter, r *http.Request, _
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"activity_id": ref, "round": round})
+}
+
+// ---------------------------------------------------------------------------
+// Roster
+// ---------------------------------------------------------------------------
+
+type matchingRosterEntryView struct {
+	ID         int64  `json:"id"`
+	UserID     string `json:"user_id"`
+	Name       string `json:"name"`
+	Nickname   string `json:"nickname"`
+	Gender     string `json:"gender"`
+	Attendance string `json:"attendance"`
+	CheckedIn  bool   `json:"checked_in"`
+	Submitted  bool   `json:"submitted"`
+	SignupAt   string `json:"signup_at"`
+}
+
+type matchingRosterView struct {
+	Total                int                       `json:"total"`
+	Submitted            int                       `json:"submitted"`
+	Unsubmitted          int                       `json:"unsubmitted"`
+	CheckedIn            int                       `json:"checked_in"`
+	UnsubmittedCheckedIn int                       `json:"unsubmitted_checked_in"`
+	SigninEnabled        bool                      `json:"signin_enabled"`
+	SubmittedList        []matchingRosterEntryView `json:"submitted_list"`
+	UnsubmittedList      []matchingRosterEntryView `json:"unsubmitted_list"`
+}
+
+func buildMatchingRosterView(activity db.Activity, roster db.MatchingRoster) matchingRosterView {
+	view := matchingRosterView{
+		Total:                roster.Total,
+		Submitted:            roster.Submitted,
+		Unsubmitted:          roster.Unsubmitted,
+		CheckedIn:            roster.CheckedIn,
+		UnsubmittedCheckedIn: roster.UnsubmittedCheckedIn,
+		SigninEnabled:        activity.SigninEnabled,
+		SubmittedList:        make([]matchingRosterEntryView, 0, roster.Submitted),
+		UnsubmittedList:      make([]matchingRosterEntryView, 0, roster.Unsubmitted),
+	}
+	for _, entry := range roster.Entries {
+		item := matchingRosterEntryView{
+			ID:         entry.ID,
+			UserID:     entry.UserID,
+			Name:       entry.Name,
+			Nickname:   entry.Nickname,
+			Gender:     entry.Gender,
+			Attendance: entry.Attendance,
+			CheckedIn:  entry.CheckedIn,
+			Submitted:  entry.Submitted,
+			SignupAt:   entry.SignupAt.Format("2006-01-02 15:04"),
+		}
+		if entry.Submitted {
+			view.SubmittedList = append(view.SubmittedList, item)
+		} else {
+			view.UnsubmittedList = append(view.UnsubmittedList, item)
+		}
+	}
+	return view
+}
+
+func (a *App) adminMatchingActivityByRef(w http.ResponseWriter, r *http.Request,
+	ref string) (db.Activity, bool) {
+	activity, err := a.db.GetActivity(r.Context(), strings.TrimSpace(ref))
+	if errors.Is(err, db.ErrActivityNotFound) {
+		writeAPIError(w, http.StatusNotFound, "activity_not_found", "活动不存在。")
+		return db.Activity{}, false
+	}
+	if err != nil {
+		a.logger(r).Error("resolve matching activity failed", "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")
+		return db.Activity{}, false
+	}
+	return activity, true
+}
+
+func (a *App) apiAdminGroupRoster(w http.ResponseWriter, r *http.Request, _ adminAccess) {
+	ref := strings.TrimSpace(r.URL.Query().Get("activity_id"))
+	if ref == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_activity", "缺少 activity_id。")
+		return
+	}
+	activity, ok := a.adminMatchingActivityByRef(w, r, ref)
+	if !ok {
+		return
+	}
+	roster, err := a.db.MatchingRoster(r.Context(), activity.ID)
+	if err != nil {
+		a.logger(r).Error("load matching roster failed", "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")
+		return
+	}
+	writeJSON(w, http.StatusOK, buildMatchingRosterView(activity, roster))
+}
+
+// ---------------------------------------------------------------------------
+// Group chat overview
+// ---------------------------------------------------------------------------
+
+type groupChatMemberView struct {
+	ID       int64  `json:"id"`
+	UserID   string `json:"user_id"`
+	Name     string `json:"name"`
+	Gender   string `json:"gender"`
+	Assigned int    `json:"assigned"`
+	Chatted  int    `json:"chatted"`
+	MsgCount int    `json:"msg_count"`
+}
+
+type groupChatGroupView struct {
+	GroupID      int                   `json:"group_id"`
+	MemberCount  int                   `json:"member_count"`
+	Pairs        int                   `json:"pairs"`
+	ChattedPairs int                   `json:"chatted_pairs"`
+	Messages     int                   `json:"messages"`
+	Members      []groupChatMemberView `json:"members"`
+}
+
+type groupChatSummaryView struct {
+	Groups       int     `json:"groups"`
+	Members      int     `json:"members"`
+	Pairs        int     `json:"pairs"`
+	ChattedPairs int     `json:"chatted_pairs"`
+	Rate         float64 `json:"rate"`
+	Messages     int     `json:"messages"`
+}
+
+type groupChatOverviewView struct {
+	ActivityID  int64                `json:"activity_id"`
+	ActivityNo  string               `json:"activity_no"`
+	Name        string               `json:"name"`
+	GroupStatus string               `json:"group_status"`
+	Round       int                  `json:"round"`
+	Rounds      []int                `json:"rounds"`
+	Summary     groupChatSummaryView `json:"summary"`
+	Groups      []groupChatGroupView `json:"groups"`
+	// RatePercent is a template helper; it is not part of the JSON payload.
+	RatePercent int `json:"-"`
+}
+
+func (a *App) buildGroupChatOverview(ctx context.Context, activity db.Activity,
+	round int) (groupChatOverviewView, error) {
+	result, err := a.db.AdminGroupResult(ctx, activity.ActivityNo, round)
+	if err != nil {
+		return groupChatOverviewView{}, err
+	}
+	view := groupChatOverviewView{
+		ActivityID:  result.ActivityID,
+		ActivityNo:  result.ActivityNo,
+		Name:        result.ActivityName,
+		GroupStatus: result.GroupStatus,
+		Round:       result.Round,
+		Rounds:      result.Rounds,
+		Groups:      make([]groupChatGroupView, 0, len(result.Groups)),
+		Summary:     groupChatSummaryView{Groups: len(result.Groups)},
+	}
+	if len(result.Groups) == 0 {
+		return view, nil
+	}
+
+	allIDs := make([]int64, 0)
+	seen := map[int64]bool{}
+	for _, group := range result.Groups {
+		for _, member := range group.Members {
+			if !seen[member.UserID] {
+				seen[member.UserID] = true
+				allIDs = append(allIDs, member.UserID)
+			}
+		}
+	}
+	stats, err := a.db.OnetooneMessageStats(ctx, allIDs, allIDs)
+	if err != nil {
+		return groupChatOverviewView{}, err
+	}
+	for _, group := range result.Groups {
+		item := groupChatGroupView{
+			GroupID:     group.GroupID,
+			MemberCount: len(group.Members),
+			Members:     make([]groupChatMemberView, 0, len(group.Members)),
+		}
+		item.Pairs = item.MemberCount * (item.MemberCount - 1) / 2
+		memberSet := make(map[int64]bool, item.MemberCount)
+		for _, member := range group.Members {
+			memberSet[member.UserID] = true
+		}
+		for _, member := range group.Members {
+			row := groupChatMemberView{
+				ID:       member.UserID,
+				UserID:   member.LegacyUserID,
+				Name:     member.DisplayName(),
+				Gender:   member.Gender,
+				Assigned: item.MemberCount - 1,
+			}
+			for _, other := range group.Members {
+				if other.UserID == member.UserID {
+					continue
+				}
+				sent := stats[db.OnetoonePairKey{AuthorID: member.UserID, TargetID: other.UserID}]
+				received := stats[db.OnetoonePairKey{AuthorID: other.UserID, TargetID: member.UserID}]
+				row.MsgCount += sent.Count
+				if sent.Count > 0 || received.Count > 0 {
+					row.Chatted++
+				}
+			}
+			item.Messages += row.MsgCount
+			item.Members = append(item.Members, row)
+		}
+		for i := 0; i < len(group.Members); i++ {
+			for j := i + 1; j < len(group.Members); j++ {
+				left := group.Members[i].UserID
+				right := group.Members[j].UserID
+				if stats[db.OnetoonePairKey{AuthorID: left, TargetID: right}].Count > 0 ||
+					stats[db.OnetoonePairKey{AuthorID: right, TargetID: left}].Count > 0 {
+					item.ChattedPairs++
+				}
+			}
+		}
+		view.Summary.Members += item.MemberCount
+		view.Summary.Pairs += item.Pairs
+		view.Summary.ChattedPairs += item.ChattedPairs
+		view.Summary.Messages += item.Messages
+		view.Groups = append(view.Groups, item)
+	}
+	if view.Summary.Pairs > 0 {
+		view.Summary.Rate = math.Round(float64(view.Summary.ChattedPairs)/
+			float64(view.Summary.Pairs)*10000) / 10000
+	}
+	view.RatePercent = int(math.Round(view.Summary.Rate * 100))
+	return view, nil
+}
+
+func (a *App) apiAdminGroupChatOverview(w http.ResponseWriter, r *http.Request, _ adminAccess) {
+	ref := strings.TrimSpace(r.URL.Query().Get("activity_id"))
+	if ref == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_activity", "缺少 activity_id。")
+		return
+	}
+	activity, ok := a.adminMatchingActivityByRef(w, r, ref)
+	if !ok {
+		return
+	}
+	overview, err := a.buildGroupChatOverview(r.Context(), activity, adminQueryInt(r, "round"))
+	if err != nil {
+		a.logger(r).Error("load group chat overview failed", "error", err)
+		adminGroupError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, overview)
 }

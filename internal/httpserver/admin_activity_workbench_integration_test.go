@@ -31,6 +31,10 @@ func TestIntegrationAdminActivityWorkbenchAccessAndRoster(t *testing.T) {
 	}
 
 	activity := createWorkbenchActivity(t, ctx, database, pool, "工作台访问测试")
+	if _, err := pool.Exec(ctx, `UPDATE activities SET group_enabled = true WHERE id = $1`,
+		activity.ID); err != nil {
+		t.Fatalf("enable grouping: %v", err)
+	}
 	if _, err := database.SignupActivity(ctx, signupUser.ID, activity.ActivityNo); err != nil {
 		t.Fatalf("signup: %v", err)
 	}
@@ -48,10 +52,15 @@ func TestIntegrationAdminActivityWorkbenchAccessAndRoster(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("workbench status = %d body=%s", resp.StatusCode, body)
 	}
-	for _, want := range []string{"工作台", "报名/签到名单", signupUser.Name, wantMask, "站内广播", "快速设置", "匹配控制台尚未在本期交付"} {
+	for _, want := range []string{"工作台", "报名/签到名单", signupUser.Name, wantMask,
+		"站内广播", "快速设置", "分组 / 一对一", "匹配总览",
+		`href="/admin/matching/group/` + strconv.FormatInt(activity.ID, 10) + `"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("workbench missing %q", want)
 		}
+	}
+	if strings.Contains(body, "匹配控制台尚未在本期交付") {
+		t.Fatal("workbench still contains the retired matching placeholder")
 	}
 	if strings.Contains(body, signupUser.Phone) {
 		t.Fatal("workbench leaked the raw phone number")

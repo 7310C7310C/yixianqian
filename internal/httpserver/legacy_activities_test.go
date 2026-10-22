@@ -193,6 +193,20 @@ func TestIntegrationLegacyActivitiesFlow(t *testing.T) {
 	for _, male := range males {
 		legacySignupRow(t, env, activityID, male.ID)
 	}
+	// The user SPA reads the matching entry flags from /mine; they must stay in
+	// sync with the activity mode.
+	resp = viewerClient.get("/legacy/api/activities/mine")
+	var mineGrouped struct {
+		Activities []map[string]any `json:"activities"`
+	}
+	profileDecode(t, resp, &mineGrouped)
+	if resp.StatusCode != http.StatusOK || len(mineGrouped.Activities) != 1 ||
+		mineGrouped.Activities[0]["group_flag"] != "是" ||
+		mineGrouped.Activities[0]["group_status"] != "收集中" ||
+		mineGrouped.Activities[0]["onetoone_flag"] != "否" ||
+		mineGrouped.Activities[0]["onetoone_status"] != "" {
+		t.Fatalf("mine matching flags = %+v status=%d", mineGrouped.Activities, resp.StatusCode)
+	}
 	resp = viewerClient.get("/legacy/api/activities/mine/groups/flag")
 	var flag struct {
 		Has bool `json:"has_group_activity"`

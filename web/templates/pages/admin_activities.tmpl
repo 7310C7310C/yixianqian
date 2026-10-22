@@ -41,11 +41,14 @@
             {{if .GroupStatus}}<span class="muted">{{.GroupStatus}}</span>{{end}}
             {{if .OnetooneEnabled}}<span class="pill">一对一</span>{{end}}
             {{if .OnetooneStatus}}<span class="muted">{{.OnetooneStatus}}</span>{{end}}
+            {{if and .GroupEnabled .OnetooneEnabled}}<div class="muted"><span class="pill pill-warn">双开</span> 两种模式互斥，执行会被拒绝。</div>{{end}}
             {{if and (not .GroupEnabled) (not .OnetooneEnabled)}}<span class="muted">—</span>{{end}}
           </td>
           <td data-label="操作">
             <div class="admin-actions">
               <a class="button primary small" href="/admin/activities/{{.ID}}">工作台</a>
+              {{if .GroupEnabled}}<a class="button small" href="/admin/matching/group/{{.ID}}">分组控制台</a>{{end}}
+              {{if .OnetooneEnabled}}<a class="button small" href="/admin/matching/onetoone/{{.ID}}">一对一控制台</a>{{end}}
               <a class="button small" href="/admin/activities/{{.ID}}/edit">编辑</a>
             </div>
           </td>

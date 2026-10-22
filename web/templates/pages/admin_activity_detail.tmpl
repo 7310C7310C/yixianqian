@@ -23,6 +23,7 @@
     <a href="#summary">基本资料</a>
     <a href="#poster">海报</a>
     <a href="#roster">报名/签到名单</a>
+    <a href="#grouping">分组 / 一对一</a>
     <a href="#broadcast">站内广播</a>
     <a href="#settings">快速设置</a>
   </nav>
@@ -98,7 +99,14 @@
 </section>
 
 <section class="card" id="roster">
-  <h2>报名/签到名单</h2>
+  <div class="admin-title-row">
+    <h2>报名/签到名单</h2>
+    <div class="admin-actions">
+      {{if .Data.Activity.GroupEnabled}}<a class="button small" href="/admin/matching/group/{{$activityID}}">分组控制台</a>{{end}}
+      {{if .Data.Activity.OnetooneEnabled}}<a class="button small" href="/admin/matching/onetoone/{{$activityID}}">一对一控制台</a>{{end}}
+      <a class="button small" href="/admin/matching">匹配总览</a>
+    </div>
+  </div>
   <p class="admin-counts">
     <span>有效报名 <strong>{{.Data.Stats.SignupCount}}</strong> 人</span>
     <span>已签到 <strong>{{.Data.Stats.CheckedInCount}}</strong> 人</span>
@@ -223,7 +231,19 @@
       <span>{{if .Data.Activity.OnetooneEnabled}}已开启{{else}}未开启{{end}}{{if .Data.Activity.OnetooneStatus}} · {{.Data.Activity.OnetooneStatus}}{{end}}</span>
     </div>
   </div>
-  <p class="admin-placeholder">匹配控制台尚未在本期交付，本页不提供假操作。开关可在下方快速设置中调整。</p>
+  {{if and .Data.Activity.GroupEnabled .Data.Activity.OnetooneEnabled}}
+  <p class="alert alert-error" role="alert"><strong>双开：</strong>分组与一对一互斥，执行任一控制台都会被后端拒绝。请先在下方快速设置关闭其中一个模式。</p>
+  {{end}}
+  {{if or .Data.Activity.GroupEnabled .Data.Activity.OnetooneEnabled}}
+  <div class="admin-actions">
+    {{if .Data.Activity.GroupEnabled}}<a class="button primary" href="/admin/matching/group/{{$activityID}}">打开分组控制台</a>{{end}}
+    {{if .Data.Activity.OnetooneEnabled}}<a class="button primary" href="/admin/matching/onetoone/{{$activityID}}">打开一对一控制台</a>{{end}}
+    <a class="button" href="/admin/matching">匹配总览</a>
+  </div>
+  <p class="hint">控制台可预览、执行、重置并按轮次查看结果与聊天概览；执行前请确认名单与签到状态。</p>
+  {{else}}
+  <p class="admin-placeholder">当前活动尚未开启分组或一对一。可在下方快速设置开启一种模式；两种模式互斥，不能同时开启。</p>
+  {{end}}
 </section>
 
 <section class="card" id="broadcast">

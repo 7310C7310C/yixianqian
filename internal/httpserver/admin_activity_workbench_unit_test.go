@@ -107,12 +107,18 @@ func TestAdminActivityNavMapping(t *testing.T) {
 	if got := canonicalNav("suggestions"); got != "suggestions" {
 		t.Fatalf("canonicalNav(suggestions) = %q", got)
 	}
+	if got := canonicalNav("matching"); got != "matching" {
+		t.Fatalf("canonicalNav(matching) = %q", got)
+	}
 	cases := map[string]string{
-		"admin_activities":      "activities",
-		"admin_activity_edit":   "activities",
-		"admin_activity_detail": "activities",
-		"admin_reports":         "reports",
-		"admin_roles":           "roles",
+		"admin_activities":        "activities",
+		"admin_activity_edit":     "activities",
+		"admin_activity_detail":   "activities",
+		"admin_matching":          "matching",
+		"admin_matching_group":    "matching",
+		"admin_matching_onetoone": "matching",
+		"admin_reports":           "reports",
+		"admin_roles":             "roles",
 	}
 	for page, want := range cases {
 		if got := navForPage(page); got != want {
@@ -215,7 +221,7 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 	activity := db.Activity{
 		ID: 5, ActivityNo: "A-0005", Name: "模板测试活动", Status: "报名中",
 		MaxSignup: 20, CurrentSignup: 1, SigninEnabled: true, SigninCode: "0123",
-		PosterMediaID: &posterID, StartAt: &now,
+		GroupEnabled: true, PosterMediaID: &posterID, StartAt: &now,
 	}
 	roster := []db.AdminActivityRosterEntry{{
 		UserID: 7, LegacyUserID: "U-0007", Name: "张三", Nickname: "小张",
@@ -252,7 +258,8 @@ func TestAdminActivityTemplatesRender(t *testing.T) {
 	html := buf.String()
 	for _, want := range []string{
 		"活动工作台", "报名/签到名单", "张三", "138****1234", "按时签到",
-		"站内广播", "快速设置", "匹配控制台尚未在本期交付",
+		"站内广播", "快速设置", "分组 / 一对一", "匹配总览",
+		`href="/admin/matching/group/5"`,
 		`enctype="multipart/form-data"`, `name="broadcast_key"`,
 		`id="member-7"`, `type="text" name="signin_code"`, `formnovalidate`,
 		`观察员（全站）`, `href="#broadcast"`, `action="/admin/activities/5#roster"`,
