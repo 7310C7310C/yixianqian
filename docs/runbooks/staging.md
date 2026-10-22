@@ -147,14 +147,38 @@ FACE_PROBE_TIMEOUT=8s
 **首次部署 migration 0005 后、对外开放前**必须补齐老照片，否则老用户
 `has_face=false` 会被 SPA 门禁拦到修改资料页：
 
+批量命令需要 DB、R2 与 FACE_* 三组变量；`staging.cli.env` 只有 DB/session，
+且 `staging.env` 的值含 `&` 与空格，不能直接 `source`。先生成 yxq 可读的
+CLI env（root 执行）：
+
 ```bash
 cd /opt/yixianqian-next
-set -a; . config/staging.cli.env; set +a
-bin/facebackfill -dry-run                 # 看数量
-bin/facebackfill -limit 20                # 小批量验证
-bin/facebackfill -workers 2               # 全量（1025 张）
-bin/facebackfill -user U-0006             # 单用户补测
-bin/facebackfill -all -user U-0006        # 强制重扫
+tmp=$(mktemp)
+grep -v '^#' config/staging.env > "$tmp"
+cat >> "$tmp" <<'EOF'
+FACE_PROBE_CMD=/opt/yixianqian-test/web/backend/venv/bin/python /opt/yixianqian-next/tools/face_probe.py
+FACE_MODEL_PATH=/opt/yixianqian-next/tools/face_detection_yunet.onnx
+FACE_PROBE_TIMEOUT=8s
+EOF
+install -m 600 -o yxq -g yxq "$tmp" config/facebackfill.cli.env
+rm -f "$tmp"
+```
+
+执行时逐行 export（不要用 `.`/`source`）：
+
+```bash
+runuser -u yxq -- bash -c '
+  while IFS= read -r line; do
+    case "$line" in ""|\#*) continue;; esac
+    export "${line%%=*}=${line#*=}"
+  done < /opt/yixianqian-next/config/facebackfill.cli.env
+  cd /opt/yixianqian-next
+  exec bin/facebackfill -dry-run          # 看数量；其余参数见下
+'
+# 小批量验证：-limit 20
+# 全量（1028 张，2 workers 约 25-30 分钟）：-workers 2
+# 单用户补测：-user U-0006
+# 强制重扫：-all -user U-0006
 ```
 
 检测失败的照片保持 `face_checked=false`，命令以非零退出，可直接重跑；
