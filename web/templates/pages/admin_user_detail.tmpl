@@ -1,0 +1,166 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+{{$userID := .Data.User.ID}}
+<div class="admin-user-detail">
+
+<section class="card">
+  <div class="admin-title-row">
+    <div>
+      <p class="eyebrow">用户审核</p>
+      <h1>{{.Data.User.Name}}</h1>
+      <p class="hint">
+        <code>{{if .Data.User.LegacyUserID}}{{.Data.User.LegacyUserID}}{{else}}#{{$userID}}{{end}}</code>
+        · {{.Data.User.Phone}}
+      </p>
+    </div>
+    <div class="admin-actions">
+      <a class="button" href="/admin/users">返回列表</a>
+    </div>
+  </div>
+  {{template "flash" .}}
+  <p class="admin-counts admin-summary">
+    <span>账号状态 <strong>{{.Data.AccountStatus}}</strong></span>
+    <span>登录状态 <strong>{{.Data.LoginStatus}}</strong></span>
+    <span>管理角色 <strong>{{.Data.Roles}}</strong></span>
+  </p>
+</section>
+
+<section class="card" id="review">
+  <h2>审核信息与操作</h2>
+  <dl class="admin-detail-inline">
+    <div>
+      <dt>审核人</dt>
+      <dd>{{.Data.Reviewer}}</dd>
+    </div>
+    <div>
+      <dt>审核时间</dt>
+      <dd>{{.Data.ReviewedAt}}</dd>
+    </div>
+    <div>
+      <dt>审核备注</dt>
+      <dd>{{.Data.ReviewNote}}</dd>
+    </div>
+  </dl>
+
+  <div class="admin-review-forms">
+    {{if ne .Data.User.AccountStatus "active"}}
+    <form method="post" action="/admin/users/{{$userID}}/approve" class="admin-review-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="next" value="{{.Data.Next}}">
+      <label for="admin-approve-note">审核备注（选填）</label>
+      <textarea id="admin-approve-note" name="note" rows="3" maxlength="500"></textarea>
+      <div class="admin-actions">
+        <button type="submit" class="button primary">审核通过</button>
+      </div>
+    </form>
+    {{end}}
+    <form method="post" action="/admin/users/{{$userID}}/reject" class="admin-review-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="next" value="{{.Data.Next}}">
+      <input type="hidden" name="require_note" value="1">
+      <label for="admin-reject-note">拒绝原因（必填）</label>
+      <textarea id="admin-reject-note" name="note" rows="3" maxlength="500" required></textarea>
+      <div class="admin-actions">
+        <button type="submit" class="button danger">拒绝申请</button>
+      </div>
+    </form>
+  </div>
+
+  {{if .Data.CanManage}}
+  <h3>账号管理</h3>
+  <div class="admin-manage-row">
+    {{if eq .Data.User.LoginStatus "active"}}
+    <form method="post" action="/admin/users/{{$userID}}/disable" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="next" value="{{.Data.Next}}">
+      <button type="submit" class="button small danger">停用账号</button>
+    </form>
+    {{end}}
+    {{if and (eq .Data.User.LoginStatus "disabled") (ne .Data.User.AccountStatus "pending") (ne .Data.User.AccountStatus "rejected")}}
+    <form method="post" action="/admin/users/{{$userID}}/enable" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="next" value="{{.Data.Next}}">
+      <button type="submit" class="button small">恢复账号</button>
+    </form>
+    {{end}}
+    <form method="post" action="/admin/users/{{$userID}}/temp-password" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit" class="button small">生成临时密码</button>
+    </form>
+  </div>
+  <p class="hint">临时密码沿用列表页行为：生成后会在列表页显示一次，请立即转交用户。</p>
+  {{end}}
+</section>
+
+<section class="card" id="photos">
+  <h2>照片{{if .Data.Photos}}（{{.Data.PhotoCount}}）{{end}}</h2>
+  {{if .Data.Photos}}
+  <ul class="admin-photo-grid">
+    {{range .Data.Photos}}
+    <li class="admin-photo-item">
+      <a href="{{.FullURL}}" target="_blank" rel="noopener">
+        <img src="{{.ThumbURL}}" alt="照片 {{.Index}}" loading="lazy">
+      </a>
+      {{if .IsCover}}<span class="pill admin-photo-cover">封面</span>{{end}}
+    </li>
+    {{end}}
+  </ul>
+  <p class="hint">点击缩略图可在新窗口查看原图；图片只经管理端受权路由串流，不暴露存储路径。</p>
+  {{else}}
+  <p class="admin-detail-empty">尚无照片。</p>
+  {{end}}
+</section>
+
+<section class="card" id="profile">
+  <h2>完整资料</h2>
+  <div class="admin-detail-grid">
+    {{range .Data.Groups}}
+    <section class="admin-detail-group">
+      <h3>{{.Title}}</h3>
+      <dl class="admin-detail-fields">
+        {{range .Fields}}
+        <div class="admin-detail-field">
+          <dt>{{.Label}}</dt>
+          <dd>{{.Value}}</dd>
+        </div>
+        {{end}}
+      </dl>
+    </section>
+    {{end}}
+  </div>
+</section>
+
+<section class="card" id="audit">
+  <h2>审核记录</h2>
+  {{if .Data.Audit}}
+  <div class="admin-table-wrap">
+    <table class="admin-table admin-audit-table">
+      <thead>
+        <tr>
+          <th scope="col">时间</th>
+          <th scope="col">操作人</th>
+          <th scope="col">操作</th>
+          <th scope="col">说明</th>
+          <th scope="col">原状态</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.Audit}}
+        <tr>
+          <td data-label="时间"><time class="muted">{{.Time}}</time></td>
+          <td data-label="操作人">{{.Actor}}</td>
+          <td data-label="操作">{{.Action}}</td>
+          <td data-label="说明">{{.Note}}</td>
+          <td data-label="原状态">{{.PreviousStatus}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="admin-detail-empty">暂无审核记录。</p>
+  {{end}}
+</section>
+
+</div>
+{{end}}

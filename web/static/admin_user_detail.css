@@ -1,0 +1,176 @@
+@import url("/static/admin.css");
+
+.admin-user-detail .admin-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.admin-user-detail .admin-detail-group {
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.admin-user-detail .admin-detail-group h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+
+.admin-user-detail .admin-detail-fields,
+.admin-user-detail .admin-detail-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.admin-user-detail .admin-detail-inline {
+  margin-bottom: 0.85rem;
+}
+
+.admin-user-detail .admin-detail-field,
+.admin-user-detail .admin-detail-inline > div {
+  min-width: 0;
+}
+
+.admin-user-detail .admin-detail-field dt,
+.admin-user-detail .admin-detail-inline dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.admin-user-detail .admin-detail-field dd,
+.admin-user-detail .admin-detail-inline dd {
+  margin: 0.1rem 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.admin-user-detail .admin-review-forms {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.admin-user-detail .admin-review-form {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.admin-user-detail .admin-review-form label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.admin-user-detail .admin-review-form textarea {
+  width: 100%;
+  min-height: 84px;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  resize: vertical;
+}
+
+.admin-user-detail .button,
+.admin-user-detail .admin-actions .button {
+  min-height: 44px;
+}
+
+.admin-user-detail .admin-manage-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.admin-user-detail .admin-manage-row form {
+  margin: 0;
+}
+
+.admin-user-detail .admin-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-user-detail .admin-photo-item {
+  position: relative;
+  min-width: 0;
+}
+
+.admin-user-detail .admin-photo-item a {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.admin-user-detail .admin-photo-item img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.admin-user-detail .admin-photo-cover {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+}
+
+.admin-user-detail .admin-audit-table {
+  min-width: 640px;
+}
+
+.admin-user-detail .admin-audit-table td {
+  overflow-wrap: anywhere;
+}
+
+.admin-user-detail .admin-detail-empty {
+  margin: 0.75rem 0 0;
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--muted);
+}
+
+@media (min-width: 1280px) {
+  .admin-user-detail .admin-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-user-detail .admin-detail-group .admin-detail-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-user-detail .admin-detail-inline {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-user-detail .admin-review-forms {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

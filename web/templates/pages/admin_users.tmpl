@@ -61,7 +61,7 @@
         {{range .Data.Users}}
         <tr>
           <td data-label="会员">
-            <strong>{{.Name}}</strong>
+            <strong><a href="/admin/users/{{.ID}}">{{.Name}}</a></strong>
             {{if .Nickname}}<span class="muted">（{{.Nickname}}）</span>{{end}}
             <div class="muted"><code>{{if .LegacyUserID}}{{.LegacyUserID}}{{else}}#{{.ID}}{{end}}</code></div>
           </td>
@@ -76,6 +76,7 @@
           <td data-label="建立时间"><time class="muted">{{.CreatedAt.Format "2006-01-02"}}</time></td>
           <td data-label="操作">
             <div class="admin-actions">
+              <a class="button small" href="/admin/users/{{.ID}}">详情</a>
               {{if and $.Data.CanReview (ne .AccountStatus "active")}}
               <form method="post" action="/admin/users/{{.ID}}/approve" class="inline-form">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">

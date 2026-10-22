@@ -377,6 +377,10 @@ func (a *App) handleAdminUserAction(w http.ResponseWriter, r *http.Request, acce
 	if !a.adminFormPost(w, r) {
 		return
 	}
+	if action == "reject" && r.PostFormValue("require_note") == "1" && noteValue(r) == "" {
+		a.renderError(w, r, http.StatusBadRequest, "操作失败", "请填写拒绝原因。")
+		return
+	}
 	if action == "disable" && userID == access.User.ID {
 		a.renderError(w, r, http.StatusConflict, "不能停用自己", "请由另一位管理员执行停用。")
 		return
@@ -414,7 +418,7 @@ func (a *App) handleAdminUserAction(w http.ResponseWriter, r *http.Request, acce
 	}
 	a.audit(r, &access.User.ID, audit, "user", strconv.FormatInt(userID, 10), meta)
 	a.adminNotifyUser(r, userID, "review", adminReviewTitle(action), adminReviewBody(action), "")
-	http.Redirect(w, r, "/admin/users?status=all&notice="+notice, http.StatusSeeOther)
+	adminUserActionRedirect(w, r, notice)
 }
 
 func adminReviewTitle(action string) string {
