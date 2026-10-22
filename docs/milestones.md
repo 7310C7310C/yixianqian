@@ -63,7 +63,8 @@
 |---|---|
 | Lead | 架构/优先级/验收/风险/对外窗口 |
 | Analyst | 旧行为 spec、演算法 parity、资料映射 |
-| Developer | Go/模板/DB/迁移实作 |
+| Dev Lead | 技术方案与 Go/模板/DB/迁移实作 |
+| Developer（如有） | 按 Dev Lead 拆解实作与测试 |
 | Reviewer | 对抗审查（安全/正确性/测试） |
 | Auditor | 里程碑独立验收 |
 | Designer | UI 对齐/可用性/老设备 |

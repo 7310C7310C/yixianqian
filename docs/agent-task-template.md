@@ -1,6 +1,6 @@
 # 子代理任务书模板（强制）
 
-每个 Developer/Reviewer 任务书至少包含以下字段，否则 Lead 不派工：
+每个执行角色（Dev Lead/Developer/Reviewer/Auditor）任务书至少包含以下字段，否则 Lead 不派工：
 
 ## 1. 基线与工作区
 - 工作区：`/root/wt/yxq-<任务>`，分支 `feat/<任务>`。

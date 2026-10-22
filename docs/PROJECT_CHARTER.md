@@ -143,7 +143,7 @@
 ## 8. 交付流程
 
 1. 每个功能先写 acceptance criteria（product-spec 勾选）。
-2. Developer 实作；Reviewer 对抗审查；必要时 Auditor 验收。
+2. Dev Lead/Developer（如有）实作；Reviewer 对抗审查；必要时 Auditor 验收。
 3. CI 必须绿（gofmt/vet/test/race/build；Postgres integration）。
 4. 部署 staging；E2E/真机/视觉/安全检查。
 5. 用户试用；不到「完整可用」不宣布完工。
