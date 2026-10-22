@@ -201,7 +201,7 @@
   .multi-option { padding: 8px 14px; border-radius: 16px; background: #f7f8fa; font-size: 14px; color: #323233; }
   .multi-option.active { background: #fff0f3; color: var(--yxq-brand-ink); }
   /* 登录页 */
-  .login-page { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 30px; text-align: center; }
+  .login-page, .boot-error-page { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 30px; text-align: center; }
   .login-logo { font-size: 50px; margin-bottom: 20px; }
   .login-title { font-size: 24px; color: #323233; margin-bottom: 10px; }
   .login-desc { color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 30px; }
@@ -957,7 +957,7 @@
   </div>
 </div>
 <!-- 启动加载失败 -->
-<div v-else-if="bootError" class="login-page">
+<div v-else-if="bootError" class="boot-error-page">
   <div class="login-logo">💔</div>
   <div class="login-title">加载失败</div>
   <div class="login-desc">{{ bootError }}<br>请检查网络后重试</div>
@@ -3581,13 +3581,15 @@ createApp({
       const m = gateMessage.value;
       if (m.includes('审核中')) return '资料审核中';
       if (m.includes('未通过审核')) return '未通过审核';
-      return '账号已退出';
+      if (m.includes('已暂时退出')) return '账号已退出';
+      return '账号无法使用';
     });
     const gateIcon = computed(() => {
       const m = gateMessage.value;
       if (m.includes('审核中')) return '⏳';
       if (m.includes('未通过审核')) return '💔';
-      return '🚪';
+      if (m.includes('已暂时退出')) return '🚪';
+      return '⚠️';
     });
     function retryGate() { window.location.reload(); }
     const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_likes','my_activities','my_groups','user_detail','mutual','liked_me','points','points_admin','group_admin','group_detail','group_roster','checkin','password'];
@@ -5125,12 +5127,24 @@ createApp({
         await loadHome();
         // 403 门禁在 loadHome 内写入 gateMessage 后正常返回，交给 gate 页展示。
         if (gateMessage.value) { bootLoading.value = false; return; }
+        // 服务端会话有效但没返回账号资料：不落回登录页，停在可重试错误页。
+        if (!user.value) {
+          bootLoading.value = false;
+          bootError.value = '无法加载账号资料，请重试';
+          return;
+        }
         bootLoading.value = false;
         restoreDeck();   // 刷新后回到原卡片（与 doLogin 成功路径一致）
         afterHomeReady(bootEntryHash);
       } catch (e) {
         if (e && (e.status === 401 || e.message === '未登录')) {
           location.href = '/login?next=/';
+          return;
+        }
+        // 非特定文案的 403（如「账号目前无法使用」）同样走 gate 页，不误报成网络错误。
+        if (e && e.status === 403) {
+          gateMessage.value = e.message || '账号目前无法使用，请联络管理员';
+          bootLoading.value = false;
           return;
         }
         bootLoading.value = false;
@@ -6823,8 +6837,11 @@ createApp({
           })
         });
         vant.showToast('密码已更新');
-        if (page.value === 'password') passwordFormDone = true;
-        page.value = 'profile';
+        // 请求在途时用户可能已返回/切页：成功只提示，不把画面硬拉回 profile。
+        if (page.value === 'password') {
+          passwordFormDone = true;
+          page.value = 'profile';
+        }
       } catch (e) {
         if (e.status === 401) { location.href = '/login?next=/'; return; }
         const msg = e.message || '修改失败，请重试';
