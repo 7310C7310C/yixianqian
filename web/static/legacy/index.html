@@ -3499,7 +3499,11 @@ createApp({
       isDark.value = !isDark.value;
       document.documentElement.classList.toggle('van-theme-dark', isDark.value);
       try { localStorage.setItem('yxq_dark', isDark.value ? '1' : '0'); } catch(e) {}
-      if (embedOpen.value) syncEmbedTheme();
+      if (embedOpen.value) {
+        let doc = null;
+        try { doc = embedFrame.value && embedFrame.value.contentDocument; } catch(e) {}
+        if (doc) applyEmbedTheme(doc);   // class 操作不受 CSP 限制；深色由外部样式表接管
+      }
     }
     document.documentElement.classList.toggle('van-theme-dark', isDark.value);
     // —— 返回拦截（飞书手势/物理返回）——
@@ -6131,72 +6135,46 @@ createApp({
       embedTitle.value = '';
     }
     // 管理台沿用 SSR 自己的交互，只把外壳（页头/页脚/底色/字体/token）换成旧 App 风格。
-    const EMBED_THEME_ID = 'yxq-embed-theme';
-    const EMBED_THEME_CSS = [
-      ':root{',
-      '  --shell-brand:#ff6b81;--shell-brand-strong:#cc304e;--shell-brand-deep:#ad2139;',
-      '  --shell-brand-soft:#fff0f3;--shell-brand-wash:#fff7f8;--shell-brand-line:#ffe3e8;',
-      '  --shell-primary-bg:#cc304e;--shell-primary-text:#ffffff;--shell-primary-hover:#ad2139;',
-      '  --shell-link:#cc304e;--shell-accent:#ff6b81;--shell-input-bg:#ffffff;',
-      '  --shell-bg:#f7f8fa;--shell-surface:#ffffff;--shell-surface-2:#f2f3f5;',
-      '  --shell-text:#323233;--shell-text-strong:#1f2022;--shell-muted:#6b7280;',
-      '  --shell-placeholder:#969799;--shell-border:#ebedf0;--shell-border-strong:#8a8a8e;',
-      '  --shell-divider:#f2f3f5;--shell-font-size:16px;--shell-line:1.55;',
-      '  --shell-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;',
-      '  --bg:#f7f8fa;--surface:#ffffff;--text:#323233;--muted:#6b7280;',
-      '  --border:#ebedf0;--accent:#ff6b81;--accent-strong:#cc304e;--accent-soft:#fff0f3;',
-      '  --danger:#9b2c2c;--danger-soft:#fdecec;--radius:12px;',
-      '}',
-      'html,body{background:#f7f8fa;color:#323233;font-size:16px;font-family:var(--shell-font);}',
-      'body.admin-shell{--shell-content-max:1080px;}',
-      '.shell-header,.shell-footer,.shell-skip{display:none!important;}',
-      '.shell-main{padding-top:0!important;}',
-      '@media (prefers-color-scheme: dark){',
-      '  :root{--shell-bg:#111111;--shell-surface:#1c1c1e;--shell-surface-2:#2c2c2e;',
-      '    --shell-text:#f5f5f5;--shell-text-strong:#ffffff;--shell-muted:#a0a0a4;',
-      '    --shell-border:#3a3a3e;--shell-divider:#2c2c2e;--shell-accent:#ff8e9b;',
-      '    --bg:#111111;--surface:#1c1c1e;--text:#f5f5f5;--muted:#a0a0a4;',
-      '    --border:#3a3a3e;--accent:#ff8e9b;--accent-strong:#ffb3bf;--accent-soft:#3a1f24;',
-      '    --danger:#ffa0a0;--danger-soft:#3a2323;}',
-      '  html,body{background:#111111;color:#f5f5f5;}',
-      '}'
-    ].join('\n');
-    function injectEmbedTheme(doc) {
-      if (!doc) return;
-      try {
-        let style = doc.getElementById(EMBED_THEME_ID);
-        if (!style) {
-          style = doc.createElement('style');
-          style.id = EMBED_THEME_ID;
-          (doc.head || doc.documentElement).appendChild(style);
+    // /admin 的 CSP 是 style-src 'self'：主题走同源外部样式表 + class，禁止注入
+    // <style> 或 inline style，否则 staging 会报 CSP console error。
+    const EMBED_THEME_LINK_ID = 'yxq-embed-theme';
+    const EMBED_THEME_HREF = '/static/embed-admin.css?v=1';
+    function applyEmbedTheme(doc) {
+      return new Promise((resolve) => {
+        if (!doc || !doc.documentElement) { resolve(); return; }
+        const root = doc.documentElement;
+        try {
+          root.classList.add('yxq-embed');
+          root.classList.toggle('yxq-embed-dark', !!isDark.value);
+        } catch (e) {}
+        let settled = false;
+        let timer = null;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          resolve();
+        };
+        try {
+          const head = doc.head || root;
+          let link = doc.getElementById(EMBED_THEME_LINK_ID);
+          if (!link) {
+            link = doc.createElement('link');
+            link.id = EMBED_THEME_LINK_ID;
+            link.rel = 'stylesheet';
+            link.href = EMBED_THEME_HREF;
+            head.appendChild(link);
+          }
+          if (link.sheet) { done(); return; }
+          link.addEventListener('load', done, { once: true });
+          link.addEventListener('error', done, { once: true });
+          timer = setTimeout(done, 2000);   // CSS 卡住时兜底，避免 iframe 一直停在骨架
+        } catch (e) {
+          done();
         }
-        if (style.textContent !== EMBED_THEME_CSS) style.textContent = EMBED_THEME_CSS;
-      } catch (e) {}
+      });
     }
-    function syncEmbedTheme() {
-      const frame = embedFrame.value;
-      if (!frame) return;
-      let doc = null;
-      try { doc = frame.contentDocument; } catch (e) { return; }
-      if (!doc) return;
-      // SSR 页面用 prefers-color-scheme 切换深色；iframe 的媒体环境与 SPA 手动
-      // 主题不一定一致，这里直接把 dark 媒体规则按 SPA 当前主题强制开关。
-      try {
-        const wantDark = isDark.value;
-        Array.from(doc.styleSheets).forEach((sheet) => {
-          let rules = null;
-          try { rules = sheet.cssRules; } catch (e) { return; }
-          if (!rules) return;
-          Array.from(rules).forEach((rule) => {
-            if (rule.type === CSSRule.MEDIA_RULE && rule.media &&
-                /prefers-color-scheme:\s*dark/i.test(rule.media.mediaText)) {
-              rule.media.mediaText = wantDark ? 'all' : 'not all';
-            }
-          });
-        });
-      } catch (e) {}
-    }
-    function onEmbedLoad() {
+    async function onEmbedLoad() {
       const frame = embedFrame.value;
       if (!frame) return;
       let doc = null, win = null;
@@ -6205,16 +6183,11 @@ createApp({
       let path = '', search = '', href = '';
       try { path = win.location.pathname; search = win.location.search || ''; href = win.location.href || ''; } catch (e) { return; }
       if (!path || href === 'about:blank') return;
-      injectEmbedTheme(doc);
-      syncEmbedTheme();
-      // 兜底隐藏 SSR 外壳（注入样式已做同样的事），保留页面内容与管理台内部导航
-      try {
-        ['.shell-header', '.shell-footer', '.shell-skip'].forEach((sel) => {
-          const el = doc.querySelector(sel);
-          if (el) el.style.setProperty('display', 'none', 'important');
-        });
-        if (doc.body) doc.body.style.setProperty('padding-top', '0', 'important');
-      } catch (e) {}
+      await applyEmbedTheme(doc);
+      // await 期间可能已导航/关闭：旧文档不得把新页面的骨架提前撤掉。
+      let currentDoc = null;
+      try { currentDoc = frame.contentDocument; } catch (e) { return; }
+      if (embedFrame.value !== frame || currentDoc !== doc) return;
       // 管理台内部导航是整页跳转：离开前立刻盖回骨架，避免 iframe 白屏。
       try {
         if (win.__yxqEmbedBeforeUnload) win.removeEventListener('beforeunload', win.__yxqEmbedBeforeUnload);

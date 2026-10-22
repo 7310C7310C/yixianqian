@@ -1,0 +1,136 @@
+/* 管理台同源 iframe 内嵌主题。
+   /admin 的 CSP 是 style-src 'self'，不能注入 <style> 或 inline style；
+   这里用外部样式表 + html.yxq-embed class 限定，由用户端 SPA 动态挂载。 */
+
+html.yxq-embed {
+  --shell-brand: #ff6b81;
+  --shell-brand-strong: #cc304e;
+  --shell-brand-deep: #ad2139;
+  --shell-brand-soft: #fff0f3;
+  --shell-brand-wash: #fff7f8;
+  --shell-brand-line: #ffe3e8;
+  --shell-primary-bg: #cc304e;
+  --shell-primary-text: #ffffff;
+  --shell-primary-hover: #ad2139;
+  --shell-link: #cc304e;
+  --shell-accent: #ff6b81;
+  --shell-input-bg: #ffffff;
+  --shell-bg: #f7f8fa;
+  --shell-surface: #ffffff;
+  --shell-surface-2: #f2f3f5;
+  --shell-text: #323233;
+  --shell-text-strong: #1f2022;
+  --shell-muted: #6b7280;
+  --shell-placeholder: #969799;
+  --shell-border: #ebedf0;
+  --shell-border-strong: #8a8a8e;
+  --shell-divider: #f2f3f5;
+  --shell-focus: #cc304e;
+  --shell-focus-ring: rgba(255, 107, 129, 0.24);
+  --shell-danger: #9b2c2c;
+  --shell-danger-soft: #fdecec;
+  --shell-danger-line: #f0c9c9;
+  --shell-success: #0a6b3d;
+  --shell-success-soft: #e8f8ee;
+  --shell-success-line: #bfe8cf;
+  --shell-warning: #8a5a11;
+  --shell-warning-soft: #fff7e6;
+  --shell-shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.04);
+  --shell-shadow-bar: 0 -4px 16px rgba(0,0,0,0.08);
+  --shell-font-size: 16px;
+  --shell-line: 1.55;
+  --shell-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --text: #323233;
+  --muted: #6b7280;
+  --border: #ebedf0;
+  --accent: #ff6b81;
+  --accent-strong: #cc304e;
+  --accent-soft: #fff0f3;
+  --danger: #9b2c2c;
+  --danger-soft: #fdecec;
+  --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.04);
+  --radius: 12px;
+  color-scheme: light;
+  line-height: 1.55;
+}
+
+html.yxq-embed,
+html.yxq-embed body {
+  background: #f7f8fa;
+  color: #323233;
+  font-size: 16px;
+  font-family: var(--shell-font);
+  line-height: 1.55;
+}
+
+html.yxq-embed .shell-header,
+html.yxq-embed .shell-footer,
+html.yxq-embed .shell-skip {
+  display: none !important;
+}
+
+html.yxq-embed .shell-main,
+html.yxq-embed body {
+  padding-top: 0 !important;
+}
+
+html.yxq-embed body.admin-shell {
+  --shell-content-max: 1080px;
+}
+
+html.yxq-embed.yxq-embed-dark {
+  --shell-brand: #ff8fa1;
+  --shell-brand-strong: #ffb3bf;
+  --shell-brand-deep: #ffd9e0;
+  --shell-brand-soft: #3a2830;
+  --shell-brand-wash: #2a1a1e;
+  --shell-brand-line: #46363c;
+  --shell-primary-bg: #ff8fa1;
+  --shell-primary-text: #2a1a1e;
+  --shell-primary-hover: #ffb3bf;
+  --shell-link: #ffb3bf;
+  --shell-accent: #ff8fa1;
+  --shell-focus: #ffb3bf;
+  --shell-focus-ring: rgba(255, 143, 161, 0.28);
+  --shell-input-bg: #1c1c1e;
+  --shell-bg: #111111;
+  --shell-surface: #1c1c1e;
+  --shell-surface-2: #2c2c2e;
+  --shell-text: #f5f5f5;
+  --shell-text-strong: #ffffff;
+  --shell-muted: #a0a0a4;
+  --shell-placeholder: #8a8a8e;
+  --shell-border: #3a3a3e;
+  --shell-border-strong: #8a8a8e;
+  --shell-divider: #2c2c2e;
+  --shell-danger: #ff7a85;
+  --shell-danger-soft: #3a1f22;
+  --shell-danger-line: #5a2a30;
+  --shell-success: #7ad9a2;
+  --shell-success-soft: #1c3326;
+  --shell-success-line: #2c513a;
+  --shell-warning: #e8c97a;
+  --shell-warning-soft: #2b2413;
+  --shell-shadow-card: none;
+  --shell-shadow-bar: 0 -4px 16px rgba(0, 0, 0, 0.35);
+  --bg: #111111;
+  --surface: #1c1c1e;
+  --text: #f5f5f5;
+  --muted: #a0a0a4;
+  --border: #3a3a3e;
+  --accent: #ff8fa1;
+  --accent-strong: #ffb3bf;
+  --accent-soft: #3a2830;
+  --danger: #ff7a85;
+  --danger-soft: #3a1f22;
+  --shadow: none;
+  color-scheme: dark;
+}
+
+html.yxq-embed.yxq-embed-dark,
+html.yxq-embed.yxq-embed-dark body {
+  background: #111111;
+  color: #f5f5f5;
+}

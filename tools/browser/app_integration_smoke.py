@@ -46,6 +46,7 @@ import time
 from pathlib import Path
 
 try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
 except ImportError:  # pragma: no cover - environment guard
     sys.exit("需要 playwright：pip install playwright && python3 -m playwright install chromium")
@@ -119,24 +120,65 @@ def badge(page):
 
 
 def dismiss_guides(page) -> None:
-    """首次进入的滑动引导/活动/更新弹窗会拦截点击；测试前统一关掉。"""
-    loc = page.locator(".swipe-guide-mask .sg-btn")
-    if loc.count() and loc.first.is_visible():
-        page.get_by_text("我知道了", exact=True).first.click()
-        page.wait_for_timeout(200)
-    # 活动报名引导/更新说明是 close-on-click-overlay 的 van-dialog：
-    # 点左上角遮罩关闭；关闭活动引导后更新说明可能接续弹出，循环处理。
-    for _ in range(3):
+    """关掉首次进入的滑动引导/活动/更新说明等一次性弹层。
+
+    1280 下部分 dialog 会在 reload 后晚 1s 左右才出现；先等一轮，再循环最多
+    6 次处理接续弹出的引导，避免后续点击被 overlay 拦住。
+    """
+    page.wait_for_timeout(800)
+    for _ in range(6):
+        acted = False
+        guide = page.locator(".swipe-guide-mask .sg-btn")
+        if guide.count() and guide.first.is_visible():
+            try:
+                guide.first.click(timeout=2000)
+                acted = True
+            except PlaywrightTimeoutError:
+                pass
         overlay = page.locator(".van-overlay")
-        if not overlay.count() or not overlay.first.is_visible():
+        if overlay.count() and overlay.first.is_visible():
+            page.mouse.click(5, 5)
+            acted = True
+        know = page.get_by_text("知道了", exact=True)
+        for i in range(know.count()):
+            if know.nth(i).is_visible():
+                try:
+                    know.nth(i).click(timeout=2000)
+                    acted = True
+                except PlaywrightTimeoutError:
+                    pass
+                break
+        if not acted:
             return
-        page.mouse.click(5, 5)
         page.wait_for_timeout(400)
 
 
 def tap_tab(page, label: str) -> None:
-    dismiss_guides(page)
-    page.locator(".van-tabbar-item").filter(has_text=label).click()
+    """点击底部 tab；晚到的小白引导可能拦截点击，带重试与遮罩诊断。"""
+    item = page.locator(".van-tabbar-item").filter(has_text=label)
+    last_error = None
+    for _ in range(4):
+        dismiss_guides(page)
+        try:
+            item.click(timeout=4000)
+            return
+        except PlaywrightTimeoutError as exc:
+            last_error = exc
+            dismiss_guides(page)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(400)
+    detail = []
+    overlays = page.locator(".van-overlay")
+    for i in range(min(overlays.count(), 3)):
+        try:
+            if overlays.nth(i).is_visible():
+                detail.append(
+                    f"class={overlays.nth(i).get_attribute('class')!r} "
+                    f"text={overlays.nth(i).inner_text().strip()[:120]!r}"
+                )
+        except Exception:  # noqa: BLE001 - diagnostic only
+            pass
+    raise SmokeFailure(f"无法点击 tab {label}（4 次尝试）：{last_error}; overlays={detail or '无'}")
 
 
 def attach_error_capture(page) -> list[dict[str, str]]:
