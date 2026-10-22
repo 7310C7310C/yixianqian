@@ -297,7 +297,7 @@ func (d *DB) ListMyActivities(ctx context.Context, userID int64) ([]MyActivity, 
 			&item.CurrentSignup, &item.Fee, &item.Food, &item.Status,
 			&item.PosterMediaID, &item.GroupStatus, &item.MalePerGroup,
 			&item.FemalePerGroup, &item.GroupEnabled, &item.OnetooneStatus,
-			&item.OnetooneEnabled, &item.SigninEnabled, &item.PublishAt,
+			&item.OnetooneEnabled, &item.SigninEnabled, &item.SigninCode, &item.PublishAt,
 			&item.StartAt, &item.EndAt, &item.CreatedAt, &item.UpdatedAt,
 			&item.SignupStatus, &attendance, &item.SignupCreatedAt); err != nil {
 			return nil, fmt.Errorf("db: scan my activity: %w", err)
