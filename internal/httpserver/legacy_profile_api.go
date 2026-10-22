@@ -512,15 +512,34 @@ func (a *App) handleLegacyAccountSwitch(w http.ResponseWriter, r *http.Request) 
 		legacyServerError(a, w, r, err, "legacy account switch profile failed")
 		return
 	}
-	current := "user"
-	if profileIsObserver(profile) {
-		current = "observer"
-	}
-	if role == current {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "role": role})
+	// Observer-only legacy accounts cannot switch into the member identity.
+	if profileIsObserver(profile) && role == "user" {
+		legacyError(w, http.StatusForbidden, "你尚未注册普通用户身份，请先完成对应注册")
 		return
 	}
-	legacyError(w, http.StatusForbidden, "你尚未注册该身份，请先完成对应注册")
+	enabled, err := a.db.ObserverEnabled(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy observer flag failed")
+		return
+	}
+	if role == "observer" && !enabled {
+		legacyError(w, http.StatusForbidden, "你尚未注册村情六处身份，请先完成对应注册")
+		return
+	}
+	if role == "observer" {
+		http.SetCookie(w, &http.Cookie{
+			Name: "yxq_view_role", Value: "observer", Path: "/",
+			HttpOnly: true, Secure: a.cfg.SessionCookieSecure,
+			SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 3600,
+		})
+	} else {
+		http.SetCookie(w, &http.Cookie{
+			Name: "yxq_view_role", Value: "", Path: "/",
+			HttpOnly: true, Secure: a.cfg.SessionCookieSecure,
+			SameSite: http.SameSiteLaxMode, MaxAge: -1,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "role": role})
 }
 
 func (a *App) legacyProfileGate(w http.ResponseWriter, r *http.Request, user db.User) (db.Profile, bool) {

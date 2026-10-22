@@ -95,7 +95,7 @@ REQUIRED_COLUMNS = {
         "personality", "self_traits", "self_hobbies", "self_sports", "mbti",
         "partner_criteria", "partner_traits", "partner_hobbies",
         "partner_sports", "wechat", "legacy_phone", "id_card_ciphertext",
-        "id_card_last4", "id_card_valid", "account_kind", "account_status",
+        "id_card_last4", "id_card_valid", "account_kind", "observer_enabled", "account_status",
         "status", "contact_consent", "referral_source", "is_for_child",
         "wechat_payment", "registered_at", "last_active_at", "created_at",
         "updated_at",
@@ -589,6 +589,7 @@ def build_user_record(
         "id_card_valid": id_valid,
         "id_card_present": bool(id_card),
         "account_kind": kind,
+        "observer_enabled": kind == "observer",
         "account_status": account_status,
         "status": "active",
         "contact_consent": False,
@@ -980,7 +981,7 @@ USER_COLUMNS = [
     "driving", "marriage", "family", "live_with_parents", "personality",
     "self_traits", "self_hobbies", "self_sports", "mbti", "partner_criteria",
     "partner_traits", "partner_hobbies", "partner_sports", "wechat",
-    "legacy_phone", "id_card_last4", "id_card_valid", "account_kind",
+    "legacy_phone", "id_card_last4", "id_card_valid", "account_kind", "observer_enabled",
     "account_status", "status", "contact_consent", "referral_source",
     "is_for_child", "wechat_payment", "registered_at", "last_active_at",
     "created_at", "updated_at",
@@ -1031,6 +1032,7 @@ def user_params(record: dict[str, Any], phone: str) -> dict[str, Any]:
         "id_card_last4": record["id_card_last4"],
         "id_card_valid": record["id_card_valid"],
         "account_kind": record["account_kind"],
+        "observer_enabled": record["observer_enabled"],
         "account_status": record["account_status"],
         "status": record["status"],
         "contact_consent": record["contact_consent"],
@@ -2580,6 +2582,17 @@ def build_user_records(tables: dict[str, list[dict[str, Any]]]) -> tuple[
         for row in tables["observers"]
         for key in [clean_text(row.get("fields", {}).get("编号")).strip()]
         if key
+    ]
+    user_openids = {r["legacy_open_id"] for r in user_records if r["legacy_open_id"]}
+    observer_openids = {r["legacy_open_id"] for r in observer_records if r["legacy_open_id"]}
+    for record in user_records:
+        if record["legacy_open_id"] in observer_openids:
+            record["observer_enabled"] = True
+    # A v1 observer row sharing a member open_id is the same person in two
+    # roles; keep one users row and mark the observer capability on it.
+    observer_records = [
+        r for r in observer_records
+        if not (r["legacy_open_id"] and r["legacy_open_id"] in user_openids)
     ]
     warnings: list[str] = []
     missing_user_ids = len(tables["users"]) - len(user_records)

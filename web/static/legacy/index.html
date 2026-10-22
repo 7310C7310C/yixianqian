@@ -1266,10 +1266,7 @@
   <div style="padding:0 12px;" v-if="user.is_admin">
     <div class="section-title">管理</div>
     <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
-      <van-cell title="👥 活动管理" :value="gaAdminBadge" is-link @click="openGroupAdmin"></van-cell>
-      <van-cell title="🌾 麦穗管理" is-link @click="openPointsAdmin"></van-cell>
-      <van-cell title="🚨 举报管理" :value="reportedCount ? reportedCount+'条待处理' : ''" is-link @click="openReportedMessages"></van-cell>
-      <van-cell title="🤖 管理员指令" is-link @click="showAdminHelp = true"></van-cell>
+      <van-cell title="🛠️ 管理后台" is-link url="/admin"></van-cell>
     </van-cell-group>
   </div>
   <!-- 帮助 -->

@@ -97,6 +97,10 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger(r).Warn("legacy home quota failed", "error", err, "user_id", user.ID)
 	}
+	if a.legacyViewRole(r) == "observer" {
+		viewer.AccountKind = "observer"
+		viewer.AccountStatus = "observer"
+	}
 	page, err := a.buildCardsPageData(ctx, viewer, r.URL.Query(), now, 100)
 	if errors.Is(err, errGenderMissing) {
 		page = CardsPageData{}
@@ -116,7 +120,7 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user":              legacyUserMap(user, profile, viewer, quota),
+		"user":              legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(r.Context(), user.ID), a.legacyObserverEnabled(r.Context(), user.ID), a.legacyViewRole(r)),
 		"cards":             cards,
 		"cards_total":       page.Total,
 		"likes":             likes,
@@ -143,6 +147,10 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 	limit := socialNonNegative(r.URL.Query().Get("limit"), 50)
 	if limit <= 0 {
 		limit = 50
+	}
+	if a.legacyViewRole(r) == "observer" {
+		viewer.AccountKind = "observer"
+		viewer.AccountStatus = "observer"
 	}
 	page, err := a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit)
 	if errors.Is(err, errGenderMissing) {
@@ -205,7 +213,7 @@ func (a *App) handleLegacyUserMe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger(r).Warn("legacy user me quota failed", "error", err, "user_id", user.ID)
 	}
-	writeJSON(w, http.StatusOK, legacyUserMap(user, profile, viewer, quota))
+	writeJSON(w, http.StatusOK, legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(r.Context(), user.ID), a.legacyObserverEnabled(r.Context(), user.ID), a.legacyViewRole(r)))
 }
 
 func (a *App) handleLegacyLikesMe(w http.ResponseWriter, r *http.Request) {
@@ -509,7 +517,7 @@ func legacyBriefMap(p db.SocialProfile) map[string]any {
 	}
 }
 
-func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quota db.LikeQuota) map[string]any {
+func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quota db.LikeQuota, isAdmin, observerEnabled bool, viewRole string) map[string]any {
 	name := profile.Nickname
 	if strings.TrimSpace(name) == "" {
 		name = viewer.Nickname
@@ -525,7 +533,10 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 	if accountStatus == "" {
 		accountStatus = viewer.AccountStatus
 	}
-	observer := accountKind == "observer" || accountStatus == "observer"
+	observer := accountKind == "observer" || accountStatus == "observer" || viewRole == "observer"
+	if observer {
+		accountStatus = "observer"
+	}
 	photo := ""
 	if len(profile.Photos) > 0 {
 		photo = "/profile/photo/" + profile.Photos[0].MediaID
@@ -548,13 +559,46 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 		"is_observer":     observer,
 		"photo":           photo,
 		"record_id":       legacyProfileID(profile, user),
-		"is_admin":        false,
-		"available_roles": []string{},
+		"is_admin":        isAdmin,
+		"available_roles": legacyRoles(observerEnabled, observer),
 		"has_face":        true,
 		"wechat":          profile.Wechat,
 		"phone":           firstNonEmpty(profile.Phone, user.Phone),
 	}
 	return out
+}
+
+func (a *App) legacyObserverEnabled(ctx context.Context, userID int64) bool {
+	enabled, err := a.db.ObserverEnabled(ctx, userID)
+	if err != nil {
+		a.log.Warn("legacy observer flag lookup failed", "error", err, "user_id", userID)
+		return false
+	}
+	return enabled
+}
+
+func (a *App) legacyViewRole(r *http.Request) string {
+	if c, err := r.Cookie("yxq_view_role"); err == nil && c.Value == "observer" {
+		return "observer"
+	}
+	return "user"
+}
+
+func legacyRoles(observerEnabled, observerView bool) []string {
+	roles := []string{"user"}
+	if observerEnabled {
+		roles = append(roles, "observer")
+	}
+	return roles
+}
+
+func (a *App) legacyIsAdmin(ctx context.Context, userID int64) bool {
+	roles, err := a.db.UserAdminRoles(ctx, userID)
+	if err != nil {
+		a.log.Warn("legacy admin role lookup failed", "error", err, "user_id", userID)
+		return false
+	}
+	return len(roles) > 0
 }
 
 func legacyProfileMap(p db.Profile, quota db.LikeQuota) map[string]any {
