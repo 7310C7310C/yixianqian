@@ -41,7 +41,7 @@ type CardFilterView struct {
 	DrivingOptions   []CardFilterOption
 }
 
-// CardsPageData is the PageData.Data payload for cards.tmpl.
+// CardsPageData is the legacy JSON payload used by /legacy/api/cards and /legacy/api/home.
 type CardsPageData struct {
 	Cards         []CardView
 	Total         int
