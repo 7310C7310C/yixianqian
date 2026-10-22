@@ -29,7 +29,11 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 		`src="lib/vue.global.prod.js"`,
 		`src="lib/vant.min.js"`,
 		`history.pushState(state, '', location.pathname);`,
+		`viewport-fit=cover`,
+		`href="favicon.ico"`,
 		`<div class="section-title">管理</div>`,
+		`fixed safe-area-inset-bottom`,
+		`TAB_ORDER.includes(nv) && TAB_ORDER.includes(ov)`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("legacy index missing %q", want)
@@ -54,6 +58,36 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 	if !(accountIdx < adminIdx && adminIdx < adminCellIdx && adminCellIdx < helpIdx) {
 		t.Fatalf("admin section order wrong: account=%d admin=%d cell=%d help=%d",
 			accountIdx, adminIdx, adminCellIdx, helpIdx)
+	}
+}
+
+func TestLegacyFaviconsAreEmbedded(t *testing.T) {
+	for _, name := range []string{"static/legacy/favicon.ico", "static/legacy/favicon.png", "static/legacy/favicon.svg"} {
+		info, err := fs.Stat(webassets.FS, name)
+		if err != nil {
+			t.Fatalf("%s missing from embed.FS: %v", name, err)
+		}
+		if info.Size() == 0 {
+			t.Fatalf("%s is empty", name)
+		}
+	}
+}
+
+func TestLegacyFaviconsAreServed(t *testing.T) {
+	h := staticHandler()
+	for _, path := range []string{"/static/legacy/favicon.ico", "/static/legacy/favicon.png", "/static/legacy/favicon.svg"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d", path, rec.Code)
+		}
+		if rec.Body.Len() == 0 {
+			t.Fatalf("%s served empty body", path)
+		}
+		if ct := rec.Header().Get("Content-Type"); ct == "" {
+			t.Fatalf("%s missing content type", path)
+		}
 	}
 }
 

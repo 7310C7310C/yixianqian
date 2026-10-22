@@ -3,10 +3,13 @@
 <head>
 <base href="/static/legacy/">
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <script>try{if(localStorage.getItem('yxq_dark')==='1')document.documentElement.classList.add('van-theme-dark');}catch(e){}</script>
 <title>一线牵</title>
+<link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="favicon.svg?v=5" type="image/svg+xml">
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="favicon.png">
 <link rel="stylesheet" href="lib/vant.min.css">
 <link rel="stylesheet" href="lib/photoswipe.css">
 <style>
@@ -17,7 +20,8 @@
   html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #f7f8fa; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; -webkit-touch-callout: none; }
   img { -webkit-touch-callout: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; -webkit-user-drag: none; user-drag: none; pointer-events: none; }
   input, textarea { -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; -webkit-touch-callout: default; }
-  #app { min-height: 100vh; padding-bottom: 60px; }
+  /* 底栏固定：预留 60px 内容区，并覆盖 iPhone 底部安全区 */
+  #app { min-height: 100vh; padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   .page { padding: 12px; }
   .theme-color { color: #ff6b81; }
   .card-shadow { box-shadow: 0 2px 12px rgba(0,0,0,0.08); border-radius: 12px; }
@@ -33,7 +37,7 @@
   .signup-count { font-size: 13px; color: #969799; }
   .signup-count b { color: #ff6b81; font-size: 16px; }
   /* 牵线卡片 */
-  .cards-page { padding: 0; height: calc(100vh - 60px); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  .cards-page { padding: 0; height: calc(100vh - 60px - env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
   .swipe-card { width: 96%; max-width: 420px; height: 90vh; max-height: 780px; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.12); position: relative; transition: opacity 0.15s ease; display: flex; flex-direction: column; }
   @keyframes cardFadeIn { from { opacity: 0; } to { opacity: 1; } }
   .swipe-card.slide-in-right { animation: slideInRight 0.28s ease; }
@@ -3223,7 +3227,7 @@
   </div>
 </van-popup>
 <!-- 底部导航 -->
-<van-tabbar v-model="page" :before-change="guardTabChange" active-color="#ff6b81" inactive-color="#969799"
+<van-tabbar v-model="page" :before-change="guardTabChange" fixed safe-area-inset-bottom active-color="#ff6b81" inactive-color="#969799"
   v-if="!subPages.includes(page)">
   <van-tabbar-item name="cards" icon="like-o">牵线</van-tabbar-item>
   <van-tabbar-item name="likes" icon="chat-o">消息</van-tabbar-item>
@@ -6835,6 +6839,12 @@ createApp({
         return;
       }
       if(st && st.page && st.page !== page.value){
+        // 主 tab 之间不再建历史条目：若弹出目标仍是主 tab，保持当前视图，
+        // 避免启动时遗留的旧 tab state 反向切页；子页 → 主 tab 仍按 state 还原。
+        if(TAB_ORDER.includes(st.page) && TAB_ORDER.includes(page.value)){
+          nextTick(() => { isHandlingPopState = false; });
+          return;
+        }
         page.value = st.page;
         // popstate 已消费一条历史：本 tick 屏蔽异步 push watcher，nextTick 再复位（否则 watcher 看到 false 会补条目 → 返回乒乓/死循环）
         nextTick(() => { isHandlingPopState = false; });
@@ -6892,10 +6902,17 @@ createApp({
     // pushState for page forward navigation
     watch(page, (nv, ov) => {
       if(isHandlingPopState) return;
-      if(nv !== ov){
-        if(suppressPagePushOnce && nv === 'checkin'){ suppressPagePushOnce = false; return; }   // 塌缩条目已在位，不补 push
-        pushHistory({page: nv});
+      if(nv === ov) return;
+      if(suppressPagePushOnce && nv === 'checkin'){ suppressPagePushOnce = false; return; }   // 塌缩条目已在位，不补 push
+      // 四个主 tab 之间切换只是视图状态：不新增历史条目、不改 URL。
+      // 新增条目会让 Safari/WebView 出现地址栏加载指示与 tabbar 闪动，返回键也会在 tab 间空转。
+      if(TAB_ORDER.includes(nv) && TAB_ORDER.includes(ov)) return;
+      // 从主 tab 进入子页前，把当前条目 state 就地改写为所在 tab（不新增条目、不改 URL），
+      // 这样从子页返回时 popstate 能落回正确的 tab，而不是启动时的旧 tab。
+      if(TAB_ORDER.includes(ov) && !TAB_ORDER.includes(nv)){
+        try{ history.replaceState({page: ov}, '', location.pathname); }catch(e){}
       }
+      pushHistory({page: nv});
     });
     // pushState for overlays
     watch(showPhotoViewer, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'viewer'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='viewer'){ ignoreNextPop=true; history.back(); } });
@@ -7650,7 +7667,7 @@ createApp({
       if(page.value === 'group_detail'){
         // 控制台页头入口：把当前 group_detail 条目就地改写为 checkin（塌缩历史，不新增条目），
         // 返回时自然回退 group_admin；一次性旗标让 watch(page) 跳过本 tick 的补 push
-        try{ history.replaceState({page:'checkin'}, '', location.pathname + '#checkin'); }catch(e){}
+        try{ history.replaceState({page:'checkin'}, '', location.pathname); }catch(e){}
         suppressPagePushOnce = true;
       }
       page.value = 'checkin';
