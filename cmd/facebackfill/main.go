@@ -34,7 +34,7 @@ func main() {
 }
 
 func run() error {
-	limit := flag.Int("limit", 0, "最多处理多少张照片；0=全部")
+	limit := flag.Int("limit", 0, "最多处理多少张照片（按 media_id 去重）；0=全部")
 	workers := flag.Int("workers", 2, "并发检测数（1-8）")
 	legacyUser := flag.String("user", "", "只处理指定 legacy user id，例如 U-0006")
 	includeChecked := flag.Bool("all", false, "连已检测过的照片一起重扫")

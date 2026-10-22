@@ -17,6 +17,9 @@
 - 卡片/资料 `faces` 补 `tb`/`lr` 为 `[0,0]`；v1 的黑边裁切未移植，黑边照片按原图构图。
 - 新增 `cmd/facebackfill` 批量补齐迁移照片；用 `pg_try_advisory_lock` 保证单实例，部署顺序要求先 migration + 全量回填、切换前验证 `unchecked=0`、U-0006 true/U-0003 false，再切 binary，详见 `docs/runbooks/staging.md`。
 - 人脸检测 venv 固定 `numpy==1.26.4` + `opencv-python-headless==4.11.0.86`（server1 无 x86-64-v2，numpy 2.x 无法 import cv2）。
+- nginx（server1 vhost + server2 relay）请求体上限由 20m 提到 96m；注册 9 张 12MP 照片的应用上限约 92MB，原 20m 会直接 413。
+- `facebackfill` 候选按 `media_id` 去重：共用同一 media 的批量账号只下载/检测一次，结果写入所有引用该媒体的 `profile_photos` 行，避免同一照片被重复 probe。
+- 部署 runbook 增加切后增量与定时增量兜底（后台 probe 重启会丢失未完成照片）；状态文档明确人脸检测未部署、全量回填未跑。
 - 腾讯云照片内容合规（宠物/卡通判定、活体）未实现，本轮不做。
 
 ### 架构

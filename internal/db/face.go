@@ -18,6 +18,7 @@ type ProfilePhotoFace struct {
 }
 
 // FaceBackfillCandidate 是批量人脸补齐需要的最小照片信息。
+// 每个 MediaID 只出现一次：同一媒体被多个账号共用时只 probe 一次。
 type FaceBackfillCandidate struct {
 	MediaID      string
 	ObjectKey    string
@@ -44,6 +45,10 @@ func faceFloat32(v *float64) *float32 {
 
 // SetProfilePhotoFace 写入一张照片的检测结果。只有检测成功才应调用；
 // 检测失败不要写入，让 face_checked 保持 false 供后续补齐重试。
+//
+// 检测结果只取决于 media 本身，因此这里按 media_id 更新所有引用该媒体的
+// profile_photos 行；staging 的压测账号可能共用同一 media，不能只更新一行。
+// 调用方（backfill 候选查询）已按 media_id 去重，保证同一媒体只 probe 一次。
 func (d *DB) SetProfilePhotoFace(ctx context.Context, mediaID string, result ProfilePhotoFace) error {
 	centerX, centerY := result.CenterX, result.CenterY
 	boxW, boxH := result.BoxW, result.BoxH
@@ -170,20 +175,29 @@ func (d *DB) FaceCentersForProfiles(ctx context.Context, userIDs []int64) (map[i
 
 // ListFaceBackfillCandidates 列出待补齐的照片。includeChecked=false 时只取
 // face_checked=false 的照片；legacyUserID 非空时只取该用户。
+//
+// 候选按 media_id 去重：同一媒体只返回最早的一行，backfill 因此只下载/检测
+// 一次；SetProfilePhotoFace 会把结果写到所有引用该媒体的 profile_photos 行。
+// 这避免 staging 中共用同一 media 的批量账号被重复 probe 并放大回填耗时。
 func (d *DB) ListFaceBackfillCandidates(ctx context.Context, limit int, includeChecked bool, legacyUserID string) ([]FaceBackfillCandidate, error) {
 	var limitValue any
 	if limit > 0 {
 		limitValue = limit
 	}
 	rows, err := d.pool.Query(ctx,
-		`SELECT pp.media_id, m.object_key, m.content_type, pp.user_id,
-		        COALESCE(u.legacy_user_id, '')
-		 FROM profile_photos pp
-		 JOIN media m ON m.id = pp.media_id
-		 JOIN users u ON u.id = pp.user_id
-		 WHERE ($1::boolean OR NOT pp.face_checked)
-		   AND ($2 = '' OR u.legacy_user_id = $2)
-		 ORDER BY pp.id
+		`SELECT media_id, object_key, content_type, user_id, legacy_user_id
+		 FROM (
+		     SELECT DISTINCT ON (pp.media_id)
+		            pp.media_id, m.object_key, m.content_type, pp.user_id,
+		            COALESCE(u.legacy_user_id, '') AS legacy_user_id, pp.id
+		       FROM profile_photos pp
+		       JOIN media m ON m.id = pp.media_id
+		       JOIN users u ON u.id = pp.user_id
+		      WHERE ($1::boolean OR NOT pp.face_checked)
+		        AND ($2 = '' OR u.legacy_user_id = $2)
+		      ORDER BY pp.media_id, pp.id
+		 ) AS distinct_media
+		 ORDER BY id
 		 LIMIT $3::bigint`, includeChecked, legacyUserID, limitValue)
 	if err != nil {
 		return nil, fmt.Errorf("db: list face backfill candidates: %w", err)

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -141,6 +142,96 @@ func TestIntegrationProfilePhotoFace(t *testing.T) {
 		t.Fatalf("candidate = %+v", candidates[0])
 	}
 
+}
+
+// staging 的批量压测账号可能共用同一 media。回填候选必须按 media_id 去重，
+// 否则同一张照片会被下载/probe 20 次；SetProfilePhotoFace 则应一次更新所有
+// 引用该 media 的 profile_photos 行。
+func TestIntegrationFaceBackfillSharedMediaDedupe(t *testing.T) {
+	ctx, database, owner, _ := faceTestSetup(t)
+
+	const clones = 20
+	shared := profileTestMedia(t, ctx, database, owner.ID)
+	if _, err := database.AddProfilePhoto(ctx, owner.ID, shared.ID); err != nil {
+		t.Fatalf("add shared photo to owner: %v", err)
+	}
+	cloneUsers := make([]int64, 0, clones-1)
+	for i := 0; i < clones-1; i++ {
+		clone := profileTestUser(t, ctx, database, fmt.Sprintf("U-FACECLONE-%02d", i))
+		cloneUsers = append(cloneUsers, clone.ID)
+		// 媒体属于 owner；这里直接插入 profile_photos 模拟共享 media 的历史数据。
+		if _, err := database.pool.Exec(ctx,
+			`INSERT INTO profile_photos (user_id, media_id, sort_order, is_cover)
+			 VALUES ($1, $2, 0, true)`, clone.ID, shared.ID); err != nil {
+			t.Fatalf("attach shared photo to clone %d: %v", i, err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, id := range cloneUsers {
+			_, _ = database.pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, id)
+		}
+	})
+
+	countShared := func(candidates []FaceBackfillCandidate) int {
+		n := 0
+		for _, c := range candidates {
+			if c.MediaID == shared.ID {
+				n++
+			}
+		}
+		return n
+	}
+
+	// unchecked 模式：20 行未检测，但候选只能有 1 条。
+	unchecked, err := database.ListFaceBackfillCandidates(ctx, 0, false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := countShared(unchecked); got != 1 {
+		t.Fatalf("shared media unchecked candidates = %d, want 1", got)
+	}
+	// -all 模式同样去重。
+	allCandidates, err := database.ListFaceBackfillCandidates(ctx, 0, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := countShared(allCandidates); got != 1 {
+		t.Fatalf("shared media all candidates = %d, want 1", got)
+	}
+
+	// 一次检测结果必须落到全部 20 行。
+	if err := database.SetProfilePhotoFace(ctx, shared.ID, ProfilePhotoFace{
+		Checked: true, HasFace: true,
+		CenterX: floatPtr(0.5), CenterY: floatPtr(0.4),
+		BoxW: floatPtr(0.2), BoxH: floatPtr(0.3),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var total, checked, withFace int
+	if err := database.pool.QueryRow(ctx,
+		`SELECT count(*),
+		        count(*) FILTER (WHERE face_checked),
+		        count(*) FILTER (WHERE has_face)
+		   FROM profile_photos WHERE media_id = $1`, shared.ID).
+		Scan(&total, &checked, &withFace); err != nil {
+		t.Fatal(err)
+	}
+	if total != clones || checked != clones || withFace != clones {
+		t.Fatalf("shared rows total=%d checked=%d has_face=%d, want %d/%d/%d",
+			total, checked, withFace, clones, clones, clones)
+	}
+	if has, err := database.ProfileHasFace(ctx, cloneUsers[0]); err != nil || !has {
+		t.Fatalf("clone ProfileHasFace = %v err=%v, want true", has, err)
+	}
+
+	// 全部 checked 后，未检测候选不再包含该 media。
+	unchecked, err = database.ListFaceBackfillCandidates(ctx, 0, false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := countShared(unchecked); got != 0 {
+		t.Fatalf("checked shared media candidates = %d, want 0", got)
+	}
 }
 
 func TestIntegrationFaceBackfillAdvisoryLock(t *testing.T) {

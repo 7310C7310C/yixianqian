@@ -127,6 +127,20 @@ ln -sf /etc/nginx/sites-available/relay-next.conf /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 ```
 
+安装后必须核对 server1 vhost 与 server2 relay 的请求体上限。注册最多 9 张
+12MP 照片，应用层上限为 `9*MEDIA_MAX_BYTES+2MB`（默认 92MB）；20m 会让 nginx
+在进入应用前直接 413，9 张高像素照片的注册/补传会失败：
+
+```bash
+grep -H 'client_max_body_size' \
+  /etc/nginx/sites-available/next.nantou.love \
+  /etc/nginx/sites-available/relay-next.conf
+# 期望两处都是：client_max_body_size 96m;
+```
+
+96m 是按当前 `MEDIA_MAX_BYTES=10MiB` 推算的；若调大该值，nginx 上限需按
+`9*MEDIA_MAX_BYTES+2MB` 同步调大，两处都要改。
+
 `/etc/nginx/conf.d/yxq-next-allow.conf` 用 `$realip_remote_addr`（realip 改写前的
 原始 peer）做 allow gate；不要改回直接用 `allow`，因为 global realip 会让
 `$remote_addr` 变成真实 client IP，导致所有外部请求 403。
@@ -211,7 +225,9 @@ migration 0005 只加列；**前提是当前运行的旧 binary 必须是 pre-00
    - U-0006 `has_face=true`、U-0003 `has_face=false`；
 7. 验证通过后才 `mv bin/server.next bin/server && systemctl restart yixianqian-next-test`；
 8. 切后跑一次**增量回填**（不带 `-all`），补上第 5 步期间旧 binary 接收的新照片；
-9. 再走用户端 smoke（登录、`/legacy/api/profile`）。
+9. 配置**定时增量兜底**（见下节）：后台 probe 在进程重启时会丢失未完成的照片，
+   只靠切换后的一次增量不够；
+10. 再走用户端 smoke（登录、`/legacy/api/profile`）。
 
 验证 SQL（server1，peer auth）：
 
@@ -237,6 +253,11 @@ runuser -u yxq -- psql -d yixianqian_staging -Atc \
 `facebackfill` 自带 `pg_try_advisory_lock` 单实例保护：同一时间只允许一个
 实例；第二个会直接以非零退出（“advisory lock 被占用”），不会重复下载/检测。
 `-dry-run` 也会拿锁，看到该错误说明已有回填在跑，等它结束即可。
+
+**候选按 `media_id` 去重**：staging 的批量压测账号可能共用同一 media，回填
+每次只下载/检测该 media 一次，`SetProfilePhotoFace` 会把结果写入所有引用它
+的 `profile_photos` 行。`-dry-run` 与 `-limit` 的数量也按去重后的 media 计数，
+不要拿它和照片行数对账（行数可能大得多）。
 
 批量命令需要 DB、R2 与 FACE_* 三组变量；`staging.cli.env` 只有 DB/session，
 且 `staging.env` 的值含 `&` 与空格，不能直接 `source`。先生成 yxq 可读的
@@ -266,8 +287,8 @@ runuser -u yxq -- bash -c '
   cd /opt/yixianqian-next
   exec bin/facebackfill -dry-run          # 先跑：应用 migration + 看数量
 '
-# 小批量验证：-limit 20
-# 全量（1028 张，2 workers；以实测为准，预留 30-45 分钟）：-workers 2
+# 小批量验证：-limit 20（按 media 去重）
+# 全量（按 media 去重后的数量，2 workers；以实测为准，预留 30-45 分钟）：-workers 2
 # 切 binary 后的增量补齐（只扫 face_checked=false）：不带参数
 # 单用户补测：-user U-0006
 # 强制重扫：-all -user U-0006
@@ -275,6 +296,48 @@ runuser -u yxq -- bash -c '
 
 检测失败的照片保持 `face_checked=false`，命令以非零退出，可直接重跑；
 日志只含 media_id，不输出对象键或图片路径。
+
+### 切后增量与定时兜底
+
+注册/上传后的后台 probe 在进程退出时会丢失尚未完成的照片，这些照片会保持
+`face_checked=false`。第 8 步的切后增量只覆盖一次；之后必须有定时增量，
+否则一次重启就可能留下永久未检测的照片。
+
+建议在 server1 安装一个每分钟/每十分钟运行的 cron 兜底（不带 `-all`，只扫
+未检测照片）；`facebackfill` 的 advisory lock 会与手动全量回填互斥，不会重复
+probe。`flock` 只用于让重叠的 cron 静默跳过，不再产生“advisory lock 被占用”
+噪音。
+
+```bash
+# root：包装脚本，读取 yxq 600 的 CLI env 后跑一次增量
+cat >/opt/yixianqian-next/bin/facebackfill-incremental <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+while IFS= read -r line; do
+  case "$line" in ""|\#*) continue;; esac
+  export "${line%%=*}=${line#*=}"
+done < /opt/yixianqian-next/config/facebackfill.cli.env
+cd /opt/yixianqian-next
+exec flock -n /tmp/yxq-facebackfill.lock bin/facebackfill
+EOF
+chown yxq:yxq /opt/yixianqian-next/bin/facebackfill-incremental
+chmod 750 /opt/yixianqian-next/bin/facebackfill-incremental
+
+# 日志文件给 yxq 写
+install -m 640 -o yxq -g yxq /dev/null /var/log/yxq-facebackfill.log
+
+# /etc/cron.d/yxq-facebackfill（root:root 0644）
+cat >/etc/cron.d/yxq-facebackfill <<'EOF'
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+*/10 * * * * yxq /opt/yixianqian-next/bin/facebackfill-incremental >> /var/log/yxq-facebackfill.log 2>&1
+EOF
+chmod 644 /etc/cron.d/yxq-facebackfill
+```
+
+- 频率可按负载调整；单次只处理 `face_checked=false`，正常情况下接近空跑。
+- 不要给 cron 加 `-all`，否则会周期性重扫全部历史照片、持续占用 CPU。
+- 重启/发布后仍应先手动跑一次第 8 步增量，cron 只是兜底。
 
 ### 门禁与已知限制
 
