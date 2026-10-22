@@ -80,6 +80,27 @@ def badge(page):
     return item.locator(".van-badge")
 
 
+def dismiss_guides(page) -> None:
+    """首次进入的滑动引导/活动/更新弹窗会拦截点击；测试前统一关掉。"""
+    loc = page.locator(".swipe-guide-mask .sg-btn")
+    if loc.count() and loc.first.is_visible():
+        page.get_by_text("我知道了", exact=True).first.click()
+        page.wait_for_timeout(200)
+    # 活动报名引导/更新说明是 close-on-click-overlay 的 van-dialog：
+    # 点左上角遮罩关闭；关闭活动引导后更新说明可能接续弹出，循环处理。
+    for _ in range(3):
+        overlay = page.locator(".van-overlay")
+        if not overlay.count() or not overlay.first.is_visible():
+            return
+        page.mouse.click(5, 5)
+        page.wait_for_timeout(400)
+
+
+def tap_tab(page, label: str) -> None:
+    dismiss_guides(page)
+    page.locator(".van-tabbar-item").filter(has_text=label).click()
+
+
 def assert_no_console_errors(errors: list[str], context: str) -> None:
     if errors:
         raise SmokeFailure(f"{context} 存在 console error：\n" + "\n".join(errors))
@@ -110,8 +131,12 @@ def frame_for_path(page, path_prefix: str):
 
 
 def open_embed(page, label: str, path_prefix: str, base_url: str) -> None:
+    dismiss_guides(page)
     page.locator(".van-cell").filter(has_text=label).first.click()
     page.locator(".embed-overlay").wait_for(state="visible", timeout=10000)
+    # iframe 的 load 事件会隐藏加载层并隐藏 shell-header；先等它完成，
+    # 否则 1280px 下大图/慢资源会让断言早于 onload。
+    page.locator(".embed-loading").wait_for(state="hidden", timeout=15000)
     wait_frame_path(page, base_url, path_prefix)
     frame = frame_for_path(page, path_prefix)
     frame.locator(".shell-container").first.wait_for(state="visible", timeout=10000)
@@ -153,6 +178,7 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
     try:
         page.goto(base_url + "/", wait_until="domcontentloaded")
         page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
+        dismiss_guides(page)
 
         # 1. 登录后未读红点（页面已存在两条测试通知）
         badge(page).wait_for(state="visible", timeout=10000)
@@ -162,12 +188,12 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         page.screenshot(path=str(out_dir / f"badge-{tag}.png"))
 
         # 2. 进入消息 tab：通知可见、红点清零
-        page.locator(".van-tabbar-item").filter(has_text="消息").click()
+        tap_tab(page, "消息")
         page.get_by_text(titles[0]).first.wait_for(state="visible", timeout=10000)
         badge(page).wait_for(state="hidden", timeout=10000)
 
         # 3. 修改密码：iframe 同源、隐藏页头、返回关闭、顶层 URL 不变
-        page.locator(".van-tabbar-item").filter(has_text="我的").click()
+        tap_tab(page, "我的")
         page.locator(".van-cell").filter(has_text="修改密码").first.wait_for(state="visible", timeout=10000)
         open_embed(page, "修改密码", "/password", base_url)
         if page.url.rstrip("/") != base_url.rstrip("/"):
@@ -189,14 +215,14 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         close_embed(page)
 
         # 5. SSE 实时未读：不刷新页面，新增通知后 badge 出现
-        page.locator(".van-tabbar-item").filter(has_text="我的").click()
+        tap_tab(page, "我的")
         live_title = f"{TITLE_PREFIX}-{tag}-LIVE-{int(time.time())}"
         insert_notification(user_legacy_id, live_title)
         badge(page).wait_for(state="visible", timeout=10000)
         if not badge(page).inner_text().strip().isdigit():
             raise SmokeFailure(f"{width}: SSE 后 badge 不是数字")
         page.screenshot(path=str(out_dir / f"badge-sse-{tag}.png"))
-        page.locator(".van-tabbar-item").filter(has_text="消息").click()
+        tap_tab(page, "消息")
         page.get_by_text(live_title).first.wait_for(state="visible", timeout=10000)
         badge(page).wait_for(state="hidden", timeout=10000)
 
@@ -229,10 +255,11 @@ def run_polling_fallback(browser, base_url: str, cookie: str, user_legacy_id: st
     try:
         page.goto(base_url + "/", wait_until="domcontentloaded")
         page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
+        dismiss_guides(page)
         # 先清零现有未读：进消息 tab 再回来
-        page.locator(".van-tabbar-item").filter(has_text="消息").click()
+        tap_tab(page, "消息")
         badge(page).wait_for(state="hidden", timeout=15000)
-        page.locator(".van-tabbar-item").filter(has_text="我的").click()
+        tap_tab(page, "我的")
         insert_notification(user_legacy_id, title)
         badge(page).wait_for(state="visible", timeout=20000)
         page.screenshot(path=str(out_dir / "badge-poll-390.png"))
