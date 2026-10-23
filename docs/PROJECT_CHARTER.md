@@ -41,7 +41,7 @@ sources: []
 | 层 | 决策 |
 |---|---|
 | 后端 | Go 1.24（以 `go.mod` 为准；CI 为 1.24.x） |
-| 模板 | 管理台 `html/template`（SSR，只由 SPA 内嵌 iframe 渲染；浏览器顶层 document 一律 303 到 `/?admin=1`）；用户端复用 v1 SPA |
+| 模板 | 管理台 `html/template`（SSR，只由 SPA 内嵌 iframe 渲染；浏览器顶层 document 访问页面路由一律 303 到 `/?admin=1`，受权媒体串流为例外、直接串流）；用户端复用 v1 SPA |
 | DB | PostgreSQL 16（staging `yixianqian_staging`；production `yixianqian`） |
 | 媒体 | Cloudflare R2 私有桶；浏览器只经 app `/media/{id}` |
 | 部署 | systemd + Nginx；server1 staging；未来 HK app server |

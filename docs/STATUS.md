@@ -73,6 +73,10 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 角色：RBAC 角色指派；最后一位 `super_admin` 受保护。
 - 响应式：640–999px 列表卡片化、1280px 表单限宽、390px 单列可读。
 
+### 质量门
+
+- `make ci` = fmt-check + docs-check + vet + 单测 + `tools/` Python 测试 + build；`tools/test_browser_call_arity.py` 用 AST 校验 `tools/browser/*.py` 的调用参数与定义一致（smoke 删形参后漏改调用点这类错误在 CI 即报）。
+
 ### 人脸与数据
 
 - 人脸检测：本地 YuNet 优先、Haar 回退；上传后检测、注册后补检测、`has_face` 门禁；观察员账号豁免 `has_face`（身份证不豁免）。

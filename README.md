@@ -57,7 +57,7 @@ server1（洛杉矶）—— nginx + Go app（127.0.0.1:8093）
 - **数据库**：PostgreSQL 16；迁移随应用启动执行。
 - **媒体**：R2 只做对象存储，桶不公开；浏览器只拿应用路径 `/media/{id}`，不拿 R2/Cloudflare 直链。
 - **用户端前端**：v1 Vue 3 + Vant SPA，保留旧版 DOM/CSS/AJAX/tab 行为；不新写 React/Vue 应用。
-- **管理台前端**：Go 模板 + 少量原生 JS；不引入 SPA 框架。管理台只经用户 SPA 的同源 iframe（`/admin?embed=1`）承载；浏览器顶层 document 访问 `/admin`、`/admin/...` 一律 303 到 `/?admin=1`，由 SPA 自动打开管理台，服务端不渲染顶层页面。
+- **管理台前端**：Go 模板 + 少量原生 JS；不引入 SPA 框架。管理台只经用户 SPA 的同源 iframe（`/admin?embed=1`）承载；浏览器顶层 document 访问 `/admin`、`/admin/...` 页面路由一律 303 到 `/?admin=1`，由 SPA 自动打开管理台，服务端不渲染顶层页面；受权媒体串流（照片原图、活动海报）是显式例外，document 也直接串流。
 - **无 JS**：用户 SPA 需要 JavaScript；登录、注册、启用、改密页仍保持服务端可用（无 JS 可完成）。管理台只经用户 SPA 内嵌入口（同源 iframe）使用，需要用户 SPA 的 JavaScript，不承诺全部管理操作无 JS 可用。
 - **不引入 Redis**：当前正确性不依赖缓存或队列；需要时再评估。
 - **外部依赖**：不引外部字体/CDN；前端资产随仓库本地提供。

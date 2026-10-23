@@ -508,7 +508,7 @@ def run_viewport(browser, base: str, width: int, height: int, shot_dir: Path) ->
     install_overlay_observer(page)
     guard = ConsoleGuard(page)
     try:
-        goto_admin_top_level(page, base, shot_dir, tag, guard)
+        goto_admin_top_level(page, base, shot_dir, tag)
         check_direct_requests(page, base, tag)
         check_password_page(page, base, shot_dir, tag, width)
         check_admin_from_profile(page, base, shot_dir, tag)
