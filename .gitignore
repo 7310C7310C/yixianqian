@@ -11,3 +11,6 @@ coverage.out
 __pycache__/
 *.pyc
 migration-report-*.json
+
+# 团队内部工作区 artifact
+.team/

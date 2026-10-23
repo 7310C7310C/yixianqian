@@ -1,95 +1,158 @@
 # AGENTS.md — yixianqian
 
-> 专案宪章（Source of Truth）：`docs/PROJECT_CHARTER.md`
-> 用户/管理端验收清单：`docs/product-spec.md`
-> 任何实作若与上述文件冲突，先改文件/加 ADR，不要先写代码。
+<!-- doc-meta
+owner: maintainer
+status: current
+last_verified: 2026-10-23
+sources:
+  - Makefile
+  - .github/workflows/**
+-->
 
-## 专案定位
-把「一线牵」改造成不依赖飞书的独立网页产品。Go 模组化单体、PostgreSQL、R2、server2 HK relay。
-**用户端复用 v1 Vue 3 + Vant SPA；管理端使用 Go 服务端渲染。不做 POC；用户功能必须完整。**
-目前 Go/Postgres/R2、auth/activation/media、管理端 SSR 已完成，不代表产品完成；
-完成标准见 `docs/product-spec.md` 的 Must-Have。资料迁移来源是 testapp。
+> **本文件是项目规则的唯一入口。** 开工先读本文件；当前状态看 `docs/STATUS.md`；
+> 机械事实（Go 版本、cmd、路由、env、migration、make 目标）看
+> `docs/reference/REFERENCE.md`（自动生成，勿手改）。
+> 需求与验收看 `docs/product-spec.md`；决策看 `docs/DECISIONS.md`；
+> 迁移看 `docs/MIGRATION.md`；部署看 `docs/runbooks/staging.md`。
+> 本文件不假设固定团队或角色；需要时使用“维护者、执行者、审查者、PM（使用者）”。
+
+## 文档地图（最终 10 个）
+
+| 文件 | 用途 |
+|---|---|
+| `AGENTS.md` | 本文件；唯一规则入口与文档地图 |
+| `README.md` | 产品边界、架构、目录、本地开发、部署与安全概览 |
+| `CLAUDE.md` | Claude Code 入口指针（生成，指向本文件；勿手改） |
+| `docs/PROJECT_CHARTER.md` | 使命、范围、架构硬约束（PM 权威） |
+| `docs/STATUS.md` | 当前部署、阶段、已实现、P0 与缺口（唯一进度来源） |
+| `docs/product-spec.md` | 验收清单（PM 定范围；勾选需证据） |
+| `docs/DECISIONS.md` | 架构/产品决策合并记录（新决策追加，不改历史） |
+| `docs/MIGRATION.md` | testapp 数据迁移、对账与已知限制 |
+| `docs/runbooks/staging.md` | staging 部署、回滚、证书、人脸切换、smoke |
+| `docs/reference/REFERENCE.md` | 机械事实（生成物，勿手改） |
+
+新增或删除文档必须同步本表；生成物（`CLAUDE.md`、`docs/reference/REFERENCE.md`）由
+`make docs-gen` 刷新，不得手改。
+
+## 项目定位与架构
+
+把「一线牵」改造成不依赖飞书的独立网页产品。Go 模块化单体、PostgreSQL、R2，
+公开入口是 server2（香港）TLS relay，回源 server1。用户端复用 v1 Vue 3 + Vant SPA；
+管理台使用 Go 服务端渲染（SSR），顶层 `/admin` 303 到 `/?admin=1`，由用户 SPA
+内嵌 iframe 承载，SSR 只在 iframe 或非 document 的 `?embed=1` 请求下渲染。
+不做 POC；用户功能必须完整，完成标准见 `docs/product-spec.md`。
+
+## 结构
+
+- `cmd/`：`server`、`seed`、`token`、`facebackfill` 四个入口。
+- `internal/config`：唯一环境变量入口；不得在别处直接读 `os.Getenv`。
+- `internal/db`：pgxpool、SQL、事务、迁移、领域仓储。
+- `internal/auth`：Argon2id、session/activation token 哈希、CSRF、进程内限流。
+- `internal/media`：图片校验/缩图、R2 存储与读取。
+- `internal/face`：人脸检测、`has_face` 门禁与回填。
+- `internal/matching`：分组与一对一纯算法。
+- `internal/platform`：时钟、日志、请求 ID、客户端 IP、构建版本。
+- `internal/httpserver`：路由、中间件、handler、模板渲染、`/legacy/api/*`。
+- `web/`：embed 模板与静态资源；`web/static/legacy/` 为 v1 用户端 SPA。
+- `migrations/`：embed 的 SQL migration，`NNNN_name.sql`，只增不改。
+- `tools/`：迁移、人脸探针、浏览器 smoke、文档生成/校验。
+- `deploy/`：nginx 与 systemd 模板；实际操作以 runbook 为准。
+
+## 通用工作规则
+
+- 开工先看 `git status`、`git log --oneline -10`，再读 `docs/STATUS.md` 与相关代码；
+  不要假设旧文档正确。
+- 先定义可证伪判准（命令 + 期望输出），再改；没有证据不算完成。
+- 不写密钥；日志、错误、audit、文档与提交里不得出现密码、token、cookie。
+- staging 验证先于生产；生产切换、删数据、凭证/权限变更必须 PM（使用者）明确批准。
+- commit message 用简体中文；不 force-push、不重写已推送历史。
+- 小改动可直接在 `main`；较大改动用独立 worktree/分支，合并前跑 `make ci`；
+  不默认使用 PR（除非 PM 明确要求）。
+- 不假设有固定团队或角色；按任务需要由维护者/执行者/审查者协作，最终对 PM 负责。
+
+## 文档自动更新协议
+
+- 机械事实（Go 版本、cmd、路由、env、migration、结构、make 目标）由
+  `tools/gen_docs.py` 生成、`tools/check_docs.py` 校验，不得手写副本。
+- 语义内容由文档 owner 复核；`last_verified` 是“对照来源核实过”的日期。
+- 每份文档文件开头必须有 doc-meta（H1 前后均可；generated 的 CLAUDE/REFERENCE 除外），字段含 `owner`、`status`、
+  `last_verified`、`sources`；owner 只用 `pm` 或 `maintainer`。
+- 任何人可凭证据更新 `docs/STATUS.md` 的已实现/缺口事实与 `last_verified`；
+  但不得改 `docs/PROJECT_CHARTER.md`、`docs/product-spec.md` 的验收勾选或
+  `docs/DECISIONS.md` 的已定决策。
+- 每个任务写文档影响；提交 trailer 二选一：`Docs: <路径列表>` 或
+  `Docs-Impact: none（理由）`。
+- 改完运行 `make docs-check`；push 前先 `git fetch origin main`，再运行 `make docs-check-stale`
+  （base 默认 `origin/main`，必须可解析）。
+- 历史看 `git log`，不维护变更日志；迁移看 `docs/MIGRATION.md`；决策看
+  `docs/DECISIONS.md`；进度看 `docs/STATUS.md`。
+
+### 变更 → 文档
+
+| 变更 | 需更新 |
+|---|---|
+| cmd / flag | `AGENTS.md` 结构/命令、`README.md`；REFERENCE 自动 |
+| HTTP 路由 | REFERENCE 自动；影响契约时更新 `docs/product-spec.md` 或 `docs/DECISIONS.md` |
+| env | REFERENCE 自动、`README.md`、`docs/runbooks/staging.md` |
+| migration | REFERENCE 自动、`docs/MIGRATION.md`、runbook、`docs/STATUS.md` |
+| 部署/证书/CI | `docs/runbooks/staging.md`、`AGENTS.md`、`README.md` |
+| Go 版本 | `docs/PROJECT_CHARTER.md`（PM 批准）、`README.md`、CI、REFERENCE 自动 |
+| 安全/auth/media 行为 | runbook 安全段；决策变化写入 `docs/DECISIONS.md` |
+| 产品范围/验收 | `docs/PROJECT_CHARTER.md`、`docs/product-spec.md`（PM）→ `docs/STATUS.md` |
+
+## 任务契约（通用六条）
+
+1. **开工检查**：`git status`/`git log`、读 `docs/STATUS.md`、定位相关代码与文档。
+2. **可证伪判准**：写清命令、期望输出、正常与边界路径。
+3. **证据**：命令 + 关键输出；没有输出视为未验证。
+4. **文档影响**：列出要更新的文档；无影响写 `Docs-Impact: none（理由）`。
+5. **报告**：改动、证据、未完成/阻塞、残余风险。
+6. **回滚**：说明如何撤销；schema 只增不改，回滚 binary 不等于回滚数据。
 
 ## 常用指令
+
 ```sh
-make tidy        # go mod tidy
-make test        # go test ./...
-make vet         # go vet ./...
-make build       # go build ./...
-make run         # go run ./cmd/server
-make seed        # go run ./cmd/seed（建立 U-0006 测试用户并印出启用 URL）
+make tidy
+make test              # go test -p 1 -count=1 ./...
+make test-race         # -race 单测，排除 internal/db、internal/httpserver
+make vet
+make build             # server/seed/token/facebackfill
+make test-integration  # 需要 TEST_DATABASE_URL；只跑 TestIntegration*
+make test-migration    # 迁移与文档工具的 Python 测试
+make test-broadcast-ui # 需要 BASE_URL/SESSION_COOKIE/ACTIVITY_ID
+make docs-gen          # 刷新 REFERENCE 与入口指针
+make docs-check        # 文档元数据/地图/链接/生成物检查
+make docs-check-stale  # 先 git fetch origin main；base 默认 origin/main，须可解析
+make ci                # 本地合并门禁：fmt-check + docs-check + vet + test + 工具测试 + build
+make run
+make seed
 go run ./cmd/token -legacy-user-id U-0006
 ```
 
-## 结构
-- `cmd/`：server、seed、token 三个入口。
-- `internal/config`：唯一环境变数入口；不得在别处直接读 `os.Getenv`。
-- `internal/db`：pgxpool + SQL；交易逻辑（启用）放这里，不放 handler。
-- `internal/auth`：Argon2id、session/activation token 杂凑、CSRF、in-memory rate limit。
-- `internal/media`：图片验证/缩图与 S3(R2) store 界面。
-- `internal/httpserver`：路由、middleware、handler、管理端模板渲染、`/legacy/api/*` 适配。
-- `web/`：`webassets` 套件 embed 模板与静态档；`web/static/legacy/` 放 v1 用户端 SPA 资产与兼容适配。
-- `migrations/`：embed 的 SQL migration，档名 `NNNN_name.sql`，只增不改。
-- `docs/adr/`：设计决策纪录。
+CI 以当前 HEAD 的 push run 为准；红灯先看 `gh run view <id> --log-failed` 修根因，
+不跳过、不 `[skip ci]`、不在红/取消时部署。本地 `make ci` 不含 `-race`，不等价于 CI。
 
-## GitHub 文字规范
-- commit message、PR 标题/说明、Release/变更摘要一律使用**简体中文**。
-- 分支名可保留英文（如 `feat/m3b-grouping`），便于工具与 CI 操作；分支说明用中文。
-- 不重写已推送的历史（禁止 force-push）；需要汇总时更新中文 `CHANGELOG.md`。
+## 安全硬约束
 
-## 语言与界面
-- 全项目（文档、代码注释、用户端与管理端界面）使用**简体中文**。
-- 用户端直接复用原版「一线牵」Vue 3 + Vant 前端：四 tab、卡片滑动、喜欢/点赞/留言、
-  活动报名、分组志愿、一对一结果。只改登录/API/媒体/飞书文案适配，不重画 UI。
-  管理端可自行设计，不受原版限制。
-- 用户 SPA 不承诺无 JS；登录、注册、管理端仍须服务端可用。
-
-## 不可违反的规则
-- 所有设定从环境变数读；不得写死任何 DB/R2/session 密钥。
-- 密码只存 Argon2id PHC 字串；session/activation token 只存 SHA-256 hash。
-- 不得在日志、错误信息、audit metadata 中输出密码、原始 token、cookie。
+- 所有配置从环境变量读；不得写死 DB/R2/session 密钥。
+- 密码只存 Argon2id PHC；session/activation token 只存 SHA-256 hash。
 - session cookie：HttpOnly + Secure（可 env 关闭供本机 HTTP）+ SameSite=Lax。
-- 所有写入（含 logout、上传）必须验 CSRF；`/api/*` 写入只接受 `X-CSRF-Token` header。
-- R2 物件路径不得外泄给浏览器；一律经 `GET /media/{id}` 授权后串流。
+- 所有写入（含 logout、上传）必须验 CSRF；`/api/*` 写入只接受 `X-CSRF-Token`。
+- R2 对象路径不得外泄；媒体一律经 `GET /media/{id}` 鉴权串流。
 - 只有 `TRUSTED_PROXY` 来源可提供 `X-Real-IP` / `X-Forwarded-For`。
-- 图片只接受 JPEG/PNG；HEIC 回 400；不可信任上传的 Content-Type，需 sniff + decode。
-- 不新增 Redis；session 与 rate-limit 状态以 Postgres / 进程内为限。
-- 用户端浏览器范围：iOS 14.5+/Safari 14.1+、Chrome/WebView 84+、Firefox 74+；
-  不维护第二套完整用户 UI，低于范围只提供登录/管理端基本可用性。
+- 图片只接受 JPEG/PNG；HEIC 回 400；不信任 Content-Type，需 sniff + decode。
+- 不新增 Redis；session 与 rate-limit 以 Postgres / 进程内为限。
+- 浏览器范围：iOS 14.5+/Safari 14.1+、Chrome/WebView 84+、Firefox 74+。
+- 身份证门禁是 P0 上线阻断；补录/放行方式等 PM 决策，不得私自绕过。
 
-## 文档治理（AI 读取顺序与更新责任）
+## 部署要点
 
-- 先读 `docs/INDEX.md`，再读 `docs/STATUS.md`，之后才按索引读 Charter/ADR/spec。
-- 权威顺序：`docs/PROJECT_CHARTER.md` > `docs/adr/*` > `docs/STATUS.md` > `docs/product-spec.md` > 其他 docs > README/CHANGELOG。
-- **没有自动更新**：不存在后台 prompt/定时任务改项目 docs；只有任务书明确授权的 agent 才能写入。
-- 不允许 agent 自行修改 `PROJECT_CHARTER`、`product-spec` 勾选、`STATUS` 或 ADR 状态；只能向 Lead/PM 提案。
-- 谁维护：Lead 维护 INDEX/STATUS/README/AGENTS/milestones；Dev Lead 维护 runbook；Analyst/Dev Lead 维护 data-migration；产品范围与验收由 PM 决定。
-- 任务若改变用户可见行为、schema、部署或验收，任务书必须写“要更新哪些 docs”；Lead 合并前检查。
-- 代码与 docs 冲突时先停下报告，不得用代码默认覆盖 Charter。历史文档必须加 `> 历史文件（日期/原因）`，否则删除。
-- `docs/STATUS.md` 是唯一“当前进度”来源；README 与 `product-spec.md` 不作为实时状态。
-
-## 变更后必跑
-- 集成到 `main` 后、push 前，必須在整合後的樹上跑 `make ci`（`gofmt`/vet/`go test -p 1`/build/迁移测试）；不可只測 feature branch 就 push。
-- **push 後 CI 閉環（不可跳過）**：
-  1. 以 `SHA=$(git rev-parse HEAD)` 為準，只認 `event=push` 的 run；
-  2. `gh run list --commit "$SHA" --event push` 找到 run，`gh run watch <id> --exit-status` 等綠；
-  3. 紅燈立即 `gh run view <id> --log-failed`，修根因後再 push；
-  4. 不得用 `workflow_dispatch` 取代 push run，也不得在 push run 紅/取消時部署；
-  5. 部署前再次確認當前 HEAD 的 push run `conclusion=success`。
-- 若 push run 被取消/不存在：先查 workflow 觸發與 concurrency，不要手動 dispatch 掩蓋。
-- docs-only push 可能因 `paths-ignore` 不產生 run；部署只認最後一個含程式碼的 push run，不為 docs 手動 dispatch。
-- `go mod tidy && go vet ./... && go test -p 1 ./... && go build ./...`
-- CI 的 `go test` 使用 `-p 1 -count=1`，避免多套件共用同一個 Postgres 測試庫造成競態。
-（改 migration 另需对真 Postgres 跑 `TEST_DATABASE_URL=... go test ./internal/db -run Integration -v`）
-
-## 部署（staging / 未来 production）
-- 旧 `yixianqian-deploy` skill **不适用**；不要套用其 fix/*、PR、生产步骤。
-- 公开入口固定是 server2（HK）→ app server；不要让 `next`/`app` 直指 server1
-  或开 Cloudflare 橙云（运营商可能封锁）。
-- staging：server1 `/opt/yixianqian-next`、`yixianqian-next-test`、8093；
+- 公开入口固定 server2（HK）→ server1；不要直指 server1，不要开 Cloudflare 橙云。
+- staging：server1 `/opt/yixianqian-next`、systemd `yixianqian-next-test`、8093；
   DB `yixianqian_staging`；R2 `yixianqian-media-staging`。
-- 媒体只经 app 的 `/media/{id}` 串流；R2 URL 不外泄。
-- 凭证：server2 签 `next.nantou.love`，同步到 server1 `/etc/ssl/yxq-next/`；
-  详见 `docs/runbooks/staging.md`。
-- 部署前保留上一版 binary；DB migration 只增不改。
-- 部署/CI 闭环使用 `yixianqian-deploy-v2` skill；详细步骤也见 `docs/runbooks/staging.md`。
+- 部署前保留上一版 binary；migration 只增不改；媒体只经应用代理。
+- 人脸检测（migration 0005）已于 2026-10-22 首次上线；常规部署走 runbook「常规部署」一节；
+  首次上线/重建见 git 历史旧版 runbook，当前不要执行 pre-0005 回滚或全量回填。
+- 顶层 `/admin` 是 SPA 内嵌入口（303 到 `/?admin=1`）；smoke 断言 303 或验证 iframe SSR。
+- ID 门禁 P0 与已知缺口以 `docs/STATUS.md` 为准。
+- v1 旧部署 skill 不适用；详细步骤见 `docs/runbooks/staging.md`。

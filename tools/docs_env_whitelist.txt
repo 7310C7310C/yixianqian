@@ -1,0 +1,6 @@
+# env 单边差异白名单。
+# 格式：KEY<TAB>code-only|example-only<TAB>原因
+# code-only = internal/config 读取但 .env.example 不需要列；
+# example-only = .env.example 列出但 Go config 不解析。
+# 条目失效（已对称/已不存在/方向不符）会报 E-ENV-003，必须删除。
+FACE_MODEL_PATH	example-only	仅 tools/face_probe.py 读取，Go config 不解析（模型路径按需设置）

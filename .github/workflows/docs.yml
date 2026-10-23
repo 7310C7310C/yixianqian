@@ -1,0 +1,40 @@
+name: Docs
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 工具单测
+        run: python3 -m unittest discover -s tools -p 'test_*.py' -v
+
+      - name: 文档一致性与生成物
+        run: python3 tools/check_docs.py --strict --format=github
+
+      - name: 文档过期映射（stale）
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          BASE="$BASE_SHA"
+          case "$BASE" in
+            ""|0000000000000000000000000000000000000000) BASE="origin/main" ;;
+          esac
+          python3 tools/check_docs.py --strict --format=github --base "$BASE"

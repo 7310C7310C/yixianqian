@@ -5,10 +5,12 @@ TEST_DATABASE_URL ?=
 BASE_URL ?=
 SESSION_COOKIE ?=
 ACTIVITY_ID ?= 1
+DOCS_BASE ?= origin/main
 
 LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSION)
 
-.PHONY: all tidy generate fmt fmt-check vet test test-integration test-migration test-broadcast-ui build run seed token ci
+.PHONY: all tidy generate fmt fmt-check vet test test-race test-integration test-migration \
+        test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale ci
 
 all: ci
 
@@ -28,14 +30,28 @@ vet:
 	$(GO) vet ./...
 
 test:
-	$(GO) test -p 1 ./...
+	$(GO) test -p 1 -count=1 ./...
 
+test-race:
+	@PKGS="$$( $(GO) list ./... | grep -v '/internal/db$$' | grep -v '/internal/httpserver$$' )"; \
+	$(GO) test -race -p 1 -count=1 $$PKGS
+
+# -run Integration 只跑 TestIntegration*；完整 db/httpserver 套件由 CI integration job 跑。
 test-integration:
 	@test -n "$(TEST_DATABASE_URL)" || (echo "TEST_DATABASE_URL is required"; exit 1)
-	TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(GO) test ./internal/db -run Integration -v
+	TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(GO) test -p 1 -count=1 ./internal/db ./internal/httpserver -run Integration
 
 test-migration:
 	python3 -m unittest discover -s tools -p 'test_*.py' -v
+
+docs-gen:
+	python3 tools/gen_docs.py
+
+docs-check:
+	python3 tools/check_docs.py --strict
+
+docs-check-stale:
+	python3 tools/check_docs.py --strict --base=$(DOCS_BASE)
 
 test-broadcast-ui:
 	@test -n "$(BASE_URL)" || (echo "BASE_URL is required"; exit 1)
@@ -60,4 +76,4 @@ token:
 	@test -n "$(USER_ID)" || (echo "usage: make token USER_ID=U-0006"; exit 1)
 	$(GO) run ./cmd/token -legacy-user-id=$(USER_ID)
 
-ci: fmt-check vet test test-migration build
+ci: fmt-check docs-check vet test test-migration build

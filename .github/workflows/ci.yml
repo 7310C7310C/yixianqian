@@ -1,17 +1,15 @@
 name: CI
-# A-only 用户端：v1 Vue SPA + Go legacy API
+# 用户端：v1 Vue SPA + Go legacy API
 
 on:
   push:
     paths-ignore:
       - 'docs/**'
       - '*.md'
-      - 'CHANGELOG.md'
   pull_request:
     paths-ignore:
       - 'docs/**'
       - '*.md'
-      - 'CHANGELOG.md'
 concurrency:
   # push / PR 分組；同一 ref 的新 push 仍取消舊 push。
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
@@ -26,6 +24,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 文档一致性
+        run: python3 tools/check_docs.py --strict
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
@@ -41,7 +44,7 @@ jobs:
         run: go vet ./...
       - name: 构建
         run: go build -trimpath ./...
-      - name: 迁移工具测试
+      - name: Python 工具测试
         run: python3 -m unittest discover -s tools -p 'test_*.py'
 
   unit:
