@@ -56,6 +56,29 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.FaceProbeCmd != "python3 tools/face_probe.py" || cfg.FaceProbeTimeout != 8*time.Second {
 		t.Fatalf("face probe defaults: %q %v", cfg.FaceProbeCmd, cfg.FaceProbeTimeout)
 	}
+	if cfg.PublicQRImage != "qrcode.png" {
+		t.Fatalf("public qr image default = %q", cfg.PublicQRImage)
+	}
+}
+
+func TestPublicQRImage(t *testing.T) {
+	env := minimalEnv()
+	env["PUBLIC_QR_IMAGE"] = "qrcode_test.png"
+	cfg, err := LoadFrom(envGetter(env))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.PublicQRImage != "qrcode_test.png" {
+		t.Fatalf("public qr image = %q", cfg.PublicQRImage)
+	}
+
+	for _, raw := range []string{"../qrcode.png", "qrcode.jpg", "a/b.png", `a\\b.png`, ".", "..", "qrcode .png"} {
+		env := minimalEnv()
+		env["PUBLIC_QR_IMAGE"] = raw
+		if _, err := LoadFrom(envGetter(env)); err == nil {
+			t.Fatalf("PUBLIC_QR_IMAGE=%q should fail", raw)
+		}
+	}
 }
 
 func TestLoadRequiresSecrets(t *testing.T) {

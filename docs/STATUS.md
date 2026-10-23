@@ -58,7 +58,8 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 - v1 Vue 3 + Vant SPA，由 Go `/legacy/api/*` 提供数据：四 tab、卡片、喜欢/点赞/留言、活动/分组/一对一、资料、麦穗、观察员切换已接入。
 - 通知：未读数字红点；`GET /legacy/api/notifications/stream` 推送未读/最新通知变化，EventSource 不可用时轮询兜底。
-- 登录/启用/注册/密码：Go SSR；`/` 由旧 SPA 入口；改密为 SPA 内 Vant 子页，离开时还原滚动位置。
+- 登录/启用/注册/密码：Go SSR；改密为 SPA 内 Vant 子页，离开时还原滚动位置。
+- 公开首页：匿名访问 `/` 返回 200 服务端页面（品牌介绍、人工审核/匿名喜欢/动态通知、注册主按钮与登录入口、飞书老用户先设密码指引、飞书链接与二维码）；`PUBLIC_QR_IMAGE` 选择二维码图（staging `qrcode_test.png`）。登录后 `/` 仍由旧 SPA 入口。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
 
 ### 管理台（SSR，仅 iframe 承载）

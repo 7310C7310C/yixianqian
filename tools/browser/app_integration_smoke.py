@@ -2,7 +2,7 @@
 """用户端 App 启动骨架 / 改密子页 / 管理台内嵌回归（Playwright）。
 
 覆盖：
-1. 未登录访问 / 会被服务端送到 /login，页面没有 SPA 登录页或「正在登录」；
+1. 未登录访问 / 渲染公开首页（200，含注册/登录 CTA、飞书说明与二维码），点登录进入 /login 后出现注册入口；
 2. 已登录刷新：home 接口被挂起时先出现 App 骨架（品牌顶栏 + 卡片 shimmer +
    四 tab 占位），没有「正在登录」；接口放行后进入主界面，普通 reload 同样不闪登录页；
 3. 登录后未读红点显示数字；进入消息 tab 后红点清零；
@@ -294,10 +294,43 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
     errors = attach_error_capture(page)
     tag = str(width)
     try:
-        page.goto(base_url + "/", wait_until="domcontentloaded")
-        page.wait_for_url(lambda url: "/login" in url, timeout=10000)
+        resp = page.goto(base_url + "/", wait_until="domcontentloaded")
+        if resp is None or resp.status != 200:
+            raise SmokeFailure(f"{width}px 未登录: / status={getattr(resp, 'status', None)}")
+        if page.url.rstrip("/") != base_url.rstrip("/"):
+            raise SmokeFailure(f"{width}px 未登录: 被重定向到 {page.url}")
+        page.locator(".home-hero").wait_for(state="visible", timeout=10000)
+        register = page.locator('.home-hero a[href="/register?from=home"]')
+        register.wait_for(state="visible", timeout=10000)
+        register_class = register.get_attribute("class") or ""
+        if "primary" not in register_class or "block" not in register_class:
+            raise SmokeFailure(f"{width}px 未登录: 注册按钮不是 primary block（{register_class}）")
+        page.locator('.home-hero a[href="/login"]').wait_for(state="visible", timeout=10000)
+        feishu = page.locator('.home-feishu a[href="https://applink.feishu.cn/T996FhMkTERp"]')
+        feishu.wait_for(state="visible", timeout=10000)
+        if feishu.get_attribute("target") != "_blank":
+            raise SmokeFailure(f"{width}px 未登录: 飞书链接缺少 target=_blank")
+        if "noopener" not in (feishu.get_attribute("rel") or ""):
+            raise SmokeFailure(f"{width}px 未登录: 飞书链接缺少 rel=noopener")
+        qr = page.locator(".home-qr img")
+        qr.wait_for(state="visible", timeout=10000)
+        page.wait_for_function(
+            "() => { const img = document.querySelector('.home-qr img');"
+            " return !!img && img.complete && img.naturalWidth > 0; }",
+            timeout=10000,
+        )
         assert_no_login_flash(page, f"{width}px 未登录")
-        page.screenshot(path=str(out_dir / f"login-anon-{tag}.png"))
+        page.screenshot(path=str(out_dir / f"home-anon-{tag}.png"), full_page=True)
+
+        page.locator('.home-hero a[href="/login"]').click()
+        page.wait_for_url(lambda url: "/login" in url, timeout=10000)
+        login_register = page.locator('a[href="/register"]')
+        login_register.wait_for(state="visible", timeout=10000)
+        login_class = login_register.get_attribute("class") or ""
+        if "primary" not in login_class or "block" not in login_class:
+            raise SmokeFailure(f"{width}px 登录页: 注册按钮不是 primary block（{login_class}）")
+        page.get_by_text("已在飞书版使用过", exact=False).first.wait_for(state="visible", timeout=10000)
+        page.screenshot(path=str(out_dir / f"login-anon-{tag}.png"), full_page=True)
         assert_no_console_errors(errors, f"{width}px 未登录")
         return []
     except Exception as exc:  # noqa: BLE001 - report all viewport failures together

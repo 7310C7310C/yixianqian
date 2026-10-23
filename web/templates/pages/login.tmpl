@@ -13,6 +13,14 @@
     <input id="password" name="password" type="password" autocomplete="current-password" required>
     <button type="submit" class="button primary">登录</button>
   </form>
-  <p class="hint">首次使用请开启管理员提供的启用链接设定密码；还没有账号？<a href="/register">立即注册</a>。</p>
+  <div class="auth-alt">
+    <p class="hint">还没有账号？</p>
+    <a class="button primary block" href="/register">注册新账号</a>
+  </div>
+  <div class="auth-feishu">
+    <p><strong>已在飞书版使用过？</strong></p>
+    <p class="hint">请先在飞书版设置好密码，再用手机号码＋密码登录网页版。<a href="{{.FeishuURL}}" target="_blank" rel="noopener noreferrer">打开飞书版</a></p>
+  </div>
+  <p class="hint">首次使用？请使用管理员提供的启用链接设定密码。</p>
 </section>
 {{end}}

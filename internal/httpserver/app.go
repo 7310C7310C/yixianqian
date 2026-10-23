@@ -62,6 +62,9 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	if cfg.MediaMaxDim <= 0 {
 		cfg.MediaMaxDim = 8000
 	}
+	if cfg.PublicQRImage == "" {
+		cfg.PublicQRImage = "qrcode.png"
+	}
 	tpl, err := LoadTemplates()
 	if err != nil {
 		return nil, err

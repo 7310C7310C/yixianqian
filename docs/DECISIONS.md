@@ -101,3 +101,10 @@ sources: []
 - 决策：`adminHTML` 在鉴权之前对 `Sec-Fetch-Dest: document` 返回 303 `/?admin=1`（含 `/admin/...` 与 `?embed=1`，POST 同样 303），由用户 SPA 自动打开同源 iframe overlay；`adminHTMLMedia` 例外保留（`/admin/users/{id}/photos/{mediaID}`、`/admin/activities/{id}/poster` 的 document 请求直接串流）；`safeNext` 把 `/admin`、`/admin/...` 重写为 `/?admin=1`；登录默认仍 `/`；SPA 仅在 query 有 `admin=1` 且 `can_admin` 时自动开 overlay，SPA 代码不改。
 - 后果：顶层入口统一落到 SPA overlay，无 404 死路；页面响应保留 `Vary: Sec-Fetch-Dest`，303 带 `Cache-Control: no-store` 防缓存串味；媒体仍先鉴权再串流。
 - 边界：不删除 `/admin` 路由（iframe 与 `/api/admin/*` 仍依赖同一套 RBAC、CSRF、模板）；不新增第二套管理 UI；不改 SPA 代码；本节取代第 10、11 节与第 2 节冲突的入口约束，SSR、RBAC、CSRF、审计不变，历史条目保留不改。
+
+## 14. 公开首页与飞书老用户迁移路径（2026-10-23）
+
+- 背景：v2 生产首页将由 `nantou.love` 承担品牌与引流；匿名访问 `/` 原来 303 到 `/login`，没有介绍、注册入口或飞书老用户指引。PM 要求公开首页参考 v1 `public.html`，并把「已在飞书版用过的人先设密码，再用手机号＋密码登录」讲清楚。
+- 决策：匿名 `GET /` 返回 200 服务端公开首页（品牌 Hero、人工审核/匿名喜欢/动态通知、注册主按钮与登录次按钮、飞书老用户三步说明、飞书入口链接与二维码）；登录后 `GET /` 仍返回 v1 Vue SPA。注册主 CTA 指向 `/register?from=home`；飞书入口固定 `https://applink.feishu.cn/T996FhMkTERp`。二维码图由 `PUBLIC_QR_IMAGE` 指定（默认 `qrcode.png`，staging 用 `qrcode_test.png`），只作为静态图引用，不解析内容。
+- 后果：匿名首屏不再依赖 SPA JavaScript，可独立承接 `nantou.love` 的公开流量；登录页同步出现主按钮「注册新账号」和同一条飞书说明。公开页不展示任何用户照片或资料，避免隐私暴露。匿名访问 `/?admin=1` 时先 303 `/login?next=...`，登录后由 SPA 依据 `admin=1` 自动打开管理台 overlay。
+- 边界：不改 `/admin` 的 303 `/?admin=1`、`/app` 的匿名跳转，以及 `/login`、`/register`、`/welcome` 现有行为；不新增第二套注册/登录流程；不把二维码内容写进代码或日志；公开页只做展示与跳转，不读取用户数据。

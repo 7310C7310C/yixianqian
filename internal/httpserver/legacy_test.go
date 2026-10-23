@@ -98,7 +98,7 @@ func TestLegacyAppRedirectsAnonymous(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/app", nil)
 	app.serveLegacyApp(rec, req)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d", rec.Code)

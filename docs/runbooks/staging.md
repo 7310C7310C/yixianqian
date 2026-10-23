@@ -74,7 +74,8 @@ mv /opt/yixianqian-next/bin/server.next /opt/yixianqian-next/bin/server
 systemctl restart yixianqian-next-test
 ```
 
-切换后按「健康检查」确认版本，再跑人脸 `unchecked=0` 与用户端/管理台 smoke。
+`config/staging.env` 增加 `PUBLIC_QR_IMAGE=qrcode_test.png`（公开首页使用测试二维码；生产用默认
+`qrcode.png`）。切换后按「健康检查」确认版本，再跑人脸 `unchecked=0` 与用户端/管理台 smoke。
 
 ### 分支与交付
 
@@ -146,12 +147,25 @@ grep -H 'client_max_body_size' /etc/nginx/sites-available/relay-next.conf
 ## 用户端 smoke
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' https://next.nantou.love/          # 未登录 303 /login
+curl -sS -o /dev/null -w '%{http_code}\n' https://next.nantou.love/          # 未登录 200 公开首页
 curl -sS -o /dev/null -w '%{http_code}\n' https://next.nantou.love/login     # 200
-curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies https://next.nantou.love/  # 已登录 200
+curl -sS -o /dev/null -w '%{http_code}\n' https://next.nantou.love/app       # 未登录 303 /login?next=/
+curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies https://next.nantou.love/  # 已登录 200 SPA
+curl -sS https://next.nantou.love/ | grep -q '立即注册'                       # 公开首页注册主按钮
+curl -sS https://next.nantou.love/ | grep -q '已在飞书版使用过'               # 飞书老用户说明
+curl -sS https://next.nantou.love/ | grep -q 'qrcode_test.png'               # staging 测试二维码
+curl -sS https://next.nantou.love/login | grep -q '注册新账号'                 # 登录页注册入口
 ```
 
+- 匿名 `/` 必须是服务端公开首页：品牌/卖点、注册主按钮、登录入口、飞书入口与二维码；不展示用户照片/资料。
 - 已登录 `/` 必须返回 v1 Vue SPA；`/legacy/api/home` 200；四 tab 用 hash 切换。
+- 公开首页/登录页真实浏览器回归（390×844 与 1280×900，含截图与二维码加载检查）：
+
+```bash
+BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> \
+  SHOT_DIR=/tmp/opencode/public-home-smoke \
+  python3 tools/browser/public_home_smoke.py
+```
 - 四 tab / 活动详情 / 弹层 / 管理台 iframe 的滚动隔离（防 tab 间串位、返回丢位置）用
   `tools/browser/tab_scroll_smoke.py` 回归；需真实账号 cookie，命令见脚本头注释：
   `BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> python3 tools/browser/tab_scroll_smoke.py`。

@@ -27,6 +27,7 @@ const (
 	defaultMediaDim      = 8000
 	defaultFaceProbeCmd  = "python3 tools/face_probe.py"
 	defaultFaceProbeTime = 8 * time.Second
+	defaultPublicQRImage = "qrcode.png"
 )
 
 // Config holds every runtime setting. Secrets are never logged.
@@ -42,6 +43,8 @@ type Config struct {
 	SessionTTL          time.Duration
 	TrustedProxies      []string
 	AutoMigrate         bool
+	// PublicQRImage 是公开首页二维码在 web/static/ 下的 PNG 文件名。
+	PublicQRImage string
 	// ActivityRosterDisabled hides the signup roster behind a count-only view.
 	// Zero value keeps the v1 behaviour (roster visible to logged-in users).
 	ActivityRosterDisabled bool
@@ -91,6 +94,7 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		SessionSecret:     get("SESSION_SECRET", ""),
 		CSRFSecret:        get("CSRF_SECRET", ""),
 		SessionCookieName: get("SESSION_COOKIE_NAME", "yxq_session"),
+		PublicQRImage:     get("PUBLIC_QR_IMAGE", defaultPublicQRImage),
 		R2Endpoint:        get("R2_ENDPOINT", ""),
 		R2Region:          get("R2_REGION", "auto"),
 		R2AccessKeyID:     get("R2_ACCESS_KEY_ID", ""),
@@ -120,6 +124,9 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	}
 
 	if err := validateCookieName(cfg.SessionCookieName); err != nil {
+		errs = append(errs, err)
+	}
+	if err := validatePublicQRImage(cfg.PublicQRImage); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -314,6 +321,27 @@ func normalizeEndpoint(raw string) (host string, fromScheme bool, secure bool, e
 		return "", false, true, fmt.Errorf("endpoint must be scheme://host[:port], got %q", raw)
 	}
 	return u.Host, strings.Contains(raw, "://"), u.Scheme == "https", nil
+}
+
+// validatePublicQRImage 只接受 web/static/ 下的 PNG 文件名，避免 env 把模板
+// 引到目录外或非图片路径。
+func validatePublicQRImage(name string) error {
+	if name == "" {
+		return errors.New("config: PUBLIC_QR_IMAGE is required")
+	}
+	if name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("config: PUBLIC_QR_IMAGE must be a file name without a path, got %q", name)
+	}
+	if !strings.HasSuffix(strings.ToLower(name), ".png") {
+		return fmt.Errorf("config: PUBLIC_QR_IMAGE must be a .png file, got %q", name)
+	}
+	for _, r := range name {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return fmt.Errorf("config: PUBLIC_QR_IMAGE contains invalid character %q", r)
+	}
+	return nil
 }
 
 func validateCookieName(name string) error {

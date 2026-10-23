@@ -41,9 +41,10 @@ func (a *App) handleWelcome(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("from") == "welcome" {
-		a.trackPublicEvent(r, "join_click", "welcome")
-	} else {
+	switch source := r.URL.Query().Get("from"); source {
+	case "welcome", "home":
+		a.trackPublicEvent(r, "join_click", source)
+	default:
 		a.trackPublicEvent(r, "page_view", "register")
 	}
 	a.renderRegister(w, r, http.StatusOK, nil, "")
@@ -537,6 +538,9 @@ func (a *App) registrationGate(w http.ResponseWriter, r *http.Request, user db.U
 }
 
 func (a *App) trackPublicEvent(r *http.Request, event, source string) {
+	if a.db == nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Second)
 	defer cancel()
 	if err := a.db.RecordTrackEvent(ctx, event, source, clientIP(r)); err != nil {

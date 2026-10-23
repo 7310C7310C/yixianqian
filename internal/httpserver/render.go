@@ -30,6 +30,15 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, status int, page st
 	if data.ActiveNav == "" {
 		data.ActiveNav = navForPage(page)
 	}
+	if data.QRImage == "" {
+		data.QRImage = a.cfg.PublicQRImage
+	}
+	if data.QRImage == "" {
+		data.QRImage = "qrcode.png"
+	}
+	if data.FeishuURL == "" {
+		data.FeishuURL = publicFeishuAppURL
+	}
 	data.CSRFToken = a.ensureCSRF(w, r)
 	body := a.renderPage(w, page, data)
 	if body == nil {

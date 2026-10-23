@@ -11,7 +11,7 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load templates: %v", err)
 	}
-	for _, page := range []string{"login", "activate", "error"} {
+	for _, page := range []string{"home", "login", "activate", "error"} {
 		if !tpl.HasPage(page) {
 			t.Fatalf("missing page %q", page)
 		}
@@ -25,11 +25,33 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 		notWant []string
 	}{
 		{
-			name:    "login",
-			page:    "login",
-			data:    PageData{Title: "登录", CSRFToken: "csrf-value", Next: "/x", Phone: "138"},
-			want:    []string{"<!doctype html>", "登录", `name="csrf_token" value="csrf-value"`, `name="next" value="/x"`, `value="138" required autofocus`},
+			name: "login",
+			page: "login",
+			data: PageData{
+				Title: "登录", CSRFToken: "csrf-value", Next: "/x", Phone: "138",
+				FeishuURL: publicFeishuAppURL,
+			},
+			want: []string{
+				"<!doctype html>", "登录", `name="csrf_token" value="csrf-value"`,
+				`name="next" value="/x"`, `value="138" required autofocus`,
+				`href="/register"`, "注册新账号", `class="button primary block"`,
+				"已在飞书版使用过", publicFeishuAppURL,
+			},
 			notWant: []string{`value="138" placeholder=`},
+		},
+		{
+			name: "home",
+			page: "home",
+			data: PageData{
+				Title: "祝你早日找到另一半", QRImage: "qrcode.png",
+				FeishuURL: publicFeishuAppURL,
+			},
+			want: []string{
+				"<!doctype html>", "一线牵", "立即注册", `href="/register?from=home"`,
+				`href="/login"`, "人工审核", "匿名喜欢", "动态通知",
+				"已在飞书版使用过", publicFeishuAppURL, `/static/qrcode.png`,
+			},
+			notWant: []string{`id="app"`},
 		},
 		{
 			name: "activate",

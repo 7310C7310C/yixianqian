@@ -225,3 +225,33 @@ a:focus-visible {
 @media (min-width: 900px) {
   .photo-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* 登录页：注册入口与飞书老用户说明 */
+.auth-alt {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.auth-alt .hint {
+  margin: 0;
+  text-align: center;
+}
+
+.auth-feishu {
+  margin-top: 0.9rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.auth-feishu p {
+  margin: 0;
+}
+
+.auth-feishu .hint {
+  margin-top: 0.35rem;
+}

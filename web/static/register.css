@@ -330,3 +330,91 @@
     margin-top: 0;
   }
 }
+
+/* --------------------------------------------------------------------------
+   公开首页（匿名 /）
+   -------------------------------------------------------------------------- */
+
+.home-hero-mark {
+  margin-bottom: 4px;
+  font-size: 46px;
+  line-height: 1.1;
+}
+
+.home-feature-icon {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: #fff0f3;
+  background: var(--shell-brand-soft, #fff0f3);
+  font-size: 22px;
+  line-height: 40px;
+  text-align: center;
+}
+
+.home-feishu {
+  padding: 18px 16px;
+  border: 1px solid #ffe3e8;
+  border-color: var(--shell-brand-line, #ffe3e8);
+  border-radius: 14px;
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+}
+
+.home-feishu h2 {
+  margin: 0 0 8px;
+}
+
+.home-feishu-lead {
+  margin: 0 0 10px;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.home-steps {
+  margin: 0 0 14px;
+  padding-left: 1.3em;
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.home-steps li + li {
+  margin-top: 6px;
+}
+
+.home-feishu-link {
+  text-decoration: none;
+}
+
+.home-qr {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.home-qr img {
+  display: block;
+  width: 200px;
+  height: 200px;
+  max-width: 100%;
+  margin: 0 auto;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.home-qr .hint {
+  margin-top: 8px;
+}
+
+@media (min-width: 700px) {
+  .home-feishu {
+    padding: 20px;
+  }
+}

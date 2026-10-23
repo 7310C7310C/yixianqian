@@ -226,6 +226,7 @@ func testConfig() config.Config {
 		MediaMaxBytes:     10 << 20,
 		MediaThumbSize:    128,
 		ActivationTTL:     time.Hour,
+		PublicQRImage:     "qrcode.png",
 		LogLevel:          slog.LevelError,
 		LogFormat:         "text",
 	}
@@ -385,12 +386,17 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 		t.Fatal("session cookie was not cleared")
 	}
 
-	// The old raw token must no longer authenticate after logout.
+	// The old raw token must no longer authenticate after logout. Anonymous
+	// home is now the public landing page, so assert the SPA flag is absent.
 	req, _ := http.NewRequest(http.MethodGet, server.URL+"/", nil)
 	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: sessionRaw})
 	resp = newWSClient(t, server.URL).do(req)
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("revoked session status = %d", resp.StatusCode)
+	body = readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || strings.Contains(body, `window.__YXQ_AUTHENTICATED__=true;`) {
+		t.Fatalf("revoked session status=%d body=%s", resp.StatusCode, body)
+	}
+	if !strings.Contains(body, "已在飞书版使用过") {
+		t.Fatal("revoked session did not fall back to the public landing page")
 	}
 
 	// A session for another user must not read the media (404, not 403, to

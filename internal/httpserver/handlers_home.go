@@ -1,11 +1,34 @@
 package httpserver
 
-import "net/http"
+import (
+	"net/http"
+	"net/url"
+)
 
-// handleHome serves the v1 Vue SPA for signed-in users. Anonymous visitors are
-// sent to the Go login page.
+// publicFeishuAppURL 是 v1 飞书版入口；公开首页与登录页共用，避免两处漂移。
+const publicFeishuAppURL = "https://applink.feishu.cn/T996FhMkTERp"
+
+// handleHome serves the public landing page to anonymous visitors and the v1
+// Vue SPA to signed-in users. The landing page stays free of account data; the
+// SPA remains the only logged-in experience.
 func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
-	a.serveLegacyApp(w, r)
+	if _, ok := currentUser(r); ok {
+		a.serveLegacyApp(w, r)
+		return
+	}
+	// /admin 的顶层 303 落在 /?admin=1；匿名时先登录并保留 next，登录后
+	// 由 SPA 依据 admin=1 自动打开管理台 overlay。
+	if r.URL.Query().Get("admin") == "1" {
+		http.Redirect(w, r, "/login?next="+url.QueryEscape("/?admin=1"), http.StatusSeeOther)
+		return
+	}
+	if r.Method == http.MethodGet {
+		a.trackPublicEvent(r, "page_view", "home")
+	}
+	a.render(w, r, http.StatusOK, "home", PageData{
+		Title:   "祝你早日找到另一半",
+		PageCSS: "register.css",
+	})
 }
 
 // handleLegacyApp serves the same SPA at /app, which keeps deep links from the

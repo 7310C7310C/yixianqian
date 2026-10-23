@@ -314,16 +314,15 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 		t.Fatal("reject was not audited")
 	}
 
-	// Rejection revokes the target's existing session.
+	// Rejection revokes the target's existing session. Anonymous `/` now serves
+	// the public landing page; the SPA must not be reachable with the old cookie.
 	resp = rejectClient.get("/")
-	if resp.StatusCode == http.StatusOK {
-		t.Fatal("rejected user session still works")
+	body = readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || strings.Contains(body, `window.__YXQ_AUTHENTICATED__=true;`) {
+		t.Fatalf("rejected user home status=%d body=%s", resp.StatusCode, body)
 	}
-	if resp.StatusCode != http.StatusSeeOther && resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("rejected user home status = %d", resp.StatusCode)
-	}
-	if resp.StatusCode == http.StatusSeeOther && !strings.HasPrefix(resp.Header.Get("Location"), "/login") {
-		t.Fatalf("rejected user redirected to %q", resp.Header.Get("Location"))
+	if !strings.Contains(body, "已在飞书版使用过") {
+		t.Fatal("rejected user did not fall back to the public landing page")
 	}
 }
 
