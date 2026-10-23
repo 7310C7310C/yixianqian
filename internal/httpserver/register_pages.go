@@ -72,7 +72,7 @@ func registerSections() []registerSectionSpec {
 				{Name: "gender", Label: "性别", Kind: registerKindSelect, Required: true, Options: registerGenderOptions},
 				{Name: "birthday", Label: "生日", Kind: registerKindDate, Required: true},
 				{Name: "phone", Label: "手机号码", Kind: registerKindTel, Required: true, MaxRunes: 20,
-					Placeholder: "0912345678", Hint: "不公开；登录账号与审核联络使用。"},
+					Placeholder: "手机号", Hint: "不公开；登录账号与审核联络使用。"},
 				{Name: "id_card", Label: "身份证号码", Kind: registerKindText, Required: true, MaxRunes: 30,
 					Hint: "不公开，仅供活动保险与人工审核；系统只显示尾号。"},
 				{Name: "wechat", Label: "微信号", Kind: registerKindText, Required: true, MaxRunes: 200,

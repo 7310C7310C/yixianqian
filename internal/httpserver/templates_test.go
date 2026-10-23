@@ -18,16 +18,18 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 	}
 
 	cases := []struct {
-		name string
-		page string
-		data PageData
-		want []string
+		name    string
+		page    string
+		data    PageData
+		want    []string
+		notWant []string
 	}{
 		{
-			name: "login",
-			page: "login",
-			data: PageData{Title: "登录", CSRFToken: "csrf-value", Next: "/x", Phone: "138"},
-			want: []string{"<!doctype html>", "登录", `name="csrf_token" value="csrf-value"`, `name="next" value="/x"`},
+			name:    "login",
+			page:    "login",
+			data:    PageData{Title: "登录", CSRFToken: "csrf-value", Next: "/x", Phone: "138"},
+			want:    []string{"<!doctype html>", "登录", `name="csrf_token" value="csrf-value"`, `name="next" value="/x"`, `value="138" required autofocus`},
+			notWant: []string{`value="138" placeholder=`},
 		},
 		{
 			name: "activate",
@@ -52,6 +54,11 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 			for _, want := range tc.want {
 				if !strings.Contains(html, want) {
 					t.Fatalf("missing %q in output", want)
+				}
+			}
+			for _, unwanted := range tc.notWant {
+				if strings.Contains(html, unwanted) {
+					t.Fatalf("unexpected %q in output", unwanted)
 				}
 			}
 		})

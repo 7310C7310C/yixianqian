@@ -203,7 +203,8 @@ func TestRegisterTemplatesRender(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{`action="/register"`, `enctype="multipart/form-data"`,
-		`name="csrf_token" value="csrf-value"`, `name="photos"`, "身份证号码", "登录密码"} {
+		`name="csrf_token" value="csrf-value"`, `name="photos"`, "身份证号码", "登录密码",
+		`name="phone"`, `placeholder="手机号"`} {
 		if !strings.Contains(register.String(), want) {
 			t.Fatalf("register missing %q", want)
 		}
