@@ -26,6 +26,7 @@ body.admin-shell {
   --adm-text: #323233;
   --adm-text-strong: #1f2022;
   --adm-muted: #6b7280;
+  --adm-label: #646566;
   --adm-placeholder: #969799;
   --adm-border: #ebedf0;
   --adm-divider: #f2f3f5;
@@ -125,6 +126,7 @@ html.yxq-embed-dark body.admin-shell {
   --adm-text: #f5f5f5;
   --adm-text-strong: #ffffff;
   --adm-muted: #a0a0a4;
+  --adm-label: #c7c7cc;
   --adm-placeholder: #8a8a8e;
   --adm-border: #3a3a3e;
   --adm-divider: #2c2c2e;
@@ -140,6 +142,31 @@ html.yxq-embed-dark body.admin-shell {
   --adm-shadow: none;
   --adm-shadow-pop: 0 8px 28px rgba(0, 0, 0, .45);
   color-scheme: dark;
+}
+
+/* 深色模式下旧 Phase B 组件的硬编码浅色需要一起切换。 */
+html.yxq-embed-dark body.admin-shell .admin-table th {
+  background: var(--adm-surface-2);
+  color: var(--adm-muted);
+}
+
+html.yxq-embed-dark body.admin-shell .alert-error,
+html.yxq-embed-dark body.admin-shell .admin-alert--error {
+  border-color: var(--adm-danger-line);
+  color: var(--adm-danger);
+}
+
+html.yxq-embed-dark body.admin-shell .alert-ok,
+html.yxq-embed-dark body.admin-shell .admin-alert--ok {
+  border-color: var(--adm-success-soft);
+  color: var(--adm-success);
+}
+
+html.yxq-embed-dark body.admin-shell .alert-warn,
+html.yxq-embed-dark body.admin-shell .admin-alert--warn,
+html.yxq-embed-dark body.admin-shell .admin-confirm {
+  border-color: var(--adm-warning-soft);
+  color: var(--adm-warning);
 }
 
 body.admin-shell a {
@@ -872,7 +899,7 @@ body.admin-shell .pill {
   border: 1px solid transparent;
   border-radius: var(--adm-pill);
   background: var(--adm-surface-2);
-  color: #646566;
+  color: var(--adm-label);
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
@@ -1055,7 +1082,7 @@ body.admin-shell .pill-warn {
   padding: 0 14px;
   flex: 1 0 auto;
   border-radius: 9px;
-  color: #646566;
+  color: var(--adm-label);
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
@@ -1156,7 +1183,7 @@ body.admin-shell .pill-warn {
 
 .admin-field-label {
   display: block;
-  color: #646566;
+  color: var(--adm-label);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
@@ -1629,7 +1656,7 @@ body.admin-shell .admin-thumb {
   display: grid;
   gap: 4px;
   margin: 0;
-  color: #646566;
+  color: var(--adm-label);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -2415,7 +2442,7 @@ body.admin-shell .admin-filter {
 }
 
 body.admin-shell .admin-filter > label {
-  color: #646566;
+  color: var(--adm-label);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2568,7 +2595,7 @@ body.admin-shell .admin-role-form {
 body.admin-shell .admin-role-form label {
   display: grid;
   gap: 5px;
-  color: #646566;
+  color: var(--adm-label);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2654,7 +2681,7 @@ body.admin-shell .admin-roster-filter {
 body.admin-shell .admin-roster-filter label {
   display: grid;
   gap: 5px;
-  color: #646566;
+  color: var(--adm-label);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2729,7 +2756,7 @@ body.admin-shell .stack > label,
 body.admin-shell fieldset > label:not(.admin-check) {
   display: grid;
   gap: 5px;
-  color: #646566;
+  color: var(--adm-label);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2786,7 +2813,7 @@ body.admin-shell .admin-matching-form label,
 body.admin-shell .admin-matching-search label {
   display: grid;
   gap: 5px;
-  color: #646566;
+  color: var(--adm-label);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2884,7 +2911,7 @@ body.admin-shell .admin-audit-filter {
 body.admin-shell .admin-audit-filter label {
   display: grid;
   gap: 5px;
-  color: #646566;
+  color: var(--adm-label);
   font-size: 12px;
   font-weight: 600;
 }
