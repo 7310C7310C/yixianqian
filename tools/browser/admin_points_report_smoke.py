@@ -42,6 +42,8 @@ FORBIDDEN_PATHS = (
     "/legacy/api/admin/points/overview",
     "/legacy/api/messages/reported",
 )
+# GaLoading 组件根节点：只有整块异步内容还在加载时才会挂载，是「数据未到」的统一标记。
+LOADING = ".ga-slow-loading"
 
 
 class SmokeFailure(AssertionError):
@@ -142,6 +144,21 @@ def admin_cell(page, label: str):
     return page.locator(".van-cell").filter(has_text=label).first
 
 
+def wait_block_loaded(page, tag: str, what: str, ready_js: str, timeout: int = 15000) -> None:
+    """等整块异步内容渲染完成：加载指示消失且 ready_js 为真。
+
+    切页瞬间 `.pa-title` / `.ga-title` 已随 v-else-if 分支挂载，但 `paLoading` 仍为 true，
+    统计与列表还没进 DOM；此时直接数卡片会稳定得到 0。必须等加载块整体结束。
+    """
+    script = f"() => !document.querySelector('{LOADING}') && ({ready_js})"
+    try:
+        page.wait_for_function(script, timeout=timeout)
+    except PlaywrightTimeoutError as exc:
+        raise SmokeFailure(
+            f"{tag}: {what} 未在 {timeout // 1000}s 内渲染完成"
+            f"（加载指示未消失或数据未到）：{exc}") from exc
+
+
 def check_admin_entries(page, shot_dir: Path, tag: str) -> None:
     for label in ("活动管理", "麦穗管理", "举报管理", "管理后台"):
         cell = admin_cell(page, label)
@@ -164,6 +181,9 @@ def open_points_admin(page, shot_dir: Path, tag: str) -> None:
         page.locator(".pa-title", has_text="麦穗管理").wait_for(state="visible", timeout=15000)
     except PlaywrightTimeoutError as exc:
         raise SmokeFailure(f"{tag}: 麦穗管理页未打开（权限或接口失败）：{exc}") from exc
+    # 标题先出现、paLoading 仍为 true 时 .pa-stats 整块还没渲染；等四张统计卡真正进 DOM。
+    wait_block_loaded(page, tag, "麦穗管理总览",
+                      "document.querySelectorAll('.pa-stats .pa-stat').length === 4")
     if page.get_by_text("麦穗没载出来").count():
         raise SmokeFailure(f"{tag}: 麦穗管理页出现错误态")
     stats = page.locator(".pa-stats .pa-stat")
@@ -195,6 +215,9 @@ def check_points_tabs(page, shot_dir: Path, tag: str) -> None:
         tab = page.locator(".van-tab").filter(has_text=label).first
         try:
             tab.click(timeout=5000)
+            # 先确认 tab 已选中，再等面板数据行；避免过场期间读到上一个面板的 .pa-row。
+            page.locator(".van-tab--active").filter(has_text=label).first.wait_for(
+                state="visible", timeout=5000)
             page.locator(".van-tab__panel:visible .pa-row").first.wait_for(
                 state="visible", timeout=15000)
         except PlaywrightTimeoutError as exc:
@@ -212,10 +235,10 @@ def back_to_profile(page, tag: str) -> None:
 
 def open_reported(page, shot_dir: Path, tag: str) -> None:
     admin_cell(page, "举报管理").click()
-    try:
-        page.locator(".reported-msg-content, .van-empty").first.wait_for(state="visible", timeout=15000)
-    except PlaywrightTimeoutError as exc:
-        raise SmokeFailure(f"{tag}: 举报管理页未载入：{exc}") from exc
+    # loadingReported 期间模板既没有 .reported-msg-content 也没有 .van-empty：
+    # 等加载块结束，避免把「还在转圈」误判成「列表为空」。
+    wait_block_loaded(page, tag, "举报管理列表",
+                      "!!document.querySelector('.reported-msg-content, .van-empty')")
     cards = page.locator(".msg-card")
     if cards.count() == 0:
         raise SmokeFailure(f"{tag}: 举报列表为空（smoke 夹具缺少待处理举报）")

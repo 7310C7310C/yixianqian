@@ -38,6 +38,8 @@ except ImportError:  # pragma: no cover - environment guard
 
 VIEWPORTS = ((390, 844), (1280, 900))
 MAX_ROWS = 5
+# GaLoading 组件根节点：只有整块异步内容还在加载时才会挂载，是「数据未到」的统一标记。
+LOADING = ".ga-slow-loading"
 
 
 class SmokeFailure(AssertionError):
@@ -49,6 +51,21 @@ def require(name: str) -> str:
     if not value:
         sys.exit(f"缺少环境变量 {name}")
     return value
+
+
+def wait_block_loaded(page, tag: str, what: str, ready_js: str, timeout: int = 15000) -> None:
+    """等整块异步内容渲染完成：加载指示消失且 ready_js 为真。
+
+    `.ga-title` 在切页瞬间就挂载，但 `gaLoading` 仍为 true（只渲染 ga-loading），
+    统计、列表、名册都还没进 DOM；只看标题就断言会把加载态当成空数据。
+    """
+    script = f"() => !document.querySelector('{LOADING}') && ({ready_js})"
+    try:
+        page.wait_for_function(script, timeout=timeout)
+    except PlaywrightTimeoutError as exc:
+        raise SmokeFailure(
+            f"{tag}: {what} 未在 {timeout // 1000}s 内渲染完成"
+            f"（加载指示未消失或数据未到）：{exc}") from exc
 
 
 class ConsoleGuard:
@@ -149,11 +166,17 @@ def open_admin_list(page, shot_dir: Path, tag: str) -> None:
     page.locator(".van-cell").filter(has_text="活动管理").first.click()
     try:
         page.locator(".ga-title", has_text="活动管理").wait_for(state="visible", timeout=15000)
-        page.locator(".ga-act-row").first.wait_for(state="visible", timeout=15000)
     except PlaywrightTimeoutError as exc:
-        raise SmokeFailure(f"{tag}: 活动管理列表未载入（权限或接口失败）：{exc}") from exc
+        raise SmokeFailure(f"{tag}: 活动管理页未打开（权限或接口失败）：{exc}") from exc
+    # gaLoading 期间统计和 .ga-act-row 都不存在；等整块结束，避免把加载态当空列表。
+    wait_block_loaded(page, tag, "活动管理列表",
+                      "!!document.querySelector('.ga-act-row, .van-empty')")
     if page.get_by_text("活动没载出来").count():
         raise SmokeFailure(f"{tag}: 活动管理列表出现错误态")
+    try:
+        page.locator(".ga-act-row").first.wait_for(state="visible", timeout=15000)
+    except PlaywrightTimeoutError as exc:
+        raise SmokeFailure(f"{tag}: 活动管理列表为空（smoke 夹具缺少活动）：{exc}") from exc
     page.screenshot(path=str(shot_dir / f"{tag}-group-admin.png"))
 
 
@@ -174,6 +197,8 @@ def wait_console(page, tag: str, activity_no: str) -> bool:
         page.locator(".ga-signin-code-field").wait_for(state="visible", timeout=15000)
     except PlaywrightTimeoutError as exc:
         raise SmokeFailure(f"{tag}: 活动控制台未载入（{activity_no}）：{exc}") from exc
+    if page.get_by_text("活动没载出来").count():
+        raise SmokeFailure(f"{tag}: 活动控制台出现错误态（{activity_no}）")
     if page.locator(".ga-status-btns .van-button").count() < 5:
         raise SmokeFailure(f"{tag}: 控制台缺少活动状态按钮（{activity_no}）")
     if not page.locator(".ga-detail-tabs").count():
@@ -203,6 +228,10 @@ def check_roster(page, shot_dir: Path, tag: str) -> None:
         page.locator(".ga-title", has_text="报名名单").wait_for(state="visible", timeout=15000)
     except PlaywrightTimeoutError as exc:
         raise SmokeFailure(f"{tag}: 报名名单页未打开：{exc}") from exc
+    # .ga-roster-tabs 只在 gaRosterLoading 结束后渲染；只等标题会把加载态当名单页。
+    wait_block_loaded(page, tag, "报名名单", "!!document.querySelector('.ga-roster-tabs')")
+    if page.get_by_text("名单没载出来").count():
+        raise SmokeFailure(f"{tag}: 报名名单出现错误态")
     page.locator(".ga-roster-tabs").first.wait_for(state="visible", timeout=10000)
     page.screenshot(path=str(shot_dir / f"{tag}-group-roster.png"))
     page.locator(".ga-page .back-nav").first.click()
@@ -216,7 +245,11 @@ def check_checkin(page, shot_dir: Path, tag: str) -> None:
         page.locator(".ga-title", has_text="现场签到").wait_for(state="visible", timeout=15000)
     except PlaywrightTimeoutError as exc:
         raise SmokeFailure(f"{tag}: 现场签到页未打开：{exc}") from exc
-    page.locator(".ga-signin-row, .ga-empty").first.wait_for(state="visible", timeout=15000)
+    # 加载态本身就是一个 .ga-empty 包着 ga-loading；只等 .ga-empty 会把转圈误当「空名册」。
+    wait_block_loaded(page, tag, "现场签到名册", "!!document.querySelector('.ga-roster-tabs')")
+    if page.get_by_text("签到名册没载出来").count():
+        raise SmokeFailure(f"{tag}: 现场签到名册出现错误态")
+    page.locator(".ga-signin-row, .van-empty").first.wait_for(state="visible", timeout=15000)
     page.screenshot(path=str(shot_dir / f"{tag}-checkin.png"))
     page.locator(".ga-page .back-nav").first.click()
     # 控制台→签到会把 group_detail 的历史条目就地改写为 checkin，返回直接到总览；
