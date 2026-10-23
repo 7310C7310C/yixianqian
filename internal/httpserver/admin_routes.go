@@ -95,8 +95,14 @@ func (a *App) loadAdminAccess(ctx context.Context, user db.User) (adminAccess, e
 
 func (a *App) adminHTML(permission string, next func(http.ResponseWriter, *http.Request, adminAccess)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 顶层 document 与 iframe 一样渲染 SSR；不再跳 SPA（/?admin=1）。
-		// SPA 内 overlay 仍通过 iframe 访问 /admin?embed=1，行为不变。
+		// 顶层不提供管理台页面：浏览器 document 导航访问 /admin、/admin/...（含
+		// ?embed=1）一律 404，且在鉴权之前返回——不跳登录，也不跳 SPA。管理台只经
+		// 用户端 SPA 的同源 iframe 使用（/admin?embed=1），iframe 与无 header 请求
+		// （测试/CLI）仍照常鉴权并渲染 SSR。
+		if r.Header.Get("Sec-Fetch-Dest") == "document" {
+			http.NotFound(w, r)
+			return
+		}
 		user, ok := a.requireUserHTML(w, r)
 		if !ok {
 			return

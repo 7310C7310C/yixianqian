@@ -27,7 +27,7 @@ sources: []
 1. **成品导向，不做 POC。** 每个功能都要能给真实用户使用。
 2. **用户功能不可省。** `docs/product-spec.md` 的 Must-Have 全部通过前，不宣布完工。
 3. **单一真相源。** PostgreSQL 是权威；R2 只存媒体/备份；Bitable 不是 runtime。
-4. **用户端复用 v1，管理台 SSR。** 用户端用 v1 Vue 3 + Vant SPA；管理页面用 Go 服务端渲染，顶层 document 访问 `/admin` 直接渲染 SSR，用户 SPA 也可用同源 iframe（`/admin?embed=1`）承载同一套页面。管理台顶层入口不再依赖 SPA 的 JavaScript；登录、注册、启用、密码页仍无 JS 可用。
+4. **用户端复用 v1，管理台 SSR。** 用户端用 v1 Vue 3 + Vant SPA；管理页面用 Go 服务端渲染，只经用户 SPA 的同源 iframe（`/admin?embed=1`）使用；浏览器顶层访问 `/admin` 一律 404，不提供独立页面。登录、注册、启用、密码页仍无 JS 可用。
 5. **UI 可辨识、可延续。** 保留品牌、四个主入口、卡片浏览、主要用语与操作习惯；重写技术与大改版分开。
 6. **安全与隐私默认开启。** 密码、session、CSRF、RBAC、审计、私有媒体、最小权限。
 7. **先 staging 后生产。** 不在生产做实验；所有变更先过 staging 与审查。

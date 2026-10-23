@@ -80,3 +80,10 @@ sources: []
 - 决策：浏览器顶层 document 访问 `/admin`、`/admin/...`（含 `?embed=1`）直接渲染 SSR，不再 303 到 `/?admin=1`；未登录仍跳 `/login?next=<原路径>`，已登录无权限仍 403。SPA 内 `/?admin=1` 打开 iframe overlay 的逻辑与 `/admin?embed=1` iframe 路由保留。
 - 后果：顶层入口不再依赖 SPA JavaScript；SPA 内嵌入口仍保留。现阶段不为顶层入口做兼容跳转，个别路径 404 可接受。
 - 边界：不删除 `/admin` 路由；不新增第二套管理 UI；smoke 断言顶层 SSR/登录跳转与 iframe SSR，不再断言 303。本节取代第 2 节中“顶层一律 303 到 `/?admin=1`”的入口约束，SSR、RBAC、CSRF、审计等其余约束不变。
+
+## 11. 顶层 `/admin` 直接 404，管理台只经站内 iframe（2026-10-23）
+
+- 背景：第 10 节让顶层 document 直接渲染 SSR 后，浏览器直接打开 `/admin` 与管理台 iframe 内看到的是同一套 SSR，但外壳/样式观感不同（PM：「为何 /admin 及 ?admin=1 看起来不一样样式，我压根不需要 /admin 那个」）。
+- 决策：`adminHTML` 在所有 `/admin`、`/admin/...`（含 `?embed=1`）路由的鉴权之前判断 `Sec-Fetch-Dest: document`，命中即 404，不跳登录、不跳 `/?admin=1`、不渲染管理台；非 document（iframe、无 header 的测试/CLI）行为不变，仍 SSR 鉴权与渲染。
+- 后果：管理台唯一入口是用户 SPA 内的同源 iframe（`/?admin=1` overlay → `/admin?embed=1`）；`/login?next=/admin` 的 next 原样保留，登录后落到 404 属可接受。不支持 `Sec-Fetch-*` 的旧浏览器无法与服务端区分，仍会看到 SSR 页面。
+- 边界：不删除 `/admin` 路由（iframe 与 `/api/admin/*` 依赖同一套 RBAC、CSRF、模板）；不新增第二套管理 UI；不改模板结构；smoke 改为断言顶层 404、iframe SSR。本节取代第 10 节「顶层 document 直接渲染 SSR」与第 2 节「顶层一律 303 到 `/?admin=1`」的入口约束，SSR、RBAC、CSRF、审计等其余约束不变。

@@ -27,7 +27,7 @@ sources:
 ### 管理端
 - 用户审核与详情/照片、活动与广播、报名/签到名单、分组/一对一控制台、麦穗与兑换、举报/反馈、审计与 CSV 导出、RBAC。
 - 管理台以运营效率为先，可自行设计，不受 v1 视觉限制；但同样使用简体中文、服务端权限与审计。
-- 管理台顶层 `/admin` 直接渲染 SSR，不再跳 `/?admin=1`；用户 SPA 仍可用内嵌 iframe（`/admin?embed=1`）承载同一套页面。
+- 管理台只经用户 SPA 的同源内嵌 iframe（`/admin?embed=1`）使用；浏览器顶层 `/admin` 一律 404，不提供独立页面。
 
 ### 明确不做
 - 飞书机器人、飞书表单、Bitable 运行时、飞书 Drive 作为 v2 依赖。
@@ -57,8 +57,8 @@ server1（洛杉矶）—— nginx + Go app（127.0.0.1:8093）
 - **数据库**：PostgreSQL 16；迁移随应用启动执行。
 - **媒体**：R2 只做对象存储，桶不公开；浏览器只拿应用路径 `/media/{id}`，不拿 R2/Cloudflare 直链。
 - **用户端前端**：v1 Vue 3 + Vant SPA，保留旧版 DOM/CSS/AJAX/tab 行为；不新写 React/Vue 应用。
-- **管理台前端**：Go 模板 + 少量原生 JS；不引入 SPA 框架。顶层 document 访问 `/admin` 直接渲染 SSR，不再 303 到 `/?admin=1`；用户 SPA 仍可用同源 iframe（`/admin?embed=1`）承载同一套 SSR 页面。
-- **无 JS**：用户 SPA 需要 JavaScript；登录、注册、启用、改密页仍保持服务端可用（无 JS 可完成）。管理台顶层为 SSR、不依赖用户 SPA；SPA 内嵌入口仍需要用户 SPA 的 JavaScript，不承诺全部管理操作无 JS 可用。
+- **管理台前端**：Go 模板 + 少量原生 JS；不引入 SPA 框架。管理台只经用户 SPA 的同源 iframe（`/admin?embed=1`）承载；浏览器顶层 document 访问 `/admin`、`/admin/...` 一律 404，不渲染管理台、不跳转。
+- **无 JS**：用户 SPA 需要 JavaScript；登录、注册、启用、改密页仍保持服务端可用（无 JS 可完成）。管理台只经用户 SPA 内嵌入口（同源 iframe）使用，需要用户 SPA 的 JavaScript，不承诺全部管理操作无 JS 可用。
 - **不引入 Redis**：当前正确性不依赖缓存或队列；需要时再评估。
 - **外部依赖**：不引外部字体/CDN；前端资产随仓库本地提供。
 

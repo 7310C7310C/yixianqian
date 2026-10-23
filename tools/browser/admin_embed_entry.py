@@ -3,11 +3,12 @@
 
 覆盖（390×844 与 1280×900 两个视口）：
 
-1. 浏览器顶层打开 /admin：服务端直接渲染 SSR 管理台（document 与 iframe 一致），
-   顶层 URL 保持 /admin，不再 303 到 /?admin=1；无 Sec-Fetch-Dest 的请求同样 200；
+1. 浏览器顶层打开 /admin：服务端一律 404，不渲染管理台、不跳登录、
+   不跳 /?admin=1；无 Sec-Fetch-Dest 的请求仍 200（测试/API 兼容）；
 2. 内嵌 iframe 首载 /admin?embed=1，骨架先出、iframe 后载；iframe 内部导航到
    /admin/users（无 query）仍能加载，顶层 URL 不变；
-3. 登录 next=/admin：登录页 next 保留 /admin（不再改写为 /?admin=1），登录后直接进入 SSR 管理台；
+3. 登录 next=/admin：登录页 next 保留 /admin（不再改写为 /?admin=1），登录后顶层
+   /admin 落到 404，不渲染管理台；
 4. 非 admin 访问 /?admin=1：不打开管理台，query 清掉；
 5. 修改密码页与「我的资料」同宽（视口宽 - 24），返回列 full width 且不遮内容；
    page-slide 过场中改密页背景不透明、relative z-index，返回后还原「我的」滚动位置；
@@ -75,6 +76,9 @@ class ConsoleGuard:
             return
         location = (getattr(msg, "location", None) or {}).get("url", "")
         if "legacy/api/notifications/stream" in location or "notifications/stream" in msg.text:
+            return
+        # 顶层 /admin 故意返回 404；Chrome 会把主文档 404 记成 network error，属预期。
+        if "404" in msg.text and ("/admin" in location or "/admin" in self.page.url):
             return
         self.errors.append(f"console: {msg.text} ({location})")
 
@@ -223,20 +227,21 @@ def box(locator) -> dict:
 
 
 def goto_admin_top_level(page, base: str, shot_dir: Path, tag: str) -> None:
-    """顶层 /admin 直接 SSR：URL 保持 /admin，不出现 SPA overlay。"""
+    """顶层 /admin 一律 404：不渲染管理台，不跳登录/SPA，不出现 SPA overlay。"""
     reset_class_logs(page)
-    page.goto(base + "/admin", wait_until="domcontentloaded", timeout=30000)
-    try:
-        page.locator(".admin-nav").wait_for(state="visible", timeout=20000)
-    except PlaywrightTimeoutError as exc:
-        raise SmokeFailure(f"{tag}: 顶层 /admin 未渲染 SSR 管理台：{exc}") from exc
+    resp = page.goto(base + "/admin", wait_until="domcontentloaded", timeout=30000)
+    if resp is None or resp.status != 404:
+        raise SmokeFailure(
+            f"{tag}: 顶层 /admin = {getattr(resp, 'status', None)}，want 404")
 
     final = urlparse(page.url)
     if final.path != "/admin" or final.query:
         raise SmokeFailure(f"{tag}: 顶层 /admin URL 异常（实际 {page.url}）")
+    if page.locator(".admin-nav").count():
+        raise SmokeFailure(f"{tag}: 顶层 /admin 不应渲染管理台")
     if page.locator(".embed-overlay").count():
         raise SmokeFailure(f"{tag}: 顶层 /admin 不应打开 SPA 内嵌 overlay")
-    page.screenshot(path=str(shot_dir / f"{tag}-admin-top-level.png"))
+    page.screenshot(path=str(shot_dir / f"{tag}-admin-top-level-404.png"))
 
     # 回到 SPA 首页，供后续底部 tab / 改密页 / 我的页检查使用。
     page.goto(base + "/", wait_until="domcontentloaded", timeout=30000)
@@ -247,16 +252,20 @@ def goto_admin_top_level(page, base: str, shot_dir: Path, tag: str) -> None:
 
 
 def check_direct_requests(page, base: str, tag: str) -> None:
-    """服务端契约：document / iframe / 无 header 均 200 SSR；不再 303。"""
+    """服务端契约：document 404（无跳转）；iframe / 无 header 仍 200 SSR。"""
     admin_url = base + "/admin"
     resp = page.request.get(admin_url, headers={"Sec-Fetch-Dest": "document"}, max_redirects=0)
-    if resp.status != 200 or "admin-nav" not in resp.text():
+    if resp.status != 404:
         raise SmokeFailure(
             f"{tag}: document /admin = {resp.status} location={resp.headers.get('location')!r}，"
-            "want 200 SSR")
+            "want 404")
+    if resp.headers.get("location"):
+        raise SmokeFailure(f"{tag}: document /admin 不应跳转（{resp.headers.get('location')!r}）")
+    if "admin-nav" in resp.text():
+        raise SmokeFailure(f"{tag}: document /admin 不应渲染管理台")
     resp = page.request.get(admin_url, headers={"Sec-Fetch-Dest": "iframe"})
-    if resp.status != 200:
-        raise SmokeFailure(f"{tag}: iframe /admin = {resp.status}，want 200")
+    if resp.status != 200 or "admin-nav" not in resp.text():
+        raise SmokeFailure(f"{tag}: iframe /admin = {resp.status}，want 200 SSR")
     resp = page.request.get(admin_url)
     if resp.status != 200:
         raise SmokeFailure(f"{tag}: 无 header /admin = {resp.status}，want 200（测试/API 兼容）")
@@ -288,15 +297,21 @@ def check_login_next_admin(browser, base: str, shot_dir: Path, tag: str) -> None
             raise SmokeFailure(f"{tag}: 登录页 next 未保留 /admin（实际 {hidden!r}）")
         page.fill('input[name="phone"]', phone)
         page.fill('input[name="password"]', password)
-        page.click('button[type="submit"]')
         try:
-            page.locator(".admin-nav").wait_for(state="visible", timeout=20000)
+            with page.expect_navigation(wait_until="domcontentloaded", timeout=20000) as nav:
+                page.click('button[type="submit"]')
         except PlaywrightTimeoutError as exc:
-            raise SmokeFailure(f"{tag}: 登录 next=/admin 后未进入 SSR 管理台：{exc}") from exc
+            raise SmokeFailure(f"{tag}: 登录 next=/admin 后未跳转：{exc}") from exc
+        resp = nav.value
         final = urlparse(page.url)
         if final.path != "/admin" or final.query:
             raise SmokeFailure(f"{tag}: 登录后 URL 不是 /admin（{page.url}）")
-        page.screenshot(path=str(shot_dir / f"{tag}-login-next-admin.png"))
+        if resp is None or resp.status != 404:
+            raise SmokeFailure(
+                f"{tag}: 登录后顶层 /admin = {getattr(resp, 'status', None)}，want 404")
+        if page.locator(".admin-nav").count():
+            raise SmokeFailure(f"{tag}: 登录 next=/admin 后仍渲染管理台")
+        page.screenshot(path=str(shot_dir / f"{tag}-login-next-admin-404.png"))
         guard.assert_clean(f"{tag} 登录 next=/admin")
     finally:
         context.close()
@@ -447,7 +462,7 @@ def run_viewport(browser, base: str, width: int, height: int, shot_dir: Path) ->
         check_password_page(page, base, shot_dir, tag, width)
         check_admin_from_profile(page, base, shot_dir, tag)
         guard.assert_clean(f"{tag} admin")
-        print(f"[ok] {tag}x{height} 顶层 SSR / iframe / 骨架 / 过场 / 改密页 / 返回还原")
+        print(f"[ok] {tag}x{height} 顶层 404 / iframe / 骨架 / 过场 / 改密页 / 返回还原")
     finally:
         context.close()
 

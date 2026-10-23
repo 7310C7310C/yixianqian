@@ -44,8 +44,8 @@ sources:
 
 把「一线牵」改造成不依赖飞书的独立网页产品。Go 模块化单体、PostgreSQL、R2，
 公开入口是 server2（香港）TLS relay，回源 server1。用户端复用 v1 Vue 3 + Vant SPA；
-管理台使用 Go 服务端渲染（SSR），顶层 `/admin` 直接渲染 SSR，用户 SPA 仍可用
-同源 iframe（`/admin?embed=1`）承载同一套页面；RBAC、CSRF 与审计不变。
+管理台使用 Go 服务端渲染（SSR），只经用户 SPA 的同源 iframe（`/admin?embed=1`）使用；
+浏览器顶层 document 访问 `/admin` 一律 404，不提供独立页面；RBAC、CSRF 与审计不变。
 不做 POC；用户功能必须完整，完成标准见 `docs/product-spec.md`。
 
 ## 结构
@@ -159,7 +159,7 @@ CI 以当前 HEAD 的 push run 为准；红灯先看 `gh run view <id> --log-fai
 - 部署前保留上一版 binary；migration 只增不改；媒体只经应用代理。
 - 人脸检测（migration 0005）已于 2026-10-22 首次上线；常规部署走 runbook「常规部署」一节；
   首次上线/重建见 git 历史旧版 runbook，当前不要执行 pre-0005 回滚或全量回填。
-- 顶层 `/admin` 直接渲染 SSR（不再 303 到 `/?admin=1`）；iframe `/admin?embed=1` 同样 SSR；
-  smoke 断言顶层 200/登录跳转，或验证 iframe SSR。
+- 顶层 document 访问 `/admin`、`/admin/...`（含 `?embed=1`）一律 404，不 303、不渲染；
+  管理台只经站内 iframe `/admin?embed=1` 使用，smoke 断言顶层 404 与 iframe SSR。
 - ID 门禁 P0 与已知缺口以 `docs/STATUS.md` 为准。
 - v1 旧部署 skill 不适用；详细步骤见 `docs/runbooks/staging.md`。

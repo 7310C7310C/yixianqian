@@ -7,43 +7,38 @@ import (
 	"testing"
 )
 
-// 顶层 document 与 iframe 一样渲染 SSR：不再跳 /?admin=1。
-// 未登录仍跳登录页，next 保留原始 /admin 深链。
-func TestAdminHTMLDocumentRendersSSR(t *testing.T) {
+// 顶层不提供管理台页面：document 导航（含 /admin?embed=1）一律 404，且在鉴权
+// 之前返回——不跳登录、不跳 SPA、不带 Location。管理台只经站内 iframe 使用。
+func TestAdminHTMLDocumentIsNotFound(t *testing.T) {
 	app := &App{}
 	handler := app.adminHTML("", func(w http.ResponseWriter, _ *http.Request, _ adminAccess) {
-		w.WriteHeader(http.StatusOK)
+		t.Fatal("document 请求不应进入管理台 handler")
 	})
 
-	documentCases := []string{
+	for _, target := range []string{
 		"/admin",
 		"/admin/users?status=pending",
 		"/admin?embed=1",
-	}
-	for _, target := range documentCases {
+	} {
 		req := httptest.NewRequest(http.MethodGet, target, nil)
 		req.Header.Set("Sec-Fetch-Dest", "document")
 		rec := httptest.NewRecorder()
 		handler(rec, req)
-		if rec.Code != http.StatusSeeOther {
-			t.Fatalf("GET %s: status = %d, want login redirect", target, rec.Code)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("GET %s: status = %d, want 404", target, rec.Code)
 		}
-		loc := rec.Header().Get("Location")
-		if loc == "/?admin=1" {
-			t.Fatalf("GET %s: 仍跳 SPA（%q）", target, loc)
-		}
-		if want := "/login?next=" + url.QueryEscape(target); loc != want {
-			t.Fatalf("GET %s: location = %q, want %q", target, loc, want)
+		if loc := rec.Header().Get("Location"); loc != "" {
+			t.Fatalf("GET %s: location = %q, want no redirect", target, loc)
 		}
 	}
 
-	// POST 顶层 document 与 iframe/无 header 一致：未登录回 /login，不带 next。
+	// POST document 同样在鉴权前 404，不暴露登录跳转。
 	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/approve", nil)
 	req.Header.Set("Sec-Fetch-Dest", "document")
 	rec := httptest.NewRecorder()
 	handler(rec, req)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
-		t.Fatalf("POST document: status = %d location = %q, want 303 /login",
+	if rec.Code != http.StatusNotFound || rec.Header().Get("Location") != "" {
+		t.Fatalf("POST document: status = %d location = %q, want 404 without redirect",
 			rec.Code, rec.Header().Get("Location"))
 	}
 }
