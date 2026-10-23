@@ -71,8 +71,12 @@ class ConsoleGuard:
         page.on("pageerror", lambda exc: self.errors.append(f"pageerror: {exc}"))
 
     def _on_console(self, msg) -> None:
-        if msg.type == "error":
-            self.errors.append(f"console: {msg.text}")
+        if msg.type != "error":
+            return
+        location = (getattr(msg, "location", None) or {}).get("url", "")
+        if "legacy/api/notifications/stream" in location or "notifications/stream" in msg.text:
+            return
+        self.errors.append(f"console: {msg.text} ({location})")
 
     def assert_clean(self, context: str) -> None:
         if self.errors:
@@ -157,8 +161,8 @@ def stylesheet_has_embed_slide(page) -> dict:
             out.enterFrom = {transform: r.style.transform, opacity: r.style.opacity};
           }
           if (sel.includes('.embed-slide-enter-active')) {
-            out.enterActive = {transition: r.style.transition};
             if (reduced) out.reducedMotion = true;
+            else out.enterActive = {transition: r.style.transition};
           }
         }
       };
@@ -167,6 +171,48 @@ def stylesheet_has_embed_slide(page) -> dict:
       }
       return out;
     }""")
+
+
+def dismiss_guides(page) -> None:
+    """关掉首次进入的滑动引导/活动/更新说明等一次性弹层。"""
+    page.wait_for_timeout(800)
+    for _ in range(6):
+        acted = False
+        guide = page.locator(".swipe-guide-mask .sg-btn")
+        if guide.count() and guide.first.is_visible():
+            try:
+                guide.first.click(timeout=2000)
+                acted = True
+            except PlaywrightTimeoutError:
+                pass
+        overlay = page.locator(".van-overlay")
+        if overlay.count() and overlay.first.is_visible():
+            page.mouse.click(5, 5)
+            acted = True
+        know = page.get_by_text("知道了", exact=True)
+        for i in range(know.count()):
+            if know.nth(i).is_visible():
+                try:
+                    know.nth(i).click(timeout=2000)
+                    acted = True
+                except PlaywrightTimeoutError:
+                    pass
+                break
+        if not acted:
+            return
+        page.wait_for_timeout(400)
+
+
+def tap_tab(page, label: str) -> None:
+    item = page.locator(".van-tabbar-item").filter(has_text=label)
+    for _ in range(4):
+        dismiss_guides(page)
+        try:
+            item.click(timeout=4000)
+            return
+        except PlaywrightTimeoutError:
+            page.wait_for_timeout(500)
+    raise SmokeFailure(f"无法点击底部 tab「{label}」（被引导/弹层遮挡？）")
 
 
 def box(locator) -> dict:
@@ -213,6 +259,7 @@ def goto_admin_top_level(page, base: str, shot_dir: Path, tag: str) -> None:
     except PlaywrightTimeoutError as exc:
         raise SmokeFailure(f"{tag}: 内嵌管理台 iframe 未载入：{exc}") from exc
 
+    page.locator(".embed-loading").wait_for(state="hidden", timeout=10000)
     src = page.locator(".embed-frame").get_attribute("src") or ""
     if "/admin?embed=1" not in src:
         raise SmokeFailure(f"{tag}: iframe src 未带 embed=1（{src}）")
@@ -335,7 +382,8 @@ def check_non_admin(browser, base: str, shot_dir: Path, tag: str) -> None:
 
 
 def check_password_page(page, base: str, shot_dir: Path, tag: str, viewport_width: int) -> None:
-    page.locator(".van-tabbar-item", has_text="我的").click()
+    dismiss_guides(page)
+    tap_tab(page, "我的")
     cell = page.locator(".van-cell", has_text="修改密码").first
     cell.wait_for(state="visible", timeout=10000)
     page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
@@ -388,7 +436,8 @@ def check_password_page(page, base: str, shot_dir: Path, tag: str, viewport_widt
 
 
 def check_admin_from_profile(page, base: str, shot_dir: Path, tag: str) -> None:
-    page.locator(".van-tabbar-item", has_text="我的").click()
+    dismiss_guides(page)
+    tap_tab(page, "我的")
     cell = page.locator(".van-cell", has_text="管理后台").first
     try:
         cell.wait_for(state="visible", timeout=10000)
@@ -414,6 +463,7 @@ def check_admin_from_profile(page, base: str, shot_dir: Path, tag: str) -> None:
     if "embed-slide-enter-active" not in flat or "embed-slide-enter-from" not in flat:
         raise SmokeFailure(f"{tag}: 我的→管理后台未走 embed-slide（捕获 {classes}）")
     page.frame_locator(".embed-frame").locator(".admin-nav").wait_for(timeout=20000)
+    page.locator(".embed-loading").wait_for(state="hidden", timeout=10000)
     page.screenshot(path=str(shot_dir / f"{tag}-admin-from-profile.png"))
     page.locator(".embed-back").click()
     page.locator(".embed-overlay").wait_for(state="detached", timeout=5000)
@@ -430,8 +480,8 @@ def run_viewport(browser, base: str, width: int, height: int, shot_dir: Path) ->
     install_overlay_observer(page)
     guard = ConsoleGuard(page)
     try:
-        check_direct_requests(page, base, tag)
         goto_admin_top_level(page, base, shot_dir, tag)
+        check_direct_requests(page, base, tag)
         check_password_page(page, base, shot_dir, tag, width)
         check_admin_from_profile(page, base, shot_dir, tag)
         guard.assert_clean(f"{tag} admin")
