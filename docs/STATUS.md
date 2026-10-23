@@ -17,8 +17,12 @@ sources:
   - internal/httpserver/onetoone_admin_view.go
   - internal/httpserver/legacy_activity_admin_routes.go
   - internal/httpserver/legacy_activity_admin_view.go
+  - internal/httpserver/legacy_points_admin_routes.go
+  - internal/httpserver/legacy_points_admin_view.go
+  - internal/httpserver/legacy_messages_report_handle.go
   - internal/db/admin_activity_legacy.go
   - internal/db/admin_activity_settings.go
+  - internal/db/points_admin_legacy.go
   - internal/db/grouping.go
   - internal/db/grouping_admin.go
   - .env.example
@@ -27,7 +31,7 @@ sources:
 - 更新日期：2026-10-23
 - 维护者：项目维护者
 - 下一更新点：P0 身份证门禁决策、下一次 staging 部署、M6 验收；不要等新阶段才开始更新。
-- 事实基准：以下部署/数据事实于 2026-10-23 对 server1 只读复核；代码基线 `main` @ `a2ce99a`。
+- 事实基准：以下部署/数据事实于 2026-10-23 对 server1 只读复核；代码基线 `main` @ `3e4d75d`。
 
 ## 1. 阶段
 
@@ -51,8 +55,8 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD | `a2ce99a` |
-| `/healthz` version | `staging-a2ce99a` |
+| 部署 HEAD | `3e4d75d` |
+| `/healthz` version | `staging-3e4d75d` |
 | migration 最大版本 | `5` |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
@@ -69,6 +73,8 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 登录/启用/注册/密码：Go SSR；改密为 SPA 内 Vant 子页，离开时还原滚动位置。
 - 公开首页：匿名访问 `/` 返回 200 服务端页面（品牌介绍、人工审核/匿名喜欢/动态通知、注册主按钮与登录入口、飞书老用户先设密码指引、飞书入口链接）；只保留入口链接，不展示二维码图片。登录后 `/` 仍由旧 SPA 入口。
 - 活动管理（v1 原版 SPA 页面）：`/legacy/api/admin/*` 兼容层与 SPA 入口、同步执行分支均已接入；「我的→管理」同时保留「👥 活动管理」（v1 卡片/控制台/名单/签到）与「🛠️ 管理后台」（SSR iframe）两个入口，`group_detail` 页头可打开「✏️ 编辑」iframe。
+- 麦穗管理（v1 原版 SPA 页面）：`/legacy/api/admin/points/*` 兼容层已接入（总览/流水/兑换/邀请/单用户详情；调整、退穗、兑换单标记走 CSRF、`points.adjust` 与审计），入口在「我的→管理→🌾 麦穗管理」。
+- 举报管理（v1 原版 SPA 页面）：列表复用 `/legacy/api/messages/reported`，处理动作补 `POST /legacy/api/messages/{id}/handle`（`content.moderate` + CSRF + 审计），入口在「我的→管理→🚨 举报管理」；`user.is_admin` 语义为「有任一管理角色」，与 `can_admin` 同值。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
 
 ### 管理台（SSR，仅 iframe 承载）
@@ -117,6 +123,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 ## 5. 已知缺口/未验收
 
 - **活动管理 SPA 待部署验收**：入口、同步执行分支与「✏️ 编辑」iframe 已在代码接入；staging 仍运行旧 binary，部署后按 runbook 跑 `tools/browser/admin_activity_native_smoke.py` 留真实浏览器证据。
+- **麦穗/举报管理 SPA 待部署验收**：后端兼容层、入口与 Playwright smoke 已在代码接入；staging 仍运行 `3e4d75d`（无本阶段改动），部署后按 runbook 跑 `tools/browser/admin_points_report_smoke.py` 留真实浏览器证据。
 
 - **人脸照片缺口**：`104` 个 `active` 普通用户没有 `has_face=true` 的照片，其中 `101` 个完全没有照片；可通过资料页上传修复，不是死锁（与身份证 P0 区分）。
 - **内容合规**：腾讯云照片内容合规（宠物/卡通判定、活体）未实现。

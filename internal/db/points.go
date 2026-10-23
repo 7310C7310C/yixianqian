@@ -30,6 +30,15 @@ var pointsKindLabels = map[string]string{
 	PointsKindClawback: "收回",
 }
 
+// PointsKindLabel returns the Chinese label for a ledger kind. Unknown values
+// fall back to the raw kind so admin views never render an empty cell.
+func PointsKindLabel(kind string) string {
+	if label, ok := pointsKindLabels[kind]; ok {
+		return label
+	}
+	return kind
+}
+
 var (
 	ErrPointsInsufficient    = errors.New("db: insufficient points")
 	ErrPointsDuplicate       = errors.New("db: duplicate points entry")

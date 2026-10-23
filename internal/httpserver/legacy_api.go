@@ -652,6 +652,8 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 	if len(profile.Photos) > 0 {
 		photo = "/profile/photo/" + profile.Photos[0].MediaID
 	}
+	// is_admin 与 can_admin 同义：v1 SPA 用它决定举报管理等入口，
+	// 语义是「有任一管理角色」；具体操作仍由服务端权限码校验。
 	out := map[string]any{
 		"user_id":         legacyProfileID(profile, user),
 		"nickname":        name,
@@ -670,7 +672,7 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 		"is_observer":     observer,
 		"photo":           photo,
 		"record_id":       legacyProfileID(profile, user),
-		"is_admin":        false,
+		"is_admin":        isAdmin,
 		"can_admin":       isAdmin,
 		"available_roles": legacyRoles(observerEnabled, observer),
 		"has_face":        hasFace,

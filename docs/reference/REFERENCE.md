@@ -149,6 +149,14 @@ sources: []
 | GET | `/legacy/api/admin/onetoone/result` | `internal/httpserver/legacy_activity_admin_routes.go` |
 | POST | `/legacy/api/admin/onetoone/run` | `internal/httpserver/legacy_activity_admin_routes.go` |
 | GET | `/legacy/api/admin/onetoone/unsubmitted` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/points/adjust` | `internal/httpserver/legacy_points_admin_routes.go` |
+| GET | `/legacy/api/admin/points/invites` | `internal/httpserver/legacy_points_admin_routes.go` |
+| GET | `/legacy/api/admin/points/ledger` | `internal/httpserver/legacy_points_admin_routes.go` |
+| GET | `/legacy/api/admin/points/overview` | `internal/httpserver/legacy_points_admin_routes.go` |
+| GET | `/legacy/api/admin/points/redemptions` | `internal/httpserver/legacy_points_admin_routes.go` |
+| POST | `/legacy/api/admin/points/redemptions/{id}/mark` | `internal/httpserver/legacy_points_admin_routes.go` |
+| POST | `/legacy/api/admin/points/redemptions/{id}/refund` | `internal/httpserver/legacy_points_admin_routes.go` |
+| GET | `/legacy/api/admin/points/user` | `internal/httpserver/legacy_points_admin_routes.go` |
 | POST | `/legacy/api/auth/claim` | `internal/httpserver/legacy_profile_api.go` |
 | GET | `/legacy/api/cards` | `internal/httpserver/legacy_api.go` |
 | POST | `/legacy/api/client-events` | `internal/httpserver/legacy_api.go` |
@@ -164,6 +172,7 @@ sources: []
 | GET | `/legacy/api/messages/received` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/messages/reported` | `internal/httpserver/legacy_social_api.go` |
 | DELETE | `/legacy/api/messages/{id}` | `internal/httpserver/legacy_social_api.go` |
+| POST | `/legacy/api/messages/{id}/handle` | `internal/httpserver/legacy_messages_report_handle.go` |
 | POST | `/legacy/api/messages/{id}/report` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/notifications` | `internal/httpserver/legacy_social_api.go` |
 | POST | `/legacy/api/notifications/read-all` | `internal/httpserver/legacy_social_api.go` |
@@ -209,9 +218,9 @@ sources: []
 |---|---:|
 | `/admin` | 34 |
 | `/api` | 28 |
-| `/legacy` | 77 |
+| `/legacy` | 86 |
 | 其他 | 22 |
-| **合计** | **161** |
+| **合计** | **170** |
 
 ## 4. 环境变量（key 集合对比）
 
@@ -314,6 +323,6 @@ sources: []
 | `docs/DECISIONS.md` | — |
 | `docs/MIGRATION.md` | `migrations/**`, `tools/migrate_testapp.py` |
 | `docs/PROJECT_CHARTER.md` | — |
-| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/admin_*.go`, `internal/httpserver/grouping_admin_routes.go`, `internal/httpserver/grouping_view.go`, `internal/httpserver/onetoone_admin.go`, `internal/httpserver/onetoone_admin_view.go`, `internal/httpserver/legacy_activity_admin_routes.go`, `internal/httpserver/legacy_activity_admin_view.go`, `internal/db/admin_activity_legacy.go`, `internal/db/admin_activity_settings.go`, `internal/db/grouping.go`, `internal/db/grouping_admin.go`, `.env.example` |
+| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/admin_*.go`, `internal/httpserver/grouping_admin_routes.go`, `internal/httpserver/grouping_view.go`, `internal/httpserver/onetoone_admin.go`, `internal/httpserver/onetoone_admin_view.go`, `internal/httpserver/legacy_activity_admin_routes.go`, `internal/httpserver/legacy_activity_admin_view.go`, `internal/httpserver/legacy_points_admin_routes.go`, `internal/httpserver/legacy_points_admin_view.go`, `internal/httpserver/legacy_messages_report_handle.go`, `internal/db/admin_activity_legacy.go`, `internal/db/admin_activity_settings.go`, `internal/db/points_admin_legacy.go`, `internal/db/grouping.go`, `internal/db/grouping_admin.go`, `.env.example` |
 | `docs/product-spec.md` | — |
 | `docs/runbooks/staging.md` | `deploy/**`, `.env.example`, `migrations/**`, `.github/workflows/ci.yml` |

@@ -139,3 +139,12 @@ sources: []
 - 决策：在「我的→管理」恢复 v1 的「👥 活动管理」cell（`openGroupAdmin`），管理员判定用 legacy `user.can_admin`；与现有「🛠️ 管理后台」SSR iframe 入口并存。`doGaRun`/`doOtoRun` 优先处理同步响应 `{ok:true,result}`，直接复用 v1 `handleGaJobDone`/`handleOtoJobDone` 的成功与错误码分支；202+job 与 409+job_id 分支保留但 v2 不触发。`group_detail` 页头新增「✏️ 编辑」，用 `gaDetail.id`（缺省回退列表项 `id`）打开 `/admin/activities/{id}/edit` iframe；该路径仍是 `/admin` 页面，顶层 document 303 不影响 iframe 语义。新增 `tools/browser/admin_activity_native_smoke.py` 做真实浏览器回归。
 - 后果：管理员可在 App 内完成活动列表→控制台（签到码/状态/模式）→报名名单→现场签到与编辑；执行同步完成，不建 job 表、不改 schema。
 - 边界：不改 v2 `/api/admin/*` 与 SSR，不改第 16 节后端契约；编辑仅经同源 iframe，不新增第二套管理 UI。本节接续第 16 节边界中「SPA 入口恢复、执行分支适配与编辑活动入口不在本阶段」的部分。
+
+## 19. 麦穗管理与举报管理恢复 v1 SPA（2026-10-23）
+
+- 背景：第 18 节完成「我的→管理→活动管理」后，SPA 仍保留 v1 的 `points_admin` 与 `reported_messages` 两个页面，但 `/legacy/api/admin/points/*` 全部 404，举报处理动作 `POST /legacy/api/messages/{id}/handle` 也未注册；`user.is_admin` 又固定为 `false`，页面即使有数据也打不开。
+- 决策：新增 `/legacy/api/admin/points/*` 薄适配层（overview/ledger/redemptions/invites/user 五个读端点，adjust/refund/mark 三个写端点），只做取数与形状映射，聚合查询集中在 `internal/db/points_admin_legacy.go`，业务写入仍走现有 `db.AdjustPoints`/`db.RefundRedemption`/`db.MarkRedemption`；读与写都用 `points.adjust`，写操作先过 HMAC CSRF，审计沿用 `admin.points.adjust`/`admin.points.refund`/`admin.points.mark`，调整继续写站内通知并使用 `admin_adjust:<request_key>` 幂等键。
+- 决策：举报处理补 `POST /legacy/api/messages/{id}/handle`，action `delete|approve`（兼容 `reject|restore`），权限 `content.moderate` + CSRF，复用 `db.HandleReportForMessage`，审计 `message.report.handle`；重复处理返回 404「找不到待处理的举报」，不产生第二条审计或二次删除。
+- 决策：`legacyUserMap` 的 `is_admin` 改为与 `can_admin` 同值（有任一管理角色），修复 v1 页面里 `is_admin` 判断；具体接口仍按权限码鉴权，普通用户仍 403，「我的→管理」仍由 `can_admin` 控制。
+- 后果：「我的→管理」现在并存「👥 活动管理」「🌾 麦穗管理」「🚨 举报管理」「🛠️ 管理后台」；麦穗页四个 tab（用户/流水/兑换/邀请）与单用户详情、举报页列表与同意/驳回按钮均可用，Playwright 双视口 smoke 覆盖管理员路径与普通用户 403。
+- 边界：不改数据库 schema、不改 SSR、不改 v2 `/api/admin/*` 与 `/api/messages/*` 语义；不恢复 v1 的 202+job；写端点当前只作为兼容能力，SPA 麦穗页仍为只读；手机号只输出 masked。
