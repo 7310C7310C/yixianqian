@@ -36,6 +36,9 @@ func TestIntegrationAdminAuditHTTP(t *testing.T) {
 	assignRole(reviewer, "reviewer")
 	assignRole(manager, "activity_manager")
 	assignRole(adminUser, "admin")
+	// Phase A 的总览入口按权限显示；admin 角色没有 admin.manage，角色入口
+	// 需要 super_admin 才能出现。这里补一个最高管理员角色，覆盖全部入口。
+	assignRole(adminUser, "super_admin")
 
 	secretValue := "S3CRET-" + marker
 	tokenValue := "TOKEN-" + marker
@@ -229,27 +232,28 @@ func TestIntegrationAdminAuditHTTP(t *testing.T) {
 			t.Fatalf("admin nav missing %q", want)
 		}
 	}
-	navOrder := []string{
-		`href="/admin"`, `href="/admin/users"`, `href="/admin/activities"`,
+	// Phase A：总览改为分组入口卡，不再渲染 9 项平铺 nav；所有入口仍必须可达。
+	for _, item := range []string{
+		`href="/admin/users"`, `href="/admin/activities"`,
 		`href="/admin/matching"`, `href="/admin/points"`, `href="/admin/reports"`,
 		`href="/admin/suggestions"`, `href="/admin/roles"`, `href="/admin/audit"`,
+	} {
+		if !strings.Contains(adminHome, item) {
+			t.Fatalf("admin entry card missing %q", item)
+		}
 	}
-	last := -1
-	for _, item := range navOrder {
-		index := strings.Index(adminHome, item)
-		if index < 0 {
-			t.Fatalf("admin nav missing %q", item)
-		}
-		if index <= last {
-			t.Fatalf("admin nav out of order at %q", item)
-		}
-		last = index
+	if strings.Contains(adminHome, `class="admin-nav`) || strings.Contains(adminHome, `class="subnav`) {
+		t.Fatal("admin home still renders the old flat nav")
+	}
+	if !strings.Contains(adminHome, "内容与安全") || !strings.Contains(adminHome, "用户与权限") {
+		t.Fatal("admin home missing grouped entry headings")
 	}
 
 	resp = reviewerClient.get("/admin/audit")
 	auditPage := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(auditPage, `href="/admin/audit" aria-current="page"`) {
-		t.Fatalf("audit nav not marked current: status=%d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(auditPage, "审计日志") ||
+		!strings.Contains(auditPage, "返回总览") {
+		t.Fatalf("audit topbar missing title/back link: status=%d", resp.StatusCode)
 	}
 }
 

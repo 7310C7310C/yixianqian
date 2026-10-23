@@ -1,59 +1,197 @@
 {{define "content"}}
 {{template "admin_nav" .}}
+{{$activityID := .Data.Activity.ID}}
 
-<section class="card">
-  <p class="eyebrow">活动</p>
-  <h1>{{if .Data.IsNew}}新建活动{{else}}编辑活动{{end}}</h1>
-  {{template "flash" .}}
-  {{if .Data.Error}}<div class="alert alert-error" role="alert">{{.Data.Error}}</div>{{end}}
-  <form method="post" action="{{if .Data.IsNew}}/admin/activities{{else}}/admin/activities/{{.Data.Activity.ID}}{{end}}" enctype="multipart/form-data" class="stack">
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <label>活动名称<input type="text" name="name" required maxlength="100" value="{{.Data.Activity.Name}}"></label>
-    {{if .Data.Activity.PosterMediaID}}
-    <div class="admin-poster">
-      <img src="/admin/activities/{{.Data.Activity.ID}}/poster?size=thumb" alt="{{.Data.Activity.Name}} 海报">
+<div class="admin-page-head">
+  <div class="admin-page-head-main">
+    <div class="admin-breadcrumb">
+      <a href="/admin/activities">活动列表</a>
+      <span aria-hidden="true">/</span>
+      <span>{{if .Data.IsNew}}新建活动{{else}}编辑活动{{end}}</span>
     </div>
-    <p class="hint">当前海报：{{.Data.PosterName}}</p>
-    {{end}}
-    <label>活动海报（可选）<input type="file" name="poster" accept="image/jpeg,image/png"></label>
-    <p class="hint">可选，只接受 JPEG/PNG，最大 {{.MediaMaxMB}} MB；{{if .Data.IsNew}}不选择则不上传海报{{else}}不选择则保留当前海报{{end}}。</p>
-    <label>活动描述<textarea name="description" rows="4" maxlength="2000">{{.Data.Activity.Description}}</textarea></label>
-    <label>地点<input type="text" name="location" maxlength="200" value="{{.Data.Activity.Location}}"></label>
-    <label>参加条件<input type="text" name="condition" maxlength="500" value="{{.Data.Activity.Condition}}"></label>
-    <div class="filter-range">
-      <label>报名上限（0=不限）<input type="number" name="max_signup" min="0" value="{{.Data.Activity.MaxSignup}}"></label>
-      <label>费用<input type="text" name="fee" maxlength="100" value="{{.Data.Activity.Fee}}"></label>
-    </div>
-    <label>食宿<input type="text" name="food" maxlength="200" value="{{.Data.Activity.Food}}"></label>
-    <label>状态
-      <select name="status">
-        {{if .Data.StatusKeep}}<option value="{{.Data.StatusUnknown}}" selected>保持目前状态{{if .Data.StatusUnknown}}（{{.Data.StatusUnknown}}）{{else}}（未设置）{{end}}</option>{{end}}
-        {{$current := .Data.Activity.Status}}
-        {{range .Data.Statuses}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
-      </select>
-    </label>
-    <div class="filter-range three">
-      <label>发布时间<input type="datetime-local" name="publish_at" value="{{if .Data.Activity.PublishAt}}{{.Data.Activity.PublishAt.Format "2006-01-02T15:04"}}{{end}}"></label>
-      <label>开始时间<input type="datetime-local" name="start_at" value="{{if .Data.Activity.StartAt}}{{.Data.Activity.StartAt.Format "2006-01-02T15:04"}}{{end}}"></label>
-      <label>结束时间<input type="datetime-local" name="end_at" value="{{if .Data.Activity.EndAt}}{{.Data.Activity.EndAt.Format "2006-01-02T15:04"}}{{end}}"></label>
-    </div>
-    <fieldset>
-      <legend>分组/一对一/签到</legend>
-      <label class="admin-check"><input type="checkbox" name="group_enabled" value="1"{{if .Data.Activity.GroupEnabled}} checked{{end}}> 开启分组</label>
-      <div class="filter-range">
-        <label>每组男生<input type="number" name="male_per_group" min="0" value="{{.Data.Activity.MalePerGroup}}"></label>
-        <label>每组女生<input type="number" name="female_per_group" min="0" value="{{.Data.Activity.FemalePerGroup}}"></label>
+    <p class="admin-eyebrow">活动</p>
+    <h1 class="admin-page-title">{{if .Data.IsNew}}新建活动{{else}}编辑活动{{end}}</h1>
+    <p class="admin-subtitle">{{if .Data.IsNew}}填写活动资料后创建；创建后可进入工作台管理报名、签到与广播。{{else}}修改活动资料；报名、签到与广播请回工作台操作。{{end}}</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="button" href="{{if .Data.IsNew}}/admin/activities{{else}}/admin/activities/{{$activityID}}{{end}}">{{if .Data.IsNew}}返回活动列表{{else}}返回工作台{{end}}</a>
+  </div>
+</div>
+
+{{template "flash" .}}
+{{if .Data.Error}}<div class="admin-alert admin-alert--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<form method="post" action="{{if .Data.IsNew}}/admin/activities{{else}}/admin/activities/{{$activityID}}{{end}}" enctype="multipart/form-data" class="admin-form admin-form--sticky">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+  <div class="admin-form-grid">
+    <section class="admin-section" aria-labelledby="form-basic">
+      <div class="admin-section-head">
+        <div>
+          <h2 class="admin-section-title" id="form-basic">基本信息</h2>
+          <p class="admin-section-desc">名称与简介会显示在用户端活动列表和详情页。</p>
+        </div>
       </div>
-      <label class="admin-check"><input type="checkbox" name="onetoone_enabled" value="1"{{if .Data.Activity.OnetooneEnabled}} checked{{end}}> 开启一对一</label>
-      <label class="admin-check"><input type="checkbox" name="signin_enabled" value="1"{{if .Data.Activity.SigninEnabled}} checked{{end}}> 开启现场签到</label>
-      <label>4 位签到码<input type="text" name="signin_code" maxlength="4" inputmode="numeric" value="{{.Data.Activity.SigninCode}}" placeholder="例如 0123"></label>
-    </fieldset>
-    {{if not .Data.IsNew}}<p class="hint">当前报名人数：{{.Data.Activity.CurrentSignup}}（由报名流程维护，不在此修改）</p>{{end}}
-    <div class="admin-actions">
-      <button type="submit" class="button primary">{{if .Data.IsNew}}创建活动{{else}}保存修改{{end}}</button>
-      {{if not .Data.IsNew}}<a class="button" href="/admin/activities/{{.Data.Activity.ID}}">返回工作台</a>{{end}}
-      <a class="button" href="/admin/activities">取消</a>
-    </div>
-  </form>
-</section>
+      <label class="admin-field">
+        <span class="admin-field-label">活动名称 <span class="req" aria-hidden="true">*</span></span>
+        <input class="admin-input" type="text" name="name" required maxlength="100" value="{{.Data.Activity.Name}}" placeholder="例如：秋日山野徒步">
+      </label>
+      <label class="admin-field">
+        <span class="admin-field-label">活动描述</span>
+        <textarea class="admin-textarea" name="description" rows="4" maxlength="2000" placeholder="活动亮点、集合方式或注意事项">{{.Data.Activity.Description}}</textarea>
+      </label>
+    </section>
+
+    <section class="admin-section" aria-labelledby="form-time">
+      <div class="admin-section-head">
+        <div>
+          <h2 class="admin-section-title" id="form-time">时间与地点</h2>
+          <p class="admin-section-desc">发布时间用于控制活动何时出现在用户端。</p>
+        </div>
+      </div>
+      <div class="admin-field-row">
+        <label class="admin-field">
+          <span class="admin-field-label">发布时间</span>
+          <input class="admin-input" type="datetime-local" name="publish_at" value="{{if .Data.Activity.PublishAt}}{{.Data.Activity.PublishAt.Format "2006-01-02T15:04"}}{{end}}">
+        </label>
+        <label class="admin-field">
+          <span class="admin-field-label">开始时间</span>
+          <input class="admin-input" type="datetime-local" name="start_at" value="{{if .Data.Activity.StartAt}}{{.Data.Activity.StartAt.Format "2006-01-02T15:04"}}{{end}}">
+        </label>
+      </div>
+      <div class="admin-field-row">
+        <label class="admin-field">
+          <span class="admin-field-label">结束时间</span>
+          <input class="admin-input" type="datetime-local" name="end_at" value="{{if .Data.Activity.EndAt}}{{.Data.Activity.EndAt.Format "2006-01-02T15:04"}}{{end}}">
+        </label>
+        <label class="admin-field">
+          <span class="admin-field-label">地点</span>
+          <input class="admin-input" type="text" name="location" maxlength="200" value="{{.Data.Activity.Location}}" placeholder="例如：市图书馆东门">
+        </label>
+      </div>
+    </section>
+
+    <section class="admin-section" aria-labelledby="form-capacity">
+      <div class="admin-section-head">
+        <div>
+          <h2 class="admin-section-title" id="form-capacity">名额与条件</h2>
+          <p class="admin-section-desc">报名上限为 0 表示不限人数；费用与条件会展示给报名者。</p>
+        </div>
+      </div>
+      <div class="admin-field-row">
+        <label class="admin-field">
+          <span class="admin-field-label">报名上限（0=不限）</span>
+          <input class="admin-input" type="number" name="max_signup" min="0" value="{{.Data.Activity.MaxSignup}}" inputmode="numeric">
+        </label>
+        <label class="admin-field">
+          <span class="admin-field-label">费用</span>
+          <input class="admin-input" type="text" name="fee" maxlength="100" value="{{.Data.Activity.Fee}}" placeholder="例如：AA 制 / 免费">
+        </label>
+      </div>
+      <label class="admin-field">
+        <span class="admin-field-label">参加条件</span>
+        <input class="admin-input" type="text" name="condition" maxlength="500" value="{{.Data.Activity.Condition}}" placeholder="例如：22–35 岁单身会员">
+      </label>
+      <label class="admin-field">
+        <span class="admin-field-label">食宿</span>
+        <input class="admin-input" type="text" name="food" maxlength="200" value="{{.Data.Activity.Food}}" placeholder="例如：含午餐，住宿自理">
+      </label>
+    </section>
+
+    <section class="admin-section" aria-labelledby="form-signin">
+      <div class="admin-section-head">
+        <div>
+          <h2 class="admin-section-title" id="form-signin">签到与匹配</h2>
+          <p class="admin-section-desc">签到码为 4 位数字；分组与一对一互斥，只能开启一种。</p>
+        </div>
+      </div>
+      <label class="admin-check-row">
+        <span class="admin-check-copy">
+          <strong>开启现场签到</strong>
+          <span>会员在活动页输入 4 位码完成签到</span>
+        </span>
+        <input type="checkbox" name="signin_enabled" value="1"{{if .Data.Activity.SigninEnabled}} checked{{end}}>
+      </label>
+      <label class="admin-field">
+        <span class="admin-field-label">4 位签到码</span>
+        <input class="admin-input" type="text" name="signin_code" maxlength="4" inputmode="numeric" value="{{.Data.Activity.SigninCode}}" placeholder="例如 0123" pattern="[0-9]{4}">
+        <span class="admin-field-hint">开启签到后生效；建议使用便于现场口播的数字。</span>
+      </label>
+      <label class="admin-check-row">
+        <span class="admin-check-copy">
+          <strong>开启分组</strong>
+          <span>按性别与每组人数生成分组结果</span>
+        </span>
+        <input type="checkbox" name="group_enabled" value="1"{{if .Data.Activity.GroupEnabled}} checked{{end}}>
+      </label>
+      <div class="admin-field-row">
+        <label class="admin-field">
+          <span class="admin-field-label">每组男生</span>
+          <input class="admin-input" type="number" name="male_per_group" min="0" value="{{.Data.Activity.MalePerGroup}}" inputmode="numeric">
+        </label>
+        <label class="admin-field">
+          <span class="admin-field-label">每组女生</span>
+          <input class="admin-input" type="number" name="female_per_group" min="0" value="{{.Data.Activity.FemalePerGroup}}" inputmode="numeric">
+        </label>
+      </div>
+      <label class="admin-check-row">
+        <span class="admin-check-copy">
+          <strong>开启一对一</strong>
+          <span>按轮次执行一对一匹配；不能与分组同时开启</span>
+        </span>
+        <input type="checkbox" name="onetoone_enabled" value="1"{{if .Data.Activity.OnetooneEnabled}} checked{{end}}>
+      </label>
+    </section>
+
+    <section class="admin-section" aria-labelledby="form-poster">
+      <div class="admin-section-head">
+        <div>
+          <h2 class="admin-section-title" id="form-poster">活动海报</h2>
+          <p class="admin-section-desc">只接受 JPEG/PNG，最大 {{.MediaMaxMB}} MB；经应用私有代理显示。</p>
+        </div>
+      </div>
+      {{if .Data.Activity.PosterMediaID}}
+      <div class="admin-poster">
+        <img src="/admin/activities/{{$activityID}}/poster?size=thumb" alt="{{.Data.Activity.Name}} 海报" loading="lazy">
+      </div>
+      <p class="admin-field-hint">当前海报：{{.Data.PosterName}}</p>
+      {{else}}
+      <div class="admin-upload-empty">
+        <strong>还没有海报</strong>
+        <p class="admin-field-hint">上传后会在用户端活动列表与详情中显示。</p>
+      </div>
+      {{end}}
+      <label class="admin-field">
+        <span class="admin-field-label">活动海报（可选）</span>
+        <input type="file" name="poster" accept="image/jpeg,image/png">
+        <span class="admin-field-hint">{{if .Data.IsNew}}不选择则不上传海报。{{else}}不选择则保留当前海报。{{end}}</span>
+      </label>
+    </section>
+
+    <section class="admin-section" aria-labelledby="form-status">
+      <div class="admin-section-head">
+        <div>
+          <h2 class="admin-section-title" id="form-status">发布状态</h2>
+          <p class="admin-section-desc">控制活动在用户端是否可见、是否还能报名。</p>
+        </div>
+      </div>
+      <label class="admin-field">
+        <span class="admin-field-label">活动状态</span>
+        <select class="admin-select" name="status">
+          {{if .Data.StatusKeep}}<option value="{{.Data.StatusUnknown}}" selected>保持目前状态{{if .Data.StatusUnknown}}（{{.Data.StatusUnknown}}）{{else}}（未设置）{{end}}</option>{{end}}
+          {{$current := .Data.Activity.Status}}
+          {{range .Data.Statuses}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+      </label>
+      {{if not .Data.IsNew}}<p class="admin-field-hint">当前报名人数：{{.Data.Activity.CurrentSignup}}（由报名流程维护，不在此修改）</p>{{end}}
+      <p class="admin-field-hint">保存后仍可在工作台快速调整状态、签到与匹配开关。</p>
+    </section>
+  </div>
+
+  <div class="admin-form-actions admin-form-actions--sticky">
+    <p class="admin-form-hint">{{if .Data.IsNew}}创建后进入工作台。{{else}}保存后返回工作台。{{end}}</p>
+    <a class="button" href="{{if .Data.IsNew}}/admin/activities{{else}}/admin/activities/{{$activityID}}{{end}}">取消</a>
+    <button type="submit" class="button primary">{{if .Data.IsNew}}创建活动{{else}}保存修改{{end}}</button>
+  </div>
+</form>
 {{end}}

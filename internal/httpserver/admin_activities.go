@@ -29,8 +29,18 @@ type adminActivityRow struct {
 	CheckedInCount int
 }
 
+// adminActivitiesSummary powers the list page stat strip. It is derived from
+// the already-loaded rows so the page stays a single round trip.
+type adminActivitiesSummary struct {
+	Total     int
+	Open      int
+	Signups   int
+	CheckedIn int
+}
+
 type adminActivitiesPageData struct {
 	Activities []adminActivityRow
+	Summary    adminActivitiesSummary
 }
 
 type adminActivityEditPageData struct {
@@ -129,17 +139,23 @@ func (a *App) handleAdminActivitiesPage(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	rows := make([]adminActivityRow, 0, len(activities))
+	summary := adminActivitiesSummary{Total: len(activities)}
 	for _, activity := range activities {
 		row := adminActivityRow{Activity: activity, SignupCount: activity.CurrentSignup}
 		if stat, ok := stats[activity.ID]; ok {
 			row.SignupCount = stat.SignupCount
 			row.CheckedInCount = stat.CheckedInCount
 		}
+		if activity.Status == db.ActivityStatusOpen {
+			summary.Open++
+		}
+		summary.Signups += row.SignupCount
+		summary.CheckedIn += row.CheckedInCount
 		rows = append(rows, row)
 	}
 	a.render(w, r, http.StatusOK, "admin_activities", PageData{
-		Title: "活动管理", User: &access.User,
-		Data:         adminActivitiesPageData{Activities: rows},
+		Title: "活动列表", User: &access.User,
+		Data:         adminActivitiesPageData{Activities: rows, Summary: summary},
 		PageCSS:      "admin.css",
 		ActiveNav:    "activities",
 		ActiveSubnav: "list",
@@ -194,8 +210,12 @@ func (a *App) renderAdminActivityEditStatus(w http.ResponseWriter, r *http.Reque
 	if mediaMaxMB < 1 {
 		mediaMaxMB = 1
 	}
+	title := "活动编辑"
+	if data.IsNew {
+		title = "新建活动"
+	}
 	a.render(w, r, status, "admin_activity_edit", PageData{
-		Title: "活动编辑", User: &access.User, Data: data,
+		Title: title, User: &access.User, Data: data,
 		PageCSS: "admin.css", ActiveNav: "activities", ActiveSubnav: subnav,
 		MediaMaxMB: mediaMaxMB,
 	})

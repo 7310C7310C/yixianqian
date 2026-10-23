@@ -1,68 +1,117 @@
 {{define "content"}}
 {{template "admin_nav" .}}
 
-<section class="card">
-  <div class="admin-title-row">
-    <div>
-      <p class="eyebrow">活动</p>
-      <h1>活动管理</h1>
-      <p class="hint">共 {{len .Data.Activities}} 个活动；点「工作台」管理名单、签到、海报与广播。</p>
-    </div>
+<section class="admin-page-head">
+  <div class="admin-page-head-main">
+    <p class="admin-eyebrow">活动</p>
+    <h1 class="admin-page-title">活动列表</h1>
+    <p class="admin-subtitle">管理活动资料、报名与签到；点「工作台」进入名单、签到、广播与设置。</p>
   </div>
-  {{template "flash" .}}
-</section>
-
-<section class="card">
-  <h2>活动列表</h2>
-  {{if .Data.Activities}}
-  <div class="admin-table-wrap">
-    <table class="admin-table admin-activities-table">
-      <thead><tr><th scope="col">活动</th><th scope="col">状态</th><th scope="col">报名</th><th scope="col">签到</th><th scope="col">分组/一对一</th><th scope="col">操作</th></tr></thead>
-      <tbody>
-      {{range .Data.Activities}}
-        <tr>
-          <td data-label="活动">
-            <div class="admin-activity-cell">
-              {{if .PosterMediaID}}<img class="admin-thumb" src="/admin/activities/{{.ID}}/poster?size=thumb" alt="{{.Name}} 海报" loading="lazy">{{end}}
-              <div>
-                <strong>{{.Name}}</strong>
-                <div class="muted"><code>{{.ActivityNo}}</code></div>
-              </div>
-            </div>
-          </td>
-          <td data-label="状态">{{if .Status}}<span class="pill">{{.Status}}</span>{{else}}<span class="pill pill-muted">状态未设置</span>{{end}}</td>
-          <td data-label="报名">{{.SignupCount}}{{if gt .MaxSignup 0}} / {{.MaxSignup}}{{else}} / 不限{{end}}</td>
-          <td data-label="签到">
-            <span class="pill{{if not .SigninEnabled}} pill-muted{{end}}">{{if .SigninEnabled}}开启{{else}}关闭{{end}}</span>
-            <div class="muted">已签到 {{.CheckedInCount}} / 报名 {{.SignupCount}}</div>
-          </td>
-          <td data-label="分组/一对一">
-            {{if .GroupEnabled}}<span class="pill">分组</span>{{end}}
-            {{if .GroupStatus}}<span class="muted">{{.GroupStatus}}</span>{{end}}
-            {{if .OnetooneEnabled}}<span class="pill">一对一</span>{{end}}
-            {{if .OnetooneStatus}}<span class="muted">{{.OnetooneStatus}}</span>{{end}}
-            {{if and .GroupEnabled .OnetooneEnabled}}<div class="muted"><span class="pill pill-warn">双开</span> 两种模式互斥，执行会被拒绝。</div>{{end}}
-            {{if and (not .GroupEnabled) (not .OnetooneEnabled)}}<span class="muted">—</span>{{end}}
-          </td>
-          <td data-label="操作">
-            <div class="admin-actions">
-              <a class="button primary small" href="/admin/activities/{{.ID}}">工作台</a>
-              {{if .GroupEnabled}}<a class="button small" href="/admin/matching/group/{{.ID}}">分组控制台</a>{{end}}
-              {{if .OnetooneEnabled}}<a class="button small" href="/admin/matching/onetoone/{{.ID}}">一对一控制台</a>{{end}}
-              <a class="button small" href="/admin/activities/{{.ID}}/edit">编辑</a>
-            </div>
-          </td>
-        </tr>
-      {{end}}
-      </tbody>
-    </table>
-  </div>
-  {{else}}
-  <div class="empty-state admin-empty">
-    <h2>还没有活动</h2>
-    <p class="shell-empty-text">创建第一个活动后，就能在工作台管理报名、签到、海报与广播。</p>
+  <div class="admin-page-actions">
     <a class="button primary" href="/admin/activities/new">新建活动</a>
   </div>
-  {{end}}
 </section>
+
+{{template "flash" .}}
+
+<section class="admin-stats-inline" aria-label="活动统计">
+  <div class="admin-stats-inline-item">
+    <strong>{{.Data.Summary.Total}}</strong>
+    <span>活动总数</span>
+  </div>
+  <div class="admin-stats-inline-item">
+    <strong>{{.Data.Summary.Open}}</strong>
+    <span>报名中</span>
+  </div>
+  <div class="admin-stats-inline-item">
+    <strong>{{.Data.Summary.Signups}}</strong>
+    <span>有效报名</span>
+  </div>
+  <div class="admin-stats-inline-item">
+    <strong>{{.Data.Summary.CheckedIn}}</strong>
+    <span>已签到</span>
+  </div>
+</section>
+
+<section class="admin-filter-bar" aria-label="筛选活动">
+  <label class="admin-search">
+    <span class="admin-visually-hidden">搜索活动</span>
+    {{template "admin_icon_search"}}
+    <input class="admin-input" type="search" data-adm-activity-search placeholder="搜索活动名称、编号或地点" autocomplete="off">
+  </label>
+  <div class="admin-filter-chips" role="group" aria-label="按状态筛选">
+    <button type="button" class="admin-chip-btn" data-adm-activity-filter="all" aria-pressed="true">全部 <span class="admin-chip-count" data-adm-count="all">{{len .Data.Activities}}</span></button>
+    <button type="button" class="admin-chip-btn" data-adm-activity-filter="报名中" aria-pressed="false">报名中 <span class="admin-chip-count" data-adm-count="报名中">0</span></button>
+    <button type="button" class="admin-chip-btn" data-adm-activity-filter="未开始报名" aria-pressed="false">未开始报名 <span class="admin-chip-count" data-adm-count="未开始报名">0</span></button>
+    <button type="button" class="admin-chip-btn" data-adm-activity-filter="已满员" aria-pressed="false">已满员 <span class="admin-chip-count" data-adm-count="已满员">0</span></button>
+    <button type="button" class="admin-chip-btn" data-adm-activity-filter="已结束" aria-pressed="false">已结束 <span class="admin-chip-count" data-adm-count="已结束">0</span></button>
+    <button type="button" class="admin-chip-btn" data-adm-activity-filter="已取消" aria-pressed="false">已取消 <span class="admin-chip-count" data-adm-count="已取消">0</span></button>
+  </div>
+  <p class="admin-filter-status" data-adm-activity-status aria-live="polite">共 {{len .Data.Activities}} 个活动</p>
+</section>
+
+{{if .Data.Activities}}
+<div class="admin-activity-grid" data-adm-activity-grid>
+  {{range .Data.Activities}}
+  <article class="admin-activity-card"
+           data-adm-activity
+           data-adm-search="{{.Name}} {{.ActivityNo}} {{.Location}}"
+           data-adm-status="{{.Status}}">
+    <div class="admin-activity-card-head">
+      {{if .PosterMediaID}}
+      <img class="admin-activity-cover" src="/admin/activities/{{.ID}}/poster?size=thumb" alt="{{.Name}} 海报" loading="lazy" width="64" height="64">
+      {{else}}
+      <span class="admin-activity-cover admin-activity-cover--empty" aria-hidden="true">{{template "admin_icon_image"}}</span>
+      {{end}}
+      <div class="admin-activity-card-body">
+        <h2 class="admin-activity-title">{{.Name}}</h2>
+        <span class="admin-activity-no">{{.ActivityNo}}</span>
+      </div>
+      {{template "admin_activity_status" .Status}}
+    </div>
+
+    <div class="admin-activity-meta">
+      <span class="admin-activity-meta-row">
+        {{template "admin_icon_clock"}}
+        <span>{{if .StartAt}}{{.StartAt.Format "2006-01-02 15:04"}}{{else}}时间待定{{end}}{{if .EndAt}} 至 {{.EndAt.Format "01-02 15:04"}}{{end}}</span>
+      </span>
+      <span class="admin-activity-meta-row">
+        {{template "admin_icon_pin"}}
+        <span>{{if .Location}}{{.Location}}{{else}}地点待定{{end}}</span>
+      </span>
+    </div>
+
+    <div class="admin-activity-stats">
+      <span>报名 {{.SignupCount}}{{if gt .MaxSignup 0}} / {{.MaxSignup}}{{else}} / 不限{{end}}</span>
+      <span>已签到 {{.CheckedInCount}}</span>
+      <span>签到{{if .SigninEnabled}}已开启{{else}}未开启{{end}}</span>
+    </div>
+
+    <div class="admin-activity-flags">
+      {{if .GroupEnabled}}<span class="admin-chip admin-chip--open">分组</span>{{end}}
+      {{if .GroupStatus}}<span class="admin-chip admin-chip--muted">{{.GroupStatus}}</span>{{end}}
+      {{if .OnetooneEnabled}}<span class="admin-chip admin-chip--open">一对一</span>{{end}}
+      {{if .OnetooneStatus}}<span class="admin-chip admin-chip--muted">{{.OnetooneStatus}}</span>{{end}}
+      {{if and .GroupEnabled .OnetooneEnabled}}<span class="admin-chip admin-chip--cancel">双开冲突</span>{{end}}
+      {{if and (not .GroupEnabled) (not .OnetooneEnabled)}}<span class="admin-chip admin-chip--muted">未开启匹配</span>{{end}}
+    </div>
+
+    <div class="admin-activity-actions">
+      <a class="button primary small" href="/admin/activities/{{.ID}}">工作台</a>
+      <a class="button small" href="/admin/activities/{{.ID}}/edit">编辑</a>
+      {{if .GroupEnabled}}<a class="button small" href="/admin/matching/group/{{.ID}}">分组控制台</a>{{end}}
+      {{if .OnetooneEnabled}}<a class="button small" href="/admin/matching/onetoone/{{.ID}}">一对一控制台</a>{{end}}
+    </div>
+  </article>
+  {{end}}
+</div>
+<div class="admin-empty-inline" data-adm-activity-empty hidden>没有符合条件的活动，试试清除搜索或切换状态筛选。</div>
+{{else}}
+<div class="admin-empty">
+  <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_calendar"}}</span>
+  <h2>还没有活动</h2>
+  <p>创建第一个活动后，就能在工作台管理报名、签到、海报与广播。</p>
+  <a class="button primary" href="/admin/activities/new">新建活动</a>
+</div>
+{{end}}
 {{end}}

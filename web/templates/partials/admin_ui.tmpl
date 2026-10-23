@@ -1,0 +1,49 @@
+{{define "admin_activity_status"}}
+{{if eq . "报名中"}}<span class="admin-chip admin-chip--open"><span class="admin-chip-dot" aria-hidden="true"></span>报名中</span>
+{{else if eq . "未开始报名"}}<span class="admin-chip admin-chip--muted"><span class="admin-chip-dot" aria-hidden="true"></span>未开始报名</span>
+{{else if eq . "已满员"}}<span class="admin-chip admin-chip--full"><span class="admin-chip-dot" aria-hidden="true"></span>已满员</span>
+{{else if eq . "已结束"}}<span class="admin-chip admin-chip--done"><span class="admin-chip-dot" aria-hidden="true"></span>已结束</span>
+{{else if eq . "已取消"}}<span class="admin-chip admin-chip--cancel"><span class="admin-chip-dot" aria-hidden="true"></span>已取消</span>
+{{else if eq . "草稿"}}<span class="admin-chip admin-chip--draft"><span class="admin-chip-dot" aria-hidden="true"></span>草稿</span>
+{{else if .}}<span class="admin-chip admin-chip--muted"><span class="admin-chip-dot" aria-hidden="true"></span>{{.}}</span>
+{{else}}<span class="admin-chip admin-chip--muted">状态未设置</span>
+{{end}}
+{{end}}
+
+{{define "admin_attendance_status"}}
+{{if eq . "按时"}}<span class="admin-chip admin-chip--done">已签到 · 按时</span>
+{{else if eq . "迟到"}}<span class="admin-chip admin-chip--draft">已签到 · 迟到</span>
+{{else if eq . "未到"}}<span class="admin-chip admin-chip--cancel">未到</span>
+{{else}}<span class="admin-chip admin-chip--muted">未签到</span>
+{{end}}
+{{end}}
+
+{{define "admin_icon_users"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 19v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V19"></path><circle cx="9" cy="7" r="3.2"></circle><path d="M17 11.2a3 3 0 1 0-1.4-5.6"></path><path d="M22 19v-1.4a3.6 3.6 0 0 0-2.8-3.5"></path></svg>{{end}}
+
+{{define "admin_icon_shield"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3l7.5 3v5.4c0 4.4-3 8.1-7.5 10.1-4.5-2-7.5-5.7-7.5-10.1V6L12 3z"></path><path d="M9.3 11.9l1.9 1.9 3.6-3.9"></path></svg>{{end}}
+
+{{define "admin_icon_calendar"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"></rect><path d="M7.5 3v4M16.5 3v4M3.5 9.5h17"></path><path d="M8 13h2.5M13.5 13H16M8 16.5h2.5M13.5 16.5H16"></path></svg>{{end}}
+
+{{define "admin_icon_plus"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="5"></rect><path d="M12 8v8M8 12h8"></path></svg>{{end}}
+
+{{define "admin_icon_matching"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="7" cy="7" r="3"></circle><circle cx="17" cy="7" r="3"></circle><path d="M7 10v4.5a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V10"></path><path d="M10 17.5h4"></path></svg>{{end}}
+
+{{define "admin_icon_wheat"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 21V9"></path><path d="M12 9c0-3 2-5 4.5-5.5C16.5 6.5 14.5 9 12 9z"></path><path d="M12 12c0-2.5-1.7-4.4-4-5 0 2.9 1.7 5 4 5z"></path><path d="M12 15.5c0-2.5 1.7-4.4 4-5 0 2.9-1.7 5-4 5z"></path><path d="M12 19c0-2.5-1.7-4.4-4-5 0 2.9 1.7 5 4 5z"></path></svg>{{end}}
+
+{{define "admin_icon_flag"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 21V4"></path><path d="M5 4h11l-1.5 4L16 12H5"></path></svg>{{end}}
+
+{{define "admin_icon_feedback"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.5 11.5a8.5 8.5 0 0 1-8.5 8.5H4l2-3.2a8.5 8.5 0 1 1 14.5-5.3z"></path><path d="M8.5 11.5h7M8.5 8.5h4.5"></path></svg>{{end}}
+
+{{define "admin_icon_audit"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3.5h8a3 3 0 0 1 3 3v14l-3.5-2-3.5 2-3.5-2-3.5 2v-14a3 3 0 0 1 3-3z"></path><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4"></path></svg>{{end}}
+
+{{define "admin_icon_heart"}}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.8-7.7 1.1-1.1a5.5 5.5 0 0 0-.1-7.8z"></path></svg>{{end}}
+
+{{define "admin_icon_search"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg>{{end}}
+
+{{define "admin_icon_clock"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>{{end}}
+
+{{define "admin_icon_pin"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"></path><circle cx="12" cy="10" r="2.6"></circle></svg>{{end}}
+
+{{define "admin_icon_image"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect><circle cx="8.5" cy="9.5" r="1.5"></circle><path d="M5 17l4.5-4.2 3.2 2.9 2.4-2.2L19.5 17"></path></svg>{{end}}
+
+{{define "admin_icon_empty"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 9.5L12 4l8 5.5v9L12 24l-8-5.5v-9z" transform="translate(0 -3)"></path><path d="M4 9.5l8 5.2 8-5.2M12 14.7V21" transform="translate(0 -3)"></path></svg>{{end}}

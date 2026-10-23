@@ -1,70 +1,185 @@
 {{define "content"}}
 {{template "admin_nav" .}}
 
-<section class="card">
-  <p class="eyebrow">管理台</p>
-  <h1>总览</h1>
-  {{template "flash" .}}
-  <p class="hint">你的角色：{{range $i, $r := .Data.Roles}}{{if $i}}、{{end}}{{$r}}{{end}}。所有管理操作都会写入审计日志。</p>
-  {{if not .Data.SuperAdmin}}<p class="hint">角色与权限指派仅限最高管理员。</p>{{end}}
-</section>
-
-<section class="card">
-  <h2>待处理事项</h2>
-  <div class="admin-stat-grid">
-    <a class="admin-stat" href="/admin/users?status=pending">
-      <span class="admin-stat-number">{{.Data.Stats.Users.Pending}}</span>
-      <span class="admin-stat-label">待审核用户</span>
-    </a>
-    <a class="admin-stat" href="/admin/reports?status=pending">
-      <span class="admin-stat-number">{{.Data.Stats.PendingReports}}</span>
-      <span class="admin-stat-label">待处理举报</span>
-    </a>
-    <a class="admin-stat" href="/admin/suggestions?status=pending">
-      <span class="admin-stat-number">{{.Data.Stats.PendingSuggestions}}</span>
-      <span class="admin-stat-label">待处理反馈</span>
-    </a>
+<section class="admin-page-head">
+  <div class="admin-page-head-main">
+    <p class="admin-eyebrow">总览</p>
+    <h1 class="admin-page-title">管理台</h1>
+    <p class="admin-subtitle">你好，{{if .User}}{{.User.Name}}{{else}}管理员{{end}}。所有管理操作都会写入审计日志。</p>
+    <div class="admin-activity-flags admin-role-chips">
+      {{range .Data.Roles}}<span class="admin-chip admin-chip--open">{{.}}</span>{{end}}
+      <span class="admin-chip admin-chip--muted">操作全程审计</span>
+    </div>
   </div>
 </section>
 
-<section class="card">
-  <h2>用户概况</h2>
-  <div class="admin-stat-grid">
-    <div class="admin-stat">
-      <span class="admin-stat-number">{{.Data.Stats.Users.Total}}</span>
-      <span class="admin-stat-label">全部用户</span>
-    </div>
-    <div class="admin-stat">
-      <span class="admin-stat-number">{{.Data.Stats.Users.Active}}</span>
-      <span class="admin-stat-label">已通过</span>
-    </div>
-    <div class="admin-stat">
-      <span class="admin-stat-number">{{.Data.Stats.Users.Rejected}}</span>
-      <span class="admin-stat-label">已拒绝</span>
-    </div>
-    <div class="admin-stat">
-      <span class="admin-stat-number">{{.Data.Stats.Users.Disabled}}</span>
-      <span class="admin-stat-label">已停用</span>
-    </div>
-  </div>
-  <p class="hint">最高管理员人数：{{.Data.Stats.SuperAdmins}}{{if eq .Data.Stats.SuperAdmins 1}}（系统必须保留至少一位）{{end}}</p>
+<section class="admin-stat-grid" aria-label="关键统计">
+  {{if .Data.CanReview}}
+  <a class="admin-stat" href="/admin/users?status=pending">
+    <span class="admin-stat-icon" aria-hidden="true">{{template "admin_icon_users"}}</span>
+    <span class="admin-stat-number{{if gt .Data.Stats.Users.Pending 0}} is-warn{{end}}">{{.Data.Stats.Users.Pending}}</span>
+    <span class="admin-stat-label">待审核用户</span>
+    <span class="admin-stat-arrow" aria-hidden="true">›</span>
+  </a>
+  {{end}}
+  {{if .Data.CanModerate}}
+  <a class="admin-stat" href="/admin/reports?status=pending">
+    <span class="admin-stat-icon" aria-hidden="true">{{template "admin_icon_flag"}}</span>
+    <span class="admin-stat-number{{if gt .Data.Stats.PendingReports 0}} is-warn{{end}}">{{.Data.Stats.PendingReports}}</span>
+    <span class="admin-stat-label">待处理举报</span>
+    <span class="admin-stat-arrow" aria-hidden="true">›</span>
+  </a>
+  <a class="admin-stat" href="/admin/suggestions?status=pending">
+    <span class="admin-stat-icon" aria-hidden="true">{{template "admin_icon_feedback"}}</span>
+    <span class="admin-stat-number{{if gt .Data.Stats.PendingSuggestions 0}} is-warn{{end}}">{{.Data.Stats.PendingSuggestions}}</span>
+    <span class="admin-stat-label">待处理反馈</span>
+    <span class="admin-stat-arrow" aria-hidden="true">›</span>
+  </a>
+  {{end}}
+  {{if .Data.CanActivity}}
+  <a class="admin-stat" href="/admin/activities">
+    <span class="admin-stat-icon" aria-hidden="true">{{template "admin_icon_calendar"}}</span>
+    <span class="admin-stat-number">{{.Data.Stats.ActivityOpen}}</span>
+    <span class="admin-stat-label">进行中活动</span>
+    <span class="admin-stat-arrow" aria-hidden="true">›</span>
+  </a>
+  {{end}}
 </section>
 
-<section class="card">
-  <h2>活动概况</h2>
-  <div class="admin-stat-grid">
-    <a class="admin-stat" href="/admin/activities">
-      <span class="admin-stat-number">{{.Data.Stats.ActivityTotal}}</span>
-      <span class="admin-stat-label">活动总数</span>
+<div class="admin-entry-groups">
+  {{if or .Data.CanReview .Data.CanAdmin}}
+  <section class="admin-entry-group" aria-labelledby="entry-group-users">
+    <div class="admin-entry-group-head">
+      <h2 id="entry-group-users">用户与权限</h2>
+      <span class="admin-entry-group-count">{{if and .Data.CanReview .Data.CanAdmin}}2 项{{else}}1 项{{end}}</span>
+    </div>
+    {{if .Data.CanReview}}
+    <a class="admin-entry" href="/admin/users">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_users"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">用户审核</span>
+        <span class="admin-entry-desc">审核新会员资料、账号状态与照片</span>
+      </span>
+      {{if gt .Data.Stats.Users.Pending 0}}<span class="admin-entry-badge">{{.Data.Stats.Users.Pending}}</span>{{end}}
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
     </a>
-    <a class="admin-stat" href="/admin/activities">
-      <span class="admin-stat-number">{{.Data.Stats.ActivityOpen}}</span>
-      <span class="admin-stat-label">报名中</span>
+    {{end}}
+    {{if .Data.CanAdmin}}
+    <a class="admin-entry" href="/admin/roles">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_shield"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">角色与权限</span>
+        <span class="admin-entry-desc">指派管理员角色，查看权限清单</span>
+      </span>
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
     </a>
-    <a class="admin-stat" href="/admin/activities">
-      <span class="admin-stat-number">{{.Data.Stats.ActivitySignupTotal}}</span>
-      <span class="admin-stat-label">有效报名人次</span>
+    {{end}}
+  </section>
+  {{end}}
+
+  {{if .Data.CanActivity}}
+  <section class="admin-entry-group" aria-labelledby="entry-group-activities">
+    <div class="admin-entry-group-head">
+      <h2 id="entry-group-activities">活动</h2>
+      <span class="admin-entry-group-count">2 项</span>
+    </div>
+    <a class="admin-entry" href="/admin/activities">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_calendar"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">活动列表</span>
+        <span class="admin-entry-desc">报名名单、签到、海报与站内广播</span>
+      </span>
+      {{if gt .Data.Stats.ActivityOpen 0}}<span class="admin-entry-badge">{{.Data.Stats.ActivityOpen}}</span>{{end}}
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
     </a>
-  </div>
-</section>
+    <a class="admin-entry" href="/admin/activities/new">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_plus"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">新建活动</span>
+        <span class="admin-entry-desc">填写时间地点、名额与签到设置</span>
+      </span>
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
+  </section>
+
+  <section class="admin-entry-group" aria-labelledby="entry-group-matching">
+    <div class="admin-entry-group-head">
+      <h2 id="entry-group-matching">匹配</h2>
+      <span class="admin-entry-group-count">2 项</span>
+    </div>
+    <a class="admin-entry" href="/admin/matching">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_matching"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">分组匹配</span>
+        <span class="admin-entry-desc">按性别与每组人数生成分组结果</span>
+      </span>
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
+    <a class="admin-entry" href="/admin/matching">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_heart"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">一对一匹配</span>
+        <span class="admin-entry-desc">按轮次执行一对一，查看配对与聊天情况</span>
+      </span>
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
+  </section>
+  {{end}}
+
+  {{if .Data.CanPoints}}
+  <section class="admin-entry-group" aria-labelledby="entry-group-points">
+    <div class="admin-entry-group-head">
+      <h2 id="entry-group-points">麦穗</h2>
+      <span class="admin-entry-group-count">1 项</span>
+    </div>
+    <a class="admin-entry" href="/admin/points">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_wheat"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">麦穗管理</span>
+        <span class="admin-entry-desc">总览、流水、兑换与加减麦穗</span>
+      </span>
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
+  </section>
+  {{end}}
+
+  {{if or .Data.CanModerate .Data.CanAudit}}
+  <section class="admin-entry-group admin-entry-group--wide" aria-labelledby="entry-group-safety">
+    <div class="admin-entry-group-head">
+      <h2 id="entry-group-safety">内容与安全</h2>
+      <span class="admin-entry-group-count">{{if and .Data.CanModerate .Data.CanAudit}}3 项{{else if .Data.CanModerate}}2 项{{else}}1 项{{end}}</span>
+    </div>
+    {{if .Data.CanModerate}}
+    <a class="admin-entry" href="/admin/reports">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_flag"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">举报处理</span>
+        <span class="admin-entry-desc">处理用户举报并记录处理结果</span>
+      </span>
+      {{if gt .Data.Stats.PendingReports 0}}<span class="admin-entry-badge">{{.Data.Stats.PendingReports}}</span>{{end}}
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
+    <a class="admin-entry" href="/admin/suggestions">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_feedback"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">意见反馈</span>
+        <span class="admin-entry-desc">查看产品建议与问题反馈</span>
+      </span>
+      {{if gt .Data.Stats.PendingSuggestions 0}}<span class="admin-entry-badge">{{.Data.Stats.PendingSuggestions}}</span>{{end}}
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
+    {{end}}
+    {{if .Data.CanAudit}}
+    <a class="admin-entry" href="/admin/audit">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_audit"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">审计日志</span>
+        <span class="admin-entry-desc">按时间与操作人查询管理动作</span>
+      </span>
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
+    {{end}}
+  </section>
+  {{end}}
+</div>
 {{end}}

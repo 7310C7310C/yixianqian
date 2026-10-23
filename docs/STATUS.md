@@ -25,6 +25,16 @@ sources:
   - internal/db/points_admin_legacy.go
   - internal/db/grouping.go
   - internal/db/grouping_admin.go
+  - web/static/admin.css
+  - web/static/admin.js
+  - web/templates/pages/admin.tmpl
+  - web/templates/pages/admin_activities.tmpl
+  - web/templates/pages/admin_activity_edit.tmpl
+  - web/templates/pages/admin_activity_detail.tmpl
+  - web/templates/partials/admin_nav.tmpl
+  - web/templates/partials/admin_ui.tmpl
+  - web/templates/layout.tmpl
+  - tools/browser/admin_ui_phase_a.py
   - .env.example
 -->
 
@@ -80,15 +90,18 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ### 管理台（SSR，仅 iframe 承载）
 
-- 入口与框架：管理台导航（总览/用户/活动/匹配/麦穗/举报/反馈/角色/审计）；顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`（不渲染顶层页面），管理台只经 SPA 内 `/?admin=1` 打开 iframe overlay 使用；受权照片/海报原图串流是显式例外。
+- 入口与框架：顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`（不渲染顶层页面），管理台只经 SPA 内 `/?admin=1` 打开 iframe overlay 使用；受权照片/海报原图串流是显式例外。
+- 导航（Phase A，2026-10-23）：取消 9 项平铺 subnav；顶部固定「管理台 / 当前页 / 返回总览」，总览改为 4 个关键统计 + 用户与权限/活动/匹配/麦穗/内容与安全分组入口卡。设计系统在 `web/static/admin.css`（`--adm-*` token、44px 触控、390/768/1280 响应式、浅色 v1 粉），`web/static/admin.js` 负责列表筛选、工作台 tabs/hash 深链与二次确认。
+- 活动（Phase A）：列表（统计条 + 搜索/状态 chips + 活动卡）、新建/编辑（分组表单 + 手机 sticky 操作条）、工作台（模式卡 + 报名名单/签到/广播/设置 tabs + 行内签到 + 广播二次确认）；路由、handler 契约、RBAC、CSRF、审计与表单字段名不变。
 - 用户：审核通过/拒绝、用户详情与受权照片串流、停用/启用、临时密码。
 - 举报与反馈：列表与处理。
 - 活动：列表、创建/编辑、活动工作台（海报上传与私有串流、报名/签到名单与搜索/出席筛选/分页、现场签到、站内广播预览+服务端签名确认、快速设置）。
+- 管理台 Phase B（待下一轮）：用户/匹配/麦穗/举报/反馈/角色/审计页模板仍为旧结构，已由新 token 与兼容层覆盖；下一轮按同一设计系统重做。
 - 匹配：`/admin/matching` 清单，分组控制台与一对一会话控制台（预览/执行/重置/轮次结果/名单/聊天概览）；沿用 `matching.run` 权限、CSRF 与审计。
 - 麦穗：`/admin/points` 总览、调整、流水、邀请、兑换、心愿、推荐；调整向用户写入站内通知。
 - 审计：`/admin/audit` 查看与 `/admin/audit.csv` 导出。
 - 角色：RBAC 角色指派；最后一位 `super_admin` 受保护。
-- 响应式：640–999px 列表卡片化、1280px 表单限宽、390px 单列可读。
+- 响应式：390（iframe 手机）/768/1280 三档；390 单列、列表卡片化，桌面内容 1080 居中；关键触控区 ≥44px，无页面级横向滚动。
 
 ### 质量门
 
