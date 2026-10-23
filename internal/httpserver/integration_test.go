@@ -226,7 +226,6 @@ func testConfig() config.Config {
 		MediaMaxBytes:     10 << 20,
 		MediaThumbSize:    128,
 		ActivationTTL:     time.Hour,
-		PublicQRImage:     "qrcode.png",
 		LogLevel:          slog.LevelError,
 		LogFormat:         "text",
 	}

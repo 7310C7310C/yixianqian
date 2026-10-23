@@ -215,7 +215,6 @@ sources: []
 | `MEDIA_MAX_DIMENSION` | 是 | 是 |
 | `MEDIA_MAX_PIXELS` | 是 | 是 |
 | `MEDIA_THUMB_SIZE` | 是 | 是 |
-| `PUBLIC_QR_IMAGE` | 是 | 是 |
 | `R2_ACCESS_KEY_ID` | 是 | 是 |
 | `R2_BUCKET` | 是 | 是 |
 | `R2_ENDPOINT` | 是 | 是 |

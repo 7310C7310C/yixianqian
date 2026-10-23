@@ -129,7 +129,10 @@ set -a; . ./.env; set +a
 ```
 
 `.env.example` 是配置项的权威清单；不要在本 README 复制整张表。密钥、`.env`、`local_config` 一律不进 git。
-公开首页二维码由 `PUBLIC_QR_IMAGE` 指定 `web/static/` 下的 PNG 文件名（默认 `qrcode.png`；staging 用 `qrcode_test.png`）。
+公开首页二维码是固定资产 `web/static/feishu-qr.png`，内容与页面飞书链接同一 URL
+（`https://applink.feishu.cn/T996FhMkTERp`），不再有二维码 env。需要重新生成时用
+`python3 tools/gen_qr.py`（一次性工具，`qrcode[pil]` 依赖不入 `tools/requirements*.txt`）；
+生成后必须用独立解码器校验解出的 URL 与 `publicFeishuAppURL` 完全一致。
 
 ### 构建、测试、启动
 

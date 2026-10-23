@@ -41,9 +41,8 @@ type PageData struct {
 	ActiveNav    string
 	ActiveSubnav string
 	PageCSS      string
-	// QRImage 是公开首页二维码在 /static/ 下的文件名；FeishuURL 是飞书版入口。
-	// render 会为所有页面填入默认值，模板无需区分 GET/POST 渲染路径。
-	QRImage   string
+	// FeishuURL 是飞书版入口；render 会为所有页面填入默认值，模板无需区分
+	// GET/POST 渲染路径。公开首页二维码固定为 /static/feishu-qr.png。
 	FeishuURL string
 	// CanPoints / CanAudit control admin navigation visibility. The renderer
 	// fills them from the admin access stored on the request context.

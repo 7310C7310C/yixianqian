@@ -53,7 +53,7 @@ func TestHomeRendersPublicLandingForAnonymous(t *testing.T) {
 		publicFeishuAppURL,
 		`target="_blank"`,
 		`rel="noopener noreferrer"`,
-		`/static/qrcode.png`,
+		`/static/feishu-qr.png`,
 		"用飞书「扫一扫」识别二维码",
 	} {
 		if !strings.Contains(body, want) {
@@ -102,22 +102,6 @@ func TestHomeServesSPAForSignedInUser(t *testing.T) {
 	}
 }
 
-func TestHomeUsesConfiguredQRImage(t *testing.T) {
-	app := newHomeTestApp(t, func(cfg *config.Config) {
-		cfg.PublicQRImage = "qrcode_test.png"
-	})
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	app.handleHome(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d", rec.Code)
-	}
-	if body := rec.Body.String(); !strings.Contains(body, `/static/qrcode_test.png`) {
-		t.Fatalf("custom PUBLIC_QR_IMAGE not rendered: %s", body)
-	}
-}
-
 func TestLoginPageShowsRegisterCTA(t *testing.T) {
 	app := newHomeTestApp(t, nil)
 	rec := httptest.NewRecorder()
@@ -143,20 +127,23 @@ func TestLoginPageShowsRegisterCTA(t *testing.T) {
 	}
 }
 
-func TestPublicQRCodeAssetsAreServed(t *testing.T) {
+func TestPublicQRCodeAssetIsServed(t *testing.T) {
+	const path = "/static/feishu-qr.png"
 	h := staticHandler()
-	for _, path := range []string{"/static/qrcode.png", "/static/qrcode_test.png"} {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		h.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("%s status = %d", path, rec.Code)
-		}
-		if ct := rec.Header().Get("Content-Type"); ct != "image/png" {
-			t.Fatalf("%s content-type = %q", path, ct)
-		}
-		if rec.Body.Len() == 0 {
-			t.Fatalf("%s served empty body", path)
-		}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s status = %d", path, rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("%s content-type = %q", path, ct)
+	}
+	body := rec.Body.String()
+	if len(body) < 200 {
+		t.Fatalf("%s served %d bytes, want a real PNG", path, len(body))
+	}
+	if !strings.HasPrefix(body, "\x89PNG\r\n\x1a\n") {
+		t.Fatalf("%s is not a PNG", path)
 	}
 }

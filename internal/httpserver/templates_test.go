@@ -43,13 +43,13 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 			name: "home",
 			page: "home",
 			data: PageData{
-				Title: "祝你早日找到另一半", QRImage: "qrcode.png",
+				Title:     "祝你早日找到另一半",
 				FeishuURL: publicFeishuAppURL,
 			},
 			want: []string{
 				"<!doctype html>", "一线牵", "立即注册", `href="/register?from=home"`,
 				`href="/login"`, "人工审核", "匿名喜欢", "动态通知",
-				"已在飞书版使用过", publicFeishuAppURL, `/static/qrcode.png`,
+				"已在飞书版使用过", publicFeishuAppURL, `/static/feishu-qr.png`,
 			},
 			notWant: []string{`id="app"`},
 		},

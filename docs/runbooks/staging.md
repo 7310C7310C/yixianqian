@@ -74,8 +74,9 @@ mv /opt/yixianqian-next/bin/server.next /opt/yixianqian-next/bin/server
 systemctl restart yixianqian-next-test
 ```
 
-`config/staging.env` 增加 `PUBLIC_QR_IMAGE=qrcode_test.png`（公开首页使用测试二维码；生产用默认
-`qrcode.png`）。切换后按「健康检查」确认版本，再跑人脸 `unchecked=0` 与用户端/管理台 smoke。
+公开首页二维码是仓库内固定资产 `web/static/feishu-qr.png`，不需要 env；若旧
+`config/staging.env` 仍有 `PUBLIC_QR_IMAGE`，删除。切换后按「健康检查」确认版本，再跑人脸
+`unchecked=0` 与用户端/管理台 smoke。
 
 ### 分支与交付
 
@@ -153,11 +154,18 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://next.nantou.love/app       # �
 curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies https://next.nantou.love/  # 已登录 200 SPA
 curl -sS https://next.nantou.love/ | grep -q '立即注册'                       # 公开首页注册主按钮
 curl -sS https://next.nantou.love/ | grep -q '已在飞书版使用过'               # 飞书老用户说明
-curl -sS https://next.nantou.love/ | grep -q 'qrcode_test.png'               # staging 测试二维码
+curl -sS https://next.nantou.love/ | grep -q 'feishu-qr.png'                  # 公开首页固定二维码
 curl -sS https://next.nantou.love/login | grep -q '注册新账号'                 # 登录页注册入口
 ```
 
 - 匿名 `/` 必须是服务端公开首页：品牌/卖点、注册主按钮、登录入口、飞书入口与二维码；不展示用户照片/资料。
+- 二维码必须可扫且与页面按钮同 URL；改动二维码资产后必须重跑（期望输出与按钮链接完全一致）：
+
+```bash
+curl -sS https://next.nantou.love/static/feishu-qr.png -o /tmp/feishu-qr.png
+zbarimg -q --raw /tmp/feishu-qr.png    # 期望 https://applink.feishu.cn/T996FhMkTERp
+```
+
 - 已登录 `/` 必须返回 v1 Vue SPA；`/legacy/api/home` 200；四 tab 用 hash 切换。
 - 公开首页/登录页真实浏览器回归（390×844 与 1280×900，含截图与二维码加载检查）：
 

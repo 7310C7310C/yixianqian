@@ -108,3 +108,11 @@ sources: []
 - 决策：匿名 `GET /` 返回 200 服务端公开首页（品牌 Hero、人工审核/匿名喜欢/动态通知、注册主按钮与登录次按钮、飞书老用户三步说明、飞书入口链接与二维码）；登录后 `GET /` 仍返回 v1 Vue SPA。注册主 CTA 指向 `/register?from=home`；飞书入口固定 `https://applink.feishu.cn/T996FhMkTERp`。二维码图由 `PUBLIC_QR_IMAGE` 指定（默认 `qrcode.png`，staging 用 `qrcode_test.png`），只作为静态图引用，不解析内容。
 - 后果：匿名首屏不再依赖 SPA JavaScript，可独立承接 `nantou.love` 的公开流量；登录页同步出现主按钮「注册新账号」和同一条飞书说明。公开页不展示任何用户照片或资料，避免隐私暴露。匿名访问 `/?admin=1` 时先 303 `/login?next=...`，登录后由 SPA 依据 `admin=1` 自动打开管理台 overlay。
 - 边界：不改 `/admin` 的 303 `/?admin=1`、`/app` 的匿名跳转，以及 `/login`、`/register`、`/welcome` 现有行为；不新增第二套注册/登录流程；不把二维码内容写进代码或日志；公开页只做展示与跳转，不读取用户数据。
+
+## 15. 公开首页二维码改为固定生成资产（2026-10-23）
+
+- 背景：`5734f10` 原样复制了 v1 的 `qrcode.png` 与 `qrcode_test.png`。部署前独立审查判 FAIL：`qrcode_test.png` 经 zbar/pyzbar、zxing-cpp、OpenCV、微信解码器均不可读；`qrcode.png` 解出 `https://applink.feishu.cn/T98YejHHBnrA`，与页面按钮/链接的 `https://applink.feishu.cn/T996FhMkTERp` 不是同一个 applink token。`.team/audits/2026-10-23-migration-gaps.md` 也已警告不要复制 v1 二维码充数。
+- 决策：删除两个 v1 PNG 与 `PUBLIC_QR_IMAGE`（`internal/config`、`.env.example`、模板、文档全部移除），公开首页模板固定引用 `web/static/feishu-qr.png`。该图由页面同一个入口 URL `https://applink.feishu.cn/T996FhMkTERp`（即 `publicFeishuAppURL`）生成，入口 URL 仍是唯一事实来源；运行时不解析二维码，也不新增 QR 生成依赖。
+- 生成与验收：资产需变更时运行一次性工具 `python3 tools/gen_qr.py`（依赖 `qrcode[pil]`，故意不写入 `tools/requirements*.txt`）；生成后必须用独立解码器（如 `zbarimg --raw web/static/feishu-qr.png`、pyzbar 或 zxing-cpp）验证解出的 URL 与 `publicFeishuAppURL` 完全一致；staging 发布前按 runbook 再验一次。
+- 后果：首页二维码在 staging 与生产使用同一张可扫、与按钮一致的图；不再需要 `config/staging.env` 的二维码配置，旧值变成无效果并在下次改 env 时删除；删除 v1 资产消除审计冲突。
+- 边界：本节取代第 14 节中「二维码图由 `PUBLIC_QR_IMAGE` 指定」的部分，其余第 14 节不变；不修改飞书入口 URL、不改公开页布局与跳转；二维码内容只是第 14 节已公开的入口 URL，不含用户数据或密钥。

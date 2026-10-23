@@ -112,6 +112,9 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
             " return !!img && img.complete && img.naturalWidth > 0; }",
             timeout=10000,
         )
+        qr_src = qr.get_attribute("src") or ""
+        if not qr_src.endswith("/static/feishu-qr.png"):
+            raise SmokeFailure(f"{width}px: 二维码 src 不是固定资产（{qr_src}）")
         page.get_by_text("已在飞书版使用过", exact=False).first.wait_for(state="visible", timeout=10000)
         page.screenshot(path=str(out_dir / f"home-anon-{tag}.png"), full_page=True)
 

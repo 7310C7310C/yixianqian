@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/7310C7310C/yixianqian/internal/config"
 )
 
 func TestIntegrationPublicHomeAndLoginEntry(t *testing.T) {
@@ -24,7 +22,7 @@ func TestIntegrationPublicHomeAndLoginEntry(t *testing.T) {
 		`href="/login"`,
 		"已在飞书版使用过",
 		publicFeishuAppURL,
-		`/static/qrcode.png`,
+		`/static/feishu-qr.png`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("anonymous home missing %q", want)
@@ -63,20 +61,28 @@ func TestIntegrationPublicHomeAndLoginEntry(t *testing.T) {
 	}
 }
 
-func TestIntegrationPublicHomeQRImageFromConfig(t *testing.T) {
-	env := setupActivitiesHTTPEnv(t, func(cfg *config.Config) {
-		cfg.PublicQRImage = "qrcode_test.png"
-	})
+func TestIntegrationPublicHomeQRAsset(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
 	anonymous := newWSClient(t, env.server.URL)
 
 	resp := anonymous.get("/")
 	body := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `/static/qrcode_test.png`) {
-		t.Fatalf("anonymous home status=%d missing custom qr image: %s", resp.StatusCode, body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("anonymous home status = %d body=%s", resp.StatusCode, body)
+	}
+	if !strings.Contains(body, `/static/feishu-qr.png`) || !strings.Contains(body, publicFeishuAppURL) {
+		t.Fatalf("anonymous home missing fixed QR asset or feishu link: %s", body)
 	}
 
-	resp = anonymous.get("/static/qrcode_test.png")
+	resp = anonymous.get("/static/feishu-qr.png")
+	body = readBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("qrcode_test.png status = %d", resp.StatusCode)
+		t.Fatalf("feishu-qr.png status = %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("feishu-qr.png content-type = %q", ct)
+	}
+	if !strings.HasPrefix(body, "\x89PNG\r\n\x1a\n") {
+		t.Fatal("feishu-qr.png is not a PNG")
 	}
 }
