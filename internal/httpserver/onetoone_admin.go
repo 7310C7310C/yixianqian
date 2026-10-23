@@ -308,24 +308,26 @@ func roundHasResults(round int, rounds []int) bool {
 }
 
 type adminOnetoonePair struct {
-	OpenID   int64  `json:"id"`
-	UserID   string `json:"user_id"`
-	Name     string `json:"name"`
-	Rank     int    `json:"rank"`
-	Chatted  bool   `json:"chatted"`
-	MsgCount int    `json:"msg_count"`
-	LastAt   string `json:"last_at"`
+	OpenID       int64  `json:"id"`
+	LegacyOpenID string `json:"open_id"`
+	UserID       string `json:"user_id"`
+	Name         string `json:"name"`
+	Rank         int    `json:"rank"`
+	Chatted      bool   `json:"chatted"`
+	MsgCount     int    `json:"msg_count"`
+	LastAt       string `json:"last_at"`
 }
 
 type adminOnetoonePerson struct {
-	OpenID    int64               `json:"id"`
-	UserID    string              `json:"user_id"`
-	Name      string              `json:"name"`
-	Assigned  int                 `json:"assigned"`
-	Chatted   int                 `json:"chatted"`
-	MsgCount  int                 `json:"msg_count"`
-	Pairs     []adminOnetoonePair `json:"pairs"`
-	Unchatted []map[string]any    `json:"unchatted"`
+	OpenID       int64               `json:"id"`
+	LegacyOpenID string              `json:"open_id"`
+	UserID       string              `json:"user_id"`
+	Name         string              `json:"name"`
+	Assigned     int                 `json:"assigned"`
+	Chatted      int                 `json:"chatted"`
+	MsgCount     int                 `json:"msg_count"`
+	Pairs        []adminOnetoonePair `json:"pairs"`
+	Unchatted    []map[string]any    `json:"unchatted"`
 }
 
 func (a *App) apiAdminOnetooneChatOverview(w http.ResponseWriter, r *http.Request, _ adminAccess) {

@@ -116,3 +116,12 @@ sources: []
 - 生成与验收：资产需变更时运行一次性工具 `python3 tools/gen_qr.py`（依赖 `qrcode[pil]`，故意不写入 `tools/requirements*.txt`）；生成后必须用独立解码器（如 `zbarimg --raw web/static/feishu-qr.png`、pyzbar 或 zxing-cpp）验证解出的 URL 与 `publicFeishuAppURL` 完全一致；staging 发布前按 runbook 再验一次。
 - 后果：首页二维码在 staging 与生产使用同一张可扫、与按钮一致的图；不再需要 `config/staging.env` 的二维码配置，旧值变成无效果并在下次改 env 时删除；删除 v1 资产消除审计冲突。
 - 边界：本节取代第 14 节中「二维码图由 `PUBLIC_QR_IMAGE` 指定」的部分，其余第 14 节不变；不修改飞书入口 URL、不改公开页布局与跳转；二维码内容只是第 14 节已公开的入口 URL，不含用户数据或密钥。
+
+## 16. 活动管理恢复 v1 SPA：后端兼容层与同步执行（2026-10-23）
+
+- 背景：v2 管理台改用 SSR 后，SPA「我的→管理→活动管理」页面仍保留 v1 原版 UI，但它调用 `/legacy/api/admin/*`，而 v2 只注册了 `/api/admin/*`，页面 0 端点可用（见 `.team/audits/2026-10-23-activity-admin-compat.md`）。PM 决定恢复 v1 原版活动管理界面（签到/执行），后端补兼容层。
+- 决策：新增 `/legacy/api/admin/*` 薄适配层（21 条路由），只做取数与形状映射，业务逻辑复用 `internal/db`；响应严格使用 v1 契约：`{"error":"..."}` 错误信封、`是/否` flag、成员/名单带 `open_id`、列表字段恒为 `[]`、`latest_round` 可为 `null`。v2 `/api/admin/*` 与 SSR 不改语义。
+- 决策：执行先同步。`group|onetoone run` 完成即回 `{ok:true,result:{code,round,...}}`，业务失败（`ALREADY_DONE`/`EXCLUSIVE_MODE`/`NOT_ENOUGH_PEOPLE`/`EMPTY_GROUPS`/`NO_PARTICIPANTS`）回 HTTP 200 + v1 `result.code`；参数、权限、CSRF 错误才用 4xx。`group/job`、`onetoone/job` 恒回 400（缺 `job_id`）或 404（任务不存在），不建 `jobs` 表；SPA 侧同步分支另行交付。
+- 权限：总览/详情需 `activity.manage` 或 `matching.run`；预览/执行/名单/结果/聊天需 `matching.run`；模式/状态/签到码/签到开关/现场签到需 `activity.manage`；`group/status.signin_code` 仅对 `activity.manage` 返回。未登录 401「未登录」、无角色/无权限 403「没有权限」，写操作沿用 HMAC CSRF；审计沿用 `group.run`/`group.reset`/`onetoone.run`/`onetoone.reset` 与 `admin.activity.*`，签到码值不进审计。
+- 后果：一段时间内同一业务有两套 JSON 形状，由集成契约测试防漂移；`/api/admin/group/result`、`/api/admin/onetoone/result`、`/api/admin/onetoone/chat-overview` 增量补 `open_id`/`display_name`/`nickname`，`/api/admin/group/run` 同时接受单数与复数每组人数键；v1 的「迟到」仍拒绝写入（两态签到只写「按时」/空）。
+- 边界：不改数据库 schema，不改 SSR 与 v2 现有字段含义，不恢复 202+job 轮询；SPA 入口恢复、执行分支适配与「编辑活动」入口不在本阶段。

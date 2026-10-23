@@ -110,6 +110,7 @@ type GroupStatus struct {
 type GroupMember struct {
 	UserID       int64
 	LegacyUserID string
+	LegacyOpenID string
 	Nickname     string
 	Name         string
 	UserName     string
@@ -472,8 +473,8 @@ func (d *DB) SelectGroupChoices(ctx context.Context, userID int64, activityRef s
 
 func scanGroupMember(row rowScanner) (GroupMember, error) {
 	var member GroupMember
-	err := row.Scan(&member.UserID, &member.LegacyUserID, &member.Nickname, &member.Name,
-		&member.UserName, &member.Gender, &member.PhotoID)
+	err := row.Scan(&member.UserID, &member.LegacyUserID, &member.LegacyOpenID,
+		&member.Nickname, &member.Name, &member.UserName, &member.Gender, &member.PhotoID)
 	if err != nil {
 		return GroupMember{}, fmt.Errorf("db: scan group member: %w", err)
 	}
@@ -481,7 +482,8 @@ func scanGroupMember(row rowScanner) (GroupMember, error) {
 }
 
 const groupMemberColumns = `gr.user_id, COALESCE(u.legacy_user_id, ''),
-		COALESCE(u.nickname, ''), COALESCE(u.name, ''), gr.user_name, gr.gender,
+		COALESCE(u.legacy_open_id, ''), COALESCE(u.nickname, ''), COALESCE(u.name, ''),
+		gr.user_name, gr.gender,
 		COALESCE((
 		    SELECT pp.media_id FROM profile_photos pp
 		     WHERE pp.user_id = gr.user_id
@@ -662,7 +664,7 @@ func (d *DB) AdminGroupResult(ctx context.Context, activityRef string, round int
 		var groupNo int
 		var member GroupMember
 		if err := rows.Scan(&groupNo, &member.UserID, &member.LegacyUserID,
-			&member.Nickname, &member.Name, &member.UserName, &member.Gender,
+			&member.LegacyOpenID, &member.Nickname, &member.Name, &member.UserName, &member.Gender,
 			&member.PhotoID); err != nil {
 			return AdminGroupResult{}, fmt.Errorf("db: scan admin group member: %w", err)
 		}

@@ -41,6 +41,12 @@ func (a *App) Handler() http.Handler {
 }
 
 func (a *App) handleNotFound(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/legacy/api/") {
+		// The bundled SPA's api() treats a non-JSON body as a network failure;
+		// keep unknown legacy paths in the v1 {"error": "..."} envelope.
+		legacyError(w, http.StatusNotFound, "找不到资源")
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		writeJSON(w, http.StatusNotFound, apiError{
 			Code:    "not_found",

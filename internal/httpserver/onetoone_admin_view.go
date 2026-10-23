@@ -115,6 +115,7 @@ func (a *App) buildOnetoonePreviewView(ctx context.Context, activity db.Activity
 
 type onetooneResultPartnerView struct {
 	ID       int64  `json:"id"`
+	OpenID   string `json:"open_id"`
 	UserID   string `json:"user_id"`
 	Nickname string `json:"nickname"`
 	Rank     int    `json:"rank"`
@@ -122,8 +123,10 @@ type onetooneResultPartnerView struct {
 
 type onetoonePersonView struct {
 	ID       int64                       `json:"id"`
+	OpenID   string                      `json:"open_id"`
 	UserID   string                      `json:"user_id"`
 	Name     string                      `json:"name"`
+	Nickname string                      `json:"nickname"`
 	Gender   string                      `json:"gender"`
 	Partners []onetooneResultPartnerView `json:"partners"`
 }
@@ -161,12 +164,25 @@ func (a *App) buildOnetooneResultView(ctx context.Context, activity db.Activity,
 		return onetooneResultView{}, err
 	}
 	summary := db.SummarizeOnetooneResults(rows)
+	// The v1 console keys and opens people by open_id, so carry the legacy open
+	// id through; fall back to the legacy user id and then the numeric id.
+	userOpenID := make(map[int64]string, len(summary.People))
+	targetOpenID := make(map[int64]string, len(rows))
+	for _, row := range rows {
+		if _, ok := userOpenID[row.UserID]; !ok {
+			userOpenID[row.UserID] = row.UserOpenID
+		}
+		if _, ok := targetOpenID[row.TargetID]; !ok {
+			targetOpenID[row.TargetID] = row.TargetOpenID
+		}
+	}
 	people := make([]onetoonePersonView, 0, len(summary.People))
 	for _, person := range summary.People {
 		partners := make([]onetooneResultPartnerView, 0, len(person.Partners))
 		for _, row := range person.Partners {
 			partners = append(partners, onetooneResultPartnerView{
 				ID:       row.TargetID,
+				OpenID:   legacyOpenID(targetOpenID[row.TargetID], row.TargetLegacyID, row.TargetID),
 				UserID:   row.TargetLegacyID,
 				Nickname: row.TargetAdminDisplayName(),
 				Rank:     row.Rank,
@@ -174,8 +190,10 @@ func (a *App) buildOnetooneResultView(ctx context.Context, activity db.Activity,
 		}
 		people = append(people, onetoonePersonView{
 			ID:       person.UserID,
+			OpenID:   legacyOpenID(userOpenID[person.UserID], person.UserIDLabel, person.UserID),
 			UserID:   person.UserIDLabel,
 			Name:     person.Name,
+			Nickname: person.Name,
 			Gender:   person.Gender,
 			Partners: partners,
 		})
@@ -243,6 +261,17 @@ func (a *App) buildOnetooneChatOverviewView(ctx context.Context, activity db.Act
 		return onetooneChatOverviewView{}, err
 	}
 	summary := db.SummarizeOnetooneResults(rows)
+	// v1 collapses a person by open_id; without it every row shares the same
+	// undefined key and all panels toggle together.
+	openIDByUser := make(map[int64]string, len(rows)*2)
+	for _, row := range rows {
+		if _, ok := openIDByUser[row.UserID]; !ok {
+			openIDByUser[row.UserID] = row.UserOpenID
+		}
+		if _, ok := openIDByUser[row.TargetID]; !ok {
+			openIDByUser[row.TargetID] = row.TargetOpenID
+		}
+	}
 	authorIDs := make([]int64, 0, len(summary.People))
 	targetSet := map[int64]struct{}{}
 	for _, person := range summary.People {
@@ -281,16 +310,18 @@ func (a *App) buildOnetooneChatOverviewView(ctx context.Context, activity db.Act
 			if chatted {
 				lastAt = stat.LastAt.Format("2006-01-02 15:04:05")
 			}
+			targetOpenID := legacyOpenID(openIDByUser[row.TargetID], row.TargetLegacyID, row.TargetID)
 			pairs = append(pairs, adminOnetoonePair{
-				OpenID: row.TargetID, UserID: row.TargetLegacyID,
+				OpenID: row.TargetID, LegacyOpenID: targetOpenID, UserID: row.TargetLegacyID,
 				Name: row.TargetAdminDisplayName(), Rank: row.Rank,
 				Chatted: chatted, MsgCount: stat.Count, LastAt: lastAt,
 			})
 			personMessages += stat.Count
 			if !chatted {
 				unchatted = append(unchatted, map[string]any{
-					"id": row.TargetID, "user_id": row.TargetLegacyID,
-					"name": row.TargetAdminDisplayName(), "rank": row.Rank,
+					"id": row.TargetID, "open_id": targetOpenID,
+					"user_id": row.TargetLegacyID,
+					"name":    row.TargetAdminDisplayName(), "rank": row.Rank,
 				})
 			}
 		}
@@ -305,7 +336,9 @@ func (a *App) buildOnetooneChatOverviewView(ctx context.Context, activity db.Act
 		totalChatted += chatted
 		totalMessages += personMessages
 		people = append(people, adminOnetoonePerson{
-			OpenID: person.UserID, UserID: person.UserIDLabel, Name: person.Name,
+			OpenID:       person.UserID,
+			LegacyOpenID: legacyOpenID(openIDByUser[person.UserID], person.UserIDLabel, person.UserID),
+			UserID:       person.UserIDLabel, Name: person.Name,
 			Assigned: len(pairs), Chatted: chatted, MsgCount: personMessages,
 			Pairs: pairs, Unchatted: unchatted,
 		})

@@ -87,6 +87,7 @@ type groupParticipant struct {
 	Name         string
 	Nickname     string
 	LegacyUserID string
+	LegacyOpenID string
 	Attendance   string
 	CheckedIn    bool
 }
@@ -98,7 +99,8 @@ func loadGroupParticipants(ctx context.Context, q groupTxQuerier, activityID int
 	rows, err := q.Query(ctx,
 		`SELECT gs.selector_id, gs.gender, gs.choices,
 		        COALESCE(u.name, ''), COALESCE(u.nickname, ''),
-		        COALESCE(u.legacy_user_id, ''), COALESCE(s.attendance, '')
+		        COALESCE(u.legacy_user_id, ''), COALESCE(u.legacy_open_id, ''),
+		        COALESCE(s.attendance, '')
 		   FROM group_selections gs
 		   JOIN users u ON u.id = gs.selector_id
 		   LEFT JOIN signups s
@@ -119,7 +121,7 @@ func loadGroupParticipants(ctx context.Context, q groupTxQuerier, activityID int
 		var row groupParticipant
 		var rawChoices []byte
 		if err := rows.Scan(&row.ID, &row.Gender, &rawChoices, &row.Name,
-			&row.Nickname, &row.LegacyUserID, &row.Attendance); err != nil {
+			&row.Nickname, &row.LegacyUserID, &row.LegacyOpenID, &row.Attendance); err != nil {
 			return nil, nil, 0, fmt.Errorf("db: scan grouping participant: %w", err)
 		}
 		row.CheckedIn = IsCheckedIn(row.Attendance)
@@ -398,6 +400,7 @@ func (d *DB) RunGrouping(ctx context.Context, activityRef string, round, male, f
 			adminGroup.Members = append(adminGroup.Members, GroupMember{
 				UserID:       id,
 				LegacyUserID: participant.LegacyUserID,
+				LegacyOpenID: participant.LegacyOpenID,
 				Nickname:     participant.Nickname,
 				Name:         participant.Name,
 				UserName:     participantDisplayName(participant),

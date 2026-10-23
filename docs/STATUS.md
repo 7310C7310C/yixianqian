@@ -12,7 +12,15 @@ sources:
   - internal/httpserver/legacy_api.go
   - internal/httpserver/admin_*.go
   - internal/httpserver/grouping_admin_routes.go
+  - internal/httpserver/grouping_view.go
   - internal/httpserver/onetoone_admin.go
+  - internal/httpserver/onetoone_admin_view.go
+  - internal/httpserver/legacy_activity_admin_routes.go
+  - internal/httpserver/legacy_activity_admin_view.go
+  - internal/db/admin_activity_legacy.go
+  - internal/db/admin_activity_settings.go
+  - internal/db/grouping.go
+  - internal/db/grouping_admin.go
   - .env.example
 -->
 
@@ -60,6 +68,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 通知：未读数字红点；`GET /legacy/api/notifications/stream` 推送未读/最新通知变化，EventSource 不可用时轮询兜底。
 - 登录/启用/注册/密码：Go SSR；改密为 SPA 内 Vant 子页，离开时还原滚动位置。
 - 公开首页：匿名访问 `/` 返回 200 服务端页面（品牌介绍、人工审核/匿名喜欢/动态通知、注册主按钮与登录入口、飞书老用户先设密码指引、飞书链接与二维码）；二维码为固定资产 `web/static/feishu-qr.png`，与飞书链接同一 URL（可扫码），无 env 依赖。登录后 `/` 仍由旧 SPA 入口。
+- 活动管理（v1 原版 SPA 页面）：后端 `/legacy/api/admin/*` 兼容层已交付（总览、详情、模式/状态/签到码/签到开关、现场签到、名单、预览、同步执行、结果、重置、job 占位）；SPA 入口与同步执行分支尚未接入（另一 workstream）。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
 
 ### 管理台（SSR，仅 iframe 承载）
@@ -106,6 +115,8 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 验收规格：`docs/product-spec.md` C4；在 PM 决策前，本项保持 P0 上线阻断。
 
 ## 5. 已知缺口/未验收
+
+- **活动管理 SPA 未闭环**：`/legacy/api/admin/*` 后端已交付，但 SPA「我的→管理」入口、`can_activity_admin` 与 `doGaRun/doOtoRun` 同步分支尚未接入；页面当前仍不可从 UI 打开。
 
 - **人脸照片缺口**：`104` 个 `active` 普通用户没有 `has_face=true` 的照片，其中 `101` 个完全没有照片；可通过资料页上传修复，不是死锁（与身份证 P0 区分）。
 - **内容合规**：腾讯云照片内容合规（宠物/卡通判定、活体）未实现。

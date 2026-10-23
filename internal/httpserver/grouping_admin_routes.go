@@ -36,10 +36,32 @@ func registerGroupingAdminRoutes(a *App, mux *http.ServeMux) {
 }
 
 type adminGroupPayload struct {
-	ActivityID      json.RawMessage `json:"activity_id"`
-	Round           *int            `json:"round"`
-	MalesPerGroup   *int            `json:"male_per_group"`
-	FemalesPerGroup *int            `json:"female_per_group"`
+	ActivityID json.RawMessage `json:"activity_id"`
+	Round      *int            `json:"round"`
+	// The v1 console sends plural keys; the v2 console sends singular ones.
+	// Both are accepted so one endpoint serves both clients.
+	MalesPerGroup         *int `json:"male_per_group"`
+	FemalesPerGroup       *int `json:"female_per_group"`
+	MalesPerGroupPlural   *int `json:"males_per_group"`
+	FemalesPerGroupPlural *int `json:"females_per_group"`
+}
+
+func (p adminGroupPayload) groupSize() (male, female int) {
+	maleValue := p.MalesPerGroup
+	if maleValue == nil {
+		maleValue = p.MalesPerGroupPlural
+	}
+	femaleValue := p.FemalesPerGroup
+	if femaleValue == nil {
+		femaleValue = p.FemalesPerGroupPlural
+	}
+	if maleValue != nil {
+		male = *maleValue
+	}
+	if femaleValue != nil {
+		female = *femaleValue
+	}
+	return male, female
 }
 
 func decodeAdminActivityRef(raw json.RawMessage) string {
@@ -77,12 +99,14 @@ func readAdminGroupPayload(r *http.Request) (adminGroupPayload, error) {
 			payload.Round = &value
 		}
 	}
-	if raw := strings.TrimSpace(r.PostFormValue("male_per_group")); raw != "" {
+	if raw := strings.TrimSpace(firstNonEmpty(r.PostFormValue("male_per_group"),
+		r.PostFormValue("males_per_group"))); raw != "" {
 		if value, err := strconv.Atoi(raw); err == nil {
 			payload.MalesPerGroup = &value
 		}
 	}
-	if raw := strings.TrimSpace(r.PostFormValue("female_per_group")); raw != "" {
+	if raw := strings.TrimSpace(firstNonEmpty(r.PostFormValue("female_per_group"),
+		r.PostFormValue("females_per_group"))); raw != "" {
 		if value, err := strconv.Atoi(raw); err == nil {
 			payload.FemalesPerGroup = &value
 		}
@@ -145,9 +169,16 @@ func (a *App) apiAdminGroupPreview(w http.ResponseWriter, r *http.Request, _ adm
 		writeAPIError(w, http.StatusBadRequest, "invalid_activity", "缺少 activity_id。")
 		return
 	}
+	malePerGroup := adminQueryInt(r, "male_per_group")
+	if malePerGroup == 0 {
+		malePerGroup = adminQueryInt(r, "males_per_group")
+	}
+	femalePerGroup := adminQueryInt(r, "female_per_group")
+	if femalePerGroup == 0 {
+		femalePerGroup = adminQueryInt(r, "females_per_group")
+	}
 	preview, err := a.db.PreviewGrouping(r.Context(), ref,
-		adminQueryInt(r, "round"), adminQueryInt(r, "male_per_group"),
-		adminQueryInt(r, "female_per_group"))
+		adminQueryInt(r, "round"), malePerGroup, femalePerGroup)
 	if err != nil {
 		a.logger(r).Error("group preview failed", "error", err)
 		adminGroupError(w, r, err)
@@ -171,16 +202,11 @@ func (a *App) apiAdminGroupRun(w http.ResponseWriter, r *http.Request, access ad
 		writeAPIError(w, http.StatusBadRequest, "invalid_activity", "缺少 activity_id。")
 		return
 	}
-	round, male, female := 0, 0, 0
+	round := 0
 	if payload.Round != nil {
 		round = *payload.Round
 	}
-	if payload.MalesPerGroup != nil {
-		male = *payload.MalesPerGroup
-	}
-	if payload.FemalesPerGroup != nil {
-		female = *payload.FemalesPerGroup
-	}
+	male, female := payload.groupSize()
 	result, err := a.db.RunGrouping(r.Context(), ref, round, male, female)
 	if err != nil {
 		a.logger(r).Error("group run failed", "error", err, "actor", access.User.ID)

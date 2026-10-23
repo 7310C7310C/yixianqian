@@ -63,8 +63,10 @@ type GroupStatusView struct {
 // GroupMemberView is one group member with a public profile link.
 type GroupMemberView struct {
 	ID          int64  `json:"id"`
+	OpenID      string `json:"open_id"`
 	UserID      string `json:"user_id"`
-	DisplayName string `json:"nickname"`
+	Nickname    string `json:"nickname"`
+	DisplayName string `json:"display_name"`
 	Gender      string `json:"gender"`
 	PhotoURL    string `json:"photo"`
 	ProfileURL  string `json:"profile_url"`
@@ -151,9 +153,15 @@ func buildGroupCandidateViews(candidates []db.GroupCandidate) []GroupCandidateVi
 }
 
 func buildGroupMemberView(member db.GroupMember) GroupMemberView {
+	nickname := member.Nickname
+	if nickname == "" {
+		nickname = member.UserName
+	}
 	return GroupMemberView{
 		ID:          member.UserID,
+		OpenID:      legacyOpenID(member.LegacyOpenID, member.LegacyUserID, member.UserID),
 		UserID:      member.LegacyUserID,
+		Nickname:    nickname,
 		DisplayName: member.DisplayName(),
 		Gender:      member.Gender,
 		PhotoURL:    groupPhotoURL(member.PhotoID, true),

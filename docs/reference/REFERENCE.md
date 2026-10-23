@@ -128,6 +128,27 @@ sources: []
 | POST | `/legacy/api/activities/{id}/signup` | `internal/httpserver/legacy_activities_routes.go` |
 | DELETE | `/legacy/api/activities/{id}/signup` | `internal/httpserver/legacy_activities_routes.go` |
 | GET | `/legacy/api/activities/{id}/signups` | `internal/httpserver/legacy_activities_routes.go` |
+| POST | `/legacy/api/admin/activity/mode` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/activity/signin` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/activity/signin` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/activity/signin-code` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/activity/signin/flag` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/activity/status` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/group/activities` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/group/job` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/group/preview` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/group/reset` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/group/result` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/group/run` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/group/status` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/group/unsubmitted` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/onetoone/chat-overview` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/onetoone/job` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/onetoone/preview` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/onetoone/reset` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/onetoone/result` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| POST | `/legacy/api/admin/onetoone/run` | `internal/httpserver/legacy_activity_admin_routes.go` |
+| GET | `/legacy/api/admin/onetoone/unsubmitted` | `internal/httpserver/legacy_activity_admin_routes.go` |
 | POST | `/legacy/api/auth/claim` | `internal/httpserver/legacy_profile_api.go` |
 | GET | `/legacy/api/cards` | `internal/httpserver/legacy_api.go` |
 | POST | `/legacy/api/client-events` | `internal/httpserver/legacy_api.go` |
@@ -188,9 +209,9 @@ sources: []
 |---|---:|
 | `/admin` | 34 |
 | `/api` | 28 |
-| `/legacy` | 56 |
+| `/legacy` | 77 |
 | 其他 | 22 |
-| **合计** | **140** |
+| **合计** | **161** |
 
 ## 4. 环境变量（key 集合对比）
 
@@ -293,6 +314,6 @@ sources: []
 | `docs/DECISIONS.md` | — |
 | `docs/MIGRATION.md` | `migrations/**`, `tools/migrate_testapp.py` |
 | `docs/PROJECT_CHARTER.md` | — |
-| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/admin_*.go`, `internal/httpserver/grouping_admin_routes.go`, `internal/httpserver/onetoone_admin.go`, `.env.example` |
+| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/admin_*.go`, `internal/httpserver/grouping_admin_routes.go`, `internal/httpserver/grouping_view.go`, `internal/httpserver/onetoone_admin.go`, `internal/httpserver/onetoone_admin_view.go`, `internal/httpserver/legacy_activity_admin_routes.go`, `internal/httpserver/legacy_activity_admin_view.go`, `internal/db/admin_activity_legacy.go`, `internal/db/admin_activity_settings.go`, `internal/db/grouping.go`, `internal/db/grouping_admin.go`, `.env.example` |
 | `docs/product-spec.md` | — |
 | `docs/runbooks/staging.md` | `deploy/**`, `.env.example`, `migrations/**`, `.github/workflows/ci.yml` |
