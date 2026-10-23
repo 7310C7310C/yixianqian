@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 sources:
   - cmd/**
   - migrations/**
@@ -102,6 +102,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 审计：`/admin/audit` 查看与 `/admin/audit.csv` 导出。
 - 角色：RBAC 角色指派；最后一位 `super_admin` 受保护。
 - 响应式：390（iframe 手机）/768/1280 三档；390 单列、列表卡片化，桌面内容 1080 居中；关键触控区 ≥44px，无页面级横向滚动。
+- 静态资源版本：`/static/*` 仍按 `public, max-age=3600` 下发，模板引用的 `app.css`/`shell.css`/`admin.css`/`admin.js`/`admin_matching.js` 统一带 `?v=`（唯一来源 `httpserver.assetVersion`，模块 CSS 的 `@import` 同值），部署后立即取新样式；改静态资源时同步提升该常量。
 
 ### 质量门
 
