@@ -34,6 +34,12 @@ sources:
 新增或删除文档必须同步本表；生成物（`CLAUDE.md`、`docs/reference/REFERENCE.md`）由
 `make docs-gen` 刷新，不得手改。
 
+## 工具兼容
+
+- 通用入口是 `AGENTS.md`；Codex、opencode、Claude Code、GitHub Copilot、Cursor、Windsurf、RooCode、Junie、Zed、Warp、Amp、Factory、Devin 等可直接读取或按各自配置读取。
+- Claude Code 的 `CLAUDE.md` 只是 `AGENTS.md` 的 `@` 导入兼容指针，不复制规则。
+- Gemini CLI / Aider 若未自动读取，用各自配置指向 `AGENTS.md`；WorkBuddy 等未约定工具由使用者先读本文件。
+
 ## 项目定位与架构
 
 把「一线牵」改造成不依赖飞书的独立网页产品。Go 模块化单体、PostgreSQL、R2，
