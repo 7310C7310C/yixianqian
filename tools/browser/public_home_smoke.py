@@ -3,7 +3,7 @@
 
 匿名（必跑）：
 1. GET / 返回 200 且不跳转，渲染公开首页；
-2. 注册是 primary block 主按钮，登录入口、飞书链接（target/rel）与二维码都在；
+2. 注册是 primary block 主按钮，登录入口与飞书链接（target/rel）都在，页面不再展示二维码图片；
 3. 点登录进入 /login，注册按钮仍是 primary block，飞书老用户说明存在。
 已登录（设置 SESSION_COOKIE 时）：
 4. GET / 仍是 v1 Vue SPA，__YXQ_AUTHENTICATED__=true，不渲染公开首页。
@@ -106,15 +106,10 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
             raise SmokeFailure(f"{width}px: 飞书链接缺少 rel=noopener")
 
         qr = page.locator(".home-qr img")
-        qr.wait_for(state="visible", timeout=10000)
-        page.wait_for_function(
-            "() => { const img = document.querySelector('.home-qr img');"
-            " return !!img && img.complete && img.naturalWidth > 0; }",
-            timeout=10000,
-        )
-        qr_src = qr.get_attribute("src") or ""
-        if not qr_src.endswith("/static/feishu-qr.png"):
-            raise SmokeFailure(f"{width}px: 二维码 src 不是固定资产（{qr_src}）")
+        if qr.count():
+            raise SmokeFailure(f"{width}px: 公开首页不应再有二维码图片")
+        if "feishu-qr" in page.content():
+            raise SmokeFailure(f"{width}px: 公开首页仍引用 feishu-qr 资产")
         page.get_by_text("已在飞书版使用过", exact=False).first.wait_for(state="visible", timeout=10000)
         page.screenshot(path=str(out_dir / f"home-anon-{tag}.png"), full_page=True)
 

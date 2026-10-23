@@ -125,3 +125,17 @@ sources: []
 - 权限：总览/详情需 `activity.manage` 或 `matching.run`；预览/执行/名单/结果/聊天需 `matching.run`；模式/状态/签到码/签到开关/现场签到需 `activity.manage`；`group/status.signin_code` 仅对 `activity.manage` 返回。未登录 401「未登录」、无角色/无权限 403「没有权限」，写操作沿用 HMAC CSRF；审计沿用 `group.run`/`group.reset`/`onetoone.run`/`onetoone.reset` 与 `admin.activity.*`，签到码值不进审计。
 - 后果：一段时间内同一业务有两套 JSON 形状，由集成契约测试防漂移；`/api/admin/group/result`、`/api/admin/onetoone/result`、`/api/admin/onetoone/chat-overview` 增量补 `open_id`/`display_name`/`nickname`，`/api/admin/group/run` 同时接受单数与复数每组人数键；v1 的「迟到」仍拒绝写入（两态签到只写「按时」/空）。
 - 边界：不改数据库 schema，不改 SSR 与 v2 现有字段含义，不恢复 202+job 轮询；SPA 入口恢复、执行分支适配与「编辑活动」入口不在本阶段。
+
+## 17. 公开首页取消二维码图片（2026-10-23）
+
+- 背景：PM「next 首页不需要那个二维码图片方式」。首页原本除飞书入口按钮外还展示 `web/static/feishu-qr.png`，并配「扫一扫」文案。
+- 决策：删除首页模板的二维码图片区块与「扫一扫」文案，只保留飞书入口链接按钮与「飞书老用户先设密码」说明；同步删除 `web/static/feishu-qr.png`、一次性生成工具 `tools/gen_qr.py` 与 `.home-qr` 样式。测试、Playwright smoke、runbook 与状态文档改为断言页面不含 `feishu-qr`/「二维码」。
+- 后果：首页少一张图片与一条资产维护链；飞书入口仍是唯一链接，登录页的飞书说明不变。
+- 边界：不改飞书入口 URL（`https://applink.feishu.cn/T996FhMkTERp`）、不改公开页其他布局与跳转、不新增其它二维码。本节取代第 14、15 节的二维码展示与生成约定，历史条目保留不改。
+
+## 18. 活动管理恢复 v1 SPA 前端入口（2026-10-23）
+
+- 背景：第 16 节的后端兼容层已就绪，但 SPA 的入口、执行分支与「编辑活动」入口尚未接，页面无法从 UI 打开。
+- 决策：在「我的→管理」恢复 v1 的「👥 活动管理」cell（`openGroupAdmin`），管理员判定用 legacy `user.can_admin`；与现有「🛠️ 管理后台」SSR iframe 入口并存。`doGaRun`/`doOtoRun` 优先处理同步响应 `{ok:true,result}`，直接复用 v1 `handleGaJobDone`/`handleOtoJobDone` 的成功与错误码分支；202+job 与 409+job_id 分支保留但 v2 不触发。`group_detail` 页头新增「✏️ 编辑」，用 `gaDetail.id`（缺省回退列表项 `id`）打开 `/admin/activities/{id}/edit` iframe；该路径仍是 `/admin` 页面，顶层 document 303 不影响 iframe 语义。新增 `tools/browser/admin_activity_native_smoke.py` 做真实浏览器回归。
+- 后果：管理员可在 App 内完成活动列表→控制台（签到码/状态/模式）→报名名单→现场签到与编辑；执行同步完成，不建 job 表、不改 schema。
+- 边界：不改 v2 `/api/admin/*` 与 SSR，不改第 16 节后端契约；编辑仅经同源 iframe，不新增第二套管理 UI。本节接续第 16 节边界中「SPA 入口恢复、执行分支适配与编辑活动入口不在本阶段」的部分。

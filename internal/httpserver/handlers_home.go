@@ -6,8 +6,7 @@ import (
 )
 
 // publicFeishuAppURL 是 v1 飞书版入口；公开首页与登录页共用，避免两处漂移。
-// 公开首页二维码 web/static/feishu-qr.png 必须编码同一 URL；用 tools/gen_qr.py
-// 重新生成后，以独立解码器核对输出完全一致。
+// 公开首页只保留该入口链接，不再展示二维码图片。
 const publicFeishuAppURL = "https://applink.feishu.cn/T996FhMkTERp"
 
 // handleHome serves the public landing page to anonymous visitors and the v1

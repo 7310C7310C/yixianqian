@@ -392,27 +392,6 @@
   text-decoration: none;
 }
 
-.home-qr {
-  margin-top: 16px;
-  text-align: center;
-}
-
-.home-qr img {
-  display: block;
-  width: 200px;
-  height: 200px;
-  max-width: 100%;
-  margin: 0 auto;
-  border: 1px solid #ebedf0;
-  border-color: var(--shell-border, #ebedf0);
-  border-radius: 12px;
-  background: #ffffff;
-}
-
-.home-qr .hint {
-  margin-top: 8px;
-}
-
 @media (min-width: 700px) {
   .home-feishu {
     padding: 20px;

@@ -1426,6 +1426,7 @@
   <div style="padding:0 12px;" v-if="user.can_admin">
     <div class="section-title">管理</div>
     <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
+      <van-cell title="👥 活动管理" :value="gaAdminBadge" is-link @click="openGroupAdmin"></van-cell>
       <van-cell title="🛠️ 管理后台" is-link @click="openAdminConsole"></van-cell>
     </van-cell-group>
   </div>
@@ -1637,6 +1638,7 @@
   <div class="ga-title" style="display:flex; align-items:center; gap:8px;">
     <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ gaDetail ? (gaDetail.name || '未命名活动') : '活动' }}</span>
     <span v-if="gaDetail" class="ga-chip" :class="gaModeChipClass(gaDetail)"><span class="ga-chip-dot"></span>{{ gaModeChip(gaDetail) }}</span>
+    <van-button v-if="gaDetailDbId" size="small" plain type="primary" color="#ff6b81" style="min-height:44px; padding:0 14px;" @click="openEditActivity()">✏️ 编辑</van-button>
     <van-button size="small" plain type="primary" color="#ff6b81" style="min-height:44px; padding:0 14px;" @click="openCheckinPage({activity_id: gaDetailId, name: gaDetail ? (gaDetail.name || '') : ''})">📋 现场签到</van-button>
   </div>
   <div class="ga-title-sub">{{ gaDetailId }} · {{ gaModeText }}</div>
@@ -5294,7 +5296,7 @@ createApp({
       if (data.user) loadPointsBalance(); // 麦穗余额：入口单元格要显示数字，静默拉，失败不打扰
       if (data.user) loadNotifications(); // 登录后立即载入未读数，消息 tab 红点不等首次切页
       if (data.user && data.user.is_admin) setTimeout(()=>{ try{ refreshReportedCount(); }catch(e){} }, 600);
-      if (data.user && data.user.is_admin) setTimeout(()=>{ try{ refreshAdminBadge(); }catch(e){} }, 900);
+      if (data.user && data.user.can_admin) setTimeout(()=>{ try{ refreshAdminBadge(); }catch(e){} }, 900);
       if (data.register_form_url) registerFormUrl.value = data.register_form_url;
       if (data.promo_activity_id) promoActivityId.value = data.promo_activity_id;
       cards.value = data.cards || []; cardIndex.value = 0; photoIndex.value = 0;
@@ -7535,7 +7537,7 @@ createApp({
       if (p === 'home') loadActivities();
       if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
       if (p === 'likes') { loadLikes(); loadNotifications().then(markNotificationsRead); refreshMyMessagesCount(); refreshReceivedCount(); }
-      if (p === 'profile') { checkGroupEntry(); loadPraiseState(); if (user.value && user.value.is_admin) { refreshReportedCount(); refreshAdminBadge(); } }
+      if (p === 'profile') { checkGroupEntry(); loadPraiseState(); if (user.value && user.value.is_admin) refreshReportedCount(); if (user.value && user.value.can_admin) refreshAdminBadge(); }
       // 任何页进入即验身份证/人脸照片，不达标则倒计时跳修改资料
       if(p !== 'profile_edit' && !showIdInvalidDialog.value){
         checkIdValidForPage(p);
@@ -8094,6 +8096,14 @@ createApp({
     const gaAdminBadge = ref(''); let gaBadgeAt = 0;
 
     const gaDetailId = ref(''), gaDetail = ref(null);
+    // 「编辑活动」iframe 需要数字主键（/admin/activities/{id}/edit 只收数字），
+    // 详情优先，尚未载入时回退列表项；activity_no 不能直接当路径参数。
+    const gaDetailDbId = computed(() => {
+      const d = gaDetail.value;
+      if (d && d.id) return String(d.id);
+      const it = gaList.value.find(x => x.activity_id === gaDetailId.value);
+      return (it && it.id) ? String(it.id) : '';
+    });
     const gaDetailLoading = ref(false), gaDetailError = ref(false), gaDetailTab = ref(0);
     const gaModeSwitching = ref(false);
     // 现场签到码（管理台小卡）：只接受 4 位数字
@@ -8297,7 +8307,7 @@ createApp({
       return '报名 ' + a.signup_count + ' 人 · 已填 ' + a.submitted_count + '/' + a.signup_count + ' · ' + per;
     }
     async function refreshAdminBadge() {
-      if (!user.value || !user.value.is_admin) { gaAdminBadge.value = ''; return; }
+      if (!user.value || !user.value.can_admin) { gaAdminBadge.value = ''; return; }
       if (Date.now() - gaBadgeAt < 30000) return;   // 30 秒缓存，避免每次切页都打实时接口
       try {
         const data = await gaGet('/api/admin/group/activities');
@@ -8306,6 +8316,11 @@ createApp({
       } catch(e) { /* 入口徽标静默失败，不打扰 */ }
     }
     function openGroupAdmin() { gaQ.value = ''; gaError.value = false; page.value = 'group_admin'; }
+    // 编辑活动：复用内嵌管理台的 SSR 表单，iframe 语义不受顶层 /admin 303 影响。
+    function openEditActivity() {
+      if (!gaDetailDbId.value) return;
+      openEmbed('/admin/activities/' + gaDetailDbId.value + '/edit', '编辑活动');
+    }
     async function loadGroupAdminList() {
       if (gaLoading.value) return;
       // 已有缓存（如从详情返回）：先用旧列表渲染、后台静默刷新；失败留旧数据只 toast。
@@ -8594,6 +8609,11 @@ createApp({
         const r = await gaApi('/api/admin/group/run', { method: 'POST', body: JSON.stringify({ activity_id: gaDetailId.value, round: rd, males_per_group: m, females_per_group: f }) });
         if ((r.status === 202 || r.status === 200) && r.data && r.data.job_id) {
           attachGaJob(r.data.job_id, rd, name);
+        } else if (r.status === 200 && r.data && r.data.ok && r.data.result) {
+          // v2 同步执行：完成后直接回 {ok:true,result}，复用 v1 job-done 分支展示结果/错误码；
+          // 不建 job，不触发 202 轮询（上面 job_id 分支保留给 v1 兼容）。
+          gaJobRound.value = rd;
+          handleGaJobDone(r.data);
         } else if (r.status === 409 && r.data && r.data.job_id) {
           attachGaJob(r.data.job_id, r.data.round || rd, name);
           vant.showToast('这轮已经在跑了，帮你接上进度');
@@ -8690,6 +8710,10 @@ createApp({
         const r = await gaApi('/api/admin/onetoone/run', { method: 'POST', body: JSON.stringify({ activity_id: gaDetailId.value, round: rd, female_chats: K }) });
         if ((r.status === 202 || r.status === 200) && r.data && r.data.job_id) {
           attachGaJob(r.data.job_id, r.data.round || rd, name);
+        } else if (r.status === 200 && r.data && r.data.ok && r.data.result) {
+          // v2 同步执行：同分组，结果/错误码交给 v1 handleOtoJobDone；202/job 分支保留不触发。
+          gaJobRound.value = rd;
+          handleOtoJobDone(r.data);
         } else if (r.status === 409 && r.data && r.data.job_id) {
           attachGaJob(r.data.job_id, r.data.round || rd, name);
           vant.showToast('第 ' + (r.data.round || rd) + ' 轮一对一已经在跑了，帮你接上进度');
@@ -9210,7 +9234,7 @@ createApp({
       paUserDetail, paUserDetailShow, paUserDetailLoading, paUserDetailOid,
       openPointsAdmin, paOpenUser, paShowLedger, clearPaFilter,
       gaAdminBadge, openGroupAdmin, loadGroupAdminList, gaLoading, gaError, gaList, gaQ, gaFilteredList, gaStats, gaChipClass, gaModeChip, gaModeChipClass, gaStatusChipText, gaStatusChipClass, gaRowSub, openGroupDetail, openCheckinPage,
-      gaDetailId, gaDetail, gaDetailLoading, gaDetailError, gaDetailTab, gaDetailMode, gaModeText, gaModeSwitching, switchMode, gaStepDefs, gaStepIndex, gaExpectedGroups, gaNextRound,
+      gaDetailId, gaDetail, gaDetailDbId, openEditActivity, gaDetailLoading, gaDetailError, gaDetailTab, gaDetailMode, gaModeText, gaModeSwitching, switchMode, gaStepDefs, gaStepIndex, gaExpectedGroups, gaNextRound,
       gaSigninCode, gaSigninCodeBusy, gaSigninCodeOk, saveGaSigninCode,
       gaActivityStatusOptions, gaActivityStatus, gaActivityStatusBusy, gaActivityStatusTarget, gaActivityStatusChipClass, confirmActivityStatus,
       signinDialogShow, signinCode, signinCodeOk, signinSubmitting, openSelfSignin, closeSigninDialog, submitSelfSignin,

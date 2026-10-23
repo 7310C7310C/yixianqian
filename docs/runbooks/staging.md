@@ -74,8 +74,8 @@ mv /opt/yixianqian-next/bin/server.next /opt/yixianqian-next/bin/server
 systemctl restart yixianqian-next-test
 ```
 
-公开首页二维码是仓库内固定资产 `web/static/feishu-qr.png`，不需要 env；若旧
-`config/staging.env` 仍有 `PUBLIC_QR_IMAGE`，删除。切换后按「健康检查」确认版本，再跑人脸
+公开首页只保留飞书入口链接，不再有二维码资产或 env；若旧 `config/staging.env` 仍有
+`PUBLIC_QR_IMAGE`，删除。切换后按「健康检查」确认版本，再跑人脸
 `unchecked=0` 与用户端/管理台 smoke。
 
 ### 分支与交付
@@ -154,20 +154,13 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://next.nantou.love/app       # �
 curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies https://next.nantou.love/  # 已登录 200 SPA
 curl -sS https://next.nantou.love/ | grep -q '立即注册'                       # 公开首页注册主按钮
 curl -sS https://next.nantou.love/ | grep -q '已在飞书版使用过'               # 飞书老用户说明
-curl -sS https://next.nantou.love/ | grep -q 'feishu-qr.png'                  # 公开首页固定二维码
+test -z "$(curl -sS https://next.nantou.love/ | grep -o 'feishu-qr\|二维码')"  # 公开首页不再有二维码
 curl -sS https://next.nantou.love/login | grep -q '注册新账号'                 # 登录页注册入口
 ```
 
-- 匿名 `/` 必须是服务端公开首页：品牌/卖点、注册主按钮、登录入口、飞书入口与二维码；不展示用户照片/资料。
-- 二维码必须可扫且与页面按钮同 URL；改动二维码资产后必须重跑（期望输出与按钮链接完全一致）：
-
-```bash
-curl -sS https://next.nantou.love/static/feishu-qr.png -o /tmp/feishu-qr.png
-zbarimg -q --raw /tmp/feishu-qr.png    # 期望 https://applink.feishu.cn/T996FhMkTERp
-```
-
+- 匿名 `/` 必须是服务端公开首页：品牌/卖点、注册主按钮、登录入口、飞书入口链接；不展示二维码图片，也不展示用户照片/资料。
 - 已登录 `/` 必须返回 v1 Vue SPA；`/legacy/api/home` 200；四 tab 用 hash 切换。
-- 公开首页/登录页真实浏览器回归（390×844 与 1280×900，含截图与二维码加载检查）：
+- 公开首页/登录页真实浏览器回归（390×844 与 1280×900，含截图与「无二维码」检查）：
 
 ```bash
 BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> \
@@ -177,6 +170,9 @@ BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> \
 - 四 tab / 活动详情 / 弹层 / 管理台 iframe 的滚动隔离（防 tab 间串位、返回丢位置）用
   `tools/browser/tab_scroll_smoke.py` 回归；需真实账号 cookie，命令见脚本头注释：
   `BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> python3 tools/browser/tab_scroll_smoke.py`。
+- 活动管理原生入口（我的→活动管理→控制台→名单→签到→编辑 iframe）用
+  `tools/browser/admin_activity_native_smoke.py` 回归；需可管理活动的管理员 cookie：
+  `BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> SHOT_DIR=/tmp/opencode/admin-activity-native python3 tools/browser/admin_activity_native_smoke.py`。
 - `/cards`、`/likes`、`/activities`、`/profile` 等旧用户页返回 404。
 - `/cards/photo/{id}`、`/profile/photo/{id}`、`/activities/{id}/poster` 等媒体路由仍可用。
 - 顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`，由 SPA 自动打开管理台 overlay；受权媒体串流（审核照片原图、活动海报原图）是显式例外，直接串流，仍需对应权限。

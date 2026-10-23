@@ -49,9 +49,9 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 			want: []string{
 				"<!doctype html>", "一线牵", "立即注册", `href="/register?from=home"`,
 				`href="/login"`, "人工审核", "匿名喜欢", "动态通知",
-				"已在飞书版使用过", publicFeishuAppURL, `/static/feishu-qr.png`,
+				"已在飞书版使用过", publicFeishuAppURL,
 			},
-			notWant: []string{`id="app"`},
+			notWant: []string{`id="app"`, `feishu-qr`, `二维码`},
 		},
 		{
 			name: "activate",

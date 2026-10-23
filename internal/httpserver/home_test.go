@@ -53,8 +53,6 @@ func TestHomeRendersPublicLandingForAnonymous(t *testing.T) {
 		publicFeishuAppURL,
 		`target="_blank"`,
 		`rel="noopener noreferrer"`,
-		`/static/feishu-qr.png`,
-		"用飞书「扫一扫」识别二维码",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %q in landing page", want)
@@ -62,6 +60,11 @@ func TestHomeRendersPublicLandingForAnonymous(t *testing.T) {
 	}
 	if strings.Contains(body, `id="app"`) {
 		t.Fatal("anonymous landing page should not serve the SPA")
+	}
+	for _, unwanted := range []string{`feishu-qr`, `二维码`, `扫一扫`} {
+		if strings.Contains(body, unwanted) {
+			t.Fatalf("landing page still contains %q", unwanted)
+		}
 	}
 }
 
@@ -124,26 +127,5 @@ func TestLoginPageShowsRegisterCTA(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %q in login page", want)
 		}
-	}
-}
-
-func TestPublicQRCodeAssetIsServed(t *testing.T) {
-	const path = "/static/feishu-qr.png"
-	h := staticHandler()
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, path, nil)
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("%s status = %d", path, rec.Code)
-	}
-	if ct := rec.Header().Get("Content-Type"); ct != "image/png" {
-		t.Fatalf("%s content-type = %q", path, ct)
-	}
-	body := rec.Body.String()
-	if len(body) < 200 {
-		t.Fatalf("%s served %d bytes, want a real PNG", path, len(body))
-	}
-	if !strings.HasPrefix(body, "\x89PNG\r\n\x1a\n") {
-		t.Fatalf("%s is not a PNG", path)
 	}
 }

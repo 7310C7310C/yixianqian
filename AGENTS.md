@@ -44,8 +44,7 @@ sources:
 
 把「一线牵」改造成不依赖飞书的独立网页产品。Go 模块化单体、PostgreSQL、R2，
 公开入口是 server2（香港）TLS relay，回源 server1。匿名访问 `/` 渲染服务端公开首页
-（品牌介绍、注册/登录入口、飞书老用户先设密码指引与固定二维码
-`web/static/feishu-qr.png`）；登录后 `/` 才进入用户 SPA。
+（品牌介绍、注册/登录入口、飞书老用户先设密码指引与飞书入口链接）；登录后 `/` 才进入用户 SPA。
 用户端复用 v1 Vue 3 + Vant SPA；
 管理台使用 Go 服务端渲染（SSR），只经用户 SPA 的同源 iframe（`/admin?embed=1`）使用；
 浏览器顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`，由 SPA 载入后自动打开管理台 overlay

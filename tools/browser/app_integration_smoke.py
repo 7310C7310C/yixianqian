@@ -2,7 +2,7 @@
 """用户端 App 启动骨架 / 改密子页 / 管理台内嵌回归（Playwright）。
 
 覆盖：
-1. 未登录访问 / 渲染公开首页（200，含注册/登录 CTA、飞书说明与二维码），点登录进入 /login 后出现注册入口；
+1. 未登录访问 / 渲染公开首页（200，含注册/登录 CTA 与飞书说明，不含二维码图片），点登录进入 /login 后出现注册入口；
 2. 已登录刷新：home 接口被挂起时先出现 App 骨架（品牌顶栏 + 卡片 shimmer +
    四 tab 占位），没有「正在登录」；接口放行后进入主界面，普通 reload 同样不闪登录页；
 3. 登录后未读红点显示数字；进入消息 tab 后红点清零；
@@ -312,13 +312,8 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
             raise SmokeFailure(f"{width}px 未登录: 飞书链接缺少 target=_blank")
         if "noopener" not in (feishu.get_attribute("rel") or ""):
             raise SmokeFailure(f"{width}px 未登录: 飞书链接缺少 rel=noopener")
-        qr = page.locator(".home-qr img")
-        qr.wait_for(state="visible", timeout=10000)
-        page.wait_for_function(
-            "() => { const img = document.querySelector('.home-qr img');"
-            " return !!img && img.complete && img.naturalWidth > 0; }",
-            timeout=10000,
-        )
+        if page.locator(".home-qr img").count() or "feishu-qr" in page.content():
+            raise SmokeFailure(f"{width}px 未登录: 公开首页不应再有二维码图片")
         assert_no_login_flash(page, f"{width}px 未登录")
         page.screenshot(path=str(out_dir / f"home-anon-{tag}.png"), full_page=True)
 
