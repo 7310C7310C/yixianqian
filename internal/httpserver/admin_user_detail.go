@@ -18,8 +18,10 @@ func init() { registerModule(registerAdminUserDetailRoutes) }
 
 func registerAdminUserDetailRoutes(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/users/{id}", a.adminHTML(adminPermUserReview, a.handleAdminUserDetail))
+	// 照片原图由管理台「新窗口查看」直接打开（Sec-Fetch-Dest: document），
+	// 走媒体串流包装：保留鉴权与 user.review 权限，但不做顶层 document 404。
 	mux.HandleFunc("GET /admin/users/{id}/photos/{mediaID}",
-		a.adminHTML(adminPermUserReview, a.handleAdminUserPhoto))
+		a.adminHTMLMedia(adminPermUserReview, a.handleAdminUserPhoto))
 }
 
 type adminUserDetailField struct {

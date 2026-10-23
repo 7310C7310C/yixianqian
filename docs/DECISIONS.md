@@ -87,3 +87,10 @@ sources: []
 - 决策：`adminHTML` 在所有 `/admin`、`/admin/...`（含 `?embed=1`）路由的鉴权之前判断 `Sec-Fetch-Dest: document`，命中即 404，不跳登录、不跳 `/?admin=1`、不渲染管理台；非 document（iframe、无 header 的测试/CLI）行为不变，仍 SSR 鉴权与渲染。
 - 后果：管理台唯一入口是用户 SPA 内的同源 iframe（`/?admin=1` overlay → `/admin?embed=1`）；`/login?next=/admin` 的 next 原样保留，登录后落到 404 属可接受。不支持 `Sec-Fetch-*` 的旧浏览器无法与服务端区分，仍会看到 SSR 页面。
 - 边界：不删除 `/admin` 路由（iframe 与 `/api/admin/*` 依赖同一套 RBAC、CSRF、模板）；不新增第二套管理 UI；不改模板结构；smoke 改为断言顶层 404、iframe SSR。本节取代第 10 节「顶层 document 直接渲染 SSR」与第 2 节「顶层一律 303 到 `/?admin=1`」的入口约束，SSR、RBAC、CSRF、审计等其余约束不变。
+
+## 12. 管理端媒体串流不受顶层 404 约束（2026-10-23）
+
+- 背景：第 11 节按 `Sec-Fetch-Dest: document` 一律 404 后，管理台详情页「点击缩略图在新窗口查看原图」被连带打死：`target="_blank"` 的新标签页正是 document 语义。
+- 决策：新增 `adminHTMLMedia` 包装器，用于 `GET /admin/users/{id}/photos/{mediaID}` 与 `GET /admin/activities/{id}/poster` 两个媒体串流路由。它们不做 document 404，鉴权、权限与串流逻辑与页面路由同一套；其余 `/admin` 页面路由继续一律 404。
+- 后果：管理台照片可在新窗口看原图（顶层直接打开该 URL 会返回图片，仍要求管理权限）；顶层直接打开管理台页面仍是 404。
+- 边界：例外只覆盖受权媒体串流，`/api/admin/*`、静态资源与页面路由不适用；页面 404 响应带 `Cache-Control: no-store`，页面响应带 `Vary: Sec-Fetch-Dest`。

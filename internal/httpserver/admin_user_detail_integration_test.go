@@ -115,6 +115,7 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 	for _, want := range []string{
 		target.Name, "详情昵称", "测试教会", "青年组", "上海", "善良体贴",
 		"1234", "已同意", "审核记录", "照片（1）", "/photos/" + mediaID,
+		`href="` + fullPath + `" target="_blank"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("detail page missing %q: %s", want, body)
@@ -169,6 +170,36 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 	}
 	if !bytes.Equal([]byte(readBody(t, resp)), originalBytes) {
 		t.Fatal("original body mismatch")
+	}
+
+	// 「新窗口查看原图」：target="_blank" 让浏览器以 Sec-Fetch-Dest: document
+	// 打开照片串流，媒体路由不能落进顶层页面 404，仍按同一套 RBAC 返回原图。
+	resp = reviewerClient.getWithHeaders(fullPath, map[string]string{"Sec-Fetch-Dest": "document"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("document full status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	if got := resp.Header.Get("Content-Type"); got != "image/png" {
+		t.Fatalf("document full content type = %q, want image/png", got)
+	}
+	if !bytes.Equal([]byte(readBody(t, resp)), originalBytes) {
+		t.Fatal("document full body mismatch")
+	}
+	// 未登录的 document 请求同样先鉴权，不是 404。
+	anon := newWSClient(t, env.server.URL)
+	resp = anon.getWithHeaders(fullPath, map[string]string{"Sec-Fetch-Dest": "document"})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("anonymous document photo status = %d, want login redirect", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/login?next="+url.QueryEscape(fullPath) {
+		t.Fatalf("anonymous document photo location = %q", loc)
+	}
+	// 页面路由本身仍是顶层 404，媒体豁免没有放宽管理台页面。
+	resp = reviewerClient.getWithHeaders(detailPath, map[string]string{"Sec-Fetch-Dest": "document"})
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("document detail page status = %d, want 404", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "" {
+		t.Fatalf("document detail page location = %q, want none", loc)
 	}
 
 	// Another user still cannot use the owner-only /media route.

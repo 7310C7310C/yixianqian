@@ -41,7 +41,7 @@ sources: []
 | 层 | 决策 |
 |---|---|
 | 后端 | Go 1.24（以 `go.mod` 为准；CI 为 1.24.x） |
-| 模板 | 管理台 `html/template`（SSR 顶层直开或由 SPA 内嵌 iframe 渲染）；用户端复用 v1 SPA |
+| 模板 | 管理台 `html/template`（SSR，只由 SPA 内嵌 iframe 渲染；浏览器顶层 document 一律 404）；用户端复用 v1 SPA |
 | DB | PostgreSQL 16（staging `yixianqian_staging`；production `yixianqian`） |
 | 媒体 | Cloudflare R2 私有桶；浏览器只经 app `/media/{id}` |
 | 部署 | systemd + Nginx；server1 staging；未来 HK app server |
@@ -110,7 +110,7 @@ sources: []
 ## 9. 目前状态
 
 - 代码能力已完成：Go/PostgreSQL/R2、activation/login/session/media、testapp 迁移、staging relay、用户端 API 与管理台。
-- 用户端复用 v1 Vue 3 + Vant SPA；管理台 SSR 可顶层直开，也可由 SPA 内嵌 iframe 承载（见 `docs/DECISIONS.md`）。
+- 用户端复用 v1 Vue 3 + Vant SPA；管理台 SSR 只由 SPA 同源 iframe 承载，浏览器顶层 document 访问 `/admin`、`/admin/...` 一律 404（见 `docs/DECISIONS.md`）。
 - **验收与上线阻断见 `docs/STATUS.md`**：当前 P0 为迁移用户身份证门禁死锁，product-spec 尚未签核。
 - 生产未切换：`app.nantou.love` 仍是 v1；上线前购买 HK app server，server2 只改 upstream。
 
@@ -119,3 +119,4 @@ sources: []
 - 2026-10-21：建立宪章；确认 Go/PostgreSQL/R2、server2 relay、成品导向。
 - 2026-10-22：确认用户端沿用 v1 Vue 3 + Vant SPA，Go 提供 API 适配与媒体代理。
 - 2026-10-23：v1.3。文档集精简为 10 个 md；旧决策记录合并为 `docs/DECISIONS.md`；Go 版本固定 1.24；管理台入口与无 JS 范围按现网行为固化。
+- 2026-10-23：同步管理台入口契约：浏览器顶层 document 访问 `/admin` 页面一律 404，只经站内 iframe；受权媒体串流（照片/海报原图）为显式例外（见 `docs/DECISIONS.md` 第 11、12 节）。

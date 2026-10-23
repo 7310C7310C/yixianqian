@@ -117,6 +117,11 @@ func (a *App) probePhotoFace(ctx context.Context, userID int64, mediaID string) 
 	}
 	if err := a.db.SetProfilePhotoFace(probeCtx, mediaID, row); err != nil {
 		a.log.Warn("face probe result persist failed", "error", err, "media_id", mediaID)
+		if probeCtx.Err() != nil {
+			// 预算在落库前耗尽：按“跳过”处理，调用方会交给后台重试，
+			// 避免这类照片只能等外部 facebackfill 才补上。
+			return face.Result{}, faceProbeSkipped
+		}
 		return face.Result{}, faceProbeFailed
 	}
 	return result, faceProbeChecked
@@ -144,22 +149,26 @@ func (a *App) probeRegistrationPhotos(ctx context.Context, userID int64, mediaID
 	next := -1
 	for i, mediaID := range mediaIDs {
 		if probeCtx.Err() != nil {
-			next = i
+			if next < 0 {
+				next = i
+			}
 			break
 		}
 		result, outcome := a.probePhotoFace(probeCtx, userID, mediaID)
-		switch outcome {
-		case faceProbeChecked:
-			if result.HasFace {
-				// 门禁已经满足；剩余照片转后台，避免注册响应等待全部大图。
+		if outcome != faceProbeChecked {
+			// 预算/信号量截断，或已尝试但失败（含落库时预算耗尽）：先记下
+			// 这张，继续用剩余预算找有脸照片；最终由后台从这张起补齐，避免
+			// 留下只能等外部 facebackfill 的空洞。
+			if next < 0 {
+				next = i
+			}
+			continue
+		}
+		if result.HasFace {
+			// 门禁已经满足；剩余照片转后台，避免注册响应等待全部大图。
+			if next < 0 {
 				next = i + 1
 			}
-		case faceProbeSkipped:
-			next = i
-		case faceProbeFailed:
-			// 已尝试但失败：保持 unchecked，由 facebackfill 重试；继续下一张。
-		}
-		if next >= 0 {
 			break
 		}
 	}

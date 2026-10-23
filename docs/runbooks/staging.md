@@ -154,7 +154,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies https://next.nanto
 - 已登录 `/` 必须返回 v1 Vue SPA；`/legacy/api/home` 200；四 tab 用 hash 切换。
 - `/cards`、`/likes`、`/activities`、`/profile` 等旧用户页返回 404。
 - `/cards/photo/{id}`、`/profile/photo/{id}`、`/activities/{id}/poster` 等媒体路由仍可用。
-- 顶层 document 访问 `/admin` 一律 404；管理台只经 SPA 内 `/?admin=1` 的 iframe overlay 使用。
+- 顶层 document 访问 `/admin` 页面一律 404；管理台只经 SPA 内 `/?admin=1` 的 iframe overlay 使用。受权媒体串流（审核照片原图、活动海报原图）是显式例外，仍需对应权限。
 
 ## 管理台 `/admin` smoke
 
@@ -184,7 +184,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
 # 期望 200
 ```
 
-顶层 document 访问 `/admin...` 一律 404，不跳转、不渲染；管理台只经 iframe 承载。iframe 未登录 303 到 `/login?next=<原路径>`，无权限 403。`/admin/users/{id}` 需真实用户 ID。
+顶层 document 访问 `/admin...` 页面一律 404，不跳转、不渲染；管理台只经 iframe 承载。iframe 未登录 303 到 `/login?next=<原路径>`，无权限 403。`/admin/users/{id}` 需真实用户 ID。受权媒体串流（`/admin/users/{id}/photos/{mediaID}`、`/admin/activities/{id}/poster`）不受顶层 404 约束（新窗口看原图），但仍先鉴权并校验权限。
 
 ## 人脸检测（日常增量）
 

@@ -13,7 +13,7 @@
 5. 修改密码页与「我的资料」同宽（视口宽 - 24），返回列 full width 且不遮内容；
    page-slide 过场中改密页背景不透明、relative z-index，返回后还原「我的」滚动位置；
 6. 管理台 overlay 以 embed-slide 滑入（20px + opacity，180ms），尊重 reduced-motion；
-7. 全程 console error / pageerror 为 0，并输出关键截图。
+7. 全程 console error / pageerror 为 0（仅放行登记过的顶层文档 404），并输出关键截图。
 
 需要已部署的 staging 与两个可登录账号的原始 session cookie；登录流程另需
 一个已知密码的 admin 账号。不放进 make ci，手动运行：
@@ -63,13 +63,41 @@ def wait(ms: int = 250) -> None:
 
 
 class ConsoleGuard:
-    """收集 console error / pageerror；任何一条都算失败。"""
+    """收集 console error / pageerror；只有「已登记且真实发生的顶层文档 404」例外。
+
+    例外同时要求两点：调用方用 expect_document_404() 登记精确 URL path，且
+    response 事件确认该 path 真的返回过 document 404。其余任何 404（/api/admin/*、
+    静态资源、管理台子页）都仍算失败，避免 guard 被整体放宽。
+    """
 
     def __init__(self, page) -> None:
         self.page = page
         self.errors: list[str] = []
+        self._console: list[tuple[str, str]] = []
+        self._expected_404: dict[str, int] = {}
+        self._observed_404: dict[str, int] = {}
+        self._console_used: dict[str, int] = {}
+        page.on("response", self._on_response)
         page.on("console", self._on_console)
         page.on("pageerror", lambda exc: self.errors.append(f"pageerror: {exc}"))
+
+    def expect_document_404(self, path: str) -> None:
+        """登记一次预期中的顶层文档 404（精确到 URL path，不含 query）。"""
+        if not path.startswith("/") or path.startswith("//"):
+            raise ValueError(f"expect_document_404 需要站内绝对路径：{path!r}")
+        self._expected_404[path] = self._expected_404.get(path, 0) + 1
+
+    def _on_response(self, resp) -> None:
+        if resp.status != 404:
+            return
+        # 只认顶层文档导航；图片/脚本/接口的 404 不能算进预期额度。
+        if resp.request.resource_type != "document":
+            return
+        path = urlparse(resp.url).path
+        seen = self._observed_404.get(path, 0) + 1
+        self._observed_404[path] = seen
+        if seen > self._expected_404.get(path, 0):
+            self.errors.append(f"unexpected document 404: {resp.url}")
 
     def _on_console(self, msg) -> None:
         if msg.type != "error":
@@ -77,12 +105,37 @@ class ConsoleGuard:
         location = (getattr(msg, "location", None) or {}).get("url", "")
         if "legacy/api/notifications/stream" in location or "notifications/stream" in msg.text:
             return
-        # 顶层 /admin 故意返回 404；Chrome 会把主文档 404 记成 network error，属预期。
-        if "404" in msg.text and ("/admin" in location or "/admin" in self.page.url):
-            return
-        self.errors.append(f"console: {msg.text} ({location})")
+        self._console.append((msg.text, location))
+
+    def _consume_expected(self, text: str, location: str) -> bool:
+        """判断这条 console error 是否就是已登记且已发生的顶层文档 404。
+
+        Chrome 不一定为主文档 404 产出 console error，所以这里只做「有则放行」，
+        是否真的发生了 404 由 response 级事件在 assert_clean 里核对。
+        """
+        if "404" not in text:
+            return False
+        path = urlparse(location).path if location else ""
+        allowance = min(
+            self._expected_404.get(path, 0),
+            self._observed_404.get(path, 0),
+        )
+        used = self._console_used.get(path, 0)
+        if used >= allowance:
+            return False
+        self._console_used[path] = used + 1
+        return True
 
     def assert_clean(self, context: str) -> None:
+        for text, location in self._console:
+            if self._consume_expected(text, location):
+                continue
+            self.errors.append(f"console: {text} ({location})")
+        for path, expected in self._expected_404.items():
+            observed = self._observed_404.get(path, 0)
+            if observed < expected:
+                self.errors.append(
+                    f"expected document 404 未发生: {path}（期望 {expected} 次，实际 {observed} 次）")
         if self.errors:
             raise SmokeFailure(f"{context}: console/pageerror 非空:\n  " + "\n  ".join(self.errors))
 
@@ -226,9 +279,11 @@ def box(locator) -> dict:
     return b
 
 
-def goto_admin_top_level(page, base: str, shot_dir: Path, tag: str) -> None:
+def goto_admin_top_level(page, base: str, shot_dir: Path, tag: str, guard: ConsoleGuard) -> None:
     """顶层 /admin 一律 404：不渲染管理台，不跳登录/SPA，不出现 SPA overlay。"""
     reset_class_logs(page)
+    # 唯一允许的顶层 404：登记精确路径，guard 只放行这一次 document 404。
+    guard.expect_document_404("/admin")
     resp = page.goto(base + "/admin", wait_until="domcontentloaded", timeout=30000)
     if resp is None or resp.status != 404:
         raise SmokeFailure(
@@ -297,12 +352,21 @@ def check_login_next_admin(browser, base: str, shot_dir: Path, tag: str) -> None
             raise SmokeFailure(f"{tag}: 登录页 next 未保留 /admin（实际 {hidden!r}）")
         page.fill('input[name="phone"]', phone)
         page.fill('input[name="password"]', password)
+        guard.expect_document_404("/admin")
         try:
-            with page.expect_navigation(wait_until="domcontentloaded", timeout=20000) as nav:
+            with page.expect_response(
+                lambda r: urlparse(r.url).path == "/admin"
+                and r.request.resource_type == "document",
+                timeout=20000,
+            ) as resp_info:
                 page.click('button[type="submit"]')
         except PlaywrightTimeoutError as exc:
             raise SmokeFailure(f"{tag}: 登录 next=/admin 后未跳转：{exc}") from exc
-        resp = nav.value
+        resp = resp_info.value
+        try:
+            page.wait_for_url(lambda url: urlparse(url).path == "/admin", timeout=20000)
+        except PlaywrightTimeoutError as exc:
+            raise SmokeFailure(f"{tag}: 登录后未落到 /admin：{exc}") from exc
         final = urlparse(page.url)
         if final.path != "/admin" or final.query:
             raise SmokeFailure(f"{tag}: 登录后 URL 不是 /admin（{page.url}）")
@@ -457,7 +521,7 @@ def run_viewport(browser, base: str, width: int, height: int, shot_dir: Path) ->
     install_overlay_observer(page)
     guard = ConsoleGuard(page)
     try:
-        goto_admin_top_level(page, base, shot_dir, tag)
+        goto_admin_top_level(page, base, shot_dir, tag, guard)
         check_direct_requests(page, base, tag)
         check_password_page(page, base, shot_dir, tag, width)
         check_admin_from_profile(page, base, shot_dir, tag)

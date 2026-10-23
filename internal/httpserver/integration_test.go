@@ -112,6 +112,18 @@ func (c *wsClient) get(path string) *http.Response {
 	return c.do(req)
 }
 
+func (c *wsClient) getWithHeaders(path string, headers map[string]string) *http.Response {
+	c.t.Helper()
+	req, err := http.NewRequest(http.MethodGet, c.base+path, nil)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	return c.do(req)
+}
+
 func (c *wsClient) postForm(path string, values url.Values) *http.Response {
 	c.t.Helper()
 	req, err := http.NewRequest(http.MethodPost, c.base+path, strings.NewReader(values.Encode()))

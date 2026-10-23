@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -30,6 +31,12 @@ func TestAdminHTMLDocumentIsNotFound(t *testing.T) {
 		if loc := rec.Header().Get("Location"); loc != "" {
 			t.Fatalf("GET %s: location = %q, want no redirect", target, loc)
 		}
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+			t.Fatalf("GET %s: content type = %q, want text/plain", target, ct)
+		}
+		if strings.Contains(rec.Body.String(), "admin-nav") {
+			t.Fatalf("GET %s: 404 body leaked admin markup", target)
+		}
 	}
 
 	// POST document 同样在鉴权前 404，不暴露登录跳转。
@@ -40,6 +47,29 @@ func TestAdminHTMLDocumentIsNotFound(t *testing.T) {
 	if rec.Code != http.StatusNotFound || rec.Header().Get("Location") != "" {
 		t.Fatalf("POST document: status = %d location = %q, want 404 without redirect",
 			rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// 管理台受权媒体串流（照片原图）允许顶层 document 打开：管理台用
+// target="_blank" 在新窗口看原图时，浏览器发的是 Sec-Fetch-Dest: document，
+// 媒体路由不能落进页面路由的 404 分支；鉴权仍先于一切。
+func TestAdminHTMLMediaAllowsDocumentNavigation(t *testing.T) {
+	app := &App{}
+	handler := app.adminHTMLMedia("", func(http.ResponseWriter, *http.Request, adminAccess) {
+		t.Fatal("文档请求匿名访问时不应进入媒体 handler")
+	})
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/admin/users/1/photos/11111111-1111-4111-8111-111111111111", nil)
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("document media: status = %d, want login redirect (auth first, never 404)", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/login?next=") {
+		t.Fatalf("document media: location = %q, want /login?next=...", loc)
 	}
 }
 

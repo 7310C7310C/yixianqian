@@ -197,7 +197,7 @@ go run ./cmd/token -phone 13900000000 -name 王小明
 - 保留四个底部主入口与顺序：牵线、消息、活动、我的；主 tab 切换不整页刷新，保留各 tab 的状态与滚动位置。
 - 管理台可不同，但必须使用简体中文、服务端权限与审计。
 - 支持矩阵：iOS 14.5+/Safari 14.1+、Chrome/Android WebView 84+、Firefox 74+ 完整支持；低于此范围可能白屏或版面错乱，登录/注册/改密页仍可用。
-- 用户 SPA 需要 JavaScript；登录、注册、启用、改密页保持服务端可用。管理台顶层入口依赖用户 SPA 的 JavaScript。
+- 用户 SPA 需要 JavaScript；登录、注册、启用、改密页保持服务端可用。管理台只经用户 SPA 的同源 iframe 进入，因此也依赖 SPA 的 JavaScript；浏览器顶层访问 `/admin` 一律 404。
 - 视觉与交互验收标准见 `docs/product-spec.md`；用户端以 v1 前端为基线，改版对照记录随对应变更提交。
 
 ## 9. 安全基线
