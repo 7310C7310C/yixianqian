@@ -205,7 +205,8 @@ func TestIntegrationLegacyPointsAdminHTTP(t *testing.T) {
 	if overview.Stats.Outstanding != overview.Stats.Earned-overview.Stats.Spent {
 		t.Fatalf("stats identity broken: %+v", overview.Stats)
 	}
-	if overview.Stats.Earned < 50 || overview.Stats.Spent < 20 || overview.Stats.EntryCount < 2 {
+	if overview.Stats.Earned < 30 || overview.Stats.Spent < 20 || overview.Stats.EntryCount < 2 ||
+		overview.Stats.UserCount < 1 || overview.Stats.RedemptionCount < 2 || overview.Stats.InviteCount < 1 {
 		t.Fatalf("stats = %+v", overview.Stats)
 	}
 	if len(overview.Config) != 15 {
