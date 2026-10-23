@@ -1,4 +1,6 @@
-@import url("/static/admin.css");
+@import url("/static/admin.css?v=2");
+
+/* @import 的版本参数须与 httpserver.assetVersion 同步提升。 */
 
 .admin-user-detail .admin-detail-grid {
   display: grid;

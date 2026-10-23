@@ -1,6 +1,7 @@
-@import url("/static/admin.css");
+@import url("/static/admin.css?v=2");
 
-/* 麦穗管理模块样式。admin.css 已提供基础表格、标签与栅格。 */
+/* 麦穗管理模块样式。admin.css 已提供基础表格、标签与栅格。
+   @import 的版本参数须与 httpserver.assetVersion 同步提升。 */
 
 .admin-points-tabs {
   margin-bottom: 0;

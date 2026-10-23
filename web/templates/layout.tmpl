@@ -8,9 +8,9 @@
   <meta name="theme-color" content="#ff6b81">
   <title>{{.Title}} · 一线牵</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css">
-  <link rel="stylesheet" href="/static/shell.css?v=1">
-  {{if .PageCSS}}<link rel="stylesheet" href="/static/{{.PageCSS}}">{{end}}
+  <link rel="stylesheet" href="/static/app.css?v={{assetVersion}}">
+  <link rel="stylesheet" href="/static/shell.css?v={{assetVersion}}">
+  {{if .PageCSS}}<link rel="stylesheet" href="/static/{{.PageCSS}}?v={{assetVersion}}">{{end}}
 </head>
 <body class="shell-body{{if .ActiveNav}} admin-shell{{end}}">
   <a class="shell-skip" href="#main">跳至主要内容</a>
@@ -40,7 +40,7 @@
       {{template "content" .}}
     </div>
   </main>
-  {{if .ActiveNav}}<script src="/static/admin.js" defer></script>{{end}}
+  {{if .ActiveNav}}<script src="/static/admin.js?v={{assetVersion}}" defer></script>{{end}}
 </body>
 </html>
 {{end}}

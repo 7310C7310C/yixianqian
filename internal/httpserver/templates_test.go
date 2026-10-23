@@ -2,8 +2,11 @@ package httpserver
 
 import (
 	"bytes"
+	"io/fs"
 	"strings"
 	"testing"
+
+	webassets "github.com/7310C7310C/yixianqian/web"
 )
 
 func TestLoadTemplatesAndRenderPages(t *testing.T) {
@@ -84,6 +87,56 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTemplatesVersionStaticAssets 防止静态资源引用漏掉 cache-busting 参数：
+// 静态文件以 public, max-age=3600 下发，版本参数缺失会让部署后仍用旧样式。
+func TestTemplatesVersionStaticAssets(t *testing.T) {
+	tpl, err := LoadTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	data := PageData{Title: "登录", PageCSS: "admin.css", ActiveNav: "admin"}
+	if err := tpl.Render(&buf, "login", data); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	for _, want := range []string{
+		`/static/app.css?v=`,
+		`/static/shell.css?v=`,
+		`/static/admin.css?v=`,
+		`/static/admin.js?v=`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("layout missing cache-busted %q", want)
+		}
+	}
+	for _, unwanted := range []string{
+		`/static/app.css"`,
+		`/static/shell.css"`,
+		`/static/admin.css"`,
+		`/static/admin.js"`,
+	} {
+		if strings.Contains(html, unwanted) {
+			t.Fatalf("layout still references unversioned %q", unwanted)
+		}
+	}
+
+	for name, want := range map[string]string{
+		"templates/pages/admin_matching_group.tmpl":    `/static/admin_matching.js?v={{assetVersion}}`,
+		"templates/pages/admin_matching_onetoone.tmpl": `/static/admin_matching.js?v={{assetVersion}}`,
+		"static/admin_points.css":                      `/static/admin.css?v=`,
+		"static/admin_user_detail.css":                 `/static/admin.css?v=`,
+	} {
+		body, err := fs.ReadFile(webassets.FS, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("%s missing %q", name, want)
+		}
 	}
 }
 

@@ -13,6 +13,13 @@ import (
 	webassets "github.com/7310C7310C/yixianqian/web"
 )
 
+// assetVersion is the cache-busting query value for static assets referenced by
+// templates. Static files are served with public, max-age=3600, so a stylesheet
+// change would otherwise stay stale in browsers for an hour after deploy. Bump
+// this whenever web/static content referenced from templates changes; module
+// CSS @import lines carry the same value and must be bumped together.
+const assetVersion = "2"
+
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
 	ID     string
@@ -58,7 +65,9 @@ type Templates struct {
 
 // LoadTemplates parses embedded templates once at startup.
 func LoadTemplates() (*Templates, error) {
-	base, err := template.New("layout").ParseFS(webassets.FS,
+	base, err := template.New("layout").Funcs(template.FuncMap{
+		"assetVersion": func() string { return assetVersion },
+	}).ParseFS(webassets.FS,
 		"templates/layout.tmpl",
 		"templates/partials/*.tmpl",
 	)
