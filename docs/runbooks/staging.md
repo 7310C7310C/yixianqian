@@ -170,13 +170,10 @@ BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> \
 - 四 tab / 活动详情 / 弹层 / 管理台 iframe 的滚动隔离（防 tab 间串位、返回丢位置）用
   `tools/browser/tab_scroll_smoke.py` 回归；需真实账号 cookie，命令见脚本头注释：
   `BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> python3 tools/browser/tab_scroll_smoke.py`。
-- 活动管理原生入口（我的→活动管理→控制台→名单→签到→编辑 iframe）用
-  `tools/browser/admin_activity_native_smoke.py` 回归；需可管理活动的管理员 cookie：
-  `BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> SHOT_DIR=/tmp/opencode/admin-activity-native python3 tools/browser/admin_activity_native_smoke.py`。
-- 麦穗管理/举报管理原生入口（我的→麦穗管理→详情/流水/兑换/邀请；我的→举报管理→待处理按钮）用
-  `tools/browser/admin_points_report_smoke.py` 回归；需管理员与普通用户两个 cookie：
-  `BASE_URL=https://next.nantou.love SESSION_COOKIE=<管理员> USER_SESSION_COOKIE=<普通用户> SHOT_DIR=/tmp/opencode/admin-points-report python3 tools/browser/admin_points_report_smoke.py`。
-  脚本要求举报列表至少有 1 条「待处理」，空列表视为 FAIL（夹具不足）。
+- 「我的→管理」只保留「🛠️ 管理后台」单一入口；活动/麦穗/举报的 v1 SPA 页面暂不暴露。
+  管理权限与 `/legacy/api/admin/*` 形状用 `tools/admin_legacy_api_smoke.py` 回归；需管理员与普通用户两个 cookie：
+  `BASE_URL=https://next.nantou.love SESSION_COOKIE=<管理员> USER_SESSION_COOKIE=<普通用户> python3 tools/admin_legacy_api_smoke.py`。
+  期望：管理员 SPA 无三个单列入口、三端点 200 且形状正确；普通用户三端点 403 且返回 v1 error 信封。
 - `/cards`、`/likes`、`/activities`、`/profile` 等旧用户页返回 404。
 - `/cards/photo/{id}`、`/profile/photo/{id}`、`/activities/{id}/poster` 等媒体路由仍可用。
 - 顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`，由 SPA 自动打开管理台 overlay；受权媒体串流（审核照片原图、活动海报原图）是显式例外，直接串流，仍需对应权限。

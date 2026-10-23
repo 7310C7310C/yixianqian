@@ -72,9 +72,10 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 通知：未读数字红点；`GET /legacy/api/notifications/stream` 推送未读/最新通知变化，EventSource 不可用时轮询兜底。
 - 登录/启用/注册/密码：Go SSR；改密为 SPA 内 Vant 子页，离开时还原滚动位置。
 - 公开首页：匿名访问 `/` 返回 200 服务端页面（品牌介绍、人工审核/匿名喜欢/动态通知、注册主按钮与登录入口、飞书老用户先设密码指引、飞书入口链接）；只保留入口链接，不展示二维码图片。登录后 `/` 仍由旧 SPA 入口。
-- 活动管理（v1 原版 SPA 页面）：`/legacy/api/admin/*` 兼容层与 SPA 入口、同步执行分支均已接入；「我的→管理」同时保留「👥 活动管理」（v1 卡片/控制台/名单/签到）与「🛠️ 管理后台」（SSR iframe）两个入口，`group_detail` 页头可打开「✏️ 编辑」iframe。
-- 麦穗管理（v1 原版 SPA 页面）：`/legacy/api/admin/points/*` 兼容层已接入（总览/流水/兑换/邀请/单用户详情；调整、退穗、兑换单标记走 CSRF、`points.adjust` 与审计），入口在「我的→管理→🌾 麦穗管理」。
-- 举报管理（v1 原版 SPA 页面）：列表复用 `/legacy/api/messages/reported`，处理动作补 `POST /legacy/api/messages/{id}/handle`（`content.moderate` + CSRF + 审计），入口在「我的→管理→🚨 举报管理」；`user.is_admin` 语义为「有任一管理角色」，与 `can_admin` 同值。
+- 活动管理（v1 原版 SPA 页面）：`/legacy/api/admin/*` 兼容层与同步执行分支已接入；页面代码保留，但入口已撤回、暂不暴露，管理操作统一经「我的→管理→🛠️ 管理后台」的 SSR iframe。
+- 麦穗管理（v1 原版 SPA 页面）：`/legacy/api/admin/points/*` 兼容层已接入（总览/流水/兑换/邀请/单用户详情；调整、退穗、兑换单标记走 CSRF、`points.adjust` 与审计）；页面代码保留，但入口已撤回、暂不暴露。
+- 举报管理（v1 原版 SPA 页面）：列表复用 `/legacy/api/messages/reported`，处理动作补 `POST /legacy/api/messages/{id}/handle`（`content.moderate` + CSRF + 审计）；页面代码保留，但入口已撤回、暂不暴露；`user.is_admin` 语义为「有任一管理角色」，与 `can_admin` 同值。
+- 管理入口收敛回单一管理后台；原生化页面暂不暴露（「我的→管理」只有「🛠️ 管理后台」）。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
 
 ### 管理台（SSR，仅 iframe 承载）
@@ -122,8 +123,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ## 5. 已知缺口/未验收
 
-- **活动管理 SPA 待部署验收**：入口、同步执行分支与「✏️ 编辑」iframe 已在代码接入；staging 仍运行旧 binary，部署后按 runbook 跑 `tools/browser/admin_activity_native_smoke.py` 留真实浏览器证据。
-- **麦穗/举报管理 SPA 待部署验收**：后端兼容层、入口与 Playwright smoke 已在代码接入；staging 仍运行 `3e4d75d`（无本阶段改动），部署后按 runbook 跑 `tools/browser/admin_points_report_smoke.py` 留真实浏览器证据。
+- **管理入口收敛待部署验收**：入口收敛回单一「🛠️ 管理后台」，活动/麦穗/举报原生化页面暂不暴露（代码保留）；staging 仍运行旧 binary，部署后按 runbook 跑 `tools/admin_legacy_api_smoke.py`（管理员 200 / 普通用户 403）留证据。
 
 - **人脸照片缺口**：`104` 个 `active` 普通用户没有 `has_face=true` 的照片，其中 `101` 个完全没有照片；可通过资料页上传修复，不是死锁（与身份证 P0 区分）。
 - **内容合规**：腾讯云照片内容合规（宠物/卡通判定、活体）未实现。

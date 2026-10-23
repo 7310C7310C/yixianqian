@@ -148,3 +148,11 @@ sources: []
 - 决策：`legacyUserMap` 的 `is_admin` 改为与 `can_admin` 同值（有任一管理角色），修复 v1 页面里 `is_admin` 判断；具体接口仍按权限码鉴权，普通用户仍 403，「我的→管理」仍由 `can_admin` 控制。
 - 后果：「我的→管理」现在并存「👥 活动管理」「🌾 麦穗管理」「🚨 举报管理」「🛠️ 管理后台」；麦穗页四个 tab（用户/流水/兑换/邀请）与单用户详情、举报页列表与同意/驳回按钮均可用，Playwright 双视口 smoke 覆盖管理员路径与普通用户 403。
 - 边界：不改数据库 schema、不改 SSR、不改 v2 `/api/admin/*` 与 `/api/messages/*` 语义；不恢复 v1 的 202+job；写端点当前只作为兼容能力，SPA 麦穗页仍为只读；手机号只输出 masked。
+
+## 20. 管理入口收敛回单一「管理后台」（2026-10-23）
+
+- 背景：第 18、19 节把「👥 活动管理」「🌾 麦穗管理」「🚨 举报管理」三个 v1 SPA 入口并列放进「我的→管理」，与「🛠️ 管理后台」形成四个入口。PM 要求管理功能统一融入「管理后台」，不要在「我的」页单列。
+- 决策：删除「我的→管理」中的三个 SPA cell，只保留「🛠️ 管理后台」；活动/麦穗/举报的 v1 SPA 页面与 `/legacy/api/admin/*`、举报处理兼容层保留在代码中，但暂不暴露入口；管理操作统一经管理后台的 SSR iframe 承载。
+- 决策：原入口级 Playwright smoke（`admin_activity_native_smoke.py`、`admin_points_report_smoke.py`）删除，替换为 API 级 `tools/admin_legacy_api_smoke.py`：校验管理员 SPA 无三个单列入口、管理员三端点 200 且响应形状正确、普通用户三端点 403 且返回 v1 error 信封。
+- 后果：「我的→管理」回到单一入口；原生化页面如后续要重新暴露，需另立决策并恢复对应入口回归。
+- 边界：不改数据库 schema、不改 SSR 页面、不改 `/legacy/api/admin/*`、`/legacy/api/messages/reported` 契约与 RBAC/CSRF/审计；不删除 SPA 页面代码；第 18、19 节中关于入口并存的描述由本节取代，其余后端与页面能力描述不变。
