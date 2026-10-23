@@ -91,7 +91,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 ### 管理台（SSR，仅 iframe 承载）
 
 - 入口与框架：顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`（不渲染顶层页面），管理台只经 SPA 内 `/?admin=1` 打开 iframe overlay 使用；受权照片/海报原图串流是显式例外。
-- 导航（Phase A，2026-10-23）：取消 9 项平铺 subnav；顶部固定「管理台 / 当前页 / 返回总览」，总览改为 4 个关键统计 + 用户与权限/活动/匹配/麦穗/内容与安全分组入口卡。设计系统在 `web/static/admin.css`（`--adm-*` token、44px 触控、390/768/1280 响应式、浅色 v1 粉），`web/static/admin.js` 负责列表筛选、工作台 tabs/hash 深链与二次确认。
+- 导航（Phase A，2026-10-23）：取消 9 项平铺 subnav；顶部固定「管理台 / 当前页 / 返回总览」，总览改为 4 个关键统计 + 用户与权限/活动/匹配/麦穗/内容与安全分组入口卡。设计系统在 `web/static/admin.css`（`--adm-*` token、44px 触控、390/768/1280 响应式、浅色 v1 粉；`html.yxq-embed-dark` 有对应深色 token 覆盖），`web/static/admin.js` 负责列表筛选、工作台 tabs/hash 深链与二次确认。
 - 活动（Phase A）：列表（统计条 + 搜索/状态 chips + 活动卡）、新建/编辑（分组表单 + 手机 sticky 操作条）、工作台（模式卡 + 报名名单/签到/广播/设置 tabs + 行内签到 + 广播二次确认）；路由、handler 契约、RBAC、CSRF、审计与表单字段名不变。
 - 用户：审核通过/拒绝、用户详情与受权照片串流、停用/启用、临时密码。
 - 举报与反馈：列表与处理。
