@@ -239,16 +239,13 @@
   @media (prefers-reduced-motion: reduce) {
     .boot-shimmer { animation: none; }
   }
-  /* 修改密码子页 */
-  .password-page { min-height: 100vh; background: #f7f8fa; }
+  /* 修改密码子页：与「我的资料」同宽，手机/桌面都全宽（12px 内容边距）。
+     relative + 不透明背景 + z-index：page-slide 过场时不能透出「我的」页顶部。 */
+  .password-page { position: relative; z-index: 1; min-height: 100vh; background: #f7f8fa; }
   /* 返回列固定：从「我的」滚到下方再进入时，内容不能停在上页滚动位置、也不能被页头遮住 */
-  .password-page .back-nav { position: fixed; top: 0; left: 0; right: 0; max-width: 480px; margin: 0 auto; z-index: 10; padding-top: calc(14px + constant(safe-area-inset-top)); padding-top: calc(14px + env(safe-area-inset-top)); box-sizing: border-box; }
-  /* 桌面返回列与 480px 卡片同宽居中，底部圆角；手机保持满宽直角 */
-  @media (min-width: 481px) {
-    .password-page .back-nav { border-radius: 0 0 12px 12px; }
-  }
+  .password-page .back-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 10; padding-top: calc(14px + constant(safe-area-inset-top)); padding-top: calc(14px + env(safe-area-inset-top)); box-sizing: border-box; }
   .password-page .page { padding: 12px; padding-top: calc(68px + constant(safe-area-inset-top)); padding-top: calc(68px + env(safe-area-inset-top)); box-sizing: border-box; }
-  .pw-card { max-width: 480px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 16px 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .pw-card { background: #fff; border-radius: 12px; padding: 16px 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
   .pw-title { font-size: 18px; font-weight: 600; color: #323233; padding: 0 16px; }
   .pw-tip { font-size: 12px; color: #969799; line-height: 1.6; padding: 6px 16px 12px; }
   .pw-error { margin: 0 16px 10px; padding: 8px 10px; border-radius: 8px; background: #fdecec; color: #9b2c2c; font-size: 13px; line-height: 1.5; }
@@ -905,6 +902,12 @@
   .embed-frame { flex: 1 1 auto; width: 100%; min-height: 0; border: 0; display: block; background: #f7f8fa; opacity: 0; transition: opacity .18s ease; }
   .embed-frame--ready { opacity: 1; }
   .embed-loading { position: absolute; inset: 0; z-index: 2; overflow-y: auto; background: #f7f8fa; }
+  /* 内嵌管理台整体滑入/滑出（20px + opacity，180ms，曲线同 page-slide）；
+     overlay 自带骨架，先出骨架再滑入，不白屏。 */
+  .embed-slide-enter-active { transition: opacity 0.18s cubic-bezier(0.32,0.72,0,1), transform 0.18s cubic-bezier(0.32,0.72,0,1); will-change: opacity, transform; }
+  .embed-slide-leave-active { transition: opacity 0.18s cubic-bezier(0.32,0.72,0,1), transform 0.18s cubic-bezier(0.32,0.72,0,1); will-change: opacity, transform; }
+  .embed-slide-enter-from { opacity: 0; transform: translateX(20px); }
+  .embed-slide-leave-to { opacity: 0; transform: translateX(20px); }
   .embed-skeleton { width: 100%; max-width: 1080px; min-height: 60vh; margin: 0 auto; padding: 16px 12px 24px; box-sizing: border-box; }
   .embed-sk-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   .embed-sk-pill { width: 96px; height: 36px; border-radius: 999px; }
@@ -926,6 +929,7 @@
   @media (prefers-reduced-motion: reduce) {
     .embed-frame { transition: none; }
     .embed-sk-shimmer { animation: none; }
+    .embed-slide-enter-active, .embed-slide-leave-active { transition: none !important; }
   }
   /* 消息 tab 未读数：贴在图标右上，限制尺寸，不挤压 tab 文案 */
   .van-tabbar-item__icon .van-badge { min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; line-height: 17px; font-weight: 600; border: 1px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
@@ -3407,6 +3411,7 @@
   <van-tabbar-item name="profile" icon="user-o">我的</van-tabbar-item>
 </van-tabbar>
 <!-- 站内嵌入页：仅管理后台（同源 iframe，关闭即返回原 tab） -->
+<Transition name="embed-slide" appear>
 <div v-if="embedOpen" class="embed-overlay" role="dialog" aria-modal="true" :aria-label="embedTitle">
   <div class="embed-bar" :class="{ 'embed-bar--wide': embedUrl.indexOf('/admin') === 0 }">
     <div class="embed-bar-inner">
@@ -3439,6 +3444,7 @@
       @load="onEmbedLoad"></iframe>
   </div>
 </div>
+</Transition>
 </template>
 </div>
 <script src="lib/vue.global.prod.js"></script>
@@ -3597,6 +3603,7 @@ createApp({
     const claimPhone = ref('');
     const claiming = ref(false);
     let claimEntryFlag = false;  // 机器人「认领」链接 ?claim=1：直接进入认领页（正式功能，生产保留）
+    let adminEntryFlag = false;  // 顶层 /admin 303 到 /?admin=1：loadHome 成功后自动开内嵌管理台
     // 账号状态门禁（待审核/审核不通过/已退出）：后端 /api/home 返回 403 时整屏提示
     const gateMessage = ref('');
     const gateTitle = computed(() => {
@@ -5174,6 +5181,13 @@ createApp({
       startNotificationSync();   // SSE 实时红点；不可用时 12s 轮询兜底
       setTimeout(()=>{ checkIdValidForPage(page.value); }, 1000);
       setTimeout(()=>{ checkFaceValidForPage(page.value); }, 1200);
+      // ?admin=1（顶层 /admin 303 而来）：先清 query，再由后台自动开内嵌管理台。
+      // replaceState 必须在 openEmbed 之前：openEmbed 会 push 一条 overlay 历史条目。
+      if (adminEntryFlag) {
+        adminEntryFlag = false;
+        try{ history.replaceState({page: page.value}, '', location.pathname); }catch(e){}
+        if (user.value.can_admin) openAdminConsole();
+      }
     }
     // 已有服务端会话时直接拉首页数据：先展示 App 骨架，不经过登录页/iframe。
     async function bootAuthenticated() {
@@ -7867,6 +7881,8 @@ createApp({
       bootEntryHash = entryHash;
       // 在下方 replaceState 清掉 query 前，捕获引导预览参数（仅测试环境）
       try { claimEntryFlag = new URLSearchParams(location.search).get('claim') === '1'; } catch(e) { claimEntryFlag = false; }
+      // 顶层 /admin 303 到 /?admin=1：同样要在清 query 前捕获
+      try { adminEntryFlag = new URLSearchParams(location.search).get('admin') === '1'; } catch(e) { adminEntryFlag = false; }
       try{ history.replaceState({page: page.value}, '', location.pathname); }catch(e){}
       window.addEventListener('popstate', handlePopState);
       if (SERVER_AUTHENTICATED) {
@@ -9019,7 +9035,8 @@ createApp({
     }
 
     function openAdminConsole() {
-      openEmbed('/admin', '管理后台');
+      // ?embed=1 供 iframe 首载放行；iframe 内部导航无 query 时靠 Sec-Fetch-Dest: iframe。
+      openEmbed('/admin?embed=1', '管理后台');
     }
 
     async function legacyLogout() {

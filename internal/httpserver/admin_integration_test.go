@@ -106,6 +106,28 @@ func TestIntegrationAdminHTTP(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || !strings.Contains(readBody(t, resp), "总览") {
 		t.Fatalf("reviewer /admin status = %d", resp.StatusCode)
 	}
+
+	// 独立管理台入口已废弃：浏览器顶层 document 打开一律 303 回 SPA；
+	// iframe 内部导航（无 embed=1）仍渲染 SSR 管理台。
+	req, err := http.NewRequest(http.MethodGet, reviewerClient.base+"/admin/users?status=pending", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	resp = reviewerClient.do(req)
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/?admin=1" {
+		t.Fatalf("top-level /admin status = %d location = %q",
+			resp.StatusCode, resp.Header.Get("Location"))
+	}
+	req, err = http.NewRequest(http.MethodGet, reviewerClient.base+"/admin/users?status=pending", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Sec-Fetch-Dest", "iframe")
+	resp = reviewerClient.do(req)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(readBody(t, resp), pending.Name) {
+		t.Fatalf("iframe /admin/users status = %d", resp.StatusCode)
+	}
 	resp = reviewerClient.get("/admin/users?status=pending&q=" + url.QueryEscape("待审核用户"))
 	if resp.StatusCode != http.StatusOK || !strings.Contains(readBody(t, resp), pending.Name) {
 		t.Fatalf("reviewer user list status = %d", resp.StatusCode)

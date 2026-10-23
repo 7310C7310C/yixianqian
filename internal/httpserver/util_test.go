@@ -13,19 +13,24 @@ import (
 
 func TestSafeNext(t *testing.T) {
 	cases := map[string]string{
-		"":                         "/",
-		"/":                        "/",
-		"/media?size=thumb":        "/media?size=thumb",
-		"//evil.example.com":       "/",
-		"https://evil.example.com": "/",
-		"/\\evil":                  "/",
-		"/login?next=/x":           "/",
-		"/logout":                  "/",
-		"/activate?token=x":        "/",
-		"/api/media":               "/",
-		"/media/upload":            "/",
-		"relative/path":            "/",
-		"/path\r\nX-Test: 1":       "/",
+		"":                            "/",
+		"/":                           "/",
+		"/media?size=thumb":           "/media?size=thumb",
+		"//evil.example.com":          "/",
+		"https://evil.example.com":    "/",
+		"/\\evil":                     "/",
+		"/login?next=/x":              "/",
+		"/logout":                     "/",
+		"/activate?token=x":           "/",
+		"/api/media":                  "/",
+		"/media/upload":               "/",
+		"relative/path":               "/",
+		"/path\r\nX-Test: 1":          "/",
+		"/admin":                      "/?admin=1",
+		"/admin/users":                "/?admin=1",
+		"/admin/users?status=pending": "/?admin=1",
+		"/admin?embed=1":              "/?admin=1",
+		"/administrator":              "/administrator",
 	}
 	for input, want := range cases {
 		if got := safeNext(input); got != want {
