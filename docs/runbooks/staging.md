@@ -152,6 +152,9 @@ curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies https://next.nanto
 ```
 
 - 已登录 `/` 必须返回 v1 Vue SPA；`/legacy/api/home` 200；四 tab 用 hash 切换。
+- 四 tab / 活动详情 / 弹层 / 管理台 iframe 的滚动隔离（防 tab 间串位、返回丢位置）用
+  `tools/browser/tab_scroll_smoke.py` 回归；需真实账号 cookie，命令见脚本头注释：
+  `BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> python3 tools/browser/tab_scroll_smoke.py`。
 - `/cards`、`/likes`、`/activities`、`/profile` 等旧用户页返回 404。
 - `/cards/photo/{id}`、`/profile/photo/{id}`、`/activities/{id}/poster` 等媒体路由仍可用。
 - 顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`，由 SPA 自动打开管理台 overlay；受权媒体串流（审核照片原图、活动海报原图）是显式例外，直接串流，仍需对应权限。

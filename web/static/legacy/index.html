@@ -854,7 +854,12 @@
   .van-theme-dark .ga-confirm-row b.danger { color: #ff7a85; }
   .van-theme-dark .ga-confirm-input { background: #1a1a1c; border-color: #3a3a3e; color: #f5f5f5; }
   /* 四 Tab 间流畅过渡 */
-  .tab-main { position: relative; min-height: calc(100vh - 60px); width: 100%; max-width: 100%; overflow-x: clip; overscroll-behavior-x: none; }
+  .tab-main { position: relative; min-height: calc(100vh - 60px); width: 100%; max-width: 100%; overflow-x: clip; overscroll-behavior-x: none; overflow-anchor: none; }
+  /* 内层滚动区（卡片详情、消息流、抽屉/兑换列表等）到底后不再把滚动链传给文档，
+     避免「内层滚完 continue 划 → 整页跟着下移」；旧内核不支持时自动忽略。 */
+  .card-info, .msg-list, .gs-tray-list, .redeem-list, .redeem-form,
+  .picker-options, .multi-options, .wish-target-list, .pa-detail,
+  .admin-help-list, .embed-loading { overscroll-behavior: contain; }
   .tab-transition-enter-active { transition: opacity 0.10s ease, transform 0.10s cubic-bezier(0.32,0.72,0,1); will-change: opacity, transform; }
   .tab-transition-leave-active { transition: opacity 0.08s ease, transform 0.08s ease; will-change: opacity, transform; }
   .tab-transition-enter-from { opacity: 0; transform: translateY(6px); }
@@ -1042,7 +1047,7 @@
 <!-- 主界面 -->
 <template v-else>
 <div class="tab-main">
-<Transition :name="pageTransition" mode="out-in">
+<Transition :name="pageTransition" mode="out-in" @enter="onPageEnter">
 <!-- ========== 牵线页 ========== -->
 <div v-if="page==='cards'" key="cards" class="cards-page">
   <div v-if="showSwipeGuide" class="swipe-guide-mask" @click="closeSwipeGuide">
@@ -3631,8 +3636,57 @@ createApp({
     let passwordFormDone = false;
     // 从「我的」进入改密页前的滚动位置，返回/改密成功回 profile 时还原
     let passwordReturnScroll = 0;
+    // 四 Tab 各自记忆滚动位置：主内容共用一个文档滚动容器，Transition out-in 切换 tab 时
+    // 浏览器会沿用上一个 tab 的 window.scrollY（长页→短页被夹到底部、短页→长页整页下移），
+    // 表现为「活动页下滑，其他 tab 也被下滑」。这里按 tab 记忆并在进场时复位/还原。
+    const tabScroll = { cards: 0, likes: 0, home: 0, profile: 0 };
+    function readScrollY(){
+      return Math.max(0, Math.round(window.scrollY || (document.scrollingElement && document.scrollingElement.scrollTop) || 0));
+    }
+    function rememberScroll(name){
+      if(TAB_ORDER.includes(name)) tabScroll[name] = readScrollY();
+    }
+    // Transition 的 @enter：离场动画结束后挂载、进场首帧（opacity 0）绘制前触发，
+    // 此时复位滚动看不到跳动；子页（活动详情/报名/我的子页）一律从顶部开始。
+    function applyPageScroll(y){
+      try { window.scrollTo(0, y); } catch(e) {}
+    }
+    // 进场后图片/列表数据可能继续把文档撑高，刚才的目标位置会被高度夹住；内容到位后补齐。
+    // 只补目标 > 0 的 tab，且用户一旦自己操作（触摸/滚轮/按键）立即放弃，最多补 1.2s。
+    function retryPageScroll(targetPage, target){
+      const started = Date.now();
+      let aborted = false;
+      const abort = () => { aborted = true; };
+      const events = ['touchstart', 'wheel', 'keydown'];
+      const cleanup = () => events.forEach((ev) => window.removeEventListener(ev, abort));
+      events.forEach((ev) => window.addEventListener(ev, abort, {once: true, passive: true}));
+      const tick = () => {
+        if(aborted || page.value !== targetPage) { cleanup(); return; }
+        if(readScrollY() >= target - 2) { cleanup(); return; }
+        applyPageScroll(target);
+        if(Date.now() - started < 1200) setTimeout(tick, 200); else cleanup();
+      };
+      setTimeout(tick, 120);
+    }
+    function onPageEnter(){
+      const targetPage = page.value;
+      const target = TAB_ORDER.includes(targetPage) ? (tabScroll[targetPage] || 0) : 0;
+      applyPageScroll(target);
+      if(target > 0 && readScrollY() < target - 2) retryPageScroll(targetPage, target);
+    }
+    // Vant 弹层（van-popup / van-dialog）锁滚动只给 body 加 van-overflow-hidden；
+    // 本页 html 带 overflow-x: clip，按规范会阻止 body 的 overflow 传播到视口，
+    // 弹层打开时背景仍会被滚轮/触摸带走。把同一个类同步到根元素锁住视口。
+    function syncViewportScrollLock(){
+      const locked = document.body.classList.contains('van-overflow-hidden');
+      document.documentElement.classList.toggle('van-overflow-hidden', locked);
+    }
+    new MutationObserver(syncViewportScrollLock).observe(document.body, {attributes: true, attributeFilter: ['class']});
+    syncViewportScrollLock();
     // 四 Tab 过渡：监听 page 切换实时选动画（需在 subPages 定义后，sync 确保与 Transition 同帧）
-    watch(page, (nv, ov) => { if(nv !== ov) pageTransition.value = pickTransition(nv, ov); }, {flush: 'sync'});
+    watch(page, (nv, ov) => {
+      if(nv !== ov){ pageTransition.value = pickTransition(nv, ov); rememberScroll(ov); }
+    }, {flush: 'sync'});
 
     // 活动
     const activities = ref([]);
@@ -6185,12 +6239,37 @@ createApp({
     }
 
     // 站内嵌入页仅供管理后台使用：同源 iframe + 返回栏；返回键/浏览器返回都只关 overlay。
+    // 打开期间锁住文档滚动：iframe 内滚动/到底回弹不带动外层页面（iOS 对 body
+    // overflow:hidden 不可靠，用 position:fixed + 负 top 把视口钉住，关闭时还原）。
+    let embedLockY = 0;
+    let embedLocked = false;
+    function lockPageScroll(){
+      if(embedLocked) return;
+      embedLocked = true;
+      embedLockY = readScrollY();
+      const b = document.body;
+      b.style.position = 'fixed';
+      b.style.top = '-' + embedLockY + 'px';
+      b.style.left = '0';
+      b.style.right = '0';
+      b.style.width = '100%';
+      b.style.overflow = 'hidden';
+    }
+    function unlockPageScroll(){
+      if(!embedLocked) return;
+      embedLocked = false;
+      const b = document.body;
+      b.style.position = ''; b.style.top = ''; b.style.left = '';
+      b.style.right = ''; b.style.width = ''; b.style.overflow = '';
+      try { window.scrollTo(0, embedLockY); } catch(e) {}
+    }
     function openEmbed(url, title) {
       embedUrl.value = url;
       embedTitle.value = title || '';
       embedLoading.value = true;
       embedReady.value = false;
       embedOpen.value = true;
+      lockPageScroll();
     }
     function closeEmbed() {
       if (!embedOpen.value) return;
@@ -6199,6 +6278,7 @@ createApp({
       embedReady.value = false;
       embedUrl.value = '';
       embedTitle.value = '';
+      unlockPageScroll();
     }
     // 管理台沿用 SSR 自己的交互，只把外壳（页头/页脚/底色/字体/token）换成旧 App 风格。
     // /admin 的 CSP 是 style-src 'self'：主题走同源外部样式表 + class，禁止注入
@@ -9050,6 +9130,7 @@ createApp({
 
     return {
       page, pageTransition, user, loggingIn, loginError, showPersonalGuide, loginTip,
+      onPageEnter,
       bootLoading, bootError, retryBoot,
       showClaim, claimName, claimPhone, claiming, submitClaim, backToLogin, requestBackToLogin,
       isDark, toggleTheme,
