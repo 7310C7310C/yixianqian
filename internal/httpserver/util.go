@@ -30,10 +30,8 @@ func safeNext(raw string) string {
 	case u.Path == "/login", u.Path == "/logout", u.Path == "/activate",
 		u.Path == "/media/upload", strings.HasPrefix(u.Path, "/api/"):
 		return "/"
-	case u.Path == "/admin", strings.HasPrefix(u.Path, "/admin/"):
-		// 独立管理台入口已废弃：登录/启用/重设后统一回 SPA，由 ?admin=1 自动开内嵌管理台。
-		return "/?admin=1"
 	}
+	// /admin 深链原样保留；服务端已直接渲染 SSR，不再改写为 /?admin=1。
 	return raw
 }
 

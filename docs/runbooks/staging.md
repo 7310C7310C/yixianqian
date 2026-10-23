@@ -154,15 +154,20 @@ curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies https://next.nanto
 - 已登录 `/` 必须返回 v1 Vue SPA；`/legacy/api/home` 200；四 tab 用 hash 切换。
 - `/cards`、`/likes`、`/activities`、`/profile` 等旧用户页返回 404。
 - `/cards/photo/{id}`、`/profile/photo/{id}`、`/activities/{id}/poster` 等媒体路由仍可用。
-- `/admin` 顶层入口是 SPA 内嵌：document 导航 303 到 `/?admin=1`；SSR 只在 iframe（`Sec-Fetch-Dest: iframe`）或非 document 的 `?embed=1` 下渲染。
+- `/admin` 顶层入口直接渲染 SSR（document 与 iframe 行为一致）；SPA 内 `/?admin=1` 仍可打开 iframe overlay。
 
 ## 管理台 `/admin` smoke
 
 ```bash
-# 顶层入口：期望 303 → https://next.nantou.love/?admin=1
-curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' \
+# 顶层入口：期望 200 SSR（未登录 303 /login，无权限 403）
+curl -sS -o /dev/null -w '%{http_code}\n' \
   -H 'Sec-Fetch-Dest: document' \
   -b /tmp/yxq_cookies https://next.nantou.love/admin
+
+# 顶层深链同样直接 SSR
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -H 'Sec-Fetch-Dest: document' \
+  -b /tmp/yxq_cookies https://next.nantou.love/admin/users
 
 # SSR 页面：用 iframe 语义访问（需管理员 session；未登录 303 到 /login，无权限 403）
 for p in /admin/users /admin/reports /admin/roles \
@@ -173,12 +178,13 @@ for p in /admin/users /admin/reports /admin/roles \
 done
 # 期望全部 200
 
-# 等价 iframe 首载（document 带 embed=1 仍 303）
+# 等价 iframe 首载（document/iframe 均直接 SSR，不再 303）
 curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
   -H 'Sec-Fetch-Dest: iframe' 'https://next.nantou.love/admin?embed=1'
+# 期望 200
 ```
 
-带 `Sec-Fetch-Dest: document` 访问任何 `/admin...` 都 303 回 SPA，属预期；`/admin/users/{id}` 需真实用户 ID。
+顶层与 iframe 访问 `/admin...` 都直接渲染 SSR，不再跳 `/?admin=1`；未登录 303 到 `/login?next=<原路径>`，无权限 403。`/admin/users/{id}` 需真实用户 ID。
 
 ## 人脸检测（日常增量）
 

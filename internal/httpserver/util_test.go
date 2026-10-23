@@ -26,10 +26,10 @@ func TestSafeNext(t *testing.T) {
 		"/media/upload":               "/",
 		"relative/path":               "/",
 		"/path\r\nX-Test: 1":          "/",
-		"/admin":                      "/?admin=1",
-		"/admin/users":                "/?admin=1",
-		"/admin/users?status=pending": "/?admin=1",
-		"/admin?embed=1":              "/?admin=1",
+		"/admin":                      "/admin",
+		"/admin/users":                "/admin/users",
+		"/admin/users?status=pending": "/admin/users?status=pending",
+		"/admin?embed=1":              "/admin?embed=1",
 		"/administrator":              "/administrator",
 	}
 	for input, want := range cases {

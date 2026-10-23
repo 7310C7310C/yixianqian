@@ -95,13 +95,8 @@ func (a *App) loadAdminAccess(ctx context.Context, user db.User) (adminAccess, e
 
 func (a *App) adminHTML(permission string, next func(http.ResponseWriter, *http.Request, adminAccess)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 独立的 SSR 管理台入口已废弃：浏览器顶层打开 /admin、/admin/... 一律回 SPA，
-		// 由 /?admin=1 载入后自动开内嵌管理台 overlay。
-		// iframe（Sec-Fetch-Dest: iframe）与 ?embed=1 仍渲染 SSR；测试/API 无此 header 照旧。
-		if r.Header.Get("Sec-Fetch-Dest") == "document" {
-			http.Redirect(w, r, "/?admin=1", http.StatusSeeOther)
-			return
-		}
+		// 顶层 document 与 iframe 一样渲染 SSR；不再跳 SPA（/?admin=1）。
+		// SPA 内 overlay 仍通过 iframe 访问 /admin?embed=1，行为不变。
 		user, ok := a.requireUserHTML(w, r)
 		if !ok {
 			return

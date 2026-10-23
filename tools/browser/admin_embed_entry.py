@@ -3,11 +3,11 @@
 
 覆盖（390×844 与 1280×900 两个视口）：
 
-1. 浏览器顶层打开 /admin：服务端 303 到 /?admin=1，SPA 载入后自动开内嵌管理台，
-   顶层 URL 清回 /；无 Sec-Fetch-Dest 的请求仍 200（测试/API 兼容）；
+1. 浏览器顶层打开 /admin：服务端直接渲染 SSR 管理台（document 与 iframe 一致），
+   顶层 URL 保持 /admin，不再 303 到 /?admin=1；无 Sec-Fetch-Dest 的请求同样 200；
 2. 内嵌 iframe 首载 /admin?embed=1，骨架先出、iframe 后载；iframe 内部导航到
    /admin/users（无 query）仍能加载，顶层 URL 不变；
-3. 登录 next=/admin：登录页隐藏 next 被改写为 /?admin=1，登录后落地 SPA 并自动开管理台；
+3. 登录 next=/admin：登录页 next 保留 /admin（不再改写为 /?admin=1），登录后直接进入 SSR 管理台；
 4. 非 admin 访问 /?admin=1：不打开管理台，query 清掉；
 5. 修改密码页与「我的资料」同宽（视口宽 - 24），返回列 full width 且不遮内容；
    page-slide 过场中改密页背景不透明、relative z-index，返回后还原「我的」滚动位置；
@@ -223,88 +223,37 @@ def box(locator) -> dict:
 
 
 def goto_admin_top_level(page, base: str, shot_dir: Path, tag: str) -> None:
-    """顶层 /admin → 303 → SPA 自动 overlay；拦截 iframe 请求证明骨架先出。"""
-    held = {}
-
-    def hold_admin_route(url):
-        parsed = urlparse(url)
-        return parsed.path == "/admin" and "embed=1" in parsed.query
-
-    def hold(route):
-        held["route"] = route
-
+    """顶层 /admin 直接 SSR：URL 保持 /admin，不出现 SPA overlay。"""
     reset_class_logs(page)
-    page.route(hold_admin_route, hold)
     page.goto(base + "/admin", wait_until="domcontentloaded", timeout=30000)
     try:
-        page.locator(".embed-overlay").wait_for(state="visible", timeout=20000)
-        page.locator(".embed-skeleton").wait_for(state="visible", timeout=5000)
+        page.locator(".admin-nav").wait_for(state="visible", timeout=20000)
     except PlaywrightTimeoutError as exc:
-        raise SmokeFailure(f"{tag}: /admin 未自动打开内嵌管理台：{exc}") from exc
+        raise SmokeFailure(f"{tag}: 顶层 /admin 未渲染 SSR 管理台：{exc}") from exc
 
     final = urlparse(page.url)
-    if final.path != "/" or final.query:
-        raise SmokeFailure(f"{tag}: 顶层 URL 未清回 /（实际 {page.url}）")
+    if final.path != "/admin" or final.query:
+        raise SmokeFailure(f"{tag}: 顶层 /admin URL 异常（实际 {page.url}）")
+    if page.locator(".embed-overlay").count():
+        raise SmokeFailure(f"{tag}: 顶层 /admin 不应打开 SPA 内嵌 overlay")
+    page.screenshot(path=str(shot_dir / f"{tag}-admin-top-level.png"))
 
-    if "route" not in held:
-        raise SmokeFailure(f"{tag}: iframe 请求未被挂起，无法验证骨架先出")
-    if page.locator(".embed-frame--ready").count():
-        raise SmokeFailure(f"{tag}: 骨架阶段 iframe 已就绪（应等请求放行）")
-    page.screenshot(path=str(shot_dir / f"{tag}-admin-skeleton.png"))
-
-    held["route"].continue_()
-    page.unroute(hold_admin_route)
+    # 回到 SPA 首页，供后续底部 tab / 改密页 / 我的页检查使用。
+    page.goto(base + "/", wait_until="domcontentloaded", timeout=30000)
     try:
-        page.frame_locator(".embed-frame").locator(".admin-nav").wait_for(timeout=20000)
+        page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
     except PlaywrightTimeoutError as exc:
-        raise SmokeFailure(f"{tag}: 内嵌管理台 iframe 未载入：{exc}") from exc
-
-    page.locator(".embed-loading").wait_for(state="hidden", timeout=10000)
-    src = page.locator(".embed-frame").get_attribute("src") or ""
-    if "/admin?embed=1" not in src:
-        raise SmokeFailure(f"{tag}: iframe src 未带 embed=1（{src}）")
-
-    classes = overlay_classes(page)
-    flat = [c for group in classes for c in group]
-    if "embed-slide-enter-active" not in flat or "embed-slide-enter-from" not in flat:
-        raise SmokeFailure(f"{tag}: overlay 未走 embed-slide 过场（捕获 {classes}）")
-    page.wait_for_timeout(400)
-    state = page.evaluate("""() => {
-      const el = document.querySelector('.embed-overlay');
-      if (!el) return null;
-      const s = getComputedStyle(el);
-      return {opacity: s.opacity, transform: s.transform};
-    }""")
-    if not state or state["opacity"] != "1" or state["transform"] not in ("none", "matrix(1, 0, 0, 1, 0, 0)"):
-        raise SmokeFailure(f"{tag}: 管理台滑入后未回到稳定态：{state}")
-    page.screenshot(path=str(shot_dir / f"{tag}-admin-overlay.png"))
-
-    # iframe 内部导航无 query，仍应渲染 SSR（Sec-Fetch-Dest: iframe）。
-    frame = page.frame_locator(".embed-frame")
-    frame.locator(".admin-nav a", has_text=ADMIN_NAV_TEXT).click()
-    try:
-        page.frame_locator(".embed-frame").locator(".admin-filter").wait_for(timeout=15000)
-    except PlaywrightTimeoutError as exc:
-        raise SmokeFailure(f"{tag}: iframe 内部导航 /admin/users 失败：{exc}") from exc
-    inner_urls = [urlparse(f.url) for f in page.frames if "/admin" in f.url]
-    if not inner_urls or inner_urls[0].path != "/admin/users" or inner_urls[0].query:
-        raise SmokeFailure(f"{tag}: iframe 内部导航 URL 异常：{[u.geturl() for u in inner_urls]}")
-    top = urlparse(page.url)
-    if top.path != "/" or top.query:
-        raise SmokeFailure(f"{tag}: iframe 内部导航改变了顶层 URL（{page.url}）")
-
-    page.locator(".embed-back").click()
-    page.locator(".embed-overlay").wait_for(state="detached", timeout=5000)
+        raise SmokeFailure(f"{tag}: SPA 首页未载入：{exc}") from exc
 
 
 def check_direct_requests(page, base: str, tag: str) -> None:
-    """服务端契约：document 303；iframe / 无 header 仍 200（登录态下）。"""
+    """服务端契约：document / iframe / 无 header 均 200 SSR；不再 303。"""
     admin_url = base + "/admin"
     resp = page.request.get(admin_url, headers={"Sec-Fetch-Dest": "document"}, max_redirects=0)
-    if resp.status != 303 or resp.headers.get("location") != "/?admin=1":
+    if resp.status != 200 or "admin-nav" not in resp.text():
         raise SmokeFailure(
             f"{tag}: document /admin = {resp.status} location={resp.headers.get('location')!r}，"
-            "want 303 /?admin=1")
+            "want 200 SSR")
     resp = page.request.get(admin_url, headers={"Sec-Fetch-Dest": "iframe"})
     if resp.status != 200:
         raise SmokeFailure(f"{tag}: iframe /admin = {resp.status}，want 200")
@@ -335,19 +284,18 @@ def check_login_next_admin(browser, base: str, shot_dir: Path, tag: str) -> None
     try:
         page.goto(base + "/login?next=%2Fadmin", wait_until="domcontentloaded", timeout=30000)
         hidden = page.locator('input[name="next"]').input_value()
-        if hidden != "/?admin=1":
-            raise SmokeFailure(f"{tag}: 登录页 next 未改写为 /?admin=1（实际 {hidden!r}）")
+        if hidden != "/admin":
+            raise SmokeFailure(f"{tag}: 登录页 next 未保留 /admin（实际 {hidden!r}）")
         page.fill('input[name="phone"]', phone)
         page.fill('input[name="password"]', password)
         page.click('button[type="submit"]')
         try:
-            page.locator(".embed-overlay").wait_for(state="visible", timeout=20000)
+            page.locator(".admin-nav").wait_for(state="visible", timeout=20000)
         except PlaywrightTimeoutError as exc:
-            raise SmokeFailure(f"{tag}: 登录 next=/admin 后未自动开管理台：{exc}") from exc
+            raise SmokeFailure(f"{tag}: 登录 next=/admin 后未进入 SSR 管理台：{exc}") from exc
         final = urlparse(page.url)
-        if final.path != "/" or final.query:
-            raise SmokeFailure(f"{tag}: 登录后 URL 未清回 /（{page.url}）")
-        page.frame_locator(".embed-frame").locator(".admin-nav").wait_for(timeout=20000)
+        if final.path != "/admin" or final.query:
+            raise SmokeFailure(f"{tag}: 登录后 URL 不是 /admin（{page.url}）")
         page.screenshot(path=str(shot_dir / f"{tag}-login-next-admin.png"))
         guard.assert_clean(f"{tag} 登录 next=/admin")
     finally:
@@ -464,6 +412,20 @@ def check_admin_from_profile(page, base: str, shot_dir: Path, tag: str) -> None:
         raise SmokeFailure(f"{tag}: 我的→管理后台未走 embed-slide（捕获 {classes}）")
     page.frame_locator(".embed-frame").locator(".admin-nav").wait_for(timeout=20000)
     page.locator(".embed-loading").wait_for(state="hidden", timeout=10000)
+
+    # iframe 内部导航无 query，仍应渲染 SSR（Sec-Fetch-Dest: iframe）。
+    page.frame_locator(".embed-frame").locator(".admin-nav a", has_text=ADMIN_NAV_TEXT).click()
+    try:
+        page.frame_locator(".embed-frame").locator(".admin-filter").wait_for(timeout=15000)
+    except PlaywrightTimeoutError as exc:
+        raise SmokeFailure(f"{tag}: iframe 内部导航 /admin/users 失败：{exc}") from exc
+    inner_urls = [urlparse(f.url) for f in page.frames if "/admin" in f.url]
+    if not inner_urls or inner_urls[0].path != "/admin/users" or inner_urls[0].query:
+        raise SmokeFailure(f"{tag}: iframe 内部导航 URL 异常：{[u.geturl() for u in inner_urls]}")
+    top = urlparse(page.url)
+    if top.path != "/" or top.query:
+        raise SmokeFailure(f"{tag}: iframe 内部导航改变了顶层 URL（{page.url}）")
+
     page.screenshot(path=str(shot_dir / f"{tag}-admin-from-profile.png"))
     page.locator(".embed-back").click()
     page.locator(".embed-overlay").wait_for(state="detached", timeout=5000)
@@ -485,7 +447,7 @@ def run_viewport(browser, base: str, width: int, height: int, shot_dir: Path) ->
         check_password_page(page, base, shot_dir, tag, width)
         check_admin_from_profile(page, base, shot_dir, tag)
         guard.assert_clean(f"{tag} admin")
-        print(f"[ok] {tag}x{height} 顶层重定向 / iframe / 骨架 / 过场 / 改密页 / 返回还原")
+        print(f"[ok] {tag}x{height} 顶层 SSR / iframe / 骨架 / 过场 / 改密页 / 返回还原")
     finally:
         context.close()
 

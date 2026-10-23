@@ -3603,7 +3603,7 @@ createApp({
     const claimPhone = ref('');
     const claiming = ref(false);
     let claimEntryFlag = false;  // 机器人「认领」链接 ?claim=1：直接进入认领页（正式功能，生产保留）
-    let adminEntryFlag = false;  // 顶层 /admin 303 到 /?admin=1：loadHome 成功后自动开内嵌管理台
+    let adminEntryFlag = false;  // ?admin=1：loadHome 成功后自动开内嵌管理台
     // 账号状态门禁（待审核/审核不通过/已退出）：后端 /api/home 返回 403 时整屏提示
     const gateMessage = ref('');
     const gateTitle = computed(() => {
@@ -5181,7 +5181,7 @@ createApp({
       startNotificationSync();   // SSE 实时红点；不可用时 12s 轮询兜底
       setTimeout(()=>{ checkIdValidForPage(page.value); }, 1000);
       setTimeout(()=>{ checkFaceValidForPage(page.value); }, 1200);
-      // ?admin=1（顶层 /admin 303 而来）：先清 query，再由后台自动开内嵌管理台。
+      // ?admin=1（直接访问或站内跳转而来）：先清 query，再由后台自动开内嵌管理台。
       // replaceState 必须在 openEmbed 之前：openEmbed 会 push 一条 overlay 历史条目。
       if (adminEntryFlag) {
         adminEntryFlag = false;
@@ -7881,7 +7881,7 @@ createApp({
       bootEntryHash = entryHash;
       // 在下方 replaceState 清掉 query 前，捕获引导预览参数（仅测试环境）
       try { claimEntryFlag = new URLSearchParams(location.search).get('claim') === '1'; } catch(e) { claimEntryFlag = false; }
-      // 顶层 /admin 303 到 /?admin=1：同样要在清 query 前捕获
+      // ?admin=1：同样要在清 query 前捕获
       try { adminEntryFlag = new URLSearchParams(location.search).get('admin') === '1'; } catch(e) { adminEntryFlag = false; }
       try{ history.replaceState({page: page.value}, '', location.pathname); }catch(e){}
       window.addEventListener('popstate', handlePopState);

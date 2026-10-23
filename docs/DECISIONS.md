@@ -73,3 +73,10 @@ sources: []
 - 决策：迁移用户 `id_valid=false` 不自动放行；observer 只豁免 `has_face`，不豁免身份证；不做 grandfather，也不伪造 `id_valid=true`。
 - 后果：绝大多数迁移用户被全屏门禁拦截，补录/人工放行方式未决，构成 P0 上线阻断（`docs/STATUS.md` §4）。
 - 边界：任何放行必须可审计、可回滚；不得用 `yxq_view_role` 或手工改库绕过。
+
+## 10. 顶层 `/admin` 不再跳 SPA（2026-10-23）
+
+- 背景：第 2 节曾要求顶层 document 访问 `/admin` 一律 303 到 `/?admin=1`，入口因此依赖 SPA JavaScript 与重定向链；PM 裁定现阶段不需要该兼容跳转。
+- 决策：浏览器顶层 document 访问 `/admin`、`/admin/...`（含 `?embed=1`）直接渲染 SSR，不再 303 到 `/?admin=1`；未登录仍跳 `/login?next=<原路径>`，已登录无权限仍 403。SPA 内 `/?admin=1` 打开 iframe overlay 的逻辑与 `/admin?embed=1` iframe 路由保留。
+- 后果：顶层入口不再依赖 SPA JavaScript；SPA 内嵌入口仍保留。现阶段不为顶层入口做兼容跳转，个别路径 404 可接受。
+- 边界：不删除 `/admin` 路由；不新增第二套管理 UI；smoke 断言顶层 SSR/登录跳转与 iframe SSR，不再断言 303。本节取代第 2 节中“顶层一律 303 到 `/?admin=1`”的入口约束，SSR、RBAC、CSRF、审计等其余约束不变。

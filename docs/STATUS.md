@@ -59,11 +59,11 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - v1 Vue 3 + Vant SPA，由 Go `/legacy/api/*` 提供数据：四 tab、卡片、喜欢/点赞/留言、活动/分组/一对一、资料、麦穗、观察员切换已接入。
 - 通知：未读数字红点；`GET /legacy/api/notifications/stream` 推送未读/最新通知变化，EventSource 不可用时轮询兜底。
 - 登录/启用/注册/密码：Go SSR；`/` 由旧 SPA 入口；改密为 SPA 内 Vant 子页，离开时还原滚动位置。
-- 管理台通过 App 内同源 iframe 全屏层承载；顶层 `/admin` 303 到 `/?admin=1`，返回栏关闭回到原 tab。
+- 管理台可从顶层直接打开 SSR 页面；App 内仍可用同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab。
 
-### 管理台（SSR 页面经 iframe 承载）
+### 管理台（SSR，顶层直开或 iframe 承载）
 
-- 入口与框架：管理台导航（总览/用户/活动/匹配/麦穗/举报/反馈/角色/审计）；顶层 document 导航 303 到 SPA，SSR 只在 iframe 或非 document 的 `?embed=1` 请求下渲染。
+- 入口与框架：管理台导航（总览/用户/活动/匹配/麦穗/举报/反馈/角色/审计）；顶层 document 与 iframe 一样渲染 SSR，不再 303 到 SPA；SPA 内 `/?admin=1` 仍按需打开 iframe overlay。
 - 用户：审核通过/拒绝、用户详情与受权照片串流、停用/启用、临时密码。
 - 举报与反馈：列表与处理。
 - 活动：列表、创建/编辑、活动工作台（海报上传与私有串流、报名/签到名单与搜索/出席筛选/分页、现场签到、站内广播预览+服务端签名确认、快速设置）。

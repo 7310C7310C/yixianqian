@@ -107,19 +107,32 @@ func TestIntegrationAdminHTTP(t *testing.T) {
 		t.Fatalf("reviewer /admin status = %d", resp.StatusCode)
 	}
 
-	// 独立管理台入口已废弃：浏览器顶层 document 打开一律 303 回 SPA；
+	// 顶层 document 与 iframe 一样渲染 SSR，不再 303 到 /?admin=1。
 	// iframe 内部导航（无 embed=1）仍渲染 SSR 管理台。
+	for _, tc := range []struct {
+		target string
+		want   string
+	}{
+		{"/admin", "总览"},
+		{"/admin/users?status=pending", pending.Name},
+		{"/admin?embed=1", "总览"},
+	} {
+		req, err := http.NewRequest(http.MethodGet, reviewerClient.base+tc.target, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Sec-Fetch-Dest", "document")
+		resp = reviewerClient.do(req)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("top-level %s status = %d location = %q",
+				tc.target, resp.StatusCode, resp.Header.Get("Location"))
+		}
+		body := readBody(t, resp)
+		if !strings.Contains(body, "admin-nav") || !strings.Contains(body, tc.want) {
+			t.Fatalf("top-level %s 未渲染管理台 SSR（body 长度 %d）", tc.target, len(body))
+		}
+	}
 	req, err := http.NewRequest(http.MethodGet, reviewerClient.base+"/admin/users?status=pending", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	resp = reviewerClient.do(req)
-	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/?admin=1" {
-		t.Fatalf("top-level /admin status = %d location = %q",
-			resp.StatusCode, resp.Header.Get("Location"))
-	}
-	req, err = http.NewRequest(http.MethodGet, reviewerClient.base+"/admin/users?status=pending", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
