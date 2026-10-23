@@ -242,7 +242,11 @@
   /* 修改密码子页 */
   .password-page { min-height: 100vh; background: #f7f8fa; }
   /* 返回列固定：从「我的」滚到下方再进入时，内容不能停在上页滚动位置、也不能被页头遮住 */
-  .password-page .back-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 10; padding-top: calc(14px + constant(safe-area-inset-top)); padding-top: calc(14px + env(safe-area-inset-top)); box-sizing: border-box; }
+  .password-page .back-nav { position: fixed; top: 0; left: 0; right: 0; max-width: 480px; margin: 0 auto; z-index: 10; padding-top: calc(14px + constant(safe-area-inset-top)); padding-top: calc(14px + env(safe-area-inset-top)); box-sizing: border-box; }
+  /* 桌面返回列与 480px 卡片同宽居中，底部圆角；手机保持满宽直角 */
+  @media (min-width: 481px) {
+    .password-page .back-nav { border-radius: 0 0 12px 12px; }
+  }
   .password-page .page { padding: 12px; padding-top: calc(68px + constant(safe-area-inset-top)); padding-top: calc(68px + env(safe-area-inset-top)); box-sizing: border-box; }
   .pw-card { max-width: 480px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 16px 0 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
   .pw-title { font-size: 18px; font-weight: 600; color: #323233; padding: 0 16px; }
@@ -3618,6 +3622,8 @@ createApp({
     const passwordSubmitting = ref(false);
     // 改密成功回 profile：就地改写 password 历史条目，避免返回又落回已提交的表单。
     let passwordFormDone = false;
+    // 从「我的」进入改密页前的滚动位置，返回/改密成功回 profile 时还原
+    let passwordReturnScroll = 0;
     // 四 Tab 过渡：监听 page 切换实时选动画（需在 subPages 定义后，sync 确保与 Transition 同帧）
     watch(page, (nv, ov) => { if(nv !== ov) pageTransition.value = pickTransition(nv, ov); }, {flush: 'sync'});
 
@@ -6831,6 +6837,7 @@ createApp({
       passwordForm.value = { current: '', password: '', confirm: '' };
       passwordErrors.value = { current: '', password: '', confirm: '' };
       passwordSubmitError.value = '';
+      passwordReturnScroll = window.scrollY || (document.scrollingElement && document.scrollingElement.scrollTop) || 0;
       page.value = 'password';
       // 从「我的」滚到下方再进子页：同步清零文档滚动，避免首屏停在上页位置被固定返回列遮住
       nextTick(() => {
@@ -7441,6 +7448,22 @@ createApp({
       }
       if(p !== 'profile_edit' && !showFaceInvalidDialog.value){
         checkFaceValidForPage(p);
+      }
+    });
+    // 从改密页回「我的」：还原进入前的滚动位置（覆盖返回键/popstate 与改密成功；不影响其它页）
+    watch(page, (newPage, oldPage) => {
+      if (oldPage === 'password' && newPage === 'profile') {
+        nextTick(() => {
+          // 主内容 Transition 是 out-in：离场动画结束前 profile 尚未挂载，此刻 scrollTo 会被夹到密码页高度
+          const started = Date.now();
+          const restore = () => { try { window.scrollTo(0, passwordReturnScroll); } catch (e) {} };
+          const tick = () => {
+            if (page.value !== 'profile') return;
+            if (document.querySelector('.profile-header') || Date.now() - started > 600) { restore(); return; }
+            requestAnimationFrame(tick);
+          };
+          tick();
+        });
       }
     });
     watch(profileData, (v)=>{
