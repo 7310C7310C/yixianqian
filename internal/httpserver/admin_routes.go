@@ -93,18 +93,18 @@ func (a *App) loadAdminAccess(ctx context.Context, user db.User) (adminAccess, e
 	}, nil
 }
 
-// adminHTML 包装管理台页面路由。顶层不提供管理台页面：浏览器 document 导航访问
-// /admin、/admin/...（含 ?embed=1）一律 404，且在鉴权之前返回——不跳登录，也不跳
-// SPA。管理台只经用户端 SPA 的同源 iframe 使用（/admin?embed=1），iframe 与无
-// header 请求（测试/CLI）仍照常鉴权并渲染 SSR。
+// adminHTML 包装管理台页面路由。管理台只有一个入口：浏览器顶层 document 访问
+// /admin、/admin/...（含 ?embed=1）一律 303 回 /?admin=1，由用户端 SPA 载入后
+// 自动打开同源 iframe overlay；服务端不再提供独立顶层页面，也不返 404 死路。
+// iframe 与无 header 请求（测试/CLI）仍照常鉴权并渲染 SSR。
 func (a *App) adminHTML(permission string, next func(http.ResponseWriter, *http.Request, adminAccess)) http.HandlerFunc {
 	return a.adminHTMLRoute(permission, false, next)
 }
 
-// adminHTMLMedia 包装管理台内的受权媒体串流（如审核照片原图）。管理台用
-// target="_blank" 在新窗口打开原图时，浏览器发的是 Sec-Fetch-Dest: document，
-// 因此媒体路由不做顶层 document 404；鉴权、RBAC 与页面路由完全一致，只是把
-// 「顶层不提供页面」的判定限定在页面路由上。
+// adminHTMLMedia 包装管理台内的受权媒体串流（审核照片原图、活动海报）。管理台用
+// target="_blank" 在新窗口打开时，浏览器发的正是 Sec-Fetch-Dest: document；媒体
+// 不是页面入口，因此不做 303，直接串流。鉴权、RBAC 与页面路由完全一致，只是把
+// 「顶层 303 回 SPA」的判定限定在页面路由上。
 func (a *App) adminHTMLMedia(permission string, next func(http.ResponseWriter, *http.Request, adminAccess)) http.HandlerFunc {
 	return a.adminHTMLRoute(permission, true, next)
 }
@@ -115,8 +115,9 @@ func (a *App) adminHTMLRoute(permission string, allowDocument bool, next func(ht
 			// 同一 URL 因 Sec-Fetch-Dest 返回不同内容，禁止中间缓存串味。
 			w.Header().Add("Vary", "Sec-Fetch-Dest")
 			if r.Header.Get("Sec-Fetch-Dest") == "document" {
+				// 303 同样禁止缓存，避免顶层重定向被中间层缓存后串给 iframe。
 				w.Header().Set("Cache-Control", "no-store")
-				http.NotFound(w, r)
+				http.Redirect(w, r, "/?admin=1", http.StatusSeeOther)
 				return
 			}
 		}

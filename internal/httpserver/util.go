@@ -30,9 +30,10 @@ func safeNext(raw string) string {
 	case u.Path == "/login", u.Path == "/logout", u.Path == "/activate",
 		u.Path == "/media/upload", strings.HasPrefix(u.Path, "/api/"):
 		return "/"
+	case u.Path == "/admin", strings.HasPrefix(u.Path, "/admin/"):
+		// 管理台单一入口在 SPA：登录后落到 /?admin=1，由 SPA 自动打开内嵌管理台。
+		return "/?admin=1"
 	}
-	// /admin 深链原样保留；服务端只对 iframe/无 header 请求渲染 SSR，
-	// 浏览器顶层 document 一律 404，不再改写为 /?admin=1。
 	return raw
 }
 

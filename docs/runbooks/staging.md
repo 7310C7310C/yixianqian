@@ -154,20 +154,24 @@ curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies https://next.nanto
 - 已登录 `/` 必须返回 v1 Vue SPA；`/legacy/api/home` 200；四 tab 用 hash 切换。
 - `/cards`、`/likes`、`/activities`、`/profile` 等旧用户页返回 404。
 - `/cards/photo/{id}`、`/profile/photo/{id}`、`/activities/{id}/poster` 等媒体路由仍可用。
-- 顶层 document 访问 `/admin` 页面一律 404；管理台只经 SPA 内 `/?admin=1` 的 iframe overlay 使用。受权媒体串流（审核照片原图、活动海报原图）是显式例外，仍需对应权限。
+- 顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`，由 SPA 自动打开管理台 overlay；受权媒体串流（审核照片原图、活动海报原图）是显式例外，直接串流，仍需对应权限。
 
 ## 管理台 `/admin` smoke
 
 ```bash
-# 顶层入口：期望 404（不跳登录、不跳 SPA、不渲染管理台）
-curl -sS -o /dev/null -w '%{http_code}\n' \
+# 顶层入口：期望 303，Location 为 /?admin=1（不渲染顶层页面，由 SPA 自动开 overlay）
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' \
   -H 'Sec-Fetch-Dest: document' \
   -b /tmp/yxq_cookies https://next.nantou.love/admin
 
-# 顶层深链同样 404
-curl -sS -o /dev/null -w '%{http_code}\n' \
+# 顶层深链与 ?embed=1 同样 303
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' \
   -H 'Sec-Fetch-Dest: document' \
   -b /tmp/yxq_cookies https://next.nantou.love/admin/users
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' \
+  -H 'Sec-Fetch-Dest: document' \
+  -b /tmp/yxq_cookies 'https://next.nantou.love/admin?embed=1'
+# 期望均为 303 https://next.nantou.love/?admin=1
 
 # 管理台真实入口：用 iframe 语义访问（需管理员 session；未登录 303 到 /login，无权限 403）
 for p in /admin/users /admin/reports /admin/roles \
@@ -184,7 +188,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
 # 期望 200
 ```
 
-顶层 document 访问 `/admin...` 页面一律 404，不跳转、不渲染；管理台只经 iframe 承载。iframe 未登录 303 到 `/login?next=<原路径>`，无权限 403。`/admin/users/{id}` 需真实用户 ID。受权媒体串流（`/admin/users/{id}/photos/{mediaID}`、`/admin/activities/{id}/poster`）不受顶层 404 约束（新窗口看原图），但仍先鉴权并校验权限。
+顶层 document 访问 `/admin...` 页面一律 303 到 `/?admin=1`，服务端不渲染顶层页面；管理台只经 iframe 承载。iframe 未登录 303 到 `/login?next=<原路径>`，无权限 403。`/admin/users/{id}` 需真实用户 ID。受权媒体串流（`/admin/users/{id}/photos/{mediaID}`、`/admin/activities/{id}/poster`）不受顶层 303 约束（新窗口看原图），直接串流，但仍先鉴权并校验权限。
 
 ## 人脸检测（日常增量）
 

@@ -173,7 +173,7 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 	}
 
 	// 「新窗口查看原图」：target="_blank" 让浏览器以 Sec-Fetch-Dest: document
-	// 打开照片串流，媒体路由不能落进顶层页面 404，仍按同一套 RBAC 返回原图。
+	// 打开照片串流，媒体路由不能落进顶层页面 303，仍按同一套 RBAC 返回原图。
 	resp = reviewerClient.getWithHeaders(fullPath, map[string]string{"Sec-Fetch-Dest": "document"})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("document full status = %d body=%s", resp.StatusCode, readBody(t, resp))
@@ -184,7 +184,7 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 	if !bytes.Equal([]byte(readBody(t, resp)), originalBytes) {
 		t.Fatal("document full body mismatch")
 	}
-	// 未登录的 document 请求同样先鉴权，不是 404。
+	// 未登录的 document 请求同样先鉴权，不是 303 回 SPA。
 	anon := newWSClient(t, env.server.URL)
 	resp = anon.getWithHeaders(fullPath, map[string]string{"Sec-Fetch-Dest": "document"})
 	if resp.StatusCode != http.StatusSeeOther {
@@ -193,13 +193,13 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 	if loc := resp.Header.Get("Location"); loc != "/login?next="+url.QueryEscape(fullPath) {
 		t.Fatalf("anonymous document photo location = %q", loc)
 	}
-	// 页面路由本身仍是顶层 404，媒体豁免没有放宽管理台页面。
+	// 页面路由本身仍是顶层 303 回 SPA，媒体豁免没有放宽管理台页面。
 	resp = reviewerClient.getWithHeaders(detailPath, map[string]string{"Sec-Fetch-Dest": "document"})
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("document detail page status = %d, want 404", resp.StatusCode)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("document detail page status = %d, want 303", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "" {
-		t.Fatalf("document detail page location = %q, want none", loc)
+	if loc := resp.Header.Get("Location"); loc != "/?admin=1" {
+		t.Fatalf("document detail page location = %q, want /?admin=1", loc)
 	}
 
 	// Another user still cannot use the owner-only /media route.

@@ -250,7 +250,7 @@ func TestIntegrationAdminActivityCreateWithPoster(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
 		t.Fatalf("admin poster status=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
-	// 海报原图也是媒体串流：顶层 document 打开（新窗口/直接导航）仍返回图片，不做页面 404。
+	// 海报原图也是媒体串流：顶层 document 打开（新窗口/直接导航）仍返回图片，不做页面 303。
 	resp = client.getWithHeaders(posterPath, map[string]string{"Sec-Fetch-Dest": "document"})
 	_ = readBody(t, resp)
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {

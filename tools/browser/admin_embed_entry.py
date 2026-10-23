@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""废弃独立管理台入口 / 内嵌管理台过场 / 改密页全宽回归（Playwright）。
+"""管理台入口（顶层 303 → SPA overlay）/ 内嵌管理台过场 / 改密页全宽回归（Playwright）。
 
 覆盖（390×844 与 1280×900 两个视口）：
 
-1. 浏览器顶层打开 /admin：服务端一律 404，不渲染管理台、不跳登录、
-   不跳 /?admin=1；无 Sec-Fetch-Dest 的请求仍 200（测试/API 兼容）；
+1. 浏览器顶层打开 /admin：服务端 303 到 /?admin=1，SPA 载入后自动开内嵌管理台，
+   顶层 URL 清回 /；无 Sec-Fetch-Dest 的请求仍 200（测试/API 兼容）；
 2. 内嵌 iframe 首载 /admin?embed=1，骨架先出、iframe 后载；iframe 内部导航到
    /admin/users（无 query）仍能加载，顶层 URL 不变；
-3. 登录 next=/admin：登录页 next 保留 /admin（不再改写为 /?admin=1），登录后顶层
-   /admin 落到 404，不渲染管理台；
+3. 登录 next=/admin：登录页隐藏 next 被改写为 /?admin=1，登录后落地 SPA 并自动开管理台；
 4. 非 admin 访问 /?admin=1：不打开管理台，query 清掉；
 5. 修改密码页与「我的资料」同宽（视口宽 - 24），返回列 full width 且不遮内容；
    page-slide 过场中改密页背景不透明、relative z-index，返回后还原「我的」滚动位置；
 6. 管理台 overlay 以 embed-slide 滑入（20px + opacity，180ms），尊重 reduced-motion；
-7. 全程 console error / pageerror 为 0（仅放行登记过的顶层文档 404），并输出关键截图。
+7. 全程 console error / pageerror 为 0（顶层 document 404 一律失败，不再有例外登记），
+   并输出关键截图。
 
 需要已部署的 staging 与两个可登录账号的原始 session cookie；登录流程另需
 一个已知密码的 admin 账号。不放进 make ci，手动运行：
@@ -63,40 +63,23 @@ def wait(ms: int = 250) -> None:
 
 
 class ConsoleGuard:
-    """收集 console error / pageerror；只有「已登记且真实发生的顶层文档 404」例外。
+    """收集 console error / pageerror；顶层 document 404 一律失败。
 
-    例外同时要求两点：调用方用 expect_document_404() 登记精确 URL path，且
-    response 事件确认该 path 真的返回过 document 404。其余任何 404（/api/admin/*、
-    静态资源、管理台子页）都仍算失败，避免 guard 被整体放宽。
+    管理台入口已统一为 303 → /?admin=1，不再有「预期中的顶层 404」，
+    因此不保留任何 404 额度登记。
     """
 
     def __init__(self, page) -> None:
         self.page = page
         self.errors: list[str] = []
         self._console: list[tuple[str, str]] = []
-        self._expected_404: dict[str, int] = {}
-        self._observed_404: dict[str, int] = {}
-        self._console_used: dict[str, int] = {}
         page.on("response", self._on_response)
         page.on("console", self._on_console)
         page.on("pageerror", lambda exc: self.errors.append(f"pageerror: {exc}"))
 
-    def expect_document_404(self, path: str) -> None:
-        """登记一次预期中的顶层文档 404（精确到 URL path，不含 query）。"""
-        if not path.startswith("/") or path.startswith("//"):
-            raise ValueError(f"expect_document_404 需要站内绝对路径：{path!r}")
-        self._expected_404[path] = self._expected_404.get(path, 0) + 1
-
     def _on_response(self, resp) -> None:
-        if resp.status != 404:
-            return
-        # 只认顶层文档导航；图片/脚本/接口的 404 不能算进预期额度。
-        if resp.request.resource_type != "document":
-            return
-        path = urlparse(resp.url).path
-        seen = self._observed_404.get(path, 0) + 1
-        self._observed_404[path] = seen
-        if seen > self._expected_404.get(path, 0):
+        # 只拦顶层文档导航；图片/脚本/接口的 404 由各自断言负责。
+        if resp.status == 404 and resp.request.resource_type == "document":
             self.errors.append(f"unexpected document 404: {resp.url}")
 
     def _on_console(self, msg) -> None:
@@ -107,35 +90,9 @@ class ConsoleGuard:
             return
         self._console.append((msg.text, location))
 
-    def _consume_expected(self, text: str, location: str) -> bool:
-        """判断这条 console error 是否就是已登记且已发生的顶层文档 404。
-
-        Chrome 不一定为主文档 404 产出 console error，所以这里只做「有则放行」，
-        是否真的发生了 404 由 response 级事件在 assert_clean 里核对。
-        """
-        if "404" not in text:
-            return False
-        path = urlparse(location).path if location else ""
-        allowance = min(
-            self._expected_404.get(path, 0),
-            self._observed_404.get(path, 0),
-        )
-        used = self._console_used.get(path, 0)
-        if used >= allowance:
-            return False
-        self._console_used[path] = used + 1
-        return True
-
     def assert_clean(self, context: str) -> None:
         for text, location in self._console:
-            if self._consume_expected(text, location):
-                continue
             self.errors.append(f"console: {text} ({location})")
-        for path, expected in self._expected_404.items():
-            observed = self._observed_404.get(path, 0)
-            if observed < expected:
-                self.errors.append(
-                    f"expected document 404 未发生: {path}（期望 {expected} 次，实际 {observed} 次）")
         if self.errors:
             raise SmokeFailure(f"{context}: console/pageerror 非空:\n  " + "\n  ".join(self.errors))
 
@@ -279,45 +236,89 @@ def box(locator) -> dict:
     return b
 
 
-def goto_admin_top_level(page, base: str, shot_dir: Path, tag: str, guard: ConsoleGuard) -> None:
-    """顶层 /admin 一律 404：不渲染管理台，不跳登录/SPA，不出现 SPA overlay。"""
+def goto_admin_top_level(page, base: str, shot_dir: Path, tag: str) -> None:
+    """顶层 /admin → 303 → SPA 自动 overlay；拦截 iframe 请求证明骨架先出。"""
+    held = {}
+
+    def hold_admin_route(url):
+        parsed = urlparse(url)
+        return parsed.path == "/admin" and "embed=1" in parsed.query
+
+    def hold(route):
+        held["route"] = route
+
     reset_class_logs(page)
-    # 唯一允许的顶层 404：登记精确路径，guard 只放行这一次 document 404。
-    guard.expect_document_404("/admin")
-    resp = page.goto(base + "/admin", wait_until="domcontentloaded", timeout=30000)
-    if resp is None or resp.status != 404:
-        raise SmokeFailure(
-            f"{tag}: 顶层 /admin = {getattr(resp, 'status', None)}，want 404")
+    page.route(hold_admin_route, hold)
+    page.goto(base + "/admin", wait_until="domcontentloaded", timeout=30000)
+    try:
+        page.locator(".embed-overlay").wait_for(state="visible", timeout=20000)
+        page.locator(".embed-skeleton").wait_for(state="visible", timeout=5000)
+    except PlaywrightTimeoutError as exc:
+        raise SmokeFailure(f"{tag}: /admin 未自动打开内嵌管理台：{exc}") from exc
 
     final = urlparse(page.url)
-    if final.path != "/admin" or final.query:
-        raise SmokeFailure(f"{tag}: 顶层 /admin URL 异常（实际 {page.url}）")
-    if page.locator(".admin-nav").count():
-        raise SmokeFailure(f"{tag}: 顶层 /admin 不应渲染管理台")
-    if page.locator(".embed-overlay").count():
-        raise SmokeFailure(f"{tag}: 顶层 /admin 不应打开 SPA 内嵌 overlay")
-    page.screenshot(path=str(shot_dir / f"{tag}-admin-top-level-404.png"))
+    if final.path != "/" or final.query:
+        raise SmokeFailure(f"{tag}: 顶层 URL 未清回 /（实际 {page.url}）")
 
-    # 回到 SPA 首页，供后续底部 tab / 改密页 / 我的页检查使用。
-    page.goto(base + "/", wait_until="domcontentloaded", timeout=30000)
+    if "route" not in held:
+        raise SmokeFailure(f"{tag}: iframe 请求未被挂起，无法验证骨架先出")
+    if page.locator(".embed-frame--ready").count():
+        raise SmokeFailure(f"{tag}: 骨架阶段 iframe 已就绪（应等请求放行）")
+    page.screenshot(path=str(shot_dir / f"{tag}-admin-skeleton.png"))
+
+    held["route"].continue_()
+    page.unroute(hold_admin_route)
     try:
-        page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
+        page.frame_locator(".embed-frame").locator(".admin-nav").wait_for(timeout=20000)
     except PlaywrightTimeoutError as exc:
-        raise SmokeFailure(f"{tag}: SPA 首页未载入：{exc}") from exc
+        raise SmokeFailure(f"{tag}: 内嵌管理台 iframe 未载入：{exc}") from exc
+
+    page.locator(".embed-loading").wait_for(state="hidden", timeout=10000)
+    src = page.locator(".embed-frame").get_attribute("src") or ""
+    if "/admin?embed=1" not in src:
+        raise SmokeFailure(f"{tag}: iframe src 未带 embed=1（{src}）")
+
+    classes = overlay_classes(page)
+    flat = [c for group in classes for c in group]
+    if "embed-slide-enter-active" not in flat or "embed-slide-enter-from" not in flat:
+        raise SmokeFailure(f"{tag}: overlay 未走 embed-slide 过场（捕获 {classes}）")
+    page.wait_for_timeout(400)
+    state = page.evaluate("""() => {
+      const el = document.querySelector('.embed-overlay');
+      if (!el) return null;
+      const s = getComputedStyle(el);
+      return {opacity: s.opacity, transform: s.transform};
+    }""")
+    if not state or state["opacity"] != "1" or state["transform"] not in ("none", "matrix(1, 0, 0, 1, 0, 0)"):
+        raise SmokeFailure(f"{tag}: 管理台滑入后未回到稳定态：{state}")
+    page.screenshot(path=str(shot_dir / f"{tag}-admin-overlay.png"))
+
+    # iframe 内部导航无 query，仍应渲染 SSR（Sec-Fetch-Dest: iframe）。
+    frame = page.frame_locator(".embed-frame")
+    frame.locator(".admin-nav a", has_text=ADMIN_NAV_TEXT).click()
+    try:
+        page.frame_locator(".embed-frame").locator(".admin-filter").wait_for(timeout=15000)
+    except PlaywrightTimeoutError as exc:
+        raise SmokeFailure(f"{tag}: iframe 内部导航 /admin/users 失败：{exc}") from exc
+    inner_urls = [urlparse(f.url) for f in page.frames if "/admin" in f.url]
+    if not inner_urls or inner_urls[0].path != "/admin/users" or inner_urls[0].query:
+        raise SmokeFailure(f"{tag}: iframe 内部导航 URL 异常：{[u.geturl() for u in inner_urls]}")
+    top = urlparse(page.url)
+    if top.path != "/" or top.query:
+        raise SmokeFailure(f"{tag}: iframe 内部导航改变了顶层 URL（{page.url}）")
+
+    page.locator(".embed-back").click()
+    page.locator(".embed-overlay").wait_for(state="detached", timeout=5000)
 
 
 def check_direct_requests(page, base: str, tag: str) -> None:
-    """服务端契约：document 404（无跳转）；iframe / 无 header 仍 200 SSR。"""
+    """服务端契约：document 303 到 /?admin=1；iframe / 无 header 仍 200（登录态下）。"""
     admin_url = base + "/admin"
     resp = page.request.get(admin_url, headers={"Sec-Fetch-Dest": "document"}, max_redirects=0)
-    if resp.status != 404:
+    if resp.status != 303 or resp.headers.get("location") != "/?admin=1":
         raise SmokeFailure(
             f"{tag}: document /admin = {resp.status} location={resp.headers.get('location')!r}，"
-            "want 404")
-    if resp.headers.get("location"):
-        raise SmokeFailure(f"{tag}: document /admin 不应跳转（{resp.headers.get('location')!r}）")
-    if "admin-nav" in resp.text():
-        raise SmokeFailure(f"{tag}: document /admin 不应渲染管理台")
+            "want 303 /?admin=1")
     resp = page.request.get(admin_url, headers={"Sec-Fetch-Dest": "iframe"})
     if resp.status != 200 or "admin-nav" not in resp.text():
         raise SmokeFailure(f"{tag}: iframe /admin = {resp.status}，want 200 SSR")
@@ -348,34 +349,20 @@ def check_login_next_admin(browser, base: str, shot_dir: Path, tag: str) -> None
     try:
         page.goto(base + "/login?next=%2Fadmin", wait_until="domcontentloaded", timeout=30000)
         hidden = page.locator('input[name="next"]').input_value()
-        if hidden != "/admin":
-            raise SmokeFailure(f"{tag}: 登录页 next 未保留 /admin（实际 {hidden!r}）")
+        if hidden != "/?admin=1":
+            raise SmokeFailure(f"{tag}: 登录页 next 未改写为 /?admin=1（实际 {hidden!r}）")
         page.fill('input[name="phone"]', phone)
         page.fill('input[name="password"]', password)
-        guard.expect_document_404("/admin")
+        page.click('button[type="submit"]')
         try:
-            with page.expect_response(
-                lambda r: urlparse(r.url).path == "/admin"
-                and r.request.resource_type == "document",
-                timeout=20000,
-            ) as resp_info:
-                page.click('button[type="submit"]')
+            page.locator(".embed-overlay").wait_for(state="visible", timeout=20000)
         except PlaywrightTimeoutError as exc:
-            raise SmokeFailure(f"{tag}: 登录 next=/admin 后未跳转：{exc}") from exc
-        resp = resp_info.value
-        try:
-            page.wait_for_url(lambda url: urlparse(url).path == "/admin", timeout=20000)
-        except PlaywrightTimeoutError as exc:
-            raise SmokeFailure(f"{tag}: 登录后未落到 /admin：{exc}") from exc
+            raise SmokeFailure(f"{tag}: 登录 next=/admin 后未自动开管理台：{exc}") from exc
         final = urlparse(page.url)
-        if final.path != "/admin" or final.query:
-            raise SmokeFailure(f"{tag}: 登录后 URL 不是 /admin（{page.url}）")
-        if resp is None or resp.status != 404:
-            raise SmokeFailure(
-                f"{tag}: 登录后顶层 /admin = {getattr(resp, 'status', None)}，want 404")
-        if page.locator(".admin-nav").count():
-            raise SmokeFailure(f"{tag}: 登录 next=/admin 后仍渲染管理台")
-        page.screenshot(path=str(shot_dir / f"{tag}-login-next-admin-404.png"))
+        if final.path != "/" or final.query:
+            raise SmokeFailure(f"{tag}: 登录后 URL 未清回 /（{page.url}）")
+        page.frame_locator(".embed-frame").locator(".admin-nav").wait_for(timeout=20000)
+        page.screenshot(path=str(shot_dir / f"{tag}-login-next-admin.png"))
         guard.assert_clean(f"{tag} 登录 next=/admin")
     finally:
         context.close()
@@ -526,7 +513,7 @@ def run_viewport(browser, base: str, width: int, height: int, shot_dir: Path) ->
         check_password_page(page, base, shot_dir, tag, width)
         check_admin_from_profile(page, base, shot_dir, tag)
         guard.assert_clean(f"{tag} admin")
-        print(f"[ok] {tag}x{height} 顶层 404 / iframe / 骨架 / 过场 / 改密页 / 返回还原")
+        print(f"[ok] {tag}x{height} 顶层 303→overlay / iframe / 骨架 / 过场 / 改密页 / 返回还原")
     finally:
         context.close()
 

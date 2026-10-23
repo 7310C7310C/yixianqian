@@ -107,8 +107,8 @@ func TestIntegrationAdminHTTP(t *testing.T) {
 		t.Fatalf("reviewer /admin status = %d", resp.StatusCode)
 	}
 
-	// 顶层 document 不提供管理台页面：一律 404，不跳登录也不跳 SPA。
-	// iframe 内部导航（无 embed=1）仍渲染 SSR 管理台。
+	// 管理台只有 SPA 一个入口：顶层 document 一律 303 回 /?admin=1，
+	// 不渲染顶层页面。iframe 内部导航（无 embed=1）仍渲染 SSR 管理台。
 	for _, tc := range []struct {
 		target string
 	}{
@@ -122,12 +122,12 @@ func TestIntegrationAdminHTTP(t *testing.T) {
 		}
 		req.Header.Set("Sec-Fetch-Dest", "document")
 		resp = reviewerClient.do(req)
-		if resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("top-level %s status = %d location = %q, want 404",
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("top-level %s status = %d location = %q, want 303",
 				tc.target, resp.StatusCode, resp.Header.Get("Location"))
 		}
-		if loc := resp.Header.Get("Location"); loc != "" {
-			t.Fatalf("top-level %s location = %q, want no redirect", tc.target, loc)
+		if loc := resp.Header.Get("Location"); loc != "/?admin=1" {
+			t.Fatalf("top-level %s location = %q, want /?admin=1", tc.target, loc)
 		}
 		if body := readBody(t, resp); strings.Contains(body, "admin-nav") {
 			t.Fatalf("top-level %s 不应渲染管理台（body 长度 %d）", tc.target, len(body))
