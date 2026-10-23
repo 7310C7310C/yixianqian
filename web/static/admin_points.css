@@ -1,136 +1,85 @@
-@import url("/static/admin.css?v=2");
+@import url("/static/admin.css?v=3");
 
-/* 麦穗管理模块样式。admin.css 已提供基础表格、标签与栅格。
-   @import 的版本参数须与 httpserver.assetVersion 同步提升。 */
+/* @import 的版本参数须与 httpserver.assetVersion 同步提升。 */
+
+/* 麦穗管理：统一用 admin.css 的 chips / 分区 / 记录卡。 */
 
 .admin-points-tabs {
-  margin-bottom: 0;
-}
-
-.admin-points-tabs a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0.4rem 0.8rem;
-}
-
-.admin-points-filters,
-.admin-points-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.55rem;
-  margin: 0.75rem 0;
-}
-
-.admin-points-filters label,
-.admin-points-form label {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-  font-weight: 600;
-}
-
-.admin-points-filters input,
-.admin-points-filters select,
-.admin-points-form input,
-.admin-points-form select,
-.admin-points-form textarea {
-  width: 100%;
-  min-height: 44px;
-  padding: 0.6rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-}
-
-.admin-points-form textarea {
-  min-height: 5.5rem;
-  resize: vertical;
-}
-
-.admin-points-actions {
-  display: grid;
-  gap: 0.5rem;
-  min-width: 180px;
-}
-
-.admin-points-action {
-  display: grid;
-  gap: 0.35rem;
   margin: 0;
-  min-width: 0;
-}
-
-.admin-points-action input,
-.admin-points-action select {
-  width: 100%;
-  min-height: 44px;
-  padding: 0.45rem 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-}
-
-.admin-points-action .button {
-  width: 100%;
 }
 
 .admin-points-number {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  overflow-wrap: anywhere;
 }
 
 .admin-points-delta-pos {
-  color: var(--accent-strong);
+  color: var(--adm-success);
   font-weight: 700;
 }
 
 .admin-points-delta-neg {
-  color: var(--danger);
+  color: var(--adm-danger);
   font-weight: 700;
 }
 
-.admin-points-table {
-  min-width: 860px;
+.admin-points-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
 }
 
-.admin-points-table td {
-  overflow-wrap: anywhere;
+.admin-points-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--adm-divider);
+  border-radius: var(--adm-radius);
+  background: var(--adm-surface-2);
 }
 
-@media (min-width: 720px) {
-  .admin-points-filters {
-    grid-template-columns: minmax(0, 2fr) minmax(9rem, 1fr) minmax(9rem, 1fr) auto;
-    align-items: end;
-  }
-
-  .admin-points-form {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-    align-items: end;
-  }
-
-  .admin-points-form .admin-actions {
-    grid-column: 1 / -1;
-  }
+.admin-points-action .admin-input,
+.admin-points-action .admin-select {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 140px;
+  max-width: 210px;
 }
 
-@media (max-width: 639px) {
-  .admin-points-table {
-    min-width: 0;
-  }
+.admin-points-action .button {
+  flex: none;
+}
 
+@media (max-width: 719px) {
+  .admin-record-actions.admin-points-actions,
   .admin-points-actions {
-    min-width: 0;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .admin-points-action {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .admin-points-action .admin-input,
+  .admin-points-action .admin-select {
+    max-width: none;
+    flex: 1 1 100%;
   }
 
   .admin-points-action .button {
-    min-height: 44px;
+    width: 100%;
   }
+}
+
+/* 调整表单：数量与原因一行，动作行占满 */
+.admin-points-adjust .admin-form-actions {
+  grid-column: 1 / -1;
 }

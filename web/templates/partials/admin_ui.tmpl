@@ -46,4 +46,98 @@
 
 {{define "admin_icon_image"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect><circle cx="8.5" cy="9.5" r="1.5"></circle><path d="M5 17l4.5-4.2 3.2 2.9 2.4-2.2L19.5 17"></path></svg>{{end}}
 
+{{define "admin_icon_export"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.5v10"></path><path d="M8.5 7L12 3.5 15.5 7"></path><path d="M5 13.5v5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5v-5"></path></svg>{{end}}
+
+{{define "admin_icon_photo"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect><circle cx="8.5" cy="9.5" r="1.6"></circle><path d="M5 17l4.6-4.3 3.2 3 2.5-2.3L19.5 17"></path></svg>{{end}}
+
+{{define "admin_icon_filter"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h16M7 12h10M10 18h4"></path></svg>{{end}}
+
+{{define "admin_icon_check"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>{{end}}
+
+{{define "admin_icon_chevron"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7"></path></svg>{{end}}
+
+{{define "admin_empty"}}
+<div class="admin-empty">
+  <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_empty"}}</span>
+  <h2 class="admin-empty-title">暂无数据</h2>
+  <p>换个筛选条件，或稍后再试。</p>
+</div>
+{{end}}
+
+{{define "admin_account_status"}}
+{{if eq . "pending"}}<span class="admin-chip admin-chip--draft"><span class="admin-chip-dot" aria-hidden="true"></span>待审核</span>
+{{else if eq . "active"}}<span class="admin-chip admin-chip--done"><span class="admin-chip-dot" aria-hidden="true"></span>已通过</span>
+{{else if eq . "rejected"}}<span class="admin-chip admin-chip--cancel"><span class="admin-chip-dot" aria-hidden="true"></span>已拒绝</span>
+{{else if eq . "disabled"}}<span class="admin-chip admin-chip--muted"><span class="admin-chip-dot" aria-hidden="true"></span>已停用</span>
+{{else if eq . "matched"}}<span class="admin-chip admin-chip--open"><span class="admin-chip-dot" aria-hidden="true"></span>已脱单</span>
+{{else if eq . "left"}}<span class="admin-chip admin-chip--muted"><span class="admin-chip-dot" aria-hidden="true"></span>已退出</span>
+{{else if eq . "observer"}}<span class="admin-chip admin-chip--full"><span class="admin-chip-dot" aria-hidden="true"></span>观察员</span>
+{{else if .}}<span class="admin-chip admin-chip--muted">{{.}}</span>
+{{else}}<span class="admin-chip admin-chip--muted">状态未知</span>
+{{end}}
+{{end}}
+
+{{define "admin_login_status"}}
+{{if eq . "active"}}<span class="admin-chip admin-chip--done">可登录</span>
+{{else if eq . "disabled"}}<span class="admin-chip admin-chip--cancel">禁止登录</span>
+{{else if .}}<span class="admin-chip admin-chip--muted">{{.}}</span>
+{{else}}<span class="admin-chip admin-chip--muted">登录状态未知</span>
+{{end}}
+{{end}}
+
+{{define "admin_report_status"}}
+{{if eq . "待处理"}}<span class="admin-chip admin-chip--draft"><span class="admin-chip-dot" aria-hidden="true"></span>待处理</span>
+{{else if eq . "已同意"}}<span class="admin-chip admin-chip--done"><span class="admin-chip-dot" aria-hidden="true"></span>已同意</span>
+{{else if eq . "已驳回"}}<span class="admin-chip admin-chip--muted"><span class="admin-chip-dot" aria-hidden="true"></span>已驳回</span>
+{{else if .}}<span class="admin-chip admin-chip--muted">{{.}}</span>
+{{else}}<span class="admin-chip admin-chip--muted">状态未知</span>
+{{end}}
+{{end}}
+
+{{define "admin_suggestion_status"}}
+{{if eq . "待处理"}}<span class="admin-chip admin-chip--draft"><span class="admin-chip-dot" aria-hidden="true"></span>待处理</span>
+{{else if eq . "已处理"}}<span class="admin-chip admin-chip--done"><span class="admin-chip-dot" aria-hidden="true"></span>已处理</span>
+{{else if eq . "已忽略"}}<span class="admin-chip admin-chip--muted"><span class="admin-chip-dot" aria-hidden="true"></span>已忽略</span>
+{{else if .}}<span class="admin-chip admin-chip--muted">{{.}}</span>
+{{else}}<span class="admin-chip admin-chip--muted">状态未知</span>
+{{end}}
+{{end}}
+
+{{define "admin_redemption_status"}}
+{{if eq . "active"}}<span class="admin-chip admin-chip--open"><span class="admin-chip-dot" aria-hidden="true"></span>生效中</span>
+{{else if eq . "pending"}}<span class="admin-chip admin-chip--draft"><span class="admin-chip-dot" aria-hidden="true"></span>待处理</span>
+{{else if eq . "arranged"}}<span class="admin-chip admin-chip--full">已安排</span>
+{{else if eq . "recommended"}}<span class="admin-chip admin-chip--full">已推荐</span>
+{{else if eq . "done"}}<span class="admin-chip admin-chip--done">已完成</span>
+{{else if eq . "cancelled"}}<span class="admin-chip admin-chip--muted">已取消</span>
+{{else if eq . "refunded"}}<span class="admin-chip admin-chip--cancel">已退穗</span>
+{{else if .}}<span class="admin-chip admin-chip--muted">{{.}}</span>
+{{else}}<span class="admin-chip admin-chip--muted">状态未知</span>
+{{end}}
+{{end}}
+
+{{define "admin_redemption_status_label"}}
+{{if eq . "待处理"}}<span class="admin-chip admin-chip--draft"><span class="admin-chip-dot" aria-hidden="true"></span>待处理</span>
+{{else if eq . "生效中"}}<span class="admin-chip admin-chip--open"><span class="admin-chip-dot" aria-hidden="true"></span>生效中</span>
+{{else if eq . "已安排"}}<span class="admin-chip admin-chip--full">已安排</span>
+{{else if eq . "已推荐"}}<span class="admin-chip admin-chip--full">已推荐</span>
+{{else if eq . "已完成"}}<span class="admin-chip admin-chip--done"><span class="admin-chip-dot" aria-hidden="true"></span>已完成</span>
+{{else if eq . "已取消"}}<span class="admin-chip admin-chip--muted">已取消</span>
+{{else if eq . "已退穗"}}<span class="admin-chip admin-chip--cancel">已退穗</span>
+{{else if .}}<span class="admin-chip admin-chip--muted">{{.}}</span>
+{{else}}<span class="admin-chip admin-chip--muted">状态未知</span>
+{{end}}
+{{end}}
+
+{{define "admin_invite_status"}}
+{{if eq . "待确认"}}<span class="admin-chip admin-chip--draft">待确认</span>
+{{else if eq . "待确认（已绑定）"}}<span class="admin-chip admin-chip--draft">待确认 · 已绑定</span>
+{{else if eq . "到账"}}<span class="admin-chip admin-chip--done">已到账</span>
+{{else if eq . "无效"}}<span class="admin-chip admin-chip--muted">无效邀请</span>
+{{else if eq . "已收回"}}<span class="admin-chip admin-chip--cancel">已收回</span>
+{{else if .}}<span class="admin-chip admin-chip--muted">{{.}}</span>
+{{else}}<span class="admin-chip admin-chip--muted">状态未知</span>
+{{end}}
+{{end}}
+
 {{define "admin_icon_empty"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 9.5L12 4l8 5.5v9L12 24l-8-5.5v-9z" transform="translate(0 -3)"></path><path d="M4 9.5l8 5.2 8-5.2M12 14.7V21" transform="translate(0 -3)"></path></svg>{{end}}

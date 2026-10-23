@@ -1,37 +1,57 @@
 {{define "content"}}
 {{template "admin_nav" .}}
 
-<section class="card">
-  <p class="eyebrow">系统</p>
-  <div class="admin-title-row">
-    <h1>审计日志</h1>
-    <div class="admin-actions">
-      <a class="button" href="{{.Data.ExportURL}}">导出 CSV</a>
+<section class="admin-page-head">
+  <div class="admin-page-head-main">
+    <p class="admin-eyebrow">系统</p>
+    <h1 class="admin-page-title">审计日志</h1>
+    <p class="admin-subtitle">
+      按创建时间倒序显示，每页 100 条，共 {{.Data.Total}} 条记录{{if .Data.PageCount}}，第 {{.Data.Page}} / {{.Data.PageCount}} 页{{end}}。
+      CSV 最多导出 10,000 条；密码、Token、Cookie、对象键等敏感值会以 [redacted] 替代。
+    </p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="button primary" href="{{.Data.ExportURL}}">
+      {{template "admin_icon_export"}}导出 CSV
+    </a>
+  </div>
+</section>
+
+{{template "flash" .}}
+
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">筛选</h2>
+      <p class="admin-section-desc">按操作人、操作、对象与日期收窄，留空表示不限。</p>
     </div>
   </div>
-  {{template "flash" .}}
-  <p class="hint">按创建时间倒序显示，每页 100 条，共 {{.Data.Total}} 条记录{{if .Data.PageCount}}，第 {{.Data.Page}} / {{.Data.PageCount}} 页{{end}}。</p>
-  <p class="hint">CSV 最多导出 10,000 条；密码、Token、Cookie、对象键等敏感值会以 [redacted] 替代。</p>
-  <form class="admin-audit-filter" method="get" action="/admin/audit">
-    <label>Actor
-      <input type="text" name="actor" value="{{.Data.Filter.Actor}}" placeholder="姓名 / 会员编号 / 手机">
-    </label>
-    <label>操作
-      <input type="text" name="action" value="{{.Data.Filter.Action}}" placeholder="如 admin.user.approve">
-    </label>
-    <label>对象类型
-      <input type="text" name="target_type" value="{{.Data.Filter.TargetType}}" placeholder="如 user / activity">
-    </label>
-    <label>对象 ID
-      <input type="text" name="target_id" value="{{.Data.Filter.TargetID}}" placeholder="完整匹配">
-    </label>
-    <label>开始日期
-      <input type="date" name="from" value="{{.Data.Filter.From}}">
-    </label>
-    <label>结束日期
-      <input type="date" name="to" value="{{.Data.Filter.To}}">
-    </label>
-    <div class="admin-filter-actions">
+  <form class="admin-form-grid admin-audit-filter" method="get" action="/admin/audit">
+    <div class="admin-field">
+      <label class="admin-field-label" for="audit-actor">操作人</label>
+      <input id="audit-actor" class="admin-input" type="text" name="actor" value="{{.Data.Filter.Actor}}" placeholder="姓名 / 会员编号 / 手机">
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="audit-action">操作</label>
+      <input id="audit-action" class="admin-input" type="text" name="action" value="{{.Data.Filter.Action}}" placeholder="如 admin.user.approve">
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="audit-target-type">对象类型</label>
+      <input id="audit-target-type" class="admin-input" type="text" name="target_type" value="{{.Data.Filter.TargetType}}" placeholder="如 user / activity">
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="audit-target-id">对象 ID</label>
+      <input id="audit-target-id" class="admin-input" type="text" name="target_id" value="{{.Data.Filter.TargetID}}" placeholder="完整匹配">
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="audit-from">开始日期</label>
+      <input id="audit-from" class="admin-input" type="date" name="from" value="{{.Data.Filter.From}}">
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="audit-to">结束日期</label>
+      <input id="audit-to" class="admin-input" type="date" name="to" value="{{.Data.Filter.To}}">
+    </div>
+    <div class="admin-form-actions">
       <button type="submit" class="button primary">筛选</button>
       <a class="button" href="/admin/audit">重置</a>
     </div>
@@ -39,56 +59,57 @@
 </section>
 
 {{if .Data.LoadError}}
-<section class="card">
-  <p class="alert alert-error">{{.Data.LoadError}}</p>
-</section>
+<p class="admin-alert admin-alert--error" role="alert">{{.Data.LoadError}}</p>
 {{end}}
 
-<section class="card">
-  <h2>记录{{if .Data.Rows}}（本页 {{len .Data.Rows}} 条）{{end}}</h2>
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">记录</h2>
+      <p class="admin-section-desc">最新动作在前；展开「详情」查看元数据。</p>
+    </div>
+    <span class="admin-section-meta">本页 {{len .Data.Rows}} 条</span>
+  </div>
   {{if .Data.Rows}}
-  <div class="admin-table-wrap">
-    <table class="admin-table admin-audit-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>时间</th>
-          <th>操作人</th>
-          <th>操作</th>
-          <th>对象</th>
-          <th>IP</th>
-          <th>详情</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Data.Rows}}
-        <tr>
-          <td data-label="ID">{{.ID}}</td>
-          <td data-label="时间">{{.CreatedAt}}</td>
-          <td data-label="操作人">
-            {{if .ActorURL}}<a href="{{.ActorURL}}">{{if .ActorName}}{{.ActorName}}{{else}}—{{end}}</a>{{else if .ActorName}}{{.ActorName}}{{else}}—{{end}}
-            {{if .ActorLegacyID}}<span class="muted admin-audit-legacy">{{.ActorLegacyID}}</span>{{end}}
-          </td>
-          <td data-label="操作"><code>{{.Action}}</code></td>
-          <td data-label="对象">
-            {{if .TargetType}}<span class="pill">{{.TargetType}}</span>{{end}}
-            {{if .TargetURL}}<a href="{{.TargetURL}}">{{.TargetID}}</a>{{else if .TargetID}}{{.TargetID}}{{else}}—{{end}}
-          </td>
-          <td data-label="IP">{{if .IP}}{{.IP}}{{else}}—{{end}}</td>
-          <td data-label="详情">{{if .Metadata}}<span class="admin-audit-meta">{{.Metadata}}</span>{{else}}—{{end}}</td>
-        </tr>
+  <div class="admin-record-list">
+    {{range .Data.Rows}}
+    <article class="admin-record">
+      <div class="admin-record-main">
+        <h3 class="admin-record-title admin-audit-entry">
+          <time datetime="{{.CreatedAt}}">{{.CreatedAt}}</time>
+          <code>{{.Action}}</code>
+          {{if .TargetType}}<span class="admin-chip admin-chip--muted">{{.TargetType}}</span>{{end}}
+        </h3>
+        <p class="admin-record-sub">
+          操作人：
+          {{if .ActorURL}}<a href="{{.ActorURL}}">{{if .ActorName}}{{.ActorName}}{{else}}—{{end}}</a>{{else if .ActorName}}{{.ActorName}}{{else}}—{{end}}
+          {{if .ActorLegacyID}} · <code>{{.ActorLegacyID}}</code>{{end}}
+          {{if .IP}} · IP {{.IP}}{{end}}
+          · 对象：
+          {{if .TargetURL}}<a href="{{.TargetURL}}">{{.TargetID}}</a>{{else if .TargetID}}{{.TargetID}}{{else}}—{{end}}
+        </p>
+        {{if .Metadata}}
+        <details class="admin-audit-more">
+          <summary>详情</summary>
+          <p class="admin-audit-detail">{{.Metadata}}</p>
+        </details>
         {{end}}
-      </tbody>
-    </table>
+      </div>
+    </article>
+    {{end}}
   </div>
   {{else}}
-  <p class="muted">目前没有符合条件的审计记录。</p>
+  <div class="admin-empty">
+    <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_audit"}}</span>
+    <h2 class="admin-empty-title">目前没有符合条件的审计记录</h2>
+    <p>放宽筛选条件或清空日期再试。</p>
+  </div>
   {{end}}
 
   {{if or .Data.PrevURL .Data.NextURL}}
   <nav class="admin-pagination" aria-label="审计分页">
-    {{if .Data.PrevURL}}<a class="button small" href="{{.Data.PrevURL}}">上一页</a>{{end}}
-    {{if .Data.PageCount}}<span class="muted">第 {{.Data.Page}} / {{.Data.PageCount}} 页</span>{{end}}
+    {{if .Data.PrevURL}}<a class="button small" href="{{.Data.PrevURL}}">上一页</a>{{else}}<span></span>{{end}}
+    {{if .Data.PageCount}}<span class="hint">第 {{.Data.Page}} / {{.Data.PageCount}} 页</span>{{end}}
     {{if .Data.NextURL}}<a class="button small" href="{{.Data.NextURL}}">下一页</a>{{end}}
   </nav>
   {{end}}

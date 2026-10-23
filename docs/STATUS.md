@@ -11,6 +11,7 @@ sources:
   - internal/httpserver/routes.go
   - internal/httpserver/legacy_api.go
   - internal/httpserver/admin_*.go
+  - internal/httpserver/templates.go
   - internal/httpserver/grouping_admin_routes.go
   - internal/httpserver/grouping_view.go
   - internal/httpserver/onetoone_admin.go
@@ -31,6 +32,19 @@ sources:
   - web/templates/pages/admin_activities.tmpl
   - web/templates/pages/admin_activity_edit.tmpl
   - web/templates/pages/admin_activity_detail.tmpl
+  - web/templates/pages/admin_users.tmpl
+  - web/templates/pages/admin_user_detail.tmpl
+  - web/templates/pages/admin_matching.tmpl
+  - web/templates/pages/admin_matching_group.tmpl
+  - web/templates/pages/admin_matching_onetoone.tmpl
+  - web/templates/pages/admin_points.tmpl
+  - web/templates/pages/admin_reports.tmpl
+  - web/templates/pages/admin_roles.tmpl
+  - web/templates/pages/admin_audit.tmpl
+  - web/static/admin_points.css
+  - web/static/admin_user_detail.css
+  - internal/httpserver/admin_ui_phase_bc_test.go
+  - tools/browser/admin_ui_phase_bc.py
   - web/templates/partials/admin_nav.tmpl
   - web/templates/partials/admin_ui.tmpl
   - web/templates/layout.tmpl
@@ -38,10 +52,10 @@ sources:
   - .env.example
 -->
 
-- 更新日期：2026-10-23
+- 更新日期：2026-10-24
 - 维护者：项目维护者
 - 下一更新点：P0 身份证门禁决策、下一次 staging 部署、M6 验收；不要等新阶段才开始更新。
-- 事实基准：以下部署/数据事实于 2026-10-23 对 server1 只读复核；代码基线 `main` @ `3e4d75d`。
+- 事实基准：部署/数据事实于 2026-10-23 对 server1 只读复核；代码基线 `main` @ `26b5eaf`（Phase B/C 为后续提交，未部署）。
 
 ## 1. 阶段
 
@@ -96,7 +110,10 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 用户：审核通过/拒绝、用户详情与受权照片串流、停用/启用、临时密码。
 - 举报与反馈：列表与处理。
 - 活动：列表、创建/编辑、活动工作台（海报上传与私有串流、报名/签到名单与搜索/出席筛选/分页、现场签到、站内广播预览+服务端签名确认、快速设置）。
-- 管理台 Phase B（待下一轮）：用户/匹配/麦穗/举报/反馈/角色/审计页模板仍为旧结构，已由新 token 与兼容层覆盖；下一轮按同一设计系统重做。
+- 用户/匹配/麦穗/内容/系统（Phase B/C，2026-10-24）：用户列表与详情、匹配总览与分组/一对一控制台、麦穗 7 个 tab、举报/反馈、角色、审计全部改用同一设计系统（`.admin-page-head` + `.admin-section` + `.admin-record-list` 记录卡 + 状态 chips + 空态/分页 + 44px 触控）；不再用 6–7 列表格承载多字段列表，768 宽不再出现按钮三行堆叠或日期折行。
+- 顶栏身份块：总览右侧改为「盾牌图标 + 管理员 + 姓名」胶囊；staging 管理员姓名是单字「一」，旧裸文本看起来像空按钮（2026-10-24 修复）。
+- 深色对比度：新增 `--adm-on-brand`（浅色白字 / 深色 `#2a1a1e`），实心主按钮、选中 chip/tab、徽标对比度由 2.17:1 提到 7.66:1（Chromium 实测）。
+- 验收（2026-10-24，临时库 + 临时服务）：`tools/browser/admin_ui_phase_bc.py` 三视口（390/768/1280）逐页 + 流程截图 108 张，`failures=[]`；覆盖用户列表→详情→审核、匹配→分组控制台→一对一、麦穗调整、举报/反馈处理、角色指派/移除、审计筛选与 CSV 导出，无 console error、无页面/表格横向滚动；模板断言 `TestAdminPhaseBCTemplatesUseDesignSystem` / `TestAdminPointsTabsKeepFormContract` / `TestAdminTopbarIdentityChip`。证据目录 `.team/audits/admin-ui-phase-bc/`（未提交，属团队 artifact）。
 - 匹配：`/admin/matching` 清单，分组控制台与一对一会话控制台（预览/执行/重置/轮次结果/名单/聊天概览）；沿用 `matching.run` 权限、CSRF 与审计。
 - 麦穗：`/admin/points` 总览、调整、流水、邀请、兑换、心愿、推荐；调整向用户写入站内通知。
 - 审计：`/admin/audit` 查看与 `/admin/audit.csv` 导出。

@@ -1,105 +1,118 @@
 {{define "content"}}
 {{template "admin_nav" .}}
 
-<section class="card">
-  <p class="eyebrow">RBAC</p>
-  <h1>角色与权限</h1>
-  {{template "flash" .}}
-  <p class="hint">super_admin 自动拥有全部权限；最后一位最高管理员不能被移除或停用。第一版角色固定，只做指派。</p>
-</section>
-
-<section class="card">
-  <h2>角色</h2>
-  <div class="admin-table-wrap">
-    <table class="admin-table admin-roles-table">
-      <thead>
-        <tr>
-          <th scope="col">代码</th>
-          <th scope="col">名称</th>
-          <th scope="col">人数</th>
-          <th scope="col">权限</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Data.Roles}}
-        <tr>
-          <td data-label="代码"><code>{{.Code}}</code></td>
-          <td data-label="名称">{{.Name}}</td>
-          <td data-label="人数">{{.UserCount}}</td>
-          <td data-label="权限">
-            {{if .Permissions}}
-            <span class="admin-perms">{{range $i, $p := .Permissions}}{{if $i}} · {{end}}<code>{{$p}}</code>{{end}}</span>
-            {{else}}<span class="muted">—</span>{{end}}
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+<section class="admin-page-head">
+  <div class="admin-page-head-main">
+    <p class="admin-eyebrow">RBAC</p>
+    <h1 class="admin-page-title">角色与权限</h1>
+    <p class="admin-subtitle">super_admin 自动拥有全部权限；最后一位最高管理员不能被移除或停用。第一版角色固定，只做指派。</p>
   </div>
 </section>
 
-<section class="card">
-  <h2>目前管理员</h2>
+{{template "flash" .}}
+
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">角色</h2>
+      <p class="admin-section-desc">角色代码用于审计与权限判断，不能改名。</p>
+    </div>
+    <span class="admin-section-meta">{{len .Data.Roles}} 个角色</span>
+  </div>
+  <div class="admin-role-grid">
+    {{range .Data.Roles}}
+    <article class="admin-role-card">
+      <div class="admin-role-card-head">
+        <span class="admin-role-code">{{.Code}}</span>
+        <span class="admin-role-name">{{.Name}}</span>
+        <span class="admin-role-count">{{.UserCount}} 人</span>
+      </div>
+      {{if .Permissions}}
+      <ul class="admin-perm-list">
+        {{range .Permissions}}<li>{{.}}</li>{{end}}
+      </ul>
+      {{else}}
+      <p class="hint">暂无权限。</p>
+      {{end}}
+    </article>
+    {{end}}
+  </div>
+</section>
+
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">目前管理员</h2>
+      <p class="admin-section-desc">已指派管理角色的会员。</p>
+    </div>
+    <span class="admin-section-meta">{{len .Data.Assignments}} 人</span>
+  </div>
   {{if .Data.Assignments}}
-  <div class="admin-table-wrap">
-    <table class="admin-table">
-      <thead>
-        <tr>
-          <th scope="col">会员</th>
-          <th scope="col">手机</th>
-          <th scope="col">角色</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Data.Assignments}}
-        <tr>
-          <td data-label="会员">
-            <strong>{{.Name}}</strong>
-            <div class="muted"><code>{{if .LegacyUserID}}{{.LegacyUserID}}{{else}}#{{.UserID}}{{end}}</code></div>
-          </td>
-          <td data-label="手机">{{.Phone}}</td>
-          <td data-label="角色">
-            {{range $i, $r := .Roles}}{{if $i}}、{{end}}<code>{{$r}}</code>{{end}}
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+  <div class="admin-record-list">
+    {{range .Data.Assignments}}
+    <article class="admin-record">
+      <span class="admin-avatar" aria-hidden="true">{{template "admin_icon_shield"}}</span>
+      <div class="admin-record-main">
+        <h3 class="admin-record-title">
+          <a href="/admin/users/{{.UserID}}">{{.Name}}</a>
+          {{range .Roles}}<span class="admin-chip admin-chip--full">{{.}}</span>{{end}}
+        </h3>
+        <p class="admin-record-sub">
+          <code>{{if .LegacyUserID}}{{.LegacyUserID}}{{else}}#{{.UserID}}{{end}}</code>
+          · {{.Phone}}
+        </p>
+      </div>
+      <div class="admin-record-actions">
+        <a class="button small" href="/admin/users/{{.UserID}}">用户资料</a>
+      </div>
+    </article>
+    {{end}}
   </div>
   {{else}}
-  <p class="muted">目前没有管理员。</p>
+  <div class="admin-empty">
+    <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_shield"}}</span>
+    <h2 class="admin-empty-title">目前没有管理员</h2>
+    <p>在下方指派第一位管理员。</p>
+  </div>
   {{end}}
 </section>
 
-<section class="card">
-  <h2>指派角色</h2>
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">指派角色</h2>
+      <p class="admin-section-desc">指派对象必须是既有用户；例如把 U-0006 指派为 super_admin。</p>
+    </div>
+  </div>
   {{if .Data.SuperAdmin}}
-  <form method="post" action="/admin/roles/assign" class="admin-role-form">
+  <form method="post" action="/admin/roles/assign" class="admin-form-grid admin-role-assign">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <label for="role-user-ref">用户
-      <input id="role-user-ref" name="user_ref" type="text" required
+    <div class="admin-field">
+      <label class="admin-field-label" for="role-user-ref">用户</label>
+      <input id="role-user-ref" class="admin-input" name="user_ref" type="text" required
              placeholder="U-0006、手机或用户 ID">
-    </label>
-    <label for="role-code">角色
-      <select id="role-code" name="role" required>
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="role-code">角色</label>
+      <select id="role-code" class="admin-select" name="role" required>
         {{range .Data.Roles}}
         <option value="{{.Code}}">{{.Name}}（{{.Code}}）</option>
         {{end}}
       </select>
-    </label>
-    <label for="role-action">动作
-      <select id="role-action" name="action">
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="role-action">动作</label>
+      <select id="role-action" class="admin-select" name="action">
         <option value="assign">指派</option>
         <option value="remove">移除</option>
       </select>
-    </label>
-    <div class="admin-role-form-actions">
-      <button type="submit" class="button primary">送出</button>
+    </div>
+    <div class="admin-form-actions">
+      <button type="submit" class="button primary" data-adm-confirm="确认提交角色变更？操作会写入审计日志。">送出</button>
     </div>
   </form>
-  <p class="hint">指派对象必须是既有用户；例如把 U-0006 指派为 super_admin。</p>
   {{else}}
-  <p class="muted">只有最高管理员可以指派或移除角色。</p>
+  <p class="admin-alert admin-alert--warn">只有最高管理员可以指派或移除角色。</p>
   {{end}}
 </section>
 {{end}}

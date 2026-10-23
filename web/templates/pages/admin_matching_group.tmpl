@@ -8,54 +8,90 @@
      data-base-url="/admin/matching/group/{{$activity.ID}}"
      data-mode-enabled="{{if $activity.GroupEnabled}}true{{else}}false{{end}}"
      data-csrf="{{.CSRFToken}}">
-  <section class="card">
-    <div class="admin-title-row">
-      <div>
-        <p class="eyebrow">匹配 · 分组</p>
-        <h1>{{$activity.Name}}</h1>
-        <p class="hint"><code>{{$activity.ActivityNo}}</code>
-          · 模式：{{if $activity.GroupEnabled}}分组已开启{{else}}分组未开启{{end}}
-          {{if $activity.OnetooneEnabled}}<span class="pill pill-warn">一对一也开启（互斥）</span>{{end}}
-        </p>
-      </div>
-      <div class="admin-actions">
-        <a class="button" href="/admin/matching">匹配总览</a>
-        <a class="button" href="/admin/activities/{{$activity.ID}}#roster">活动名单</a>
-        <a class="button" href="/admin/activities/{{$activity.ID}}">活动工作台</a>
+
+  <section class="admin-page-head">
+    <div class="admin-page-head-main">
+      <p class="admin-eyebrow">匹配 · 分组</p>
+      <h1 class="admin-page-title">{{$activity.Name}}</h1>
+      <p class="admin-subtitle">
+        <code>{{$activity.ActivityNo}}</code>
+        · 模式：{{if $activity.GroupEnabled}}分组已开启{{else}}分组未开启{{end}}
+        {{if $activity.OnetooneEnabled}}· 一对一也开启（互斥）{{end}}
+      </p>
+      <div class="admin-role-chips">
+        {{template "admin_activity_status" $activity.Status}}
+        {{if $activity.GroupEnabled}}<span class="admin-chip admin-chip--open">分组已开启</span>{{else}}<span class="admin-chip admin-chip--muted">分组未开启</span>{{end}}
+        {{if $activity.OnetooneEnabled}}<span class="admin-chip admin-chip--cancel">一对一也开启</span>{{end}}
       </div>
     </div>
-    {{template "flash" .}}
-    <div class="admin-matching-stats">
-      <div class="admin-matching-stat"><strong>{{.Data.Roster.Total}}</strong><span>有效报名</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Roster.Submitted}}</strong><span>已填志愿</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Roster.Unsubmitted}}</strong><span>未填志愿</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Roster.CheckedIn}}</strong><span>已签到</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Preview.MaleCount}} / {{.Data.Preview.FemaleCount}}</strong><span>男 / 女（报名）</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Preview.CheckedInMaleCount}} / {{.Data.Preview.CheckedInFemaleCount}}</strong><span>男 / 女（签到后）</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Preview.ExpectedGroups}}</strong><span>预计组数</span></div>
-      <div class="admin-matching-stat"><strong>第 {{.Data.Preview.Round}} 轮</strong><span>本次预览轮次</span></div>
+    <div class="admin-page-actions">
+      <a class="button" href="/admin/matching">匹配总览</a>
+      <a class="button" href="/admin/activities/{{$activity.ID}}#roster">活动名单</a>
+      <a class="button" href="/admin/activities/{{$activity.ID}}">活动工作台</a>
     </div>
-    {{if not $activity.GroupEnabled}}
-    <p class="alert alert-warn" role="alert">当前活动未开启分组模式：即使执行，用户端也不会显示分组入口。请先在活动工作台开启分组。</p>
-    {{end}}
-    {{if $activity.SigninEnabled}}
-    <p class="alert alert-warn">签到门禁已开启：只有已签到的有效报名者会进入分组。当前已签到 {{.Data.Roster.CheckedIn}} / {{.Data.Roster.Total}} 人。</p>
-    {{end}}
   </section>
 
-  <section class="card" id="preview">
-    <h2>执行预览</h2>
-    <p class="hint">调整轮次与每组男女人数后先预览；分组与一对一互斥，轮次已存在时不能重复执行。</p>
+  {{template "flash" .}}
+
+  <section class="admin-stat-grid admin-stat-grid--tight" aria-label="分组统计">
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Roster.Total}}</span>
+      <span class="admin-stat-label">有效报名</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Roster.Submitted}}</span>
+      <span class="admin-stat-label">已填志愿</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Roster.Unsubmitted}}</span>
+      <span class="admin-stat-label">未填志愿</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Roster.CheckedIn}}</span>
+      <span class="admin-stat-label">已签到</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Preview.MaleCount}} / {{.Data.Preview.FemaleCount}}</span>
+      <span class="admin-stat-label">男 / 女（报名）</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Preview.CheckedInMaleCount}} / {{.Data.Preview.CheckedInFemaleCount}}</span>
+      <span class="admin-stat-label">男 / 女（签到后）</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Preview.ExpectedGroups}}</span>
+      <span class="admin-stat-label">预计组数</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">第 {{.Data.Preview.Round}} 轮</span>
+      <span class="admin-stat-label">本次预览轮次</span>
+    </div>
+  </section>
+
+  {{if not $activity.GroupEnabled}}
+  <p class="admin-alert admin-alert--warn" role="alert">当前活动未开启分组模式：即使执行，用户端也不会显示分组入口。请先在活动工作台开启分组。</p>
+  {{end}}
+  {{if $activity.SigninEnabled}}
+  <p class="admin-alert admin-alert--warn">签到门禁已开启：只有已签到的有效报名者会进入分组。当前已签到 {{.Data.Roster.CheckedIn}} / {{.Data.Roster.Total}} 人。</p>
+  {{end}}
+
+  <section class="admin-section" id="preview">
+    <div class="admin-section-head">
+      <div class="admin-section-head-main">
+        <h2 class="admin-section-title">执行预览</h2>
+        <p class="admin-section-desc">调整轮次与每组男女人数后先预览；分组与一对一互斥，轮次已存在时不能重复执行。</p>
+      </div>
+    </div>
     <form method="get" action="/admin/matching/group/{{$activity.ID}}#preview" class="admin-matching-form" data-matching-preview-form>
-      <label>轮次<input type="number" name="preview_round" min="1" value="{{.Data.Preview.Round}}" data-matching-field="preview_round"></label>
-      <label>每组男生<input type="number" name="male_per_group" min="1" value="{{.Data.Preview.MalesPerGroup}}" data-matching-field="male_per_group"></label>
-      <label>每组女生<input type="number" name="female_per_group" min="1" value="{{.Data.Preview.FemalesPerGroup}}" data-matching-field="female_per_group"></label>
-      <div class="admin-actions">
+      <label>轮次<input type="number" name="preview_round" min="1" value="{{.Data.Preview.Round}}" data-matching-field="preview_round" class="admin-input"></label>
+      <label>每组男生<input type="number" name="male_per_group" min="1" value="{{.Data.Preview.MalesPerGroup}}" data-matching-field="male_per_group" class="admin-input"></label>
+      <label>每组女生<input type="number" name="female_per_group" min="1" value="{{.Data.Preview.FemalesPerGroup}}" data-matching-field="female_per_group" class="admin-input"></label>
+      <div class="admin-form-actions">
         <button type="submit" class="button">预览参数</button>
       </div>
     </form>
     {{if .Data.Preview.Blockers}}
-    <div class="alert alert-error" role="alert">
+    <div class="admin-alert admin-alert--error admin-alert--block" role="alert">
       <strong>当前不可执行</strong>
       <ul class="admin-matching-blockers">
         {{range .Data.Preview.Blockers}}<li>{{.}}</li>{{end}}
@@ -63,26 +99,30 @@
       <p class="hint">修复提示：确认活动只开启一种匹配模式、核对签到名单是否足够、调整每组人数，或改用新的轮次。</p>
     </div>
     {{else}}
-    <p class="alert alert-ok" role="status">预览检查通过：预计生成 {{.Data.Preview.ExpectedGroups}} 组，参与 {{.Data.Preview.ParticipantCount}} 人。</p>
+    <p class="admin-alert admin-alert--ok" role="status">预览检查通过：预计生成 {{.Data.Preview.ExpectedGroups}} 组，参与 {{.Data.Preview.ParticipantCount}} 人。</p>
     {{end}}
     {{if .Data.Preview.ExistingRoundResults}}
     <p class="hint">第 {{.Data.Preview.Round}} 轮已有 {{.Data.Preview.ExistingRoundResults}} 条结果；重复执行会被后端拒绝。</p>
     {{end}}
     <div class="admin-actions">
-      <button type="button" class="button primary" data-matching-action="run"
-              aria-busy="false">执行分组</button>
-      <button type="button" class="button danger" data-matching-action="reset"
-              aria-busy="false">清空分组结果</button>
+      <button type="button" class="button primary" data-matching-action="run" aria-busy="false">执行分组</button>
+      <button type="button" class="button danger" data-matching-action="reset" aria-busy="false"
+              data-adm-confirm="确认清空该活动的分组结果？此操作会删除已保存的分组。">清空分组结果</button>
     </div>
     <div class="admin-matching-status" data-matching-status role="status" aria-live="polite"></div>
   </section>
 
-  <section class="card" id="result">
-    <h2>分组结果</h2>
+  <section class="admin-section" id="result">
+    <div class="admin-section-head">
+      <div class="admin-section-head-main">
+        <h2 class="admin-section-title">分组结果</h2>
+        <p class="admin-section-desc">结果按轮次保存；切换轮次只影响展示。</p>
+      </div>
+    </div>
     {{if .Data.Result.Rounds}}
-    <nav class="admin-tabs" aria-label="分组轮次">
+    <nav class="admin-filter-chips" aria-label="分组轮次">
       {{range .Data.Result.Rounds}}
-      <a href="?round={{.}}#result"{{if eq . $.Data.Result.Round}} aria-current="page"{{end}}>第 {{.}} 轮</a>
+      <a class="admin-chip-btn" href="?round={{.}}#result"{{if eq . $.Data.Result.Round}} aria-current="page"{{end}}>第 {{.}} 轮</a>
       {{end}}
     </nav>
     {{end}}
@@ -109,22 +149,29 @@
       {{end}}
     </div>
     {{else}}
-    <div class="empty-state admin-empty">
-      <h2>还没有分组结果</h2>
-      <p class="shell-empty-text">预览检查通过后执行分组；结果会按轮次保存在这里。</p>
+    <div class="admin-empty">
+      <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_matching"}}</span>
+      <h2 class="admin-empty-title">还没有分组结果</h2>
+      <p>预览检查通过后执行分组；结果会按轮次保存在这里。</p>
     </div>
     {{end}}
   </section>
 
-  <section class="card" id="roster">
-    <h2>报名与志愿</h2>
+  <section class="admin-section" id="roster">
+    <div class="admin-section-head">
+      <div class="admin-section-head-main">
+        <h2 class="admin-section-title">报名与志愿</h2>
+        <p class="admin-section-desc">未填志愿的用户也会参与匹配，可在这里核对。</p>
+      </div>
+      <span class="admin-section-meta">报名 {{.Data.Roster.Total}} · 已填 {{.Data.Roster.Submitted}}</span>
+    </div>
     <p class="admin-counts">
       <span>报名 <strong>{{.Data.Roster.Total}}</strong> 人</span>
       <span>已填 <strong>{{.Data.Roster.Submitted}}</strong> 人</span>
       <span>未填 <strong>{{.Data.Roster.Unsubmitted}}</strong> 人</span>
       <span>未填且已签到 <strong>{{.Data.Roster.UnsubmittedCheckedIn}}</strong> 人</span>
     </p>
-    <label class="admin-matching-search">搜索名单<input type="search" placeholder="姓名、昵称或会员编号" data-roster-filter></label>
+    <label class="admin-matching-search">搜索名单<input type="search" placeholder="姓名、昵称或会员编号" data-roster-filter class="admin-input"></label>
     <div class="admin-matching-roster">
       <div>
         <h3>未提交志愿（{{len .Data.Roster.UnsubmittedList}}）</h3>
@@ -134,7 +181,7 @@
           <li class="admin-matching-roster-item" data-roster-entry data-search="{{.Name}} {{.Nickname}} {{.UserID}} {{.Gender}}">
             <a {{if .UserID}}href="/admin/activities/{{$activity.ID}}?q={{.UserID | urlquery}}#roster"{{else}}href="/admin/activities/{{$activity.ID}}#member-{{.ID}}"{{end}}>{{if .Name}}{{.Name}}{{else}}{{.Nickname}}{{end}}</a>
             {{if .UserID}}<span class="muted">{{.UserID}}</span>{{end}}
-            {{if .Gender}}<span class="pill pill-muted">{{.Gender}}</span>{{end}}
+            {{if .Gender}}<span class="admin-chip admin-chip--muted">{{.Gender}}</span>{{end}}
             <span class="muted">{{if .Attendance}}{{.Attendance}}{{else}}未签到{{end}}</span>
           </li>
           {{end}}
@@ -151,7 +198,7 @@
           <li class="admin-matching-roster-item" data-roster-entry data-search="{{.Name}} {{.Nickname}} {{.UserID}} {{.Gender}}">
             <a {{if .UserID}}href="/admin/activities/{{$activity.ID}}?q={{.UserID | urlquery}}#roster"{{else}}href="/admin/activities/{{$activity.ID}}#member-{{.ID}}"{{end}}>{{if .Name}}{{.Name}}{{else}}{{.Nickname}}{{end}}</a>
             {{if .UserID}}<span class="muted">{{.UserID}}</span>{{end}}
-            {{if .Gender}}<span class="pill pill-muted">{{.Gender}}</span>{{end}}
+            {{if .Gender}}<span class="admin-chip admin-chip--muted">{{.Gender}}</span>{{end}}
             <span class="muted">{{if .Attendance}}{{.Attendance}}{{else}}未签到{{end}}</span>
           </li>
           {{end}}
@@ -164,12 +211,17 @@
     <p class="hint"><a href="/admin/activities/{{$activity.ID}}#roster">打开活动报名/签到名单</a>，可核对或调整签到状态。</p>
   </section>
 
-  <section class="card" id="chat">
-    <h2>聊天概览</h2>
+  <section class="admin-section" id="chat">
+    <div class="admin-section-head">
+      <div class="admin-section-head-main">
+        <h2 class="admin-section-title">聊天概览</h2>
+        <p class="admin-section-desc">组内成员之间的留言统计。</p>
+      </div>
+    </div>
     {{if .Data.Chat.Rounds}}
-    <nav class="admin-tabs" aria-label="聊天轮次">
+    <nav class="admin-filter-chips" aria-label="聊天轮次">
       {{range .Data.Chat.Rounds}}
-      <a href="?chat_round={{.}}#chat"{{if eq . $.Data.Chat.Round}} aria-current="page"{{end}}>第 {{.}} 轮</a>
+      <a class="admin-chip-btn" href="?chat_round={{.}}#chat"{{if eq . $.Data.Chat.Round}} aria-current="page"{{end}}>第 {{.}} 轮</a>
       {{end}}
     </nav>
     {{end}}
@@ -196,7 +248,7 @@
           <li class="admin-matching-member">
             <span>{{.Name}}</span>
             {{if .UserID}}<span class="muted">{{.UserID}}</span>{{end}}
-            <span class="pill">{{.Chatted}} / {{.Assigned}}</span>
+            <span class="admin-chip admin-chip--open">{{.Chatted}} / {{.Assigned}}</span>
             <span class="muted">{{.MsgCount}} 条</span>
           </li>
           {{end}}

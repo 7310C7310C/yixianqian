@@ -114,7 +114,7 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 	body := readBody(t, resp)
 	for _, want := range []string{
 		target.Name, "详情昵称", "测试教会", "青年组", "上海", "善良体贴",
-		"1234", "已同意", "审核记录", "照片（1）", "/photos/" + mediaID,
+		"1234", "审核记录", "1 张", "照片", "/photos/" + mediaID,
 		`href="` + fullPath + `" target="_blank"`,
 	} {
 		if !strings.Contains(body, want) {

@@ -1,34 +1,62 @@
 {{define "content"}}
 {{template "admin_nav" .}}
+{{$base := "/admin/reports"}}
+{{if eq .Data.Mode "suggestions"}}{{$base = "/admin/suggestions"}}{{end}}
 
-<section class="card">
-  <p class="eyebrow">{{if eq .Data.Mode "suggestions"}}反馈{{else}}内容管理{{end}}</p>
-  <h1>{{if eq .Data.Mode "suggestions"}}意见反馈{{else}}举报处理{{end}}</h1>
-  {{template "flash" .}}
-  <nav class="admin-tabs" aria-label="状态">
+<section class="admin-page-head">
+  <div class="admin-page-head-main">
+    <p class="admin-eyebrow">{{if eq .Data.Mode "suggestions"}}内容反馈{{else}}内容安全{{end}}</p>
+    <h1 class="admin-page-title">{{if eq .Data.Mode "suggestions"}}意见反馈{{else}}举报处理{{end}}</h1>
+    <p class="admin-subtitle">
+      {{if eq .Data.Mode "suggestions"}}查看用户提交的产品建议与问题反馈，标记已处理或忽略。{{else}}核实用户举报并记录处理结果，删除留言会同时受理举报。{{end}}
+      处理动作写入审计日志。
+    </p>
+  </div>
+</section>
+
+{{template "flash" .}}
+
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">状态筛选</h2>
+      <p class="admin-section-desc">{{if eq .Data.Mode "suggestions"}}反馈{{else}}举报{{end}}按状态归类，默认显示待处理。</p>
+    </div>
+    <span class="admin-section-meta">
+      {{if eq .Data.Mode "suggestions"}}{{len .Data.Suggestions}}{{else}}{{len .Data.Reports}}{{end}} 条
+    </span>
+  </div>
+  <nav class="admin-filter-chips" aria-label="状态">
     {{range .Data.Statuses}}
-    <a href="{{if eq $.Data.Mode "suggestions"}}/admin/suggestions{{else}}/admin/reports{{end}}?status={{.Value}}"
-       {{if eq $.Data.StatusFilter .Value}}aria-current="page"{{end}}>{{.Label}}</a>
+    <a class="admin-chip-btn" href="{{$base}}?status={{.Value}}"{{if eq $.Data.StatusFilter .Value}} aria-current="page"{{end}}>{{.Label}}</a>
     {{end}}
   </nav>
 </section>
 
 {{if eq .Data.Mode "suggestions"}}
-<section class="card">
-  <h2>反馈{{if .Data.Suggestions}}（{{len .Data.Suggestions}}）{{end}}</h2>
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">反馈列表</h2>
+    </div>
+    <span class="admin-section-meta">{{len .Data.Suggestions}} 条</span>
+  </div>
   {{if .Data.Suggestions}}
-  <div class="admin-list">
+  <div class="admin-record-list">
     {{range .Data.Suggestions}}
-    <article class="admin-item">
-      <header class="admin-item-head">
-        <strong>{{.AuthorName}}{{if not .AuthorName}}匿名{{end}}</strong>
-        {{if .Type}}<span class="pill">{{.Type}}</span>{{end}}
-        <span class="pill{{if eq .Status "待处理"}} pill-warn{{end}}">{{.Status}}</span>
-        <time class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</time>
-      </header>
-      <p class="admin-item-content">{{.Content}}</p>
+    <article class="admin-record">
+      <span class="admin-avatar" aria-hidden="true">{{template "admin_icon_feedback"}}</span>
+      <div class="admin-record-main">
+        <h3 class="admin-record-title">
+          {{if .AuthorName}}{{.AuthorName}}{{else}}匿名用户{{end}}
+          {{if .Type}}<span class="admin-chip admin-chip--full">{{.Type}}</span>{{end}}
+          {{template "admin_suggestion_status" .Status}}
+        </h3>
+        <p class="admin-record-sub">{{.CreatedAt.Format "2006-01-02 15:04"}}</p>
+        <p class="admin-item-content">{{.Content}}</p>
+      </div>
       {{if eq .Status "待处理"}}
-      <div class="admin-actions">
+      <div class="admin-record-actions">
         <form method="post" action="/admin/suggestions/{{.ID}}/handle" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <input type="hidden" name="action" value="handle">
@@ -37,7 +65,7 @@
         <form method="post" action="/admin/suggestions/{{.ID}}/handle" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <input type="hidden" name="action" value="ignore">
-          <button type="submit" class="button small">忽略</button>
+          <button type="submit" class="button small" data-adm-confirm="确认忽略这条反馈？">忽略</button>
         </form>
       </div>
       {{end}}
@@ -45,51 +73,65 @@
     {{end}}
   </div>
   {{else}}
-  <p class="muted">目前没有符合条件的意见反馈。</p>
+  <div class="admin-empty">
+    <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_feedback"}}</span>
+    <h2 class="admin-empty-title">目前没有符合条件的反馈</h2>
+    <p>切换到「全部」可查看历史反馈。</p>
+  </div>
   {{end}}
 </section>
 {{else}}
-<section class="card">
-  <h2>举报{{if .Data.Reports}}（{{len .Data.Reports}}）{{end}}</h2>
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">举报列表</h2>
+    </div>
+    <span class="admin-section-meta">{{len .Data.Reports}} 条</span>
+  </div>
   {{if .Data.Reports}}
-  <div class="admin-list">
+  <div class="admin-record-list">
     {{range .Data.Reports}}
-    <article class="admin-item">
-      <header class="admin-item-head">
-        <strong>#{{.ID}}</strong>
-        <span class="pill{{if eq .Status "待处理"}} pill-warn{{end}}">{{.Status}}</span>
-        <time class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</time>
-      </header>
-      <p class="admin-item-meta">
-        举报人：{{if .ReporterName}}{{.ReporterName}}{{else}}—{{end}}
-        · 对象：{{if .TargetName}}{{.TargetName}}{{else}}—{{end}}
-        {{if .TargetMessageID}}· 留言 #{{.TargetMessageID}}{{end}}
-      </p>
-      <p class="admin-item-content">原因：{{.Reason}}</p>
-      {{if .MessageContent}}
-      <blockquote class="admin-quote">{{.MessageContent}}</blockquote>
-      {{end}}
-      {{if .HandledAt}}<p class="hint">处理时间：{{.HandledAt.Format "2006-01-02 15:04"}}</p>{{end}}
-      {{if eq .Status "待处理"}}
-      <form method="post" action="/admin/reports/{{.ID}}/handle" class="admin-handle-form">
-        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-        <label for="report-note-{{.ID}}">处理备注（选填，写入审计）</label>
-        <input id="report-note-{{.ID}}" name="note" type="text" maxlength="500">
-        <div class="admin-actions">
-          {{if .TargetMessageID}}
-          <button type="submit" name="action" value="delete" class="button small danger">删除留言并受理</button>
-          {{else}}
-          <button type="submit" name="action" value="resolve" class="button small primary">受理</button>
-          {{end}}
-          <button type="submit" name="action" value="dismiss" class="button small">驳回</button>
-        </div>
-      </form>
-      {{end}}
+    <article class="admin-record">
+      <span class="admin-avatar" aria-hidden="true">{{template "admin_icon_flag"}}</span>
+      <div class="admin-record-main">
+        <h3 class="admin-record-title">
+          #{{.ID}}
+          {{template "admin_report_status" .Status}}
+          {{if .TargetMessageID}}<span class="admin-chip admin-chip--muted">留言 #{{.TargetMessageID}}</span>{{end}}
+        </h3>
+        <p class="admin-record-sub">
+          举报人：{{if .ReporterName}}{{.ReporterName}}{{else}}—{{end}}
+          · 对象：{{if .TargetName}}{{.TargetName}}{{else}}—{{end}}
+          · {{.CreatedAt.Format "2006-01-02 15:04"}}
+        </p>
+        <p class="admin-item-content">原因：{{.Reason}}</p>
+        {{if .MessageContent}}<blockquote class="admin-quote">{{.MessageContent}}</blockquote>{{end}}
+        {{if .HandledAt}}<p class="admin-record-sub">处理时间：{{.HandledAt.Format "2006-01-02 15:04"}}</p>{{end}}
+        {{if eq .Status "待处理"}}
+        <form method="post" action="/admin/reports/{{.ID}}/handle" class="admin-handle-form admin-handle-form--inline">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <label class="admin-visually-hidden" for="report-note-{{.ID}}">处理备注（选填，写入审计）</label>
+          <input id="report-note-{{.ID}}" class="admin-input" name="note" type="text" maxlength="500" placeholder="处理备注（选填，写入审计）">
+          <div class="admin-actions">
+            {{if .TargetMessageID}}
+            <button type="submit" name="action" value="delete" class="button small danger" data-adm-confirm="确认删除该留言并受理举报？留言删除后不可恢复。">删除留言并受理</button>
+            {{else}}
+            <button type="submit" name="action" value="resolve" class="button small primary">受理</button>
+            {{end}}
+            <button type="submit" name="action" value="dismiss" class="button small" data-adm-confirm="确认驳回这条举报？">驳回</button>
+          </div>
+        </form>
+        {{end}}
+      </div>
     </article>
     {{end}}
   </div>
   {{else}}
-  <p class="muted">目前没有符合条件的举报。</p>
+  <div class="admin-empty">
+    <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_flag"}}</span>
+    <h2 class="admin-empty-title">目前没有符合条件的举报</h2>
+    <p>切换到「全部」可查看历史举报。</p>
+  </div>
   {{end}}
 </section>
 {{end}}

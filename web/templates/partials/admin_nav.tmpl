@@ -20,7 +20,13 @@
       <span>返回总览</span>
     </a>
     {{else}}
-    <span class="admin-topbar-user">{{if .User}}{{.User.Name}}{{else}}管理员{{end}}</span>
+    <span class="admin-identity" aria-label="当前管理员：{{if .User}}{{.User.Name}}{{else}}管理员{{end}}">
+      <span class="admin-identity-icon" aria-hidden="true">{{template "admin_icon_shield"}}</span>
+      <span class="admin-identity-text">
+        <span class="admin-identity-role">管理员</span>
+        <span class="admin-identity-name">{{if .User}}{{.User.Name}}{{else}}管理员{{end}}</span>
+      </span>
+    </span>
     {{end}}
   </div>
 </header>

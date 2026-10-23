@@ -115,7 +115,7 @@ func TestIntegrationAdminMatchingPagesAccessAndEntryLinks(t *testing.T) {
 		"匹配控制台", "活动匹配清单", "匹配",
 		`href="/admin/matching/group/` + strconv.FormatInt(groupActivityID, 10) + `"`,
 		`href="/admin/matching/onetoone/` + strconv.FormatInt(onetooneActivityID, 10) + `"`,
-		"活动工作台", "报名 / 签到",
+		"活动工作台", "报名", "签到",
 	} {
 		if !strings.Contains(list, want) {
 			t.Fatalf("matching list missing %q", want)

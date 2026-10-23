@@ -8,52 +8,85 @@
      data-base-url="/admin/matching/onetoone/{{$activity.ID}}"
      data-mode-enabled="{{if $activity.OnetooneEnabled}}true{{else}}false{{end}}"
      data-csrf="{{.CSRFToken}}">
-  <section class="card">
-    <div class="admin-title-row">
-      <div>
-        <p class="eyebrow">匹配 · 一对一</p>
-        <h1>{{$activity.Name}}</h1>
-        <p class="hint"><code>{{$activity.ActivityNo}}</code>
-          · 模式：{{if $activity.OnetooneEnabled}}一对一已开启{{else}}一对一未开启{{end}}
-          {{if $activity.GroupEnabled}}<span class="pill pill-warn">分组也开启（互斥）</span>{{end}}
-        </p>
-      </div>
-      <div class="admin-actions">
-        <a class="button" href="/admin/matching">匹配总览</a>
-        <a class="button" href="/admin/activities/{{$activity.ID}}#roster">活动名单</a>
-        <a class="button" href="/admin/activities/{{$activity.ID}}">活动工作台</a>
+
+  <section class="admin-page-head">
+    <div class="admin-page-head-main">
+      <p class="admin-eyebrow">匹配 · 一对一</p>
+      <h1 class="admin-page-title">{{$activity.Name}}</h1>
+      <p class="admin-subtitle">
+        <code>{{$activity.ActivityNo}}</code>
+        · 模式：{{if $activity.OnetooneEnabled}}一对一已开启{{else}}一对一未开启{{end}}
+        {{if $activity.GroupEnabled}}· 分组也开启（互斥）{{end}}
+      </p>
+      <div class="admin-role-chips">
+        {{template "admin_activity_status" $activity.Status}}
+        {{if $activity.OnetooneEnabled}}<span class="admin-chip admin-chip--full">一对一已开启</span>{{else}}<span class="admin-chip admin-chip--muted">一对一未开启</span>{{end}}
+        {{if $activity.GroupEnabled}}<span class="admin-chip admin-chip--cancel">分组也开启</span>{{end}}
       </div>
     </div>
-    {{template "flash" .}}
-    <div class="admin-matching-stats">
-      <div class="admin-matching-stat"><strong>{{.Data.Roster.Total}}</strong><span>有效报名</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Roster.Submitted}}</strong><span>已填志愿</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Roster.Unsubmitted}}</strong><span>未填志愿</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Preview.MaleCount}} / {{.Data.Preview.FemaleCount}}</strong><span>男 / 女（参与）</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.FemaleChats}}</strong><span>女生场次 K</span></div>
-      <div class="admin-matching-stat"><strong>{{.Data.Preview.TotalPairsExpected}}</strong><span>预计场次（双向往返）</span></div>
-      <div class="admin-matching-stat"><strong>第 {{.Data.Preview.Round}} 轮</strong><span>本次预览轮次</span></div>
+    <div class="admin-page-actions">
+      <a class="button" href="/admin/matching">匹配总览</a>
+      <a class="button" href="/admin/activities/{{$activity.ID}}#roster">活动名单</a>
+      <a class="button" href="/admin/activities/{{$activity.ID}}">活动工作台</a>
     </div>
-    {{if not $activity.OnetooneEnabled}}
-    <p class="alert alert-warn" role="alert">当前活动未开启一对一模式：即使执行，用户端也不会显示必聊入口。请先在活动工作台开启一对一。</p>
-    {{end}}
-    {{if $activity.SigninEnabled}}
-    <p class="alert alert-warn">签到门禁已开启：只有已签到的有效报名者参与匹配。当前报名 {{.Data.Preview.RegisteredMaleCount}} 男 {{.Data.Preview.RegisteredFemaleCount}} 女，签到后参与 {{.Data.Preview.MaleCount}} 男 {{.Data.Preview.FemaleCount}} 女。</p>
-    {{end}}
   </section>
 
-  <section class="card" id="preview">
-    <h2>执行预览</h2>
-    <p class="hint">K 为每位女生接待的男生场次；人数不足、模式冲突、轮次重复或 K 非法时，后端会拒绝执行并显示原因。</p>
+  {{template "flash" .}}
+
+  <section class="admin-stat-grid admin-stat-grid--tight" aria-label="一对一人数统计">
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Roster.Total}}</span>
+      <span class="admin-stat-label">有效报名</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Roster.Submitted}}</span>
+      <span class="admin-stat-label">已填志愿</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Roster.Unsubmitted}}</span>
+      <span class="admin-stat-label">未填志愿</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Preview.MaleCount}} / {{.Data.Preview.FemaleCount}}</span>
+      <span class="admin-stat-label">男 / 女（参与）</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.FemaleChats}}</span>
+      <span class="admin-stat-label">女生场次 K</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">{{.Data.Preview.TotalPairsExpected}}</span>
+      <span class="admin-stat-label">预计场次（双向往返）</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat-number">第 {{.Data.Preview.Round}} 轮</span>
+      <span class="admin-stat-label">本次预览轮次</span>
+    </div>
+  </section>
+
+  {{if not $activity.OnetooneEnabled}}
+  <p class="admin-alert admin-alert--warn" role="alert">当前活动未开启一对一模式：即使执行，用户端也不会显示必聊入口。请先在活动工作台开启一对一。</p>
+  {{end}}
+  {{if $activity.SigninEnabled}}
+  <p class="admin-alert admin-alert--warn">签到门禁已开启：只有已签到的有效报名者参与匹配。当前报名 {{.Data.Preview.RegisteredMaleCount}} 男 {{.Data.Preview.RegisteredFemaleCount}} 女，签到后参与 {{.Data.Preview.MaleCount}} 男 {{.Data.Preview.FemaleCount}} 女。</p>
+  {{end}}
+
+  <section class="admin-section" id="preview">
+    <div class="admin-section-head">
+      <div class="admin-section-head-main">
+        <h2 class="admin-section-title">执行预览</h2>
+        <p class="admin-section-desc">K 为每位女生接待的男生场次；人数不足、模式冲突、轮次重复或 K 非法时，后端会拒绝执行并显示原因。</p>
+      </div>
+    </div>
     <form method="get" action="/admin/matching/onetoone/{{$activity.ID}}#preview" class="admin-matching-form" data-matching-preview-form>
-      <label>轮次<input type="number" name="preview_round" min="1" value="{{.Data.Preview.Round}}" data-matching-field="preview_round"></label>
-      <label>女生场次 K<input type="number" name="female_chats" min="1" value="{{.Data.FemaleChats}}" data-matching-field="female_chats"></label>
-      <div class="admin-actions">
+      <label>轮次<input type="number" name="preview_round" min="1" value="{{.Data.Preview.Round}}" data-matching-field="preview_round" class="admin-input"></label>
+      <label>女生场次 K<input type="number" name="female_chats" min="1" value="{{.Data.FemaleChats}}" data-matching-field="female_chats" class="admin-input"></label>
+      <div class="admin-form-actions">
         <button type="submit" class="button">预览参数</button>
       </div>
     </form>
     {{if .Data.Preview.Blockers}}
-    <div class="alert alert-error" role="alert">
+    <div class="admin-alert admin-alert--error admin-alert--block" role="alert">
       <strong>当前不可执行</strong>
       <ul class="admin-matching-blockers">
         {{range .Data.Preview.Blockers}}<li>{{.}}</li>{{end}}
@@ -61,26 +94,30 @@
       <p class="hint">修复提示：确认只开启一种匹配模式、核对参与者与签到状态、把 K 调整为 ≥1 且不超过男生人数，或改用新的轮次。</p>
     </div>
     {{else}}
-    <p class="alert alert-ok" role="status">预览检查通过：{{.Data.Preview.FemaleCount}} 位女生各安排 {{.Data.FemaleChats}} 场，预计 {{.Data.Preview.TotalPairsExpected}} 场（双向往返）。</p>
+    <p class="admin-alert admin-alert--ok" role="status">预览检查通过：{{.Data.Preview.FemaleCount}} 位女生各安排 {{.Data.FemaleChats}} 场，预计 {{.Data.Preview.TotalPairsExpected}} 场（双向往返）。</p>
     {{end}}
     {{if .Data.Preview.ExistingRoundResults}}
     <p class="hint">第 {{.Data.Preview.Round}} 轮已有 {{.Data.Preview.ExistingRoundResults}} 条结果；重复执行会被后端拒绝。</p>
     {{end}}
     <div class="admin-actions">
-      <button type="button" class="button primary" data-matching-action="run"
-              aria-busy="false">执行一对一</button>
-      <button type="button" class="button danger" data-matching-action="reset"
-              aria-busy="false">清空一对一结果</button>
+      <button type="button" class="button primary" data-matching-action="run" aria-busy="false">执行一对一</button>
+      <button type="button" class="button danger" data-matching-action="reset" aria-busy="false"
+              data-adm-confirm="确认清空该活动的一对一结果？此操作会删除已保存的必聊关系。">清空一对一结果</button>
     </div>
     <div class="admin-matching-status" data-matching-status role="status" aria-live="polite"></div>
   </section>
 
-  <section class="card" id="result">
-    <h2>一对一结果</h2>
+  <section class="admin-section" id="result">
+    <div class="admin-section-head">
+      <div class="admin-section-head-main">
+        <h2 class="admin-section-title">一对一结果</h2>
+        <p class="admin-section-desc">按轮次保存；展开单个用户查看必聊对象。</p>
+      </div>
+    </div>
     {{if .Data.Result.Rounds}}
-    <nav class="admin-tabs" aria-label="一对一轮次">
+    <nav class="admin-filter-chips" aria-label="一对一轮次">
       {{range .Data.Result.Rounds}}
-      <a href="?round={{.}}#result"{{if eq . $.Data.Result.Round}} aria-current="page"{{end}}>第 {{.}} 轮</a>
+      <a class="admin-chip-btn" href="?round={{.}}#result"{{if eq . $.Data.Result.Round}} aria-current="page"{{end}}>第 {{.}} 轮</a>
       {{end}}
     </nav>
     {{end}}
@@ -89,7 +126,7 @@
       <span>当前轮次 <strong>第 {{.Data.Result.Round}} 轮</strong></span>
       <span>人数 <strong>{{.Data.Result.MatchedCount}}</strong></span>
       <span>必聊关系 <strong>{{.Data.Result.ResultCount}}</strong> 条</span>
-      {{if not .Data.Result.RoundHasResults}}<span class="pill pill-warn">该轮没有结果</span>{{end}}
+      {{if not .Data.Result.RoundHasResults}}<span class="admin-chip admin-chip--draft">该轮没有结果</span>{{end}}
     </p>
     <div class="admin-matching-people">
       {{range .Data.Result.People}}
@@ -103,19 +140,25 @@
       {{end}}
     </div>
     {{else}}
-    <div class="empty-state admin-empty">
-      <h2>还没有一对一结果</h2>
-      <p class="shell-empty-text">预览检查通过后执行一对一；结果会按轮次保存在这里。</p>
+    <div class="admin-empty">
+      <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_heart"}}</span>
+      <h2 class="admin-empty-title">还没有一对一结果</h2>
+      <p>预览检查通过后执行一对一；结果会按轮次保存在这里。</p>
     </div>
     {{end}}
   </section>
 
-  <section class="card" id="chat">
-    <h2>聊天概览</h2>
+  <section class="admin-section" id="chat">
+    <div class="admin-section-head">
+      <div class="admin-section-head-main">
+        <h2 class="admin-section-title">聊天概览</h2>
+        <p class="admin-section-desc">必聊关系与留言统计，按轮次查看。</p>
+      </div>
+    </div>
     {{if .Data.Chat.Rounds}}
-    <nav class="admin-tabs" aria-label="聊天轮次">
+    <nav class="admin-filter-chips" aria-label="聊天轮次">
       {{range .Data.Chat.Rounds}}
-      <a href="?chat_round={{.}}#chat"{{if eq . $.Data.Chat.Round}} aria-current="page"{{end}}>第 {{.}} 轮</a>
+      <a class="admin-chip-btn" href="?chat_round={{.}}#chat"{{if eq . $.Data.Chat.Round}} aria-current="page"{{end}}>第 {{.}} 轮</a>
       {{end}}
     </nav>
     {{end}}
@@ -136,7 +179,7 @@
         <summary>{{.Name}} {{if .UserID}}<span class="muted">{{.UserID}}</span>{{end}} · 必聊 {{.Assigned}} · 已聊 {{.Chatted}} · 留言 {{.MsgCount}}</summary>
         <ul class="admin-matching-pairs">
           {{range .Pairs}}
-          <li>{{if .Chatted}}<span class="pill">已聊</span>{{else}}<span class="pill pill-muted">未聊</span>{{end}}
+          <li>{{if .Chatted}}<span class="admin-chip admin-chip--done">已聊</span>{{else}}<span class="admin-chip admin-chip--muted">未聊</span>{{end}}
             {{.Name}} {{if .UserID}}<span class="muted">{{.UserID}}</span>{{end}}
             · 第 {{.Rank}} 位 · {{.MsgCount}} 条{{if .LastAt}} · {{.LastAt}}{{end}}</li>
           {{end}}

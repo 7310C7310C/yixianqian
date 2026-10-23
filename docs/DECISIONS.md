@@ -156,3 +156,10 @@ sources: []
 - 决策：原入口级 Playwright smoke（`admin_activity_native_smoke.py`、`admin_points_report_smoke.py`）删除，替换为 API 级 `tools/admin_legacy_api_smoke.py`：校验管理员 SPA 无三个单列入口、管理员三端点 200 且响应形状正确、普通用户三端点 403 且返回 v1 error 信封。
 - 后果：「我的→管理」回到单一入口；原生化页面如后续要重新暴露，需另立决策并恢复对应入口回归。
 - 边界：不改数据库 schema、不改 SSR 页面、不改 `/legacy/api/admin/*`、`/legacy/api/messages/reported` 契约与 RBAC/CSRF/审计；不删除 SPA 页面代码；第 18、19 节中关于入口并存的描述由本节取代，其余后端与页面能力描述不变。
+
+## 21. 管理台剩余页面沿用 Phase A 设计系统（2026-10-24）
+
+- 背景：Phase A 只重做了外壳、总览与活动；用户/匹配/麦穗/举报/反馈/角色/审计仍用旧 `.card` + 6–7 列表格，768 宽按钮堆叠、日期折行，深色实心按钮对比度 2.17:1，总览右上角因管理员姓名单字「一」看起来像空按钮。
+- 决策：不新增第二套设计系统；在 `web/static/admin.css` 的 `Phase B/C` 分区补齐共享组件（身份块、记录卡 `.admin-record-list`、键值网格 `.admin-kv`、角色卡、审计行卡、`.admin-table--stack`），页面统一使用 `.admin-page-head` + `.admin-section` + 状态 partial + 空态/分页；多字段列表改记录卡，不再用 6–7 列表格；顶栏右侧改为「图标 + 管理员 + 姓名」胶囊；实心品牌控件统一用 `--adm-on-brand`（深色 `#2a1a1e`）保证 ≥4.5:1。
+- 边界：只改模板/CSS/交互钩子；路由、handler、字段名、表单 action/method、`data-matching-*`/`data-adm-*` 钩子、RBAC、CSRF 与审计不变；Phase A 的 719px 表格断点不改，新表格卡片化用 `.admin-table--stack`（≤899）。
+- 后果：剩余 10 页在三视口下统一为粉色 Vant 观感；`assetVersion` 提升到 3，两个 `@import` 同步；证据与断言见 `docs/STATUS.md` 管理台章节。

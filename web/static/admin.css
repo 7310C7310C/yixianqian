@@ -18,6 +18,8 @@ body.admin-shell {
   --adm-brand-soft: #fff0f3;
   --adm-brand-wash: #fff7f8;
   --adm-brand-line: #ffe3e8;
+  /* 实心品牌底上的文字色：浅色白字，深色用深底反色保证 ≥4.5:1 */
+  --adm-on-brand: #ffffff;
 
   /* 中性 */
   --adm-bg: #f7f8fa;
@@ -120,6 +122,7 @@ html.yxq-embed-dark body.admin-shell {
   --adm-brand-soft: #3a2830;
   --adm-brand-wash: #2a1a1e;
   --adm-brand-line: #46363c;
+  --adm-on-brand: #2a1a1e;
   --adm-bg: #111111;
   --adm-surface: #1c1c1e;
   --adm-surface-2: #2c2c2e;
@@ -572,14 +575,14 @@ body.admin-shell .button:hover {
 body.admin-shell .button.primary {
   border-color: var(--adm-brand-strong);
   background: var(--adm-brand-strong);
-  color: #fff;
+  color: var(--adm-on-brand);
   box-shadow: 0 4px 14px rgba(204, 48, 78, .18);
 }
 
 body.admin-shell .button.primary:hover {
   border-color: var(--adm-brand-deep);
   background: var(--adm-brand-deep);
-  color: #fff;
+  color: var(--adm-on-brand);
 }
 
 body.admin-shell .button.danger {
@@ -846,7 +849,7 @@ a.admin-stat:hover {
   flex: none;
   border-radius: var(--adm-pill);
   background: var(--adm-brand-strong);
-  color: #fff;
+  color: var(--adm-on-brand);
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -979,10 +982,11 @@ body.admin-shell .pill-warn {
 }
 
 .admin-chip-btn[aria-pressed="true"],
+.admin-chip-btn[aria-current="page"],
 .admin-chip-btn.is-active {
   border-color: var(--adm-brand-strong);
   background: var(--adm-brand-strong);
-  color: #fff;
+  color: var(--adm-on-brand);
 }
 
 .admin-chip-count {
@@ -1098,7 +1102,7 @@ body.admin-shell .pill-warn {
 
 .admin-tab[aria-selected="true"] {
   background: var(--adm-brand-strong);
-  color: #fff;
+  color: var(--adm-on-brand);
   box-shadow: 0 2px 8px rgba(204, 48, 78, .22);
 }
 
@@ -2483,7 +2487,7 @@ body.admin-shell .admin-tabs a {
 body.admin-shell .admin-tabs a[aria-current="page"] {
   border-color: var(--adm-brand-strong);
   background: var(--adm-brand-strong);
-  color: #fff;
+  color: var(--adm-on-brand);
 }
 
 body.admin-shell .admin-jump {
@@ -3016,5 +3020,569 @@ body.admin-shell .admin-points-tabs {
   body.admin-shell * {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* ==========================================================================
+   Phase B/C：剩余管理页（用户/匹配/麦穗/内容/系统）共享组件
+   --------------------------------------------------------------------------
+   - 只新增类，不改 Phase A 既有组件与断点。
+   - 390 宽按钮不挤压文字；所有可点元素 ≥44px。
+   ========================================================================== */
+
+/* 顶栏身份块：staging 管理员姓名是单字「一」，裸文本看起来像空按钮，改为
+   带图标与「管理员」标签的胶囊。 */
+.admin-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  max-width: min(58vw, 260px);
+  margin-left: auto;
+  padding: 3px 12px 3px 5px;
+  border: 1px solid var(--adm-brand-line);
+  border-radius: var(--adm-pill);
+  background: var(--adm-brand-wash);
+  color: var(--adm-text);
+  flex: none;
+}
+
+.admin-identity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--adm-surface);
+  color: var(--adm-brand-strong);
+  box-shadow: inset 0 0 0 1px var(--adm-brand-line);
+}
+
+.admin-identity-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.admin-identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.admin-identity-role {
+  color: var(--adm-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.admin-identity-name {
+  overflow: hidden;
+  color: var(--adm-text-strong);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 430px) {
+  .admin-identity {
+    padding-right: 9px;
+  }
+
+  .admin-identity-role {
+    display: none;
+  }
+}
+
+@media (max-width: 359px) {
+  .admin-identity-text {
+    display: none;
+  }
+
+  .admin-identity {
+    padding: 4px;
+  }
+}
+
+/* 列表卡：用户 / 匹配 / 审计 / 角色等统一用行卡，避免 6–7 列表格在 768 挤压。 */
+.admin-record-list {
+  margin-top: 12px;
+  border: 1px solid var(--adm-divider);
+  border-radius: var(--adm-radius-lg);
+  background: var(--adm-surface);
+  overflow: hidden;
+}
+
+.admin-record-list + .admin-record-list {
+  margin-top: 10px;
+}
+
+.admin-record {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px 14px;
+  min-width: 0;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--adm-divider);
+}
+
+.admin-record:last-child {
+  border-bottom: 0;
+}
+
+.admin-record:hover {
+  background: var(--adm-brand-wash);
+}
+
+.admin-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--adm-brand-soft);
+  color: var(--adm-brand-strong);
+}
+
+.admin-avatar svg {
+  width: 19px;
+  height: 19px;
+}
+
+.admin-record-main {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.admin-record-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--adm-text-strong);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-record-title a {
+  color: var(--adm-brand-strong);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.admin-record-title a:hover {
+  text-decoration: underline;
+}
+
+.admin-record-sub {
+  margin: 3px 0 0;
+  color: var(--adm-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.admin-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.admin-record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.admin-record-actions form {
+  display: inline-flex;
+  margin: 0;
+}
+
+@media (max-width: 719px) {
+  .admin-record {
+    padding: 12px;
+  }
+
+  .admin-record-actions {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .admin-record-actions .button {
+    flex: 1 1 auto;
+  }
+}
+
+/* 详情键值网格 */
+.admin-kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px 18px;
+  margin: 10px 0 0;
+}
+
+.admin-kv > div {
+  min-width: 0;
+}
+
+.admin-kv dt {
+  color: var(--adm-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.admin-kv dd {
+  margin: 2px 0 0;
+  color: var(--adm-text);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 640px) {
+  .admin-kv {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .admin-kv {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.admin-nowrap {
+  white-space: nowrap;
+}
+
+/* 表格单元换行：长用户名 / 长活动名不得撑破容器 */
+body.admin-shell .admin-table th,
+body.admin-shell .admin-table td {
+  overflow-wrap: anywhere;
+}
+
+body.admin-shell .admin-table td strong,
+body.admin-shell .admin-table td a {
+  overflow-wrap: anywhere;
+}
+
+/* Phase B/C 表格：≤899 转卡片，≥900 显示表格（Phase A 的 719 断点保持不变） */
+@media (max-width: 899px) {
+  body.admin-shell .admin-table.admin-table--stack thead {
+    display: none;
+  }
+
+  body.admin-shell .admin-table.admin-table--stack,
+  body.admin-shell .admin-table.admin-table--stack tbody,
+  body.admin-shell .admin-table.admin-table--stack tr,
+  body.admin-shell .admin-table.admin-table--stack td {
+    display: block;
+    width: 100%;
+  }
+
+  body.admin-shell .admin-table.admin-table--stack tr {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--adm-divider);
+  }
+
+  body.admin-shell .admin-table.admin-table--stack tr:last-child {
+    border-bottom: 0;
+  }
+
+  body.admin-shell .admin-table.admin-table--stack td {
+    position: relative;
+    min-height: 28px;
+    padding: 3px 0 3px 34%;
+    border-bottom: 0;
+    overflow-wrap: anywhere;
+  }
+
+  body.admin-shell .admin-table.admin-table--stack td::before {
+    content: attr(data-label);
+    position: absolute;
+    top: 3px;
+    left: 0;
+    width: 31%;
+    color: var(--adm-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  body.admin-shell .admin-table--stack-wrap {
+    overflow: visible;
+  }
+}
+
+/* 角色卡 */
+.admin-role-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+@media (min-width: 900px) {
+  .admin-role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.admin-role-card {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--adm-divider);
+  border-radius: var(--adm-radius);
+  background: var(--adm-surface);
+}
+
+.admin-role-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.admin-role-code {
+  padding: 2px 8px;
+  border-radius: var(--adm-pill);
+  background: var(--adm-surface-2);
+  color: var(--adm-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.admin-role-name {
+  color: var(--adm-text-strong);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-role-count {
+  margin-left: auto;
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.admin-perm-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-perm-list li {
+  padding: 2px 8px;
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface-2);
+  color: var(--adm-label);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* 审计行卡 */
+.admin-audit-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.admin-audit-entry time {
+  color: var(--adm-text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.admin-audit-entry code {
+  overflow-wrap: anywhere;
+}
+
+.admin-audit-detail {
+  width: 100%;
+  margin: 2px 0 0;
+  color: var(--adm-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* 麦穗/用户详情共用的紧凑统计格 */
+.admin-stat-grid--tight .admin-stat {
+  min-height: 78px;
+  padding: 12px;
+}
+
+.admin-stat-grid--tight .admin-stat-number {
+  font-size: 22px;
+}
+
+/* 内联筛选：搜索 + 下拉 + 提交同一行（≥720） */
+@media (min-width: 720px) {
+  .admin-filter-bar--inline {
+    grid-template-columns: minmax(0, 1fr) minmax(140px, .42fr) auto;
+    align-items: center;
+  }
+}
+
+/* 匹配控制台补充：预览表单动作行、名单搜索、触控 */
+body.admin-shell .admin-matching-form .admin-form-actions {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+body.admin-shell .admin-matching-search {
+  max-width: 420px;
+}
+
+body.admin-shell .admin-matching-person summary {
+  min-height: var(--adm-tap);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+body.admin-shell .admin-matching-roster h3 {
+  font-size: 13px;
+  color: var(--adm-muted);
+  font-weight: 700;
+}
+
+@media (min-width: 720px) {
+  body.admin-shell .admin-matching-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 多段提示（标题 + 列表 + 说明）用块级布局 */
+.admin-alert--block {
+  display: block;
+}
+
+.admin-alert--block strong {
+  display: block;
+}
+
+.admin-alert--block ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.admin-alert--block .hint {
+  display: block;
+  margin: 6px 0 0;
+  color: inherit;
+}
+
+/* 表单栅格内的字段不再叠加纵向 margin */
+.admin-form-grid .admin-field + .admin-field {
+  margin-top: 0;
+}
+
+/* 审计筛选：2 列（<900）/ 3 列（≥900） */
+body.admin-shell .admin-form-grid.admin-audit-filter {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  body.admin-shell .admin-form-grid.admin-audit-filter {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+body.admin-shell .admin-audit-filter .admin-form-actions {
+  grid-column: 1 / -1;
+}
+
+.admin-audit-more {
+  margin-top: 6px;
+}
+
+.admin-audit-more summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--adm-tap);
+  color: var(--adm-brand-strong);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* 举报处理备注与按钮同一行（≥720） */
+@media (min-width: 720px) {
+  body.admin-shell .admin-handle-form--inline {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  body.admin-shell .admin-handle-form--inline .admin-actions {
+    margin-top: 0;
+    flex-wrap: nowrap;
+  }
+}
+
+/* 角色指派：3 列（≥900） */
+@media (min-width: 900px) {
+  body.admin-shell .admin-role-assign {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(140px, .6fr);
+  }
+
+  body.admin-shell .admin-role-assign .admin-form-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+/* 按钮内图标固定尺寸，避免 flex 拉伸（390 全宽按钮曾把 SVG 放大） */
+body.admin-shell .button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* 审计筛选：手机单列，≥640 两列，≥900 三列 */
+body.admin-shell .admin-form-grid.admin-audit-filter {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 640px) {
+  body.admin-shell .admin-form-grid.admin-audit-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  body.admin-shell .admin-form-grid.admin-audit-filter {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
