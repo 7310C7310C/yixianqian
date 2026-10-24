@@ -3,20 +3,52 @@ package httpserver
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var (
 	errIDCardFormat = errors.New("身份证号码格式不正确。")
 	idCard18RE      = regexp.MustCompile(`^[0-9]{17}[0-9X]$`)
 	idCard15RE      = regexp.MustCompile(`^[0-9]{15}$`)
+	wechatIDRE      = regexp.MustCompile(`^[A-Za-z0-9_.@+-]+$`)
 )
+
+// validateWechatID applies the WeChat ID rules used by the registration and
+// mutual-contact forms: 5-64 visible characters, ASCII letters, digits and the
+// separators users commonly paste (underscore, hyphen, dot, @, plus). The rule
+// is deliberately permissive enough for legacy IDs such as "wxid_xxx" while
+// rejecting whitespace, control characters and markup.
+func validateWechatID(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", errors.New("请填写：微信号")
+	}
+	if n := utf8.RuneCountInString(value); n < 5 || n > 64 {
+		return "", errors.New("微信号需为 5-64 个字符。")
+	}
+	if !wechatIDRE.MatchString(value) {
+		return "", errors.New("微信号只能包含字母、数字、下划线、短横线、点、@ 或 +。")
+	}
+	return value, nil
+}
+
+// idCardHash is a keyed digest of the normalised ID number. It lets the
+// database enforce uniqueness without storing a directly brute-forceable
+// digest: the key is derived from the deployment secret.
+func idCardHash(secret, plain string) string {
+	mac := hmac.New(sha256.New, idCardKey(secret))
+	mac.Write([]byte(strings.ToUpper(strings.TrimSpace(plain))))
+	return hex.EncodeToString(mac.Sum(nil))
+}
 
 // validateChineseIDCard accepts the 18-digit (checksum verified) and legacy
 // 15-digit mainland formats, returning the birth date embedded in the number.
@@ -41,6 +73,24 @@ func validateChineseIDCard(raw string) (string, time.Time, error) {
 	default:
 		return "", time.Time{}, errIDCardFormat
 	}
+}
+
+// validateBackfillIDCard is the stricter profile-backfill rule: the legacy
+// 15-digit form is no longer accepted for a new submission, and the embedded
+// birth date must match the profile birthday (checked by the caller).
+func validateBackfillIDCard(raw string) (string, time.Time, error) {
+	raw = strings.ToUpper(strings.TrimSpace(raw))
+	if !idCard18RE.MatchString(raw) {
+		return "", time.Time{}, errIDCardFormat
+	}
+	birth, err := time.Parse("20060102", raw[6:14])
+	if err != nil || birth.Year() < 1900 {
+		return "", time.Time{}, errIDCardFormat
+	}
+	if !idCard18ChecksumValid(raw) {
+		return "", time.Time{}, errIDCardFormat
+	}
+	return raw, birth, nil
 }
 
 func idCard18ChecksumValid(id string) bool {

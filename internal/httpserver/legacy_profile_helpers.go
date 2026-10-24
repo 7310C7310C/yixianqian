@@ -42,6 +42,7 @@ const (
 	legacyFieldPartnerSports   = "理想中的TA-运动"
 	legacyFieldWechat          = "微信号"
 	legacyFieldPhone           = "手机号"
+	legacyFieldIDCard          = "身份证号"
 )
 
 type legacyEditableField struct {
@@ -51,6 +52,7 @@ type legacyEditableField struct {
 	Options any    `json:"options"`
 	Long    bool   `json:"long"`
 	Value   any    `json:"value"`
+	Hint    string `json:"hint,omitempty"`
 }
 
 // legacyProfileEditable mirrors the v1 `_editable_schema` payload. The SPA
@@ -61,7 +63,7 @@ func legacyProfileEditable(p db.Profile) []legacyEditableField {
 	if p.HeightCM != nil && *p.HeightCM > 0 {
 		height = *p.HeightCM
 	}
-	return []legacyEditableField{
+	fields := []legacyEditableField{
 		{Field: legacyFieldNickname, Label: "昵称", Type: "text", Value: p.Nickname},
 		{Field: legacyFieldHeight, Label: "身高", Type: "number", Value: height},
 		{Field: legacyFieldEducation, Label: "学历", Type: "select", Options: db.ProfileEducationOptions, Value: p.Education},
@@ -88,6 +90,19 @@ func legacyProfileEditable(p db.Profile) []legacyEditableField {
 		{Field: legacyFieldWechat, Label: "微信号", Type: "text", Value: p.Wechat},
 		{Field: legacyFieldPhone, Label: "手机号", Type: "phone", Value: p.Phone},
 	}
+	// v1 exposed the ID card only while it was missing/invalid; the input is
+	// intentionally empty so the server never echoes plaintext back.
+	observer := p.AccountKind == "observer" || p.AccountStatus == "observer"
+	if !p.IDCardValid && !observer {
+		fields = append([]legacyEditableField{{
+			Field: legacyFieldIDCard,
+			Label: "身份证号",
+			Type:  "text",
+			Value: "",
+			Hint:  "身份证号有误或缺失，请重新填写正确的18位身份证号；仅核验使用，不公开展示。",
+		}}, fields...)
+	}
+	return fields
 }
 
 func legacyStringList(values []string) []string {
@@ -241,6 +256,24 @@ func legacyProfileUpdateFromJSON(body map[string]any) (db.ProfileUpdate, error) 
 		upd.Phone = v
 	}
 	return upd, nil
+}
+
+// legacyIDCardValue extracts the temporary ID-card backfill field. Spaces are
+// stripped because users often paste the number in groups.
+func legacyIDCardValue(body map[string]any) (string, bool, error) {
+	value, key, ok := legacyLookup(body, legacyFieldIDCard, "id_card")
+	if !ok {
+		return "", false, nil
+	}
+	switch v := value.(type) {
+	case nil:
+		return "", false, nil
+	case string:
+		normalized := strings.ToUpper(strings.Join(strings.Fields(v), ""))
+		return normalized, true, nil
+	default:
+		return "", false, fmt.Errorf("「%s」格式不正确", key)
+	}
 }
 
 func legacyLookup(body map[string]any, keys ...string) (any, string, bool) {

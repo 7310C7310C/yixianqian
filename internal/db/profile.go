@@ -147,6 +147,13 @@ type ProfileUpdate struct {
 	PartnerSports   *[]string
 	Wechat          *string
 	Phone           *string
+
+	// ID card backfill is only accepted while the account is still invalid.
+	// The handler validates and encrypts the number; the database stores the
+	// ciphertext, last four digits and keyed uniqueness hash.
+	IDCardCipher []byte
+	IDCardLast4  string
+	IDCardHash   string
 }
 
 // Empty reports whether the update contains no whitelisted changes.
@@ -159,7 +166,7 @@ func (u ProfileUpdate) Empty() bool {
 		u.PartnerCriteria == nil && u.SelfTraits == nil && u.SelfHobbies == nil &&
 		u.SelfSports == nil && u.MBTI == nil && u.PartnerTraits == nil &&
 		u.PartnerHobbies == nil && u.PartnerSports == nil && u.Wechat == nil &&
-		u.Phone == nil
+		u.Phone == nil && u.IDCardCipher == nil
 }
 
 // Account status switches are restricted to the product's original rule.
@@ -394,6 +401,12 @@ func (d *DB) UpdateProfile(ctx context.Context, userID int64, upd ProfileUpdate)
 	if upd.Phone != nil {
 		add("phone", *upd.Phone)
 	}
+	if upd.IDCardCipher != nil {
+		add("id_card_ciphertext", upd.IDCardCipher)
+		add("id_card_last4", upd.IDCardLast4)
+		add("id_card_hash", upd.IDCardHash)
+		add("id_card_valid", true)
+	}
 
 	if len(sets) == 0 {
 		return d.GetProfile(ctx, userID)
@@ -413,6 +426,22 @@ func (d *DB) UpdateProfile(ctx context.Context, userID int64, upd ProfileUpdate)
 		return Profile{}, err
 	}
 	return p, nil
+}
+
+// IDCardHashInUse reports whether another account already stores this keyed
+// identity hash. The unique index remains the final guard against races.
+func (d *DB) IDCardHashInUse(ctx context.Context, hash string, excludeUserID int64) (bool, error) {
+	if strings.TrimSpace(hash) == "" {
+		return false, nil
+	}
+	var exists bool
+	err := d.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE id_card_hash = $1 AND id <> $2)`,
+		hash, excludeUserID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("db: check id card hash: %w", err)
+	}
+	return exists, nil
 }
 
 func validateProfileUpdate(upd *ProfileUpdate) error {

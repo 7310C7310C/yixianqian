@@ -448,9 +448,11 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	}
 	in.IDCard = normalizedID
 
-	if in.Wechat, err = validateRegisterText(values, "wechat"); err != nil {
-		return in, err
+	wechat, wechatErr := validateWechatID(values.Get("wechat"))
+	if wechatErr != nil {
+		return in, registerFormErr("wechat", wechatErr.Error())
 	}
+	in.Wechat = wechat
 	if in.BaptismalName, err = validateRegisterText(values, "baptismal_name"); err != nil {
 		return in, err
 	}

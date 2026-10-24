@@ -204,7 +204,7 @@ sources: []
 
 ## 26. D10 每周推荐位按 v1 原版补实现（2026-10-24）
 
-- 背景：第 25 节按 PM 2026-10-24 的决定「D10 不做」，`weekly_recommendations` 因此保持 0 引用、`CardView.Recommended` 永远 false。同日 PM 追加要求「按 v1 原版补 D10 每周推荐」，第 25 节中 D10 部分由本节取代；E2（相互喜欢展示微信号）仍不做。
+- 背景：第 25 节按 PM 2026-10-24 的决定「D10 不做」，`weekly_recommendations` 因此保持 0 引用、`CardView.Recommended` 永远 false。同日 PM 追加要求「按 v1 原版补 D10 每周推荐」，第 25 节中 D10 部分由本节取代；E2（相互喜欢展示微信号）另见第 27 节。
 - 决策：选人规则逐条移植 v1 `lib/recommend.py` 到 `internal/matching/recommend.go`：推荐位总数 `max(7, 必显数)`、算法位保底 3、每周保留 4 个（先被必显占）、必显=匿名喜欢我的异性单身（最近优先、去重、排除自己与相互喜欢）、ISO 周跨年连续、同周只剔除失效并补空位；相似度复用 `matching.MatchScore`（100 分制，缺失中性 0.5），不新增第二套打分。
 - 决策：生成任务用 `cmd/server` 现有后台循环（启动补跑 + 整点检查），不新增常驻进程；`db.GenerateWeeklyRecommendations` 在单事务内读取用户/喜欢/上一周名单，`pg_advisory_xact_lock` 串行化，名单未变化时不重写（幂等且不刷新 `created_at`）。
 - 决策：`weekly_recommendations` 就地修正——主键改为 `(week, user_id, position)`、新增 `target_user_id`；`user_id` 为名单所有者，`pinned_by_user_id` 非空表示必显位且值为喜欢名单主人的用户，只在服务端保存。不新建表，避免再造一张死表。
@@ -213,3 +213,13 @@ sources: []
 - 决策：学历档位补 `大专以下 = 1`（与 v1「高中及以下」同档），否则 v2 资料页新选项在 `MatchScore` 里会被当成未填而拿中性分；golden fixtures 未使用该值，一对一历史结果不受影响。
 - 边界：不恢复 v1 把名单写多维表格/文件的行为；不展示推荐理由；观察员与性别未填用户不生成名单；推荐对象仍需在卡片候选池（有照片、符合筛选）中才可见，候选不足时名单可短于 7 个；不做历史周回填。
 - 证据：`internal/matching/recommend_test.go`（槽位/轮换/必显≥4/幂等/空池/ISO 跨年/打分）、`TestIntegrationWeeklyRecommendations`（16 用户 + 喜欢关系，推荐位/轮换/必显/幂等/失效剔除）、`TestIntegrationRecommendationAdminPage`（RBAC/CSRF/审计/不泄漏必显）、`TestIntegrationWeeklyRecommendationsOnCards`（置顶 + `recommended` + SPA 角标）。
+
+## 27. 身份证 P0 补填+服务端门禁；相互喜欢按双方就绪交换微信号（2026-10-24）
+
+- 背景：第 25 节把 E2 记为不做后，PM 重新确认需要按 v1 原版补齐两件事：注册必填微信号（v1 `_REGISTER_RULES`），以及迁移用户 `id_card_valid=false` 的补填与服务端门禁（审计 P0）。staging 1103 个 active + 4 个 observer 被客户端门禁拦住且无补录入口；服务端 `/legacy/api/*` 完全未校验 `id_card_valid`。
+- 决策（微信号）：注册表单微信号必填并做长度/字符校验（5–64 个 ASCII 字母、数字、`_ - . @ +`），写入 `users.wechat`；资料编辑保留可改。数据导入重复执行时，数据库已有非空微信号不得被源记录覆盖；身份证后四位与 `id_card_valid=true` 同样不被回退。
+- 决策（相互喜欢交换）：以 `users.wechat` 为联系方式，`contact_consent=true` 为“同意在相互喜欢后交换”。资料已有微信号且已同意的，直接视为就绪；没有微信号或未同意的，在「相互喜欢」页填写并显式打开同意开关。**只有双方都就绪**时才在 mutual API 返回 `their_wechat`，并给双方各发一条站内通知，正文含对方微信号；未就绪返回空值并给 `wechat_required`/`wechat_status`（`need_wechat`、`need_consent`、`waiting_other`、`ready`）。通知用 `mutual-wechat:<低ID>:<高ID>:<收件人ID>` 去重，重复读取不重发。
+- 决策（身份证 P0）：资料编辑在 `id_card_valid=false` 时显示「身份证号」补填字段，仅接受 18 位、校验位正确、证内生日与资料生日一致、未被其他账号使用的号码；通过后 AES-GCM 加密写 `id_card_ciphertext`、写 `id_card_last4` 与 HMAC 唯一哈希 `id_card_hash`、置 `id_card_valid=true`，审计只记后四位。服务端门禁对非豁免用户拦截 `/legacy/api/*` 与 `/app`、`/admin` 页面：仅放行首页、资料（含照片）、通知、改密、退出、版本/埋点与 mutual 微信号表单；其余返回 403 `id_card_required`（JSON/HTML 按路径）。SPA 全屏门禁保留，但以服务端 `id_card_valid` 为准，补填成功后解除。
+- 观察员口径：观察员继续豁免 `has_face`，**不豁免身份证**（PM 2026-10-22）；观察员 `id_card_valid=false` 时同样 403，资料接口仍可读到 `id_valid=false`。
+- 边界：不改注册审核状态机、不改 v1 的喜欢/通知匿名语义；相互喜欢通知只在双方就绪时发送，绝不把匿名喜欢者身份带入 mutual 页。`id_card_hash` 只用于唯一性，不写日志/响应；存量密文不批量解密回填哈希。
+- 证据：`TestIntegrationIDCardGateAndBackfill`、`TestIntegrationIDCardBackfillUniqueness`、`TestIntegrationObserverStillBlockedByIDCard`、`TestIntegrationMutualWechatExchange`、`TestIntegrationMutualWechatDoesNotLeakAnonymousLike`、`TestWechatIDValidation`、`TestBackfillIDCardRequires18Digits`、`tools/test_migrate_testapp.py`（微信号空值不覆盖）。

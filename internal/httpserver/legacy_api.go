@@ -101,6 +101,21 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger(r).Warn("legacy home quota failed", "error", err, "user_id", user.ID)
 	}
+	// The home endpoint stays reachable so the SPA can boot and show the
+	// backfill gate, but an unverified account must not receive cards, likes
+	// or activities through it.
+	if !viewer.IDCardValid {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user":              legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(ctx, user.ID), a.legacyObserverEnabled(ctx, user.ID), a.legacyViewRole(r), a.legacyProfileHasFace(ctx, user.ID)),
+			"cards":             []any{},
+			"cards_total":       0,
+			"likes":             map[string]any{"liked_me": []any{}, "mutual": []any{}},
+			"activities":        []any{},
+			"register_form_url": "",
+			"promo_activity_id": "",
+		})
+		return
+	}
 	// 观察员视角只影响卡片筛选；不要改写 viewer 本身，否则账号状态会被
 	// cookie 污染（例如 has_face 误判为 observer 放行）。
 	pageViewer := viewer
@@ -461,6 +476,12 @@ func (a *App) legacyLikes(ctx context.Context, userID int64, now time.Time) (map
 	}
 	mutual := make([]map[string]any, 0)
 	for _, pair := range uniqueMutualPairs(overview) {
+		status, required, waiting := mutualWechatStatus(overview.Me, pair.Other)
+		myWechat := strings.TrimSpace(overview.Me.Wechat)
+		theirWechat := ""
+		if status == wechatStatusReady {
+			theirWechat = pair.Other.Wechat
+		}
 		mutual = append(mutual, map[string]any{
 			"nickname":         pair.Other.DisplayName(),
 			"message":          mutualMessage(overview, pair),
@@ -468,8 +489,16 @@ func (a *App) legacyLikes(ctx context.Context, userID int64, now time.Time) (map
 			"mutual":           true,
 			"real":             pair.Like.LikeType == db.LikeTypeReal,
 			"initiator_openid": socialCardOpenID(pair.Other),
+			"my_wechat":        myWechat,
+			"their_wechat":     theirWechat,
+			"wechat_required":  required,
+			"wechat_status":    status,
+			"waiting_other":    waiting,
 		})
 	}
+	// Sending is idempotent; reading likes is a convenient safety net for
+	// pairs that became ready through a retried write.
+	a.ensureMutualWechatExchanges(ctx, overview)
 	likedMe := make([]map[string]any, 0)
 	for _, view := range likedMeViews(overview) {
 		likedMe = append(likedMe, map[string]any{
@@ -679,6 +708,7 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 		"can_admin":       isAdmin,
 		"available_roles": legacyRoles(observerEnabled, observer),
 		"has_face":        hasFace,
+		"id_valid":        profile.IDCardValid,
 		"wechat":          profile.Wechat,
 		"phone":           firstNonEmpty(profile.Phone, user.Phone),
 	}

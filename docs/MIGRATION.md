@@ -26,7 +26,7 @@ sources:
 
 | 表 | 笔数 | 说明 |
 |---|---:|---|
-| users | 1110 | 用户主档、身份证号、账号状态、飞书 ID、个人照片 |
+| users | 1110 | 用户主档、身份证号（密文/后四位/HMAC 哈希）、微信号、账号状态、飞书 ID、个人照片 |
 | observers | 4 | 观察员记录；管理员身份由 `admin_user_roles` 迁移，不由本表推导 |
 | likes | 132 | 喜欢/状态/附言/归属月份 |
 | activities | 6 | 活动、海报、分组/一对一/签到开关与签到码 |
@@ -56,12 +56,14 @@ sources:
 - staging 用确定的测试号（`1390000xxxx`）；重复手机只保留一笔（优先 U-0006 / 较小 legacy ID），其余分配新测试号。
 - `testapp` 的 `1390000xxxx` 为压测/测试数据，不代表生产存量；生产导出需抽查手机号非空率（不写具体用户信息）。
 - production 必须使用真实手机号；缺失/重复人工处理并写入报告，不能自动乱配。
+- 微信号：来源 `微信号` 写入 `users.wechat`；重复执行导入时，数据库已有非空微信号不会被源值覆盖（用户在网页补填/修改的值优先），源值只填充空列。
 
 ### 3.2 身份证（P0）
 
-- 迁移只写 `id_card_last4` 与 `id_card_valid`，**不写 `id_card_ciphertext`**；密文只有注册流程会写入。
-- 结果：1103 个 active + 4 个 observer `id_card_valid=false`，用户端资料页没有身份证补录字段，形成门禁死锁。
-- PM 2026-10-22 已裁定不 grandfather、不豁免 observer；补录/放行方式未决。处置见 `docs/STATUS.md` §4，不得用部署或文档绕过。
+- 迁移只写 `id_card_last4` 与 `id_card_valid`，**不写 `id_card_ciphertext`/`id_card_hash`**；密文与哈希只有注册或资料补填会写入。迁移用户的 `id_card_valid=false` 保持原样，不做 grandfather。
+- 补填（2026-10-24）：用户端资料编辑在 `id_card_valid=false` 时显示「身份证号」；仅接受 18 位、校验位正确、证内生日与资料生日一致、`id_card_hash` 未被其他账号占用的号码。通过后 AES-GCM 写密文、写后四位与 HMAC 哈希并置 `id_card_valid=true`；审计只记后四位。服务端门禁见 `docs/STATUS.md` §4 / `docs/DECISIONS.md` §27。
+- 观察员不豁免身份证；`has_face` 仍按 v1 豁免。
+- 存量 1 个有密文的账号不回填哈希（需要部署密钥解密）；其 `id_card_valid` 已为 true，不影响门禁。若后续需要把存量 valid 用户纳入唯一性，可另起一次性离线任务：解密→HMAC→写回，先备份并审计。
 
 ### 3.3 对账与媒体口径
 

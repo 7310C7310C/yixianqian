@@ -233,6 +233,29 @@ BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> \
 - `/cards/photo/{id}`、`/profile/photo/{id}`、`/activities/{id}/poster` 等媒体路由仍可用。
 - 顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`，由 SPA 自动打开管理台 overlay；受权媒体串流（审核照片原图、活动海报原图）是显式例外，直接串流，仍需对应权限。
 
+## 身份证门禁与微信号交换 smoke
+
+```bash
+# 用一个 id_card_valid=false 的测试账号 cookie（部署后第一次登录）
+curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
+  https://next.nantou.love/legacy/api/cards          # 期望 403
+curl -sS -b /tmp/yxq_cookies https://next.nantou.love/legacy/api/cards | grep -q id_card_required
+curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
+  https://next.nantou.love/legacy/api/profile        # 期望 200（资料页可打开）
+curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
+  https://next.nantou.love/legacy/api/notifications  # 期望 200
+curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
+  https://next.nantou.love/app                       # 期望 403（页面入口）
+
+# 资料页补填身份证后（PUT /legacy/api/profile，字段名「身份证号」）：
+curl -sS -b /tmp/yxq_cookies https://next.nantou.love/legacy/api/profile | grep -o '"id_valid":true'
+curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
+  https://next.nantou.love/legacy/api/cards          # 期望 200
+```
+
+- 相互喜欢交换：准备两个已相互喜欢的测试账号。只有一方 `contact_consent` 时，双方 `/legacy/api/likes/me` 的 `mutual[].their_wechat` 必须为空且 `wechat_status` 为 `waiting_other`/`need_consent`；另一方在 SPA「相互喜欢」页填写并打开同意开关后，双方应看到对方微信号，且各收到 1 条 `wechat_exchange` 通知（重复刷新不增加）。匿名喜欢者不得出现在 mutual 列表。
+- observer 账号 `has_face=true`、`id_valid=false` 且 `/legacy/api/cards` 403，属预期。
+
 ## 管理台 `/admin` smoke
 
 ```bash
@@ -329,9 +352,9 @@ runuser -u yxq -- psql -d yixianqian_staging -Atc \
 
 ## 门禁与已知限制
 
-- **身份证门禁死锁（P0，2026-10-23）**：staging 1115 个用户中，1103 个 active + 4 个 observer `id_card_valid=false`；迁移不写 ciphertext，用户端无补录字段。PM 已裁定不 grandfather、不豁免 observer；补录/放行未决。详见 `docs/STATUS.md` §4，部署/验收不得绕过。
+- **身份证门禁（P0，2026-10-24 已实现，待部署验收）**：非观察员且 `id_card_valid=false` 时，除首页/资料/通知/改密/退出（及版本/埋点/mutual 微信号表单）外的 `/legacy/api/*` 返回 403 `id_card_required`；`/app` 与 `/admin` 页面入口返回 403 HTML。资料编辑页可补填 18 位身份证，成功后解除。部署后先用一个 `id_card_valid=false` 的测试账号按下方命令验证，再用真实迁移账号抽查。
 - observer 沿用 v1 的 `has_face` 放行；`yxq_view_role=observer` 只是 UI 视角，不会让 `has_face` 变 true。
-- observer 的身份证不豁免；`has_face=true` 但 `id_valid=false` 属预期。
+- observer 的身份证不豁免；`has_face=true` 但 `id_valid=false` 属预期，`/legacy/api/cards` 仍 403。
 - 卡片照片 `faces` 只回传 `{c,box,tb:[0,0],lr:[0,0]}`；v1 黑边裁切未移植。
 - 腾讯云照片内容合规（宠物/卡通/活体）未实现；`has_face` 仅代表本地 YuNet/Haar 检出人脸。
 - 人脸照片缺口：104 个 active 普通用户没有 `has_face=true` 照片（101 个无照片），可通过资料页上传修复。

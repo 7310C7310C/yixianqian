@@ -707,6 +707,7 @@ type SocialViewer struct {
 	AccountKind   string
 	AccountStatus string
 	Status        string
+	IDCardValid   bool
 }
 
 // GetSocialViewer loads the gate-relevant account row.
@@ -714,9 +715,9 @@ func (d *DB) GetSocialViewer(ctx context.Context, id int64) (SocialViewer, error
 	var v SocialViewer
 	err := d.pool.QueryRow(ctx,
 		`SELECT id, name, COALESCE(NULLIF(nickname, ''), ''), gender,
-		        account_kind, account_status, status
+		        account_kind, account_status, status, id_card_valid
 		 FROM users WHERE id = $1`, id).
-		Scan(&v.ID, &v.Name, &v.Nickname, &v.Gender, &v.AccountKind, &v.AccountStatus, &v.Status)
+		Scan(&v.ID, &v.Name, &v.Nickname, &v.Gender, &v.AccountKind, &v.AccountStatus, &v.Status, &v.IDCardValid)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SocialViewer{}, ErrNotFound
 	}

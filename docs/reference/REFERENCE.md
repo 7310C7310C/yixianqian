@@ -176,6 +176,7 @@ sources: []
 | DELETE | `/legacy/api/messages/{id}` | `internal/httpserver/legacy_social_api.go` |
 | POST | `/legacy/api/messages/{id}/handle` | `internal/httpserver/legacy_messages_report_handle.go` |
 | POST | `/legacy/api/messages/{id}/report` | `internal/httpserver/legacy_social_api.go` |
+| POST | `/legacy/api/mutual/wechat` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/notifications` | `internal/httpserver/legacy_social_api.go` |
 | POST | `/legacy/api/notifications/read-all` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/notifications/stream` | `internal/httpserver/legacy_social_api.go` |
@@ -220,7 +221,7 @@ sources: []
 |---|---:|
 | `/admin` | 36 |
 | `/api` | 28 |
-| `/legacy` | 86 |
+| `/legacy` | 87 |
 | 其他 | 22 |
 | **合计** | **172** |
 
@@ -271,6 +272,7 @@ sources: []
 | 0004 | `0004_observer_roles.sql` | Dual-role users: a v1 user row and an observer row may share one open_id. |
 | 0005 | `0005_face.sql` | 本地人脸检测结果（YuNet/Haar），只增列，不改既有数据。 |
 | 0006 | `0006_weekly_recommendations_list.sql` | 每周推荐位名单：把 v1「一人一行」的占位表改成真正的名单表。 |
+| 0007 | `0007_id_card_hash.sql` | Deterministic HMAC of the identity number, used only to enforce |
 
 ## 6. make targets
 

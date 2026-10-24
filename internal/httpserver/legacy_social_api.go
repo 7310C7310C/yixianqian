@@ -22,6 +22,7 @@ func registerLegacySocial(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("POST /legacy/api/like", a.handleLegacyLike)
 	mux.HandleFunc("POST /legacy/api/praise", a.handleLegacyPraise)
 	mux.HandleFunc("DELETE /legacy/api/praise/{openid}", a.handleLegacyPraiseCancel)
+	mux.HandleFunc("POST /legacy/api/mutual/wechat", a.handleLegacyMutualWechat)
 
 	mux.HandleFunc("GET /legacy/api/messages", a.handleLegacyMessages)
 	mux.HandleFunc("POST /legacy/api/messages", a.handleLegacyMessageCreate)
@@ -59,6 +60,94 @@ type legacySocialMessageRequest struct {
 
 type legacySocialReportRequest struct {
 	Reason string `json:"reason"`
+}
+
+type legacyMutualWechatRequest struct {
+	Wechat string `json:"wechat"`
+	Agree  bool   `json:"agree"`
+}
+
+// handleLegacyMutualWechat fills a missing wechat and records the explicit
+// mutual-page consent. The value is only ever disclosed through the mutual
+// list once both sides are ready.
+func (a *App) handleLegacyMutualWechat(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.legacyActor(w, r)
+	if !ok {
+		return
+	}
+	if !a.legacyWriteCSRF(w, r) {
+		return
+	}
+	viewer, ok := a.legacySocialViewerFor(w, r, user)
+	if !ok {
+		return
+	}
+	if !a.legacySocialGate(w, viewer, true) {
+		return
+	}
+	var req legacyMutualWechatRequest
+	if !decodeLegacyJSON(w, r, &req) {
+		return
+	}
+	current, err := a.db.GetWechatConsentState(r.Context(), user.ID)
+	if errors.Is(err, db.ErrNotFound) {
+		legacyError(w, http.StatusNotFound, "用户不存在")
+		return
+	}
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy mutual wechat state failed")
+		return
+	}
+	wechat := strings.TrimSpace(current.Wechat)
+	setWechat := false
+	if raw := strings.TrimSpace(req.Wechat); raw != "" {
+		if raw == current.Wechat {
+			// Legacy/migrated values were not validated by v1; keep them when
+			// the user only toggles consent, otherwise the form prefill would
+			// block a perfectly valid existing contact.
+			wechat = raw
+		} else {
+			validated, verr := validateWechatID(raw)
+			if verr != nil {
+				legacyError(w, http.StatusBadRequest, verr.Error())
+				return
+			}
+			wechat = validated
+			setWechat = true
+		}
+	}
+	if req.Agree && wechat == "" {
+		legacyError(w, http.StatusBadRequest, "请先填写微信号")
+		return
+	}
+	if !setWechat && req.Agree == current.ContactConsent {
+		// Nothing changed, still return the current state for the SPA.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":              true,
+			"wechat_ready":    socialWechatReady(db.SocialProfile{Wechat: wechat, ContactConsent: req.Agree}),
+			"wechat_required": !(wechat != "" && req.Agree),
+			"message":         "已保存",
+		})
+		return
+	}
+	if err := a.db.UpdateWechatConsent(r.Context(), user.ID, wechat, setWechat, req.Agree); err != nil {
+		legacyServerError(a, w, r, err, "legacy mutual wechat update failed")
+		return
+	}
+	a.audit(r, &user.ID, "profile.wechat.exchange_consent", "user", strconv.FormatInt(user.ID, 10),
+		map[string]any{"consent": req.Agree, "wechat_changed": setWechat})
+	a.ensureMutualWechatForUser(r.Context(), user.ID)
+	ready := wechat != "" && req.Agree
+	message := "已保存，双方都同意后即可看到对方微信号"
+	if !req.Agree {
+		message = "已关闭微信号交换"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":              true,
+		"wechat_ready":    ready,
+		"wechat_required": !ready,
+		"message":         message,
+	})
 }
 
 func decodeLegacyJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
@@ -254,6 +343,7 @@ func (a *App) handleLegacyLike(w http.ResponseWriter, r *http.Request) {
 	message := "喜欢成功"
 	if result.Mutual {
 		message = "你们相互喜欢了！"
+		a.ensureMutualWechatForUser(r.Context(), viewer.ID)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":             true,

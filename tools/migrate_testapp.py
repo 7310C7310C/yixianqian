@@ -907,7 +907,16 @@ def upsert_by_existing(
     json_columns: set[str],
     existing_id: int | None,
     id_column: str = "id",
+    preserve_nonempty_text: set[str] | None = None,
+    preserve_true: set[str] | None = None,
 ) -> int:
+    """Insert a row, or update an existing one.
+
+    preserve_nonempty_text keeps an existing non-empty text value; the source
+    value only fills an empty column. preserve_true ORs boolean flags so a
+    later import cannot undo a verification the user completed in the app.
+    Re-running the import must never overwrite user-edited values.
+    """
     placeholders = ", ".join(
         f"%({column})s::jsonb" if column in json_columns else f"%({column})s"
         for column in columns
@@ -919,9 +928,15 @@ def upsert_by_existing(
         )
         row = conn.execute(sql, params).fetchone()
         return int(row[0])
+    preserve = preserve_nonempty_text or set()
+    preserve_flags = preserve_true or set()
     assignments = ", ".join(
-        f"{column} = %({column})s::jsonb" if column in json_columns
-        else f"{column} = %({column})s"
+        f"{column} = COALESCE(NULLIF({table}.{column}, ''), %({column})s)"
+        if column in preserve
+        else (f"{column} = ({table}.{column} OR %({column})s)"
+              if column in preserve_flags
+              else (f"{column} = %({column})s::jsonb" if column in json_columns
+                    else f"{column} = %({column})s"))
         for column in columns
         if column != id_column
     )
@@ -1125,6 +1140,8 @@ def process_users(
                         params,
                         USER_JSON_COLUMNS,
                         row["id"] if row else None,
+                        preserve_nonempty_text={"wechat", "id_card_last4"},
+                        preserve_true={"id_card_valid"},
                     )
                 key_to_id[record["key"]] = user_id
                 if row:

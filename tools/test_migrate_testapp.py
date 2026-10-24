@@ -20,6 +20,49 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import migrate_testapp as m  # noqa: E402
 
 
+class UpsertTests(unittest.TestCase):
+    def test_upsert_preserves_existing_wechat_when_incoming_empty(self):
+        class FakeConn:
+            def __init__(self):
+                self.sql = ""
+                self.params = {}
+
+            def execute(self, sql, params):
+                self.sql, self.params = sql, params
+                return None
+
+        conn = FakeConn()
+        m.upsert_by_existing(
+            conn, "users", ["wechat", "nickname"], {"wechat": "", "nickname": "新名"},
+            set(), 42, preserve_nonempty_text={"wechat"},
+        )
+        self.assertIn("wechat = COALESCE(NULLIF(users.wechat, ''), %(wechat)s)", conn.sql)
+        self.assertIn("nickname = %(nickname)s", conn.sql)
+        self.assertEqual(conn.params["row_id"], 42)
+
+    def test_upsert_never_undoes_id_card_verification(self):
+        class FakeConn:
+            def __init__(self):
+                self.sql = ""
+
+            def execute(self, sql, params):
+                self.sql = sql
+                return None
+
+        conn = FakeConn()
+        m.upsert_by_existing(
+            conn, "users", ["id_card_valid", "id_card_last4"],
+            {"id_card_valid": False, "id_card_last4": "0000"}, set(), 42,
+            preserve_nonempty_text={"id_card_last4"},
+            preserve_true={"id_card_valid"},
+        )
+        self.assertIn("id_card_valid = (users.id_card_valid OR %(id_card_valid)s)", conn.sql)
+        self.assertIn(
+            "id_card_last4 = COALESCE(NULLIF(users.id_card_last4, ''), %(id_card_last4)s)",
+            conn.sql,
+        )
+
+
 class FieldHelperTests(unittest.TestCase):
     def test_text_segments_and_selects(self):
         fields = {

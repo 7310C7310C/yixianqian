@@ -96,6 +96,30 @@ func TestChineseIDCardValidation(t *testing.T) {
 	}
 }
 
+func TestWechatIDValidation(t *testing.T) {
+	for _, valid := range []string{"wx-test", "wxid_abc123", "13800138000", "a.b@c"} {
+		if got, err := validateWechatID("  " + valid + " "); err != nil || got != valid {
+			t.Fatalf("valid wechat %q: got %q err=%v", valid, got, err)
+		}
+	}
+	for _, invalid := range []string{"", "abcd", "wx test", "微信abc", "<script>", strings.Repeat("a", 65)} {
+		if _, err := validateWechatID(invalid); err == nil {
+			t.Fatalf("invalid wechat %q accepted", invalid)
+		}
+	}
+}
+
+func TestBackfillIDCardRequires18Digits(t *testing.T) {
+	id := makeTestIDCard(t, "19900101", "002")
+	if got, birth, err := validateBackfillIDCard(id); err != nil || got != id ||
+		birth.Format("2006-01-02") != "1990-01-01" {
+		t.Fatalf("valid backfill id: %q %v %v", got, birth, err)
+	}
+	if _, _, err := validateBackfillIDCard("110105491231002"); err == nil {
+		t.Fatal("15-digit id accepted for backfill")
+	}
+}
+
 func TestIDCardCipherRoundTrip(t *testing.T) {
 	const secret = "test-session-secret-0123456789abcdef"
 	const id = "11010519900101002X"
@@ -112,6 +136,32 @@ func TestIDCardCipherRoundTrip(t *testing.T) {
 	}
 	if _, err := openIDCard("another-secret-0123456789abcdef", sealed); err == nil {
 		t.Fatal("ciphertext opened with wrong key")
+	}
+}
+
+func TestParseRegisterInputRequiresValidWechat(t *testing.T) {
+	id := makeTestIDCard(t, "19900101", "002")
+	for _, tt := range []struct {
+		name   string
+		wechat string
+		field  string
+	}{
+		{"missing", "", "wechat"},
+		{"too short", "abcd", "wechat"},
+		{"whitespace", "wx test", "wechat"},
+		{"markup", "<b>wx</b>", "wechat"},
+	} {
+		values := validRegisterValues(t, "13800138000", id, "1990-01-01")
+		values.Set("wechat", tt.wechat)
+		if _, ferr := parseRegisterInput(values); ferr == nil || ferr.Field != tt.field {
+			t.Fatalf("%s: err = %+v", tt.name, ferr)
+		}
+	}
+	values := validRegisterValues(t, "13800138000", id, "1990-01-01")
+	values.Set("wechat", "wx-valid_1")
+	in, ferr := parseRegisterInput(values)
+	if ferr != nil || in.Wechat != "wx-valid_1" {
+		t.Fatalf("valid wechat: %q %+v", in.Wechat, ferr)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"strings"
 	"testing"
 
@@ -52,7 +53,7 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 		Phone:           "13800000000",
 	}
 	fields := legacyProfileEditable(profile)
-	if len(fields) != 25 {
+	if len(fields) != 26 {
 		t.Fatalf("editable fields = %d", len(fields))
 	}
 	byName := map[string]legacyEditableField{}
@@ -60,7 +61,7 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 		byName[field.Field] = field
 	}
 	for _, want := range []string{
-		legacyFieldNickname, legacyFieldHeight, legacyFieldEducation, legacyFieldCity,
+		legacyFieldIDCard, legacyFieldNickname, legacyFieldHeight, legacyFieldEducation, legacyFieldCity,
 		legacyFieldChurch, legacyFieldChurchGroup, legacyFieldChurchLocation,
 		legacyFieldIndustry, legacyFieldPosition, legacyFieldIncome, legacyFieldHouse,
 		legacyFieldDriving, legacyFieldPersonality, legacyFieldSelfTraits,
@@ -73,6 +74,9 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 			t.Fatalf("editable field missing %q", want)
 		}
 	}
+	if byName[legacyFieldIDCard].Value != "" || byName[legacyFieldIDCard].Hint == "" {
+		t.Fatalf("id card backfill field leaked or missing hint: %+v", byName[legacyFieldIDCard])
+	}
 	if got := byName[legacyFieldHeight].Value; got != 165 {
 		t.Fatalf("height value = %#v", got)
 	}
@@ -84,6 +88,25 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 	}
 	if got := byName[legacyFieldMBTI].Value.([]string); len(got) != 2 || got[0] != "I" {
 		t.Fatalf("mbti = %#v", got)
+	}
+}
+
+func TestIDCardGateAllowlistCannotBeBypassedByDotSegments(t *testing.T) {
+	cases := []string{
+		"/legacy/api/notifications/../cards",
+		"/legacy/api/home/../like",
+		"/legacy/api/profile/../activities",
+	}
+	for _, raw := range cases {
+		p := path.Clean(raw)
+		if !idCardGateApplies(p) || idCardGateAllowed(p) {
+			t.Fatalf("%s cleaned to %s: applies=%v allowed=%v", raw, p, idCardGateApplies(p), idCardGateAllowed(p))
+		}
+	}
+	for _, p := range []string{"/legacy/api/notifications", "/legacy/api/notifications/stream", "/legacy/api/profile"} {
+		if !idCardGateAllowed(p) {
+			t.Fatalf("%s should be allowed", p)
+		}
 	}
 }
 

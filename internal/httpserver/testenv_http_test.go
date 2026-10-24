@@ -96,9 +96,13 @@ func (e *profileHTTPEnv) createUser(t *testing.T, legacyPrefix, name, accountSta
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	// Most HTTP tests predate the server-side ID gate. Mark ordinary active
+	// users as verified so they exercise their target feature; observer and
+	// explicit ID-gate tests override this with SQL.
+	verified := accountKind != "observer" && accountStatus != "observer"
 	if _, err := e.pool.Exec(e.ctx,
-		`UPDATE users SET account_status = $2, account_kind = $3 WHERE id = $1`,
-		user.ID, accountStatus, accountKind); err != nil {
+		`UPDATE users SET account_status = $2, account_kind = $3, id_card_valid = $4 WHERE id = $1`,
+		user.ID, accountStatus, accountKind, verified); err != nil {
 		t.Fatalf("set account status: %v", err)
 	}
 	raw, hash, err := auth.NewToken()
@@ -257,7 +261,8 @@ func createMessageUser(t *testing.T, ctx context.Context, database *db.DB, pool 
 	if err != nil {
 		t.Fatalf("create user %s: %v", name, err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE users SET account_status = 'active' WHERE id = $1`, u.ID); err != nil {
+	if _, err := pool.Exec(ctx,
+		`UPDATE users SET account_status = 'active', id_card_valid = true WHERE id = $1`, u.ID); err != nil {
 		t.Fatalf("activate user %s: %v", name, err)
 	}
 	return u
@@ -383,7 +388,8 @@ func (e *pointsHTTPEnv) user(t *testing.T, gender, accountStatus, accountKind st
 	})
 	if _, err := e.conn.Exec(e.ctx,
 		`UPDATE users SET gender = $2, account_status = $3, account_kind = $4,
-		                  status = 'active', nickname = $5 WHERE id = $1`,
+		                  status = 'active', nickname = $5,
+		                  id_card_valid = ($4 <> 'observer') WHERE id = $1`,
 		u.ID, gender, accountStatus, accountKind, legacy); err != nil {
 		t.Fatalf("update fixture user: %v", err)
 	}

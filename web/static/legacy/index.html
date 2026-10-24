@@ -1286,11 +1286,21 @@
   <div class="page">
     <div v-if="loadingLikes" style="text-align:center; padding:40px;"><van-loading size="24px">加载中...</van-loading></div>
     <van-empty v-else-if="!likesData.mutual.length" description="还没有相互喜欢的人" image-size="60"></van-empty>
-    <div v-else v-for="m in likesData.mutual" :key="m.initiator_openid" class="msg-card">
+    <div v-else v-for="m in likesData.mutual" :key="m.initiator_openid" class="msg-card" style="align-items:flex-start;">
       <div class="msg-avatar">💕</div>
       <div class="msg-body">
         <div class="msg-name">{{ m.nickname }}</div>
-        <div class="msg-sub">💕你们相互喜欢！微信号已交换，快去加微信好友吧～</div>
+        <div class="msg-sub" v-if="m.their_wechat">💚 对方微信号：<b>{{ m.their_wechat }}</b>，快去加好友吧～</div>
+        <template v-else-if="m.wechat_required && !m.waiting_other">
+          <div class="msg-sub">填写你的微信号并同意交换；双方都填好并同意后，系统会通知双方。</div>
+          <van-field v-model="m.edit_wechat" placeholder="请输入微信号" maxlength="64" :border="false" style="padding:8px 0;"></van-field>
+          <div style="display:flex; align-items:center; gap:8px; padding:2px 0 8px; font-size:13px; color:#646566;">
+            <van-switch v-model="m.edit_agree" size="20px" />
+            <span>我同意在相互喜欢后向对方展示微信号</span>
+          </div>
+          <van-button class="tap-44" type="primary" color="#ff6b81" size="small" block :loading="m.submitting" @click="submitMutualWechat(m)">保存并同意交换</van-button>
+        </template>
+        <div class="msg-sub" v-else>已同意交换，等待对方填写微信号并同意后，即可看到对方微信号。</div>
         <div class="msg-message" v-if="m.message">附言：{{ m.message }}</div>
       </div>
     </div>
@@ -5204,7 +5214,13 @@ createApp({
       return toastRaw(message, options);
     };
     function handleApiAuthError(err, options){
-      if (!err || err.status !== 401) return;
+      if (!err) return;
+      if (err.code === 'id_card_required') {
+        // 服务端 P0 门禁：任何被拦的 API 都回到身份证补填浮层，由服务端事实驱动。
+        try { startIdInvalidOverlay(); } catch(e) {}
+        return;
+      }
+      if (err.status !== 401) return;
       if (options && options.suppressAuthPrompt) return;
       notifySessionExpired();
     }
@@ -5552,7 +5568,11 @@ createApp({
       cards.value = data.cards || []; cardIndex.value = 0; photoIndex.value = 0;
       cardsTotal.value = (typeof data.cards_total === 'number' ? data.cards_total : cards.value.length);
       cardsVersion.value = null;
-      likesData.value = data.likes || { liked_me: [], mutual: [] };
+      const homeLikes = data.likes || { liked_me: [], mutual: [] };
+      likesData.value = {
+        liked_me: homeLikes.liked_me || [],
+        mutual: normalizeMutualItems(homeLikes.mutual),
+      };
       activities.value = data.activities || [];
       triggerPhotoLoading();
       preloadAround();
@@ -6898,7 +6918,7 @@ createApp({
           body: JSON.stringify({ target_openid: target.openid, message: likeMessage.value, like_type: likeType.value })
         });
         if (data.mutual) {
-          vant.showDialog({ title: '💕 相互喜欢', message: '恭喜！你和' + target.nickname + '相互喜欢了！微信号已交换，快去加微信好友吧～', confirmButtonColor: '#ff6b81' });
+          vant.showDialog({ title: '💕 相互喜欢', message: '恭喜！你和' + target.nickname + '相互喜欢了！到「相互喜欢」填写并同意交换后，就能看到对方微信号。', confirmButtonColor: '#ff6b81' });
         } else { vant.showToast('喜欢成功'); }
         justLiked.add(target.openid);
         lastLikeAt.value = Date.now();
@@ -7155,17 +7175,56 @@ createApp({
         }
       } catch (e) {}
     }
+    // 相互喜欢页的微信号交换表单状态：保留用户正在输入的值，刷新列表时不丢。
+    function normalizeMutualItems(list) {
+      const prev = new Map((likesData.value.mutual || []).map(m => [m.initiator_openid, m]));
+      return (list || []).map(m => {
+        const old = prev.get(m.initiator_openid) || {};
+        return {
+          ...m,
+          edit_wechat: typeof old.edit_wechat === 'string' ? old.edit_wechat : (m.my_wechat || ''),
+          edit_agree: !!old.edit_agree,
+          submitting: false,
+        };
+      });
+    }
     async function loadLikes() {
       // 仅首次进入显示转圈；之后进入直接展示上次数据，后台静默刷新（接口已毫秒级）
       if (!likesInitialized.value) loadingLikes.value = true;
       try {
         const data = await api('/api/likes/me');
-        likesData.value = data;
+        likesData.value = {
+          liked_me: data.liked_me || [],
+          mutual: normalizeMutualItems(data.mutual),
+        };
         likesInitialized.value = true;
       }
       catch(e) { vant.showToast(e.message); }
       await loadMyLikesCount();
       loadingLikes.value = false;
+    }
+    async function submitMutualWechat(m) {
+      if (!m || m.submitting) return;
+      const wechat = String(m.edit_wechat || '').trim();
+      if (!wechat) { vant.showToast('请先填写微信号'); return; }
+      if (!m.edit_agree) { vant.showToast('请先勾选同意交换微信号'); return; }
+      m.submitting = true;
+      try {
+        await api('/api/mutual/wechat', {
+          method: 'POST',
+          body: JSON.stringify({ wechat, agree: true }),
+        });
+        vant.showToast('已保存，双方都同意后即可看到对方微信号');
+        const data = await api('/api/likes/me');
+        likesData.value = {
+          liked_me: data.liked_me || [],
+          mutual: normalizeMutualItems(data.mutual),
+        };
+      } catch (e) {
+        vant.showToast(e.message || '保存失败，请稍后再试');
+      } finally {
+        m.submitting = false;
+      }
     }
     async function loadMyLikesCount() {
       try {
@@ -7247,7 +7306,13 @@ createApp({
       if (profileLoaded.value) { page.value = 'profile_detail'; return; } // 已加载则直接展示缓存
       page.value = 'profile_detail'; // 先切页，加载态先行（接口慢时用户点了入口却像没反应）
       loadingProfileDetail.value = true;
-      try { const data = await api('/api/profile'); profileData.value = data; profileLoaded.value = true; }
+      try {
+        const data = await api('/api/profile');
+        profileData.value = data;
+        profileLoaded.value = true;
+        if (user.value && typeof data.id_valid === 'boolean') user.value.id_valid = data.id_valid;
+        if (user.value && typeof data.has_face === 'boolean') user.value.has_face = data.has_face;
+      }
       catch(e) {
         vant.showToast(e.message);
         // 没有任何旧数据可展示时退回上一页，不停留在空资料页（有旧数据则保留展示）
@@ -7329,8 +7394,11 @@ createApp({
       if(targetPage === 'profile_edit') return;
       if(nativeAdmin.value) return;   // 管理台原生管理页不受用户端门禁影响
       try{
-        // 优先用已加载的 profileData，若未加载或无 id_valid 则拉取
-        let valid = profileData.value && typeof profileData.value.id_valid === 'boolean' ? profileData.value.id_valid : null;
+        // 优先用首页已返回的服务端事实，其次 profileData，最后拉取资料
+        let valid = user.value && typeof user.value.id_valid === 'boolean' ? user.value.id_valid : null;
+        if (valid === null) {
+          valid = profileData.value && typeof profileData.value.id_valid === 'boolean' ? profileData.value.id_valid : null;
+        }
         if(valid === null){
           try{
             const d = await api('/api/profile');
@@ -7345,7 +7413,8 @@ createApp({
     }
     function guardTabChange(name){
       // 身份证有误时禁止 tab 跳离修改资料：弹全屏提醒，不切页
-      const invalid = profileData.value && profileData.value.id_valid === false;
+      const invalid = (user.value && user.value.id_valid === false)
+        || (profileData.value && profileData.value.id_valid === false);
       if(invalid){
         startIdInvalidOverlay();
         return false;
@@ -9567,7 +9636,7 @@ createApp({
       embedOpen, embedUrl, embedTitle, embedLoading, embedReady, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
       embedFailed, retryEmbed, returnAdminHome,
       nativeAdmin, gaBack,
-      myLikesList, loadingMyLikes, myLikesCount, openMyLikes, openMutual, openLikedMe,
+      myLikesList, loadingMyLikes, myLikesCount, openMyLikes, openMutual, openLikedMe, submitMutualWechat,
       myActivitiesList, loadingMyActivities, openMyActivities,
       myGroupsList, loadingMyGroups, openMyGroups, hasGroupEntry,
       onetooneResult, onetooneResultLoading,

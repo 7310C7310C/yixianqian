@@ -70,6 +70,7 @@ type RegisterParams struct {
 	Wechat          string
 	IDCardCipher    []byte
 	IDCardLast4     string
+	IDCardHash      string
 	ContactConsent  bool
 	ReferralSource  string
 	IsForChild      string
@@ -105,7 +106,7 @@ func (d *DB) CreateRegisteredUser(ctx context.Context, p RegisterParams) (User, 
 		   city, industry, position, income, house, driving, marriage, family,
 		   live_with_parents, personality, self_traits, self_hobbies, self_sports,
 		   mbti, partner_criteria, partner_traits, partner_hobbies, partner_sports,
-		   wechat, id_card_ciphertext, id_card_last4, contact_consent,
+		   wechat, id_card_ciphertext, id_card_last4, id_card_hash, contact_consent,
 		   referral_source, is_for_child, status, account_status, registered_at
 		 ) VALUES (
 		   'U-' || nextval('user_no_seq'), $1, $2, $3, $4, $5, $6, $7,
@@ -113,8 +114,8 @@ func (d *DB) CreateRegisteredUser(ctx context.Context, p RegisterParams) (User, 
 		   $13, $14, $15, $16, $17, $18, $19, $20,
 		   $21, $22, $23::jsonb, $24::jsonb, $25::jsonb,
 		   $26::jsonb, $27, $28::jsonb, $29::jsonb, $30::jsonb,
-		   $31, $32, $33, $34,
-		   $35, $36, 'active', 'pending', now()
+		   $31, $32, $33, $34, $35,
+		   $36, $37, 'active', 'pending', now()
 		 ) RETURNING `+userColumns,
 		p.Phone, p.Name, p.Nickname, p.Gender, p.Birthday, p.HeightCM, p.Education,
 		p.BaptismalName, p.Church, p.ChurchLocation, p.ChurchGroup, p.NativePlace,
@@ -124,7 +125,7 @@ func (d *DB) CreateRegisteredUser(ctx context.Context, p RegisterParams) (User, 
 		marshalStringList(p.MBTI), p.PartnerCriteria,
 		marshalStringList(p.PartnerTraits), marshalStringList(p.PartnerHobbies),
 		marshalStringList(p.PartnerSports),
-		p.Wechat, p.IDCardCipher, p.IDCardLast4, p.ContactConsent,
+		p.Wechat, p.IDCardCipher, p.IDCardLast4, p.IDCardHash, p.ContactConsent,
 		p.ReferralSource, p.IsForChild))
 	if err != nil {
 		return User{}, mapWriteError(err)

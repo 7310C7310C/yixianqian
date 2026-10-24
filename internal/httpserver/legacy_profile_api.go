@@ -101,6 +101,53 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 		legacyError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// v1 allowed the ID card to be filled only while the record was invalid.
+	// The plaintext is validated here, encrypted immediately and never logged
+	// or returned; only the last four digits stay queryable.
+	idRaw, hasID, idErr := legacyIDCardValue(body)
+	if idErr != nil {
+		legacyError(w, http.StatusBadRequest, idErr.Error())
+		return
+	}
+	backfilled := false
+	if hasID {
+		if profile.IDCardValid {
+			legacyErrorCode(w, http.StatusBadRequest, "id_card_locked", "身份证号已核验，不可修改")
+			return
+		}
+		normalized, birth, verr := validateBackfillIDCard(idRaw)
+		if verr != nil {
+			legacyErrorCode(w, http.StatusBadRequest, "invalid_id_card", "身份证号码格式不正确，请填写18位有效身份证号")
+			return
+		}
+		if profile.Birthday == nil {
+			legacyErrorCode(w, http.StatusBadRequest, "invalid_id_card", "请先在资料中填写生日后再补填身份证号")
+			return
+		}
+		if !sameCalendarDay(*profile.Birthday, birth) {
+			legacyErrorCode(w, http.StatusBadRequest, "id_card_birthday_mismatch", "身份证上的出生日期与资料生日不一致，请核对后重试")
+			return
+		}
+		hash := idCardHash(a.cfg.SessionSecret, normalized)
+		inUse, uerr := a.db.IDCardHashInUse(r.Context(), hash, user.ID)
+		if uerr != nil {
+			legacyServerError(a, w, r, uerr, "id card uniqueness check failed")
+			return
+		}
+		if inUse {
+			legacyErrorCode(w, http.StatusConflict, "id_card_taken", "此身份证号已被其他账号使用")
+			return
+		}
+		sealed, serr := sealIDCard(a.cfg.SessionSecret, normalized)
+		if serr != nil {
+			legacyServerError(a, w, r, serr, "id card encrypt failed")
+			return
+		}
+		upd.IDCardCipher = sealed
+		upd.IDCardLast4 = normalized[len(normalized)-4:]
+		upd.IDCardHash = hash
+		backfilled = true
+	}
 	if upd.Empty() {
 		legacyError(w, http.StatusBadRequest, "没有可更新的字段")
 		return
@@ -122,6 +169,9 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	case errors.Is(err, db.ErrPhoneConflict):
 		legacyErrorCode(w, http.StatusConflict, "phone_taken", "手机号码已被其他账号使用")
 		return
+	case errors.Is(err, db.ErrIDCardConflict):
+		legacyErrorCode(w, http.StatusConflict, "id_card_taken", "此身份证号已被其他账号使用")
+		return
 	case errors.Is(err, db.ErrNotFound):
 		legacyError(w, http.StatusNotFound, "用户不存在")
 		return
@@ -129,8 +179,19 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 		legacyServerError(a, w, r, err, "legacy profile update failed")
 		return
 	}
+	auditFields := profileUpdateFieldNames(upd)
+	if backfilled {
+		auditFields = append(auditFields, "id_card")
+	}
 	a.audit(r, &user.ID, "profile.updated", "user", strconv.FormatInt(profile.ID, 10),
-		map[string]any{"fields": profileUpdateFieldNames(upd), "source": "legacy"})
+		map[string]any{"fields": auditFields, "source": "legacy"})
+	if backfilled {
+		a.audit(r, &user.ID, "profile.id_card.backfilled", "user", strconv.FormatInt(profile.ID, 10),
+			map[string]any{"last4": upd.IDCardLast4, "source": "legacy"})
+	}
+	if upd.Wechat != nil {
+		a.ensureMutualWechatForUser(r.Context(), user.ID)
+	}
 	if upd.Phone != nil && !samePhone(oldPhone, *upd.Phone) {
 		a.audit(r, &user.ID, "profile.phone.changed", "user", strconv.FormatInt(profile.ID, 10),
 			map[string]any{

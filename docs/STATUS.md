@@ -66,8 +66,8 @@ sources:
 
 - 更新日期：2026-10-24
 - 维护者：项目维护者
-- 下一更新点：P0 身份证门禁决策、下一次 staging 部署、M6 验收；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-24 对 server1 只读复核；代码基线 `main` @ `2d0e29b`（staging 已部署）。
+- 下一更新点：P0 身份证补填/服务端门禁变更部署与验收、下一次 staging 部署、M6 验收；不要等新阶段才开始更新。
+- 事实基准：部署/数据事实于 2026-10-24 对 server1 只读复核；staging 已部署 `2d0e29b`；本次身份证/微信号变更在本地分支待 Review/部署（migration 6）。
 
 ## 1. 阶段
 
@@ -115,6 +115,13 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 举报管理（v1 原版 SPA 页面）：列表复用 `/legacy/api/messages/reported`，处理动作补 `POST /legacy/api/messages/{id}/handle`（`content.moderate` + CSRF + 审计）；页面代码保留，但入口已撤回、暂不暴露；`user.is_admin` 语义为「有任一管理角色」，与 `can_admin` 同值。
 - 管理入口：活动管理经管理台 iframe 内的原版 SPA 承载；麦穗/举报原生化页面仍不暴露（「我的→管理」只有「🛠️ 管理后台」）。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
+
+### 微信号交换与身份证补填（2026-10-24，待 Review/部署）
+
+- 注册：微信号必填，5–64 个 ASCII 字母/数字/`_ - . @ +`；写入 `users.wechat`；身份证重复注册由 `id_card_hash` 唯一索引兜底。数据导入重复执行时，已有非空微信号不被源值覆盖（含身份证后四位/valid 标记）。
+- 相互喜欢交换：资料微信号 + `contact_consent=true` 即就绪；缺失时 SPA「相互喜欢」页填写并显式同意。双方就绪后 mutual API 返回 `their_wechat`，并给双方各发一条含对方微信号的站内通知（`wechat_exchange`，按 pair+收件人去重）。未就绪返回空值 + `wechat_required`/`wechat_status`（`need_wechat`/`need_consent`/`waiting_other`/`ready`），匿名喜欢者身份不进 mutual 列表。
+- 身份证补填：资料编辑按需显示「身份证号」；18 位、校验位、生日一致、唯一性校验；加密存储、审计只记后四位。服务端门禁见 §4。
+- 证据：`TestIntegrationMutualWechatExchange`、`TestIntegrationMutualWechatDoesNotLeakAnonymousLike`、`TestIntegrationIDCardGateAndBackfill`、`TestIntegrationIDCardBackfillUniqueness`、`TestIntegrationObserverStillBlockedByIDCard`、`TestWechatIDValidation`、`TestBackfillIDCardRequires18Digits`。
 
 ### 用户端审计修复（2026-10-24，UD-02/04/05/06/07 + 管理台广播/iframe 兜底，待部署）
 
@@ -205,25 +212,15 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 迁移数据计数：users `1115`、activities `6`、signups `245`、profile_photos `1028`、points_ledger `131`（2026-10-23 复核）。
 - 管理员：U-0006 为 `super_admin`，U-0001 为 `admin`；两人均 `observer_enabled=true`。
 
-## 4. P0 上线阻断：身份证门禁死锁（必须先决策，不改代码绕过）
+## 4. P0 身份证门禁：补填 + 服务端强制（已实现，待部署/验收）
 
-**结论**：绝大多数迁移用户进入 SPA 后会被全屏身份证门禁拦住，而资料编辑页没有身份证补录字段，形成死锁；当前不能宣称“主路径可用”。
+**结论**：P0 死锁已按 PM 2026-10-24 方案实现：资料编辑提供身份证补填；服务端对 `id_card_valid=false` 的非豁免用户强制 403，补填成功后解除。代码在本地分支，尚未部署；部署前仍需独立 Review 与 staging smoke。
 
-- 数据（2026-10-23 staging）：`active` 用户 `id_card_valid=false` 共 `1103`（另有 `observer` 4 个 false）；`active` true 仅 `8`；`id_card_last4` 为空 `1105`；有 `id_card_ciphertext` 仅 `1`。
-- 成因链：
-  1. `migrations/0002_domain.sql` 的 `id_card_valid` 默认 `false`；
-  2. `tools/migrate_testapp.py` 只写 `id_card_last4`/`id_card_valid`/`id_card_present`，不写 `id_card_ciphertext`；
-  3. 只有注册流程写密文（`internal/httpserver/register_routes.go` + `internal/db/register.go`）；
-  4. 管理员批准不会修复：`internal/db/admin.go` 仅在 `id_card_ciphertext IS NOT NULL` 时置 true；
-  5. 用户端可编辑字段（`internal/httpserver/legacy_profile_helpers.go`）没有身份证号；管理端详情只读展示；
-  6. 用户 SPA 读取 `id_valid=false` 后启动全屏提示、阻止切 tab，并跳转资料编辑页。
-- 影响：`1103` 个 `active` 迁移用户进入 SPA 即被拦截，无法通过正常路径补录或放行；`observer` 也不豁免身份证。
-- PM（使用者）已裁定（2026-10-22）：不 grandfather、不豁免 observer；补录/放行方式未决。
-- 待 PM 选择的选项（不在本文替 PM 决定）：
-  1. **补录**：新增用户自助或管理员代录身份证的写入/复核路径（代码任务，需安全评审）；
-  2. **grandfather**：打标 + 审计后放行（PM 已否决，保留为决策记录）；
-  3. **人工放行**：按批次人工核对并记录放行依据（需审计与可回滚口径）。
-- 验收规格：`docs/product-spec.md` C4；在 PM 决策前，本项保持 P0 上线阻断。
+- 补填：`legacyProfileEditable` 仅在 `id_card_valid=false` 且非观察员时返回「身份证号」字段；提交后校验 18 位、校验位、证内生日与资料生日一致、`id_card_hash` 未被其他账号占用；AES-GCM 写 `id_card_ciphertext`、`id_card_last4`、`id_card_hash`，置 `id_card_valid=true`；审计 `profile.id_card.backfilled` 只记后四位，不记明文。
+- 服务端门禁：`withSession` 在注册门禁之后执行 `idCardGate`。非观察员且 `id_card_valid=false` 时，`/legacy/api/*` 仅放行首页、资料（含照片）、通知、改密、退出、版本/埋点与 mutual 微信号表单；其余返回 403 `id_card_required`。`/app` 与 `/admin` 页面入口返回 403 HTML（带 `X-Error-Code: id_card_required`）。
+- 观察员：继续豁免 `has_face`（资料投影 `has_face=true`），但身份证不豁免；`id_valid=false` 时 `/legacy/api/cards` 等仍 403，属预期。
+- 数据：staging 现有 `id_card_valid=false` 的 active/observer 用户仍可在部署后第一次进入资料页补填；存量 `id_card_ciphertext` 仅 1 人，不批量解密回填哈希。
+- 验收规格：`docs/product-spec.md` C4；证据见 `docs/DECISIONS.md` §27 与集成测试。
 
 ## 5. 已知缺口/未验收
 
@@ -234,15 +231,15 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - **真机与性能**：真机 iOS/Android/微信、旧设备宽度、图片/首屏性能未完成。
 - **运维演练**：备份还原、回滚演练、安全最终审查未完成。
 - **E2E**：全流程 E2E（登录→卡片→喜欢→留言→活动→分组→结果→麦穗）未建。
-- **验收签核**：`docs/product-spec.md` 仍 `0/83` 未勾选，未经 PM 签核；其中 E2 已由 PM 2026-10-24 明确不做，不参与验收；D10 已于 2026-10-24 按 v1 原版补实现（见 §3），仍待验收签核。不要从 0 勾选推断“未做”，也不要当作已完成。
+- **验收签核**：`docs/product-spec.md` 仍 `0/83` 未勾选，未经 PM 签核；其中 E2 已按 §4/`docs/DECISIONS.md` §27 新方案实现待验收，D10 已于 2026-10-24 按 v1 原版补实现（见 §3），均待验收签核。不要从 0 勾选推断“未做”，也不要当作已完成。
 - **生产切换**：v2 未切生产；`app.nantou.love` 仍是 v1。
 - **管理员核对**：v1 `ADMIN_OPEN_IDS` 不在 Bitable 导出中，其余管理员需按 `docs/MIGRATION.md` 人工核对。
 - **账号数差异**：迁移记录为 `1114`，staging 当前 `1115`，多出的 1 个账号来源待核对。
 
-### 明确不做（PM 2026-10-24）
+### 原「明确不做」条目（PM 2026-10-24，均已被后续决策取代）
 
-- **E2 相互喜欢展示双方微信号**：不做，不展示微信号。原 P1 缺口（后端审计 P1-8）关闭并移出缺口清单；`docs/product-spec.md` 条目保留并标注，不再作为验收项。
-- **D10 推荐位/每周推荐（已由 PM 2026-10-24 追加改回实现）**：v1 原版规则已移植（见 §3「每周推荐位」）；`weekly_recommendations` 已接线，不再视为死表。原「不做」的决定保留在 `docs/DECISIONS.md` §25 历史中，由 §26 取代。
+- **E2 相互喜欢展示双方微信号**：原「不做」记录已被 `docs/DECISIONS.md` §27 取代：相互喜欢按双方就绪交换微信号，重新纳入验收。
+- **D10 推荐位/每周推荐**：原「不做」记录已被 `docs/DECISIONS.md` §26 取代：v1 原版规则已移植（见 §3「每周推荐位」），`weekly_recommendations` 已接线，重新纳入验收。
 
 ## 6. 文档自动化
 

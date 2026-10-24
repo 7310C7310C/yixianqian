@@ -13,6 +13,7 @@ var (
 	ErrInvalidActivation = errors.New("db: activation token is invalid, expired or already used")
 	ErrAlreadyActivated  = errors.New("db: account already has a password")
 	ErrPhoneConflict     = errors.New("db: phone already belongs to another account")
+	ErrIDCardConflict    = errors.New("db: id card already belongs to another account")
 	ErrAccountDisabled   = errors.New("db: account is disabled")
 
 	ErrLastSuperAdmin         = errors.New("db: cannot remove or disable the last super admin")
@@ -30,6 +31,8 @@ func mapWriteError(err error) error {
 		switch pgErr.ConstraintName {
 		case "users_phone_key":
 			return fmt.Errorf("%w: %s", ErrPhoneConflict, pgErr.ConstraintName)
+		case "users_id_card_hash_uidx":
+			return fmt.Errorf("%w: %s", ErrIDCardConflict, pgErr.ConstraintName)
 		case "auth_credentials_pkey":
 			return fmt.Errorf("%w: %s", ErrAlreadyActivated, pgErr.ConstraintName)
 		default:

@@ -78,12 +78,15 @@ type CardsPageData struct {
 
 // MutualView is one mutual match, with contact fields gated by consent.
 type MutualView struct {
-	Other       SocialUserRef
-	LikeType    string
-	Message     string
-	MyWechat    string
-	TheirWechat string
-	Since       string
+	Other          SocialUserRef
+	LikeType       string
+	Message        string
+	MyWechat       string
+	TheirWechat    string
+	WechatRequired bool
+	WechatStatus   string
+	WaitingOther   bool
+	Since          string
 }
 
 // LikedMeView is one incoming like. Anonymous rows never carry an identity.
@@ -553,10 +556,14 @@ func mutualView(o db.SocialOverview, pair db.LikePair) MutualView {
 		Message:  mutualMessage(o, pair),
 		Since:    formatSocialTime(pair.Like.CreatedAt),
 	}
-	if o.Me.ContactConsent {
+	status, required, waiting := mutualWechatStatus(o.Me, pair.Other)
+	view.WechatStatus = status
+	view.WechatRequired = required
+	view.WaitingOther = waiting
+	if strings.TrimSpace(o.Me.Wechat) != "" {
 		view.MyWechat = o.Me.Wechat
 	}
-	if pair.Other.ContactConsent {
+	if status == wechatStatusReady {
 		view.TheirWechat = pair.Other.Wechat
 	}
 	return view

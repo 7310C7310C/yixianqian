@@ -192,6 +192,7 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		Wechat:          input.Wechat,
 		IDCardCipher:    sealedID,
 		IDCardLast4:     last4,
+		IDCardHash:      idCardHash(a.cfg.SessionSecret, input.IDCard),
 		ReferralSource:  referral,
 		IsForChild:      input.IsForChild,
 		ContactConsent:  true,
@@ -200,6 +201,9 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, db.ErrPhoneConflict):
 		a.renderRegister(w, r, http.StatusConflict, values, "此手机号码已注册，请直接登录或联系小天使。")
+		return
+	case errors.Is(err, db.ErrIDCardConflict):
+		a.renderRegister(w, r, http.StatusConflict, values, "此身份证号已被其他账号使用，请勿重复注册。")
 		return
 	case errors.Is(err, db.ErrConflict):
 		a.renderRegister(w, r, http.StatusConflict, values, "资料与现有账号冲突，请联系小天使。")

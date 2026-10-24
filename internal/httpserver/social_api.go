@@ -120,6 +120,7 @@ func (a *App) handleAPILike(w http.ResponseWriter, r *http.Request) {
 	message := "喜欢成功。"
 	if result.Mutual {
 		message = "你们相互喜欢了！"
+		a.ensureMutualWechatForUser(r.Context(), viewer.ID)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":             true,
@@ -182,6 +183,7 @@ func (a *App) handleAPILikesMe(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "暂时无法载入，请稍后再试。")
 		return
 	}
+	a.ensureMutualWechatExchanges(r.Context(), overview)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"liked_me": likedMeAPI(overview),
 		"mutual":   mutualAPI(overview),
@@ -239,6 +241,9 @@ type socialMutualItem struct {
 	CreatedAt       string `json:"created_at"`
 	MyWechat        string `json:"my_wechat"`
 	TheirWechat     string `json:"their_wechat"`
+	WechatRequired  bool   `json:"wechat_required"`
+	WechatStatus    string `json:"wechat_status"`
+	WaitingOther    bool   `json:"waiting_other"`
 }
 
 func mutualAPI(o db.SocialOverview) []socialMutualItem {
@@ -257,10 +262,15 @@ func mutualAPI(o db.SocialOverview) []socialMutualItem {
 			LikeType:        pair.Like.LikeType,
 			CreatedAt:       formatSocialTime(pair.Like.CreatedAt),
 		}
-		if o.Me.ContactConsent {
+		status, required, waiting := mutualWechatStatus(o.Me, pair.Other)
+		item.WechatStatus = status
+		item.WechatRequired = required
+		item.WaitingOther = waiting
+		if strings.TrimSpace(o.Me.Wechat) != "" {
 			item.MyWechat = o.Me.Wechat
 		}
-		if pair.Other.ContactConsent {
+		// Contact details are exchanged only after both sides are ready.
+		if status == wechatStatusReady {
 			item.TheirWechat = pair.Other.Wechat
 		}
 		out = append(out, item)
@@ -306,6 +316,7 @@ func (a *App) handleAPIMyLikes(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "暂时无法载入，请稍后再试。")
 		return
 	}
+	a.ensureMutualWechatExchanges(r.Context(), overview)
 	list := make([]map[string]any, 0, len(overview.MyLikes))
 	for _, pair := range overview.MyLikes {
 		item := map[string]any{
