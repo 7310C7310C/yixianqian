@@ -44,6 +44,7 @@ const GaLoading = {
     + '</div>'
 };
 createApp({
+  render: window.__YXQ_RENDER__,
   components: { 'ga-loading': GaLoading },
   setup() {
     // 管理台 iframe 内的原版活动管理：/app?native_admin=1&p=group_admin。
@@ -523,6 +524,11 @@ createApp({
       if (!currentCard.value) return [];
       return cardDisplayPhotos(currentCard.value);
     });
+    // 牌堆只解码当前与下一张；其余用同尺寸占位，避免首屏一次拉 9 张。
+    function photoSrc(i) {
+      if (i === photoIndex.value || i === photoIndex.value + 1) return currentPhotoList.value[i] || '';
+      return '';
+    }
     const photoLoading = ref(false);
     let photoLoadingTimer = null;
     const loadedPhotoSet = new Set();
@@ -2316,11 +2322,11 @@ createApp({
       return cardPhotosOf(c);
     }
     function preloadAround() {
-      const idx = cardIndex.value;
-      for (let i = idx; i <= idx + 3 && i < cards.value.length; i++) {
-        const p = cardDisplayPhotos(cards.value[i]);
-        if (p[0]) preloadImage(p[0]);
-      }
+      // 只预取下一张卡片的首图；当前卡片的相邻照片由 deck 自身按需加载。
+      const next = cards.value[cardIndex.value + 1];
+      if (!next) return;
+      const p = cardDisplayPhotos(next);
+      if (p[0]) preloadImage(p[0]);
     }
     function cardsQuery() {
       const q = buildFilterQuery();
@@ -6126,7 +6132,7 @@ createApp({
       activityListTime, activityRangeText,
       isAttendancePresent, isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
-      cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoLoading,
+      cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoSrc, photoLoading,
       showSwipeGuide, closeSwipeGuide, showSelfCardGuide, dismissSelfCardGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
       filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,

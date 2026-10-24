@@ -221,6 +221,14 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 本地（gzip 前置）实测：FCP 冷 6.1s→2.3–2.6s、热 4.24s→1.0–1.3s；LCP 仍约 8.4–9.1s（Vue 运行时编译主导，未达 2.5s，下一批需拆模板/预编译）。
 - 未部署；证据与回滚见 `.team/perf/batch2-report.md`。
 
+### 性能批次3（2026-10-25，实现待审）
+
+- 根模板预编译：`tools/spa_precompile`（Node + `@vue/compiler-dom@3.4.27`，与 `vue.global.prod.js` 一致，package-lock 锁定）从 `index.html` 的 `#app` 抽取模板，生成 `web/static/legacy/app.render.js`（768KB / gzip 69.6KB，挂 `window.__YXQ_RENDER__`，无 eval）；`app.js` 根 options 使用它，文件缺失时回退运行时编译。改模板后必须 `npm run build`，`npm run check` 校验 hash。
+- 首屏图：牌堆只解码当前+下一张照片（其余同尺寸占位），预取只取下一张卡首图；9 张→**2 个图片请求**。
+- `assetVersion` 5→6；壳/静态/媒体缓存语义同批次2。
+- 本地（gzip 前置，390×844，1.6Mbps/150ms/CPU×4，N=3 中位）：auth-cold FCP **2.60s**、LCP **6.12s**、524KB/16 请求；warm FCP **1.41s**、LCP **4.96s**；最长任务 1.77s（原 5.6s）。LCP 仍 >2.5s（剩余为 JS 字节/解析与图片下载），待下一批拆包。
+- 未部署；详见 `.team/perf/batch3-report.md`。
+
 ### 人脸与数据
 
 - 人脸检测：本地 YuNet 优先、Haar 回退；上传后检测、注册后补检测、`has_face` 门禁；观察员账号豁免 `has_face`（身份证不豁免）。

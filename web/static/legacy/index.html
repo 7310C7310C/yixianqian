@@ -170,11 +170,14 @@
       <div class="card-photo-wrap" @touchstart="onPhotoTouchStart" @touchmove="onPhotoTouchMove" @touchend="onPhotoTouchEnd" @mousedown="onPhotoMouseDown" @mousemove="onPhotoMouseMove" @mouseup="onPhotoMouseUp" @mouseleave="onPhotoMouseLeave" @click="onPhotoClick">
         <div v-if="photoLoading" class="photo-loading"></div>
         <div v-if="currentPhotoList.length" class="card-photo-track" :style="{ transform: 'translateX(-' + photoIndex * 100 + '%)' }">
-          <img v-for="(p,i) in currentPhotoList" :key="i" :src="p" class="card-photo-item" alt=""
-            :loading="i === 0 ? 'eager' : 'lazy'" decoding="async"
-            :fetchpriority="(cardIndex === 0 && i === 0) ? 'high' : 'auto'"
-            :style="photoPositions[i] ? { objectPosition: photoPositions[i] } : null"
-            @load="onPhotoLoad($event); recalcPhotoPosition($event, i)" @error="onPhotoError($event); retryImg($event, 2)">
+          <template v-for="(p,i) in currentPhotoList" :key="i">
+            <img v-if="photoSrc(i)" :src="photoSrc(i)" class="card-photo-item" alt=""
+              :loading="i === photoIndex ? 'eager' : 'lazy'" decoding="async"
+              :fetchpriority="(cardIndex === 0 && i === 0) ? 'high' : 'auto'"
+              :style="photoPositions[i] ? { objectPosition: photoPositions[i] } : null"
+              @load="onPhotoLoad($event); recalcPhotoPosition($event, i)" @error="onPhotoError($event); retryImg($event, 2)">
+            <div v-else class="card-photo-item card-photo-ghost"></div>
+          </template>
         </div>
         <div v-else class="card-photo-placeholder">{{ currentCard.gender==='男性' ? '👨' : '👩' }}</div>
         <div class="photo-dots" v-if="currentCard.photos && currentCard.photos.length > 1">
@@ -2611,6 +2614,7 @@
   } catch (e) {}
 })();
 </script>
+<script src="app.render.js?v=__ASSET_URL_VERSION__" defer></script>
 <script src="app.js?v=__ASSET_URL_VERSION__" defer></script>
 </body>
 </html>

@@ -321,6 +321,20 @@ ME=$(curl -sI -H "Cookie: yxq_session=$C" "https://next.nantou.love/cards/photo/
 curl -s -o /dev/null -w 'media 304=%{http_code}\n' -H "Cookie: yxq_session=$C" -H "If-None-Match: $ME" "https://next.nantou.love/cards/photo/<mediaID>?size=thumb"
 ```
 
+## SPA 根模板预编译（批次3）
+
+- 生成物 `web/static/legacy/app.render.js` 已提交；生产部署不需要 Node。
+- 改 `index.html` 的 `#app` 模板后：
+  ```bash
+  cd tools/spa_precompile
+  npm ci
+  npm run build
+  npm run check
+  ```
+  然后按静态资源变更 bump `internal/httpserver/templates.go` 的 `assetVersion` 并重新构建部署。
+- `@vue/compiler-dom` 必须与 `lib/vue.global.prod.js` 版本一致（当前 3.4.27）；升级 Vue 必须同步升级并重新生成。
+- 回滚：`app.render.js` 缺失时 `app.js` 自动回退运行时编译；彻底回滚用 `git revert` + 重新部署。
+
 ## 用户端 smoke
 
 ```bash

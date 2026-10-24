@@ -949,3 +949,5 @@
   .update-bar-close { flex: 0 0 auto; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
     border: 0; padding: 0; background: transparent; color: #969799; font-size: 16px; line-height: 1; cursor: pointer; }
   .van-theme-dark .update-bar { background: #2a1b1f; color: #ffb3bf; border-color: #43262c; }
+
+.card-photo-ghost{background:linear-gradient(90deg,#f1f2f4 25%,#e6e8eb 37%,#f1f2f4 63%);background-size:400% 100%;animation:bootShimmer 1.2s ease infinite;}

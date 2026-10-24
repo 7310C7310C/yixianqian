@@ -1,0 +1,14 @@
+{
+  "name": "yxq-spa-precompile",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Compile the legacy SPA root in-DOM template into a static render function",
+  "scripts": {
+    "build": "node precompile.mjs",
+    "check": "node precompile.mjs --check"
+  },
+  "devDependencies": {
+    "@vue/compiler-dom": "3.4.27"
+  }
+}
