@@ -62,7 +62,7 @@ func TestAdminDashboardGroupedNavigation(t *testing.T) {
 		`class="admin-topbar"`,
 		"管理台",
 		"待审核用户", "待处理举报", "待处理反馈", "进行中活动",
-		"用户与权限", "活动", "麦穗", "内容与安全",
+		"用户与权限", "活动", "内容与安全", "麦穗",
 		`href="/admin/users?status=pending"`,
 		`href="/admin/roles"`,
 		`href="/app?native_admin=1&amp;p=group_admin"`, `href="/admin/activities/new"`,
@@ -80,6 +80,42 @@ func TestAdminDashboardGroupedNavigation(t *testing.T) {
 		if strings.Contains(html, unwanted) {
 			t.Fatalf("dashboard still renders removed entry %q", unwanted)
 		}
+	}
+}
+
+// 分组顺序是可见契约：「麦穗」必须排在「内容与安全」之后，不能只靠包含断言。
+func TestAdminDashboardGroupOrder(t *testing.T) {
+	html := renderAdminPage(t, "admin", PageData{
+		Title: "管理台", ActiveNav: "admin",
+		Data: adminHomeData{
+			Stats:       db.AdminStats{Users: db.AdminUserCounts{Pending: 2}},
+			Roles:       []string{"super_admin"},
+			SuperAdmin:  true,
+			CanReview:   true,
+			CanManage:   true,
+			CanModerate: true,
+			CanAdmin:    true,
+			CanActivity: true,
+			CanPoints:   true,
+			CanAudit:    true,
+		},
+	})
+	groups := []struct{ name, anchor string }{
+		{"用户与权限", `id="entry-group-users"`},
+		{"活动", `id="entry-group-activities"`},
+		{"内容与安全", `id="entry-group-safety"`},
+		{"麦穗", `id="entry-group-points"`},
+	}
+	last := -1
+	for _, group := range groups {
+		index := strings.Index(html, group.anchor)
+		if index < 0 {
+			t.Fatalf("dashboard missing group %s", group.name)
+		}
+		if index <= last {
+			t.Fatalf("dashboard group %s is out of order (index %d, previous %d)", group.name, index, last)
+		}
+		last = index
 	}
 }
 
@@ -102,7 +138,7 @@ func TestAdminDashboardHidesForbiddenEntries(t *testing.T) {
 			t.Fatalf("reviewer dashboard missing %q", want)
 		}
 	}
-	for _, unwanted := range []string{`href="/admin/roles"`, `href="/admin/points"`, `href="/admin/activities/new"`} {
+	for _, unwanted := range []string{`href="/admin/roles"`, `href="/admin/points"`, `href="/admin/activities/new"`, `id="entry-group-points"`} {
 		if strings.Contains(html, unwanted) {
 			t.Fatalf("reviewer dashboard leaked %q", unwanted)
 		}

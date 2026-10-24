@@ -760,27 +760,7 @@ a.admin-stat:hover {
   font-weight: 600;
 }
 
-/* 内容与安全是最后一个分组：桌面横跨两列，条目按可用宽度平分。 */
-@media (min-width: 900px) {
-  .admin-entry-group--wide {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  }
-
-  .admin-entry-group--wide .admin-entry-group-head {
-    grid-column: 1 / -1;
-  }
-
-  .admin-entry-group--wide .admin-entry {
-    border-top: 1px solid var(--adm-divider);
-    border-left: 1px solid var(--adm-divider);
-  }
-
-  .admin-entry-group--wide .admin-entry:first-of-type {
-    border-left: 0;
-  }
-}
+/* 四个入口分组在桌面按 2×2 排布：末行不足时左对齐，不跨列。 */
 
 .admin-entry {
   display: flex;

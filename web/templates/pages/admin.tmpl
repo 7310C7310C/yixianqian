@@ -103,25 +103,8 @@
   </section>
   {{end}}
 
-  {{if .Data.CanPoints}}
-  <section class="admin-entry-group" aria-labelledby="entry-group-points">
-    <div class="admin-entry-group-head">
-      <h2 id="entry-group-points">麦穗</h2>
-      <span class="admin-entry-group-count">1 项</span>
-    </div>
-    <a class="admin-entry" href="/admin/points">
-      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_wheat"}}</span>
-      <span class="admin-entry-body">
-        <span class="admin-entry-title">麦穗管理</span>
-        <span class="admin-entry-desc">总览、流水、兑换与加减麦穗</span>
-      </span>
-      <span class="admin-entry-arrow" aria-hidden="true">›</span>
-    </a>
-  </section>
-  {{end}}
-
   {{if or .Data.CanModerate .Data.CanAudit}}
-  <section class="admin-entry-group admin-entry-group--wide" aria-labelledby="entry-group-safety">
+  <section class="admin-entry-group" aria-labelledby="entry-group-safety">
     <div class="admin-entry-group-head">
       <h2 id="entry-group-safety">内容与安全</h2>
       <span class="admin-entry-group-count">{{if and .Data.CanModerate .Data.CanAudit}}3 项{{else if .Data.CanModerate}}2 项{{else}}1 项{{end}}</span>
@@ -156,6 +139,23 @@
       <span class="admin-entry-arrow" aria-hidden="true">›</span>
     </a>
     {{end}}
+  </section>
+  {{end}}
+
+  {{if .Data.CanPoints}}
+  <section class="admin-entry-group" aria-labelledby="entry-group-points">
+    <div class="admin-entry-group-head">
+      <h2 id="entry-group-points">麦穗</h2>
+      <span class="admin-entry-group-count">1 项</span>
+    </div>
+    <a class="admin-entry" href="/admin/points">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_wheat"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">麦穗管理</span>
+        <span class="admin-entry-desc">总览、流水、兑换与加减麦穗</span>
+      </span>
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
   </section>
   {{end}}
 </div>
