@@ -234,18 +234,23 @@ ssh -i "$KEY" "$RELAY" "set -e
 ```
 
 > 顺序要求：`/var/cache/nginx/yxq` 必须在 `nginx -t` 之前创建（缺目录会 reload 失败）；server1 与 server2 可独立回滚。
+> **`nginx -t` 失败分支**：任一台 `nginx -t` 非 0 时不要 reload，先把该台备份 `cp` 回原路径并再次 `nginx -t`（让磁盘配置回到旧版）；若 server1 已 reload 而 server2 失败，立即回滚 server1（见下），再排查 server2。
 
 ```bash
-# ===== rollback（每台单独执行；<TS> 换成 apply 时的时间戳）=====
-cp -a /var/backups/yxq-nginx/next.nantou.love.<TS> /etc/nginx/sites-available/next.nantou.love
+# ===== rollback（每台单独执行）=====
+# 示例：apply 时的 TS=20261025-0215；回滚时显式设置同一值（不要写 <TS>，shell 会当成重定向）
+TS=20261025-0215
+cp -a "/var/backups/yxq-nginx/next.nantou.love.$TS" /etc/nginx/sites-available/next.nantou.love
 nginx -t && systemctl reload nginx
 
 # server2（从 server1 执行）
 RELAY=root@45.125.16.205
 KEY=~/.ssh/yixianqian_relay
+TS=20261025-0215
 ssh -i "$KEY" "$RELAY" "set -e
-  cp -a /var/backups/yxq-nginx/relay-next.conf.<TS> /etc/nginx/sites-available/relay-next.conf
-  cp -a /var/backups/yxq-nginx/relay-next-proxy.conf.<TS> /etc/nginx/snippets/relay-next-proxy.conf
+  TS=$TS
+  cp -a /var/backups/yxq-nginx/relay-next.conf.\$TS /etc/nginx/sites-available/relay-next.conf
+  cp -a /var/backups/yxq-nginx/relay-next-proxy.conf.\$TS /etc/nginx/snippets/relay-next-proxy.conf
   nginx -t && systemctl reload nginx"
 ```
 
@@ -255,16 +260,22 @@ ssh -i "$KEY" "$RELAY" "set -e
 curl -s -o /dev/null -o /dev/null -w 'ttfb=%{time_starttransfer}\n' \
   https://next.nantou.love/healthz https://next.nantou.love/healthz
 
-# 2) 静态：MISS 与 HIT 都必须 gzip（边缘缓存 identity + 边缘压缩）
+# 2) 静态：4 个真实资源 MISS/HIT 都必须 gzip；identity 不压缩
+#    Go 静态 .js 的 MIME 是 text/javascript，gzip_types 必须含它（见 relay-next.conf）。
 V=$(date +%s)
-curl -sSI -H 'Accept-Encoding: gzip' "https://next.nantou.love/static/legacy/lib/vant.min.js?v=$V" \
-  | tr -d '\r' | grep -iE 'content-encoding|content-length|x-cache-status'   # 期望 gzip + MISS
-curl -sSI -H 'Accept-Encoding: gzip' "https://next.nantou.love/static/legacy/lib/vant.min.js?v=$V" \
-  | tr -d '\r' | grep -iE 'content-encoding|content-length|x-cache-status'   # 期望 gzip + HIT
-
-# 3) identity 客户端仍拿到未压缩（不应出现 content-encoding: gzip）
-curl -sSI "https://next.nantou.love/static/legacy/lib/vant.min.js?v=$V" \
-  | tr -d '\r' | grep -iE 'content-encoding|content-length|x-cache-status'
+for f in vant.min.js vue.global.prod.js photoswipe.umd.min.js vant.min.css; do
+  U="https://next.nantou.love/static/legacy/lib/$f?v=$V"
+  echo "== $f"
+  echo -n 'MISS '; curl -sSI -H 'Accept-Encoding: gzip' "$U" | tr -d '\r' \
+    | grep -iE 'content-encoding|content-length|x-cache-status' | tr '\n' ' '; echo
+  echo -n 'HIT  '; curl -sSI -H 'Accept-Encoding: gzip' "$U" | tr -d '\r' \
+    | grep -iE 'content-encoding|content-length|x-cache-status' | tr '\n' ' '; echo
+  echo -n 'IDENT'; curl -sSI "$U" | tr -d '\r' \
+    | grep -iE 'content-encoding|content-length|x-cache-status' | tr '\n' ' '; echo
+done
+# 期望：MISS/HIT 均 content-encoding: gzip；IDENT 无 content-encoding 且 content-length 为原大小
+# 参考（nginx level 4 实测）：vant.min.js 239831→81433、vue 147796→55635、
+# photoswipe 54495→17346、vant.min.css 198331→55322
 
 # 4) HSTS 在 /static/ location 仍生效（location 内有 add_header 会覆盖 server 级）
 curl -sSI https://next.nantou.love/static/legacy/lib/vant.min.js | tr -d '\r' \
