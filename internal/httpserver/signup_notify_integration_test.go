@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -76,12 +77,50 @@ func TestIntegrationSignupSendsNotifications(t *testing.T) {
 	if !strings.Contains(anonTitle, "喜欢你的人报名了") {
 		t.Fatalf("anonymous signup title = %q", anonTitle)
 	}
-	for _, leak := range []string{signer.Name, signer.Phone, strconv.FormatInt(signer.ID, 10)} {
+	for _, leak := range []string{signer.Name, signer.Phone} {
 		if strings.Contains(anonTitle, leak) || strings.Contains(anonBody, leak) ||
 			strings.Contains(anonPayload, leak) {
 			t.Fatalf("anonymous notice leaked %q: %s / %s / %s", leak, anonTitle, anonBody, anonPayload)
 		}
 	}
+	// The numeric user id is a weak needle: the activity name carries random
+	// digits and the dedupe key carries other users' ids, so a raw substring
+	// match goes red by chance. Check the payload structurally instead: no
+	// account-identifier field and no value equal to the signer id.
+	var anonPayloadJSON map[string]any
+	if err := json.Unmarshal([]byte(anonPayload), &anonPayloadJSON); err != nil {
+		t.Fatalf("anonymous payload is not JSON: %v (%s)", err, anonPayload)
+	}
+	if anonymous, ok := anonPayloadJSON["anonymous"].(bool); !ok || !anonymous {
+		t.Fatalf("anonymous payload = %s", anonPayload)
+	}
+	signerID := strconv.FormatInt(signer.ID, 10)
+	var checkAnon func(v any)
+	checkAnon = func(v any) {
+		switch value := v.(type) {
+		case map[string]any:
+			for key, child := range value {
+				switch key {
+				case "user_id", "initiator_id", "signer_id", "inviter_id", "phone", "name", "nickname", "legacy_user_id":
+					t.Fatalf("anonymous payload leaked field %q: %s", key, anonPayload)
+				}
+				checkAnon(child)
+			}
+		case []any:
+			for _, child := range value {
+				checkAnon(child)
+			}
+		case string:
+			if value == signerID {
+				t.Fatalf("anonymous payload leaked signer id: %s", anonPayload)
+			}
+		case float64:
+			if strconv.FormatFloat(value, 'f', -1, 64) == signerID {
+				t.Fatalf("anonymous payload leaked signer id: %s", anonPayload)
+			}
+		}
+	}
+	checkAnon(anonPayloadJSON)
 	// A duplicate signup attempt must not send a second notice.
 	resp = client.postJSON("/legacy/api/activities/"+activity.ActivityNo+"/signup",
 		client.csrfCookie(), map[string]any{})
