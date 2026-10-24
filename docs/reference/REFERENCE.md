@@ -283,6 +283,7 @@ sources: []
 | `fmt` | — |
 | `fmt-check` | — |
 | `generate` | — |
+| `prepush` | `fmt-check docs-check vet build` |
 | `run` | — |
 | `seed` | — |
 | `test` | — |

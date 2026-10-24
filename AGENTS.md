@@ -79,16 +79,34 @@ sources:
   不默认使用 PR（除非 PM 明确要求）。
 - 不假设有固定团队或角色；按任务需要由维护者/执行者/审查者协作，最终对 PM 负责。
 
-## 交付节奏与快速通道（2026-10-24 PM 批准）
+## 标准交付流水线（2026-10-24 PM 确认；唯一标准流程）
 
-- **绿 CI 即部署（已自动）**：server1 `yxq-autodeploy.timer` 已启用，每 60 秒检查 `origin/main`；当前 HEAD 的 CI（有文档变更时含 Docs）全绿后自动构建/重启/健康校验，失败自动回滚（`deployed.sha` 不推进）；docs-only 提交只更新 `deployed.sha`，不重启。日志 `/var/log/yxq-autodeploy.log`；紧急冻结 `systemctl stop yxq-autodeploy.timer`。15 分钟部署 SLA 由自动部署满足；人工部署仅用于回滚/热修。细节见 `docs/runbooks/staging.md`「自动部署」。
-- **审查必须前移（push 即部署）**：常规/高风险改动必须在 `git push` 前拿到独立 Reviewer PASS（可审本地 commit）；**禁止「先 push 再等 Review」**。低风险快速通道可直接 push，由自动部署上线。
-- **快速通道（低风险）**：纯文案/样式/排序/静态资源，且不涉及 auth、权限、数据、API、schema、支付 → Dev Lead 自测 + 截图/浏览器 smoke + CI 绿即可直接 push，**无需独立 Reviewer**；同时在 `.team/decisions.md` 记录范围、风险与批准（PM 2026-10-24 授权）。目标 ≤10 分钟（开工→上线）。
-- **常规通道**：行为、逻辑、接口、模板结构变更 → 独立 Reviewer PASS 后 push（自动部署跟进）。
-- **高风险**：安全/支付/数据/权限/凭据 → Reviewer + Auditor/security gate，PASS 后 push（不变）。
-- 自动部署冻结或异常时，未部署提交须登记 `.team/status.md`「已推送未部署」并在 30 分钟内清空。
-- **文档门禁减负**：仅当改动命中 `docs/`、env、route、migration 时跑 `docs-check-stale`；纯前端模板/样式允许 `Docs-Impact: none（理由）`，不强制刷新 `docs/STATUS.md` 的 sources。
-- 超过时间目标要记录原因；不允许用「批量等待」掩盖未部署。
+顺序固定，不得跳步、不得重排：
+
+1. **改动**：小改动直接在 `main`；较大改动用独立 worktree/分支，由维护者本地合并后 push。
+2. **本地验证**：`gofmt -l .` 为空 + `go vet ./...` + 定向测试 + `make ci`（够用时可先 `make prepush` 快速门禁）；前端改动跑对应 browser smoke。
+3. **commit**：简体中文；带 `Docs:` 或 `Docs-Impact: none（理由）`。
+4. **push**：常规/高风险须在 push 前拿到独立 Reviewer 对本地 commit 的 PASS；低风险快速通道可直接 push。
+5. **CI 绿**：当前 HEAD 的 `lint-build`/`unit`/`integration`；有文档变更时 `Docs` 也须绿。
+6. **自动部署 staging**：`yxq-autodeploy` 在 CI 绿后 60 秒内构建/重启/health，失败自动回滚。
+7. **部署后 smoke**：对应 Playwright/curl 冒烟；以 `/healthz` 的 `version=staging-<sha>` 对齐部署 HEAD。
+8. **批次总报告**：改动、证据、部署状态与残余风险。
+
+硬约束：
+
+- **push 不等于已部署**；以 `/healthz` 版本为准，不以 `git push` 成功为完成。
+- **CI 红不部署**；不允许 `[skip ci]`、绕过 CI、红/取消时先部署“看看”。
+- 不得绕过本流程；异常（冻结自动部署、回滚）须记录到 `.team/status.md`/`.team/decisions.md`。
+
+通道分级（唯一差别在第 4 步；第 5–7 步完全相同）：
+
+- **快速通道（低风险）**：纯文案/样式/排序/静态资源，且不涉及 auth、权限、数据、API、schema、支付 → 自测 + 截图/浏览器 smoke，可免独立 Reviewer 直接 push；须在 `.team/decisions.md` 记录范围、风险与批准（PM 2026-10-24 授权）。目标 ≤10 分钟（开工→上线）。
+- **常规通道**：行为、逻辑、接口、模板结构变更 → 独立 Reviewer PASS 后 push。
+- **高风险**：安全/支付/数据/权限/凭据 → Reviewer + Auditor/security gate，PASS 后 push。
+
+自动部署运维：`systemctl is-active yxq-autodeploy.timer`、`tail -n 50 /var/log/yxq-autodeploy.log`、紧急冻结 `systemctl stop yxq-autodeploy.timer`；细节见 `docs/runbooks/staging.md`「自动部署」。人工部署仅用于回滚/热修。
+
+**文档门禁减负**：仅当改动命中 `docs/`、env、route、migration 时跑 `docs-check-stale`；纯前端模板/样式允许 `Docs-Impact: none（理由）`，不强制刷新 `docs/STATUS.md` 的 sources。
 
 ## 文档自动更新协议
 
@@ -143,6 +161,7 @@ make test-broadcast-ui # 需要 BASE_URL/SESSION_COOKIE/ACTIVITY_ID
 make docs-gen          # 刷新 REFERENCE 与入口指针
 make docs-check        # 文档元数据/地图/链接/生成物检查
 make docs-check-stale  # 先 git fetch origin main；base 默认 origin/main，须可解析
+make prepush           # 快速本地门禁（push 前必跑）：fmt-check + docs-check + vet + build
 make ci                # 本地合并门禁：fmt-check + docs-check + vet + test + 工具测试 + build
 make run
 make seed

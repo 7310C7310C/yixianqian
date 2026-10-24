@@ -10,7 +10,7 @@ DOCS_BASE ?= origin/main
 LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSION)
 
 .PHONY: all tidy generate fmt fmt-check vet test test-race test-integration test-migration \
-        test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale ci
+        test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale prepush ci
 
 all: ci
 
@@ -75,5 +75,8 @@ seed:
 token:
 	@test -n "$(USER_ID)" || (echo "usage: make token USER_ID=U-0006"; exit 1)
 	$(GO) run ./cmd/token -legacy-user-id=$(USER_ID)
+
+# 快速本地门禁：push 前必跑；全量仍用 make ci（多 test/test-migration）
+prepush: fmt-check docs-check vet build
 
 ci: fmt-check docs-check vet test test-migration build
