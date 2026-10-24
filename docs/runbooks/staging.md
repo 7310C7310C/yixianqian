@@ -218,45 +218,76 @@ cp -a /etc/nginx/sites-available/next.nantou.love /var/backups/yxq-nginx/next.na
 install -m 0644 deploy/nginx/next.nantou.love.conf /etc/nginx/sites-available/next.nantou.love
 nginx -t && systemctl reload nginx
 
-# --- server2（repo 根目录执行）---
-cp -a /etc/nginx/sites-available/relay-next.conf /var/backups/yxq-nginx/relay-next.conf.$TS
-cp -a /etc/nginx/snippets/relay-next-proxy.conf /var/backups/yxq-nginx/relay-next-proxy.conf.$TS
-install -d -o www-data -g www-data /var/cache/nginx/yxq
-install -D -m 0644 deploy/nginx/snippets/relay-next-proxy.conf /etc/nginx/snippets/relay-next-proxy.conf
-install -m 0644 deploy/nginx/relay-next.conf /etc/nginx/sites-available/relay-next.conf
+# --- server2：server2 没有仓库副本，从 server1 传文件 ---
+RELAY=root@45.125.16.205
+KEY=~/.ssh/yixianqian_relay
+ssh -i "$KEY" "$RELAY" "install -d -m 0755 /var/backups/yxq-nginx /tmp/yxq-nginx-$TS && install -d -o www-data -g www-data /var/cache/nginx/yxq"
+scp -i "$KEY" deploy/nginx/snippets/relay-next-proxy.conf deploy/nginx/relay-next.conf \
+  "$RELAY:/tmp/yxq-nginx-$TS/"
+ssh -i "$KEY" "$RELAY" "set -e
+  TS=$TS
+  cp -a /etc/nginx/sites-available/relay-next.conf /var/backups/yxq-nginx/relay-next.conf.\$TS
+  cp -a /etc/nginx/snippets/relay-next-proxy.conf /var/backups/yxq-nginx/relay-next-proxy.conf.\$TS
+  install -D -m 0644 /tmp/yxq-nginx-\$TS/relay-next-proxy.conf /etc/nginx/snippets/relay-next-proxy.conf
+  install -m 0644 /tmp/yxq-nginx-\$TS/relay-next.conf /etc/nginx/sites-available/relay-next.conf
+  nginx -t && systemctl reload nginx"
+```
+
+> 顺序要求：`/var/cache/nginx/yxq` 必须在 `nginx -t` 之前创建（缺目录会 reload 失败）；server1 与 server2 可独立回滚。
+
+```bash
+# ===== rollback（每台单独执行；<TS> 换成 apply 时的时间戳）=====
+cp -a /var/backups/yxq-nginx/next.nantou.love.<TS> /etc/nginx/sites-available/next.nantou.love
 nginx -t && systemctl reload nginx
+
+# server2（从 server1 执行）
+RELAY=root@45.125.16.205
+KEY=~/.ssh/yixianqian_relay
+ssh -i "$KEY" "$RELAY" "set -e
+  cp -a /var/backups/yxq-nginx/relay-next.conf.<TS> /etc/nginx/sites-available/relay-next.conf
+  cp -a /var/backups/yxq-nginx/relay-next-proxy.conf.<TS> /etc/nginx/snippets/relay-next-proxy.conf
+  nginx -t && systemctl reload nginx"
 ```
 
 ```bash
-# ===== rollback（每台单独执行；把 <file>/$TS 换成实际备份）=====
-cp -a /var/backups/yxq-nginx/next.nantou.love.$TS /etc/nginx/sites-available/next.nantou.love
-nginx -t && systemctl reload nginx
-# server2
-cp -a /var/backups/yxq-nginx/relay-next.conf.$TS /etc/nginx/sites-available/relay-next.conf
-cp -a /var/backups/yxq-nginx/relay-next-proxy.conf.$TS /etc/nginx/snippets/relay-next-proxy.conf
-nginx -t && systemctl reload nginx
-```
-
-```bash
-# ===== 验证（server2）=====
+# ===== 验证 =====
 # 1) 同连接连续两个请求：第 2 条 TTFB 期望 ≤200ms（改前 ~465ms）
 curl -s -o /dev/null -o /dev/null -w 'ttfb=%{time_starttransfer}\n' \
   https://next.nantou.love/healthz https://next.nantou.love/healthz
 
-# 2) 静态：预热后应命中边缘缓存，TTFB p95 ≤50ms
-for i in 1 2 3; do curl -s -o /dev/null -w '%{http_code} %{time_starttransfer}\n' \
-  https://next.nantou.love/static/legacy/lib/vant.min.js; done
-curl -sI https://next.nantou.love/static/legacy/lib/vant.min.js | tr -d '\r' \
-  | grep -iE 'x-cache-status|strict-transport|content-encoding'
+# 2) 静态：MISS 与 HIT 都必须 gzip（边缘缓存 identity + 边缘压缩）
+V=$(date +%s)
+curl -sSI -H 'Accept-Encoding: gzip' "https://next.nantou.love/static/legacy/lib/vant.min.js?v=$V" \
+  | tr -d '\r' | grep -iE 'content-encoding|content-length|x-cache-status'   # 期望 gzip + MISS
+curl -sSI -H 'Accept-Encoding: gzip' "https://next.nantou.love/static/legacy/lib/vant.min.js?v=$V" \
+  | tr -d '\r' | grep -iE 'content-encoding|content-length|x-cache-status'   # 期望 gzip + HIT
 
-# 3) SSE 仍能收到事件（需登录 cookie；浏览器端或 curl -N）
+# 3) identity 客户端仍拿到未压缩（不应出现 content-encoding: gzip）
+curl -sSI "https://next.nantou.love/static/legacy/lib/vant.min.js?v=$V" \
+  | tr -d '\r' | grep -iE 'content-encoding|content-length|x-cache-status'
+
+# 4) HSTS 在 /static/ location 仍生效（location 内有 add_header 会覆盖 server 级）
+curl -sSI https://next.nantou.love/static/legacy/lib/vant.min.js | tr -d '\r' \
+  | grep -i 'strict-transport-security'   # 期望且仅 1 条
+
+# 5) 回源路径压缩（server1 nginx，不经边缘缓存）
+curl -sk -H 'Host: next.nantou.love' -H 'Accept-Encoding: gzip' -sI \
+  https://127.0.0.1/static/legacy/lib/vant.min.js | tr -d '\r' | grep -i 'content-encoding'
+
+# 6) SSE 仍能收到事件（需登录 cookie；浏览器端或 curl -N）
 curl -N -H "Cookie: <yxq_session>" https://next.nantou.love/legacy/api/notifications/stream | head -3
+
+# 7) 边缘连接占用（SSE 每连接占 1 客户端 + 1 上游；worker_connections 768）
+ssh -i ~/.ssh/yixianqian_relay root@45.125.16.205 \
+  "ss -tn state established '( sport = :443 )' | wc -l"
 ```
 
 - `/static/` location 内有 `add_header`，会覆盖 server 级 HSTS，因此该 location 显式重复 HSTS；新增 location 时同理。
+- server2 的 `gzip_types` 在 `deploy/nginx/relay-next.conf` 的 server 段显式声明（主配置 `/etc/nginx/nginx.conf` 的 gzip_types 默认是注释）；改压缩策略时同步这里，否则 js/css 会退回 identity。
 - `proxy_cache_path` 目录必须存在且可写，否则 reload 失败。
-- SSE 会长期占用一个上游连接；关注 server2 `worker_connections` 与 `ss -tn state established`。
+- SSE 会长期占用一个上游连接；关注 server2 `worker_connections`（768，单 worker）与上面第 7 条计数。
 - TTL 先 1h（`lib/*` 无版本参数）；部署后最多 1h 可能取到旧静态资源。
+- migration `0008_perf_indexes.sql` 只加索引；自动部署时 runner 在事务内执行普通 `CREATE INDEX`（当前表小，锁窗口毫秒级）；生产大表另走手工 `CONCURRENTLY`。
 
 ## 用户端 smoke
 
