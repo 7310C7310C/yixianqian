@@ -1,0 +1,11 @@
+[Unit]
+Description=Run yxq-autodeploy every 60s (staging push→CI→deploy)
+
+[Timer]
+OnBootSec=120s
+OnUnitActiveSec=60s
+AccuracySec=15s
+Unit=yxq-autodeploy.service
+
+[Install]
+WantedBy=timers.target

@@ -82,6 +82,7 @@ sources:
 ## 交付节奏与快速通道（2026-10-24 PM 批准）
 
 - **绿 CI 即部署**：任何提交在当前 HEAD 的 CI 与 Docs 绿后 15 分钟内必须部署 staging；若在批量等待，必须写入 `.team/status.md` 的「已推送未部署」并在 30 分钟内清空，不允许静默积压。
+- **自动部署**：server1 `yxq-autodeploy.timer` 每 60 秒检查 `origin/main`，CI 与 Docs 绿后自动构建/切换/健康校验，失败自动回滚（`deployed.sha` 不推进）。紧急冻结：`systemctl stop yxq-autodeploy.timer`；启用/日志/回滚见 `docs/runbooks/staging.md` 的「自动部署」。
 - **快速通道（低风险）**：纯文案/样式/排序/静态资源，且不涉及 auth、权限、数据、API、schema、支付 → Dev Lead 自测 + 截图/浏览器 smoke + CI 绿即可直接部署，**无需独立 Reviewer**；同时在 `.team/decisions.md` 记录范围、风险与批准（PM 2026-10-24 授权）。目标 ≤10 分钟（开工→部署）。
 - **常规通道**：行为、逻辑、接口、模板结构变更 → 独立 Reviewer PASS 后部署（不变）。
 - **高风险**：安全/支付/数据/权限/凭据 → Reviewer + Auditor/security gate（不变）。

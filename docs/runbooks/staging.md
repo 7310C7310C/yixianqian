@@ -78,6 +78,58 @@ systemctl restart yixianqian-next-test
 `PUBLIC_QR_IMAGE`，删除。切换后按「健康检查」确认版本，再跑人脸
 `unchecked=0` 与用户端/管理台 smoke。
 
+### 自动部署（push → CI 绿 → 自动部署）
+
+server1 上的 `yxq-autodeploy.timer` 每 60 秒检查一次 `origin/main`：与
+`/opt/yixianqian-next/deployed.sha` 相同则直接退出；不同则要求该提交的 CI
+（`lint-build`/`unit`/`integration`）与 Docs 均 success，再执行
+gofmt/vet → 构建 4 个 binary（`version=staging-<short>`）→ 备份 `server.prev` → 切换 →
+`systemctl restart yixianqian-next-test` → 轮询 `/healthz` 等到版本匹配；任何一步失败都
+不写 `deployed.sha`，切换后失败则用 `server.prev` 自动回滚并重启。
+
+- 脚本：`/opt/yixianqian-next/autodeploy.sh`（仓库 `deploy/autodeploy/`，root:755，支持 `--dry-run`）。
+- 单实例：`flock /run/yxq-autodeploy.lock`；CI 未完成、`git fetch` 失败只等下一轮，不算失败。
+- 仅文档提交（只改 `docs/`、`*.md`、`.team/`）：只推进 `deployed.sha`，不构建、不重启。
+- 失败退避：同一提交失败后 15 分钟内不重试（`/opt/yixianqian-next/autodeploy.failed`），
+  `--force` 可立即重试。
+- 日志：`/var/log/yxq-autodeploy.log`（logrotate 每日或 10MB 轮转；脚本内置 20MB 自截断兜底）。
+- 状态文件：`/opt/yixianqian-next/deployed.sha`（实际已部署提交，唯一部署指针）。
+
+启用（维护者/PM 批准后执行一次）：
+
+```bash
+systemctl daemon-reload
+systemctl enable --now yxq-autodeploy.timer
+systemctl list-timers yxq-autodeploy.timer --no-pager
+```
+
+紧急冻结（push 后不想自动部署时先做这个）：
+
+```bash
+systemctl stop yxq-autodeploy.timer      # 立即停止触发；已在跑的一轮会跑完
+systemctl disable yxq-autodeploy.timer   # 重启后也不再自动跑
+systemctl is-active yxq-autodeploy.timer # 期望 inactive
+```
+
+排障与手动验证：
+
+```bash
+/opt/yixianqian-next/autodeploy.sh --dry-run      # 只判断+打印计划，不改任何文件/服务
+tail -n 50 /var/log/yxq-autodeploy.log
+systemctl status yxq-autodeploy.service --no-pager
+bash /opt/yixianqian-next/tests/test_autodeploy.sh # 沙箱单测（临时仓库+假 gh，不碰生产）
+```
+
+人工回滚与自动部署的关系：自动部署失败会自行回滚且不写 `deployed.sha`，下一轮会重试同一提交
+（15 分钟退避）。若人工按上一节回滚了 binary，必须把 `deployed.sha` 同步改成实际运行的提交，
+否则下一轮会重新部署 `origin/main`：
+
+```bash
+git -C /opt/yixianqian-next/src rev-parse <实际运行的提交> > /opt/yixianqian-next/deployed.sha
+```
+
+自动部署只部署已 push 的 `origin/main`；migration 只增不改，回滚 binary 不回滚 schema。
+
 ### 分支与交付
 
 - 仓库只有 `main`；功能在独立 worktree 分支开发，由维护者本地合并后 push `main`。

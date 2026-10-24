@@ -1,0 +1,18 @@
+[Unit]
+Description=Yixianqian Next staging auto-deploy (push → CI green → deploy)
+Documentation=file:///opt/yixianqian-next/autodeploy.sh
+After=network-online.target yixianqian-next-test.service
+Wants=network-online.target
+# 部署失败由脚本自己回滚；unit 失败只为可见性，不阻塞 timer 下一轮。
+
+[Service]
+Type=oneshot
+User=root
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/root
+ExecStart=/opt/yixianqian-next/autodeploy.sh
+# 构建 4 个 Go binary 需要时间；超时只影响本次，不保留半成品（脚本保证不 mv 半成品）。
+TimeoutStartSec=600
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true

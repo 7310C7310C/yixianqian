@@ -89,6 +89,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | migration 最大版本 | `5` |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
+| 自动部署 | `yxq-autodeploy.service/.timer` 已安装、**未启用**（2026-10-24 dry-run 验证通过）；脚本 `/opt/yixianqian-next/autodeploy.sh`，`deployed.sha=2d0e29b` |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
 | 账号数 | 用户 `1115`：`active=1111`、`observer=4` |
 | v2 生产 | 未切换；`app.nantou.love` 仍是 v1 |

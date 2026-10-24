@@ -95,7 +95,7 @@ web/static/             服务端页面静态资源
 web/static/legacy/      v1 用户端 SPA 资产与兼容适配
 migrations/             只增不改的 SQL migration
 tools/                  数据迁移、人脸探针、浏览器 smoke、文档生成/校验
-deploy/                 nginx vhost/allow/snippet 与 systemd 模板
+deploy/                 nginx vhost/allow/snippet、systemd 模板与自动部署脚本
 docs/                   规则、状态、规格、决策、迁移、runbook、参考
 ```
 
@@ -193,6 +193,8 @@ go run ./cmd/token -phone 13900000000 -name 王小明
 - **v2 生产**：尚未切换；`app.nantou.love` 仍是 v1。切换必须另行走查、备份与回滚演练。
 - **CI 是硬闸门**：当前 HEAD 的 CI（含 Docs workflow）必须为绿才能部署；红灯先修根因，不跳过、不 `[skip ci]`。
 - 部署命令、systemd 服务名、证书同步、回滚与验收 smoke 见 `docs/runbooks/staging.md`。
+- staging 默认走自动部署：server1 `yxq-autodeploy.timer` 每 60 秒检查 `origin/main`，CI 与 Docs 绿后
+  自动构建/切换/健康校验，失败自动回滚；紧急冻结用 `systemctl stop yxq-autodeploy.timer`。
 - 人脸检测（migration 0005）已于 2026-10-22 首次上线；后续常规部署只走 runbook「常规部署」；首次上线/重建步骤见 git 历史旧版 runbook，当前不要执行 pre-0005 回滚或全量回填。
 - 任何对外不可逆操作（生产部署、DNS 切换、删数据、发版）都需要 PM（使用者）明确批准。
 
