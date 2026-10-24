@@ -205,6 +205,13 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 - `make ci` = fmt-check + docs-check + vet + 单测 + `tools/` Python 测试 + build；`tools/test_browser_call_arity.py` 用 AST 校验 `tools/browser/*.py` 的调用参数与定义一致（smoke 删形参后漏改调用点这类错误在 CI 即报）。
 
+### 性能批次1（2026-10-25，实现待审）
+
+- 用户端 hot path：`/legacy/api/home` 两段式候选（只排 id、按页取档案）、消息计数按页收敛、quota/praise 每请求一次、home 默认 20 张卡；目标 home p95 ≤40ms（改前 137ms）。
+- 微信号交换通知移出 GET：写入路径触发 + 启动/每小时回填；GET 只读。
+- migration `0008_perf_indexes.sql`：`likes(initiator_id,status)`、`notifications(user_id) WHERE read_at IS NULL`，只加索引不改数据。
+- 边缘/传输 nginx 改动已入仓库但**未 apply**；证据与回滚见 `.team/perf/ws-a-report.md`、`.team/perf/ws-b-report.md`。
+
 ### 人脸与数据
 
 - 人脸检测：本地 YuNet 优先、Haar 回退；上传后检测、注册后补检测、`has_face` 门禁；观察员账号豁免 `has_face`（身份证不豁免）。

@@ -696,6 +696,40 @@ func decodeSocialStringList(raw []byte) []string {
 	return out
 }
 
+// ViewerBundle is the per-request account context used by the home handler.
+// It replaces four separate lookups (viewer row, observer flag, admin role,
+// has_face) with one indexed query so the aggregated home payload does not pay
+// four round trips.
+type ViewerBundle struct {
+	Viewer          SocialViewer
+	ObserverEnabled bool
+	HasFace         bool
+	IsAdmin         bool
+}
+
+// LoadViewerBundle loads the gate flags for one signed-in user.
+func (d *DB) LoadViewerBundle(ctx context.Context, userID int64) (ViewerBundle, error) {
+	var b ViewerBundle
+	err := d.pool.QueryRow(ctx,
+		`SELECT u.id, u.name, COALESCE(NULLIF(u.nickname, ''), ''), u.gender,
+		        u.account_kind, u.account_status, u.status, u.id_card_valid,
+		        COALESCE(u.observer_enabled, false),
+		        EXISTS (SELECT 1 FROM admin_user_roles ur WHERE ur.user_id = u.id),
+		        EXISTS (SELECT 1 FROM profile_photos pp
+		                 WHERE pp.user_id = u.id AND pp.face_checked AND pp.has_face)
+		 FROM users u WHERE u.id = $1`, userID).
+		Scan(&b.Viewer.ID, &b.Viewer.Name, &b.Viewer.Nickname, &b.Viewer.Gender,
+			&b.Viewer.AccountKind, &b.Viewer.AccountStatus, &b.Viewer.Status, &b.Viewer.IDCardValid,
+			&b.ObserverEnabled, &b.IsAdmin, &b.HasFace)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ViewerBundle{}, ErrNotFound
+	}
+	if err != nil {
+		return ViewerBundle{}, fmt.Errorf("db: load viewer bundle: %w", err)
+	}
+	return b, nil
+}
+
 // SocialViewer is the gate-relevant account state for the current session user.
 // The P0 User model intentionally does not grow profile columns; feature
 // modules load what they need instead.

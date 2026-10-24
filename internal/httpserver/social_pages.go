@@ -156,14 +156,21 @@ type MyLikesPageData struct {
 	Items []MyLikeView
 }
 
+// cardPageDeps lets aggregated callers (home) reuse quota/praise they already
+// loaded instead of paying for the same two queries twice.
+type cardPageDeps struct {
+	quota  *db.LikeQuota
+	praise *db.PraiseState
+}
+
 func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q url.Values,
-	now time.Time, pageLimit int) (CardsPageData, error) {
+	now time.Time, pageLimit int, deps cardPageDeps) (CardsPageData, error) {
 	filter := parseCardFilter(q)
 	targetGender, err := socialTargetGender(viewer, strings.TrimSpace(q.Get("gender")))
 	if err != nil {
 		return CardsPageData{Filter: cardFilterView(filter)}, err
 	}
-	candidates, err := a.db.ListCardCandidates(ctx, viewer.ID, targetGender, filter, now)
+	candidateIDs, err := a.db.ListCardCandidateIDs(ctx, viewer.ID, targetGender, filter, now)
 	if err != nil {
 		return CardsPageData{}, err
 	}
@@ -174,7 +181,7 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 	seed := socialSeed(strings.TrimSpace(q.Get("seed")), viewer.ID, now)
 	version := cardVersion(seed, filter, targetGender)
 	// 本周推荐位：必显（匿名喜欢我的人）在前、算法位在后，整体置顶。
-	// pinnedIDs 的顺序就是展示顺序，OrderCards 不会打乱它。
+	// pinnedIDs 的顺序就是展示顺序，OrderCardIDs 不会打乱它。
 	recommendedIDs, err := a.db.WeeklyRecommendationTargets(ctx, viewer.ID, db.WeekKey(now))
 	if err != nil {
 		return CardsPageData{}, err
@@ -183,7 +190,7 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 	for _, id := range recommendedIDs {
 		recommended[id] = true
 	}
-	ordered := db.OrderCards(candidates, state.LikedMe, recommendedIDs, fmt.Sprintf("%s|%d", seed, version))
+	ordered := db.OrderCardIDs(candidateIDs, state.LikedMe, recommendedIDs, fmt.Sprintf("%s|%d", seed, version))
 
 	offset := socialNonNegative(q.Get("offset"), 0)
 	if offset > len(ordered) {
@@ -200,22 +207,49 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 	if end > len(ordered) {
 		end = len(ordered)
 	}
-	views := make([]CardView, 0, end-offset)
-	for _, p := range ordered[offset:end] {
-		view := buildCardView(p, state.LikedTargets[p.ID], state.PraisedTargets[p.ID],
-			state.MessageCounts[p.ID], now)
-		view.IsSelf = p.ID == viewer.ID
-		view.Recommended = recommended[p.ID]
+	pageIDs := ordered[offset:end]
+	profiles, err := a.db.GetSocialProfilesByIDs(ctx, pageIDs)
+	if err != nil {
+		return CardsPageData{}, err
+	}
+	// 留言数只统计当前页收件人（语义仍是「该收件人收到的留言总数」）。
+	msgCounts, err := a.db.MessageCountsFor(ctx, pageIDs)
+	if err != nil {
+		return CardsPageData{}, err
+	}
+	for id, n := range msgCounts {
+		state.MessageCounts[id] = n
+	}
+	views := make([]CardView, 0, len(pageIDs))
+	for _, id := range pageIDs {
+		p, ok := profiles[id]
+		if !ok {
+			continue
+		}
+		view := buildCardView(p, state.LikedTargets[id], state.PraisedTargets[id],
+			state.MessageCounts[id], now)
+		view.IsSelf = id == viewer.ID
+		view.Recommended = recommended[id]
 		views = append(views, view)
 	}
 
-	quota, err := a.db.LikeQuotaFor(ctx, viewer.ID, now)
-	if err != nil {
-		return CardsPageData{}, err
+	quota := db.LikeQuota{}
+	if deps.quota != nil {
+		quota = *deps.quota
+	} else {
+		quota, err = a.db.LikeQuotaFor(ctx, viewer.ID, now)
+		if err != nil {
+			return CardsPageData{}, err
+		}
 	}
-	praise, err := a.db.PraiseStateFor(ctx, viewer.ID, now)
-	if err != nil {
-		return CardsPageData{}, err
+	praise := db.PraiseState{}
+	if deps.praise != nil {
+		praise = *deps.praise
+	} else {
+		praise, err = a.db.PraiseStateFor(ctx, viewer.ID, now)
+		if err != nil {
+			return CardsPageData{}, err
+		}
 	}
 	prevValues := socialCloneValues(q)
 	prevValues.Set("offset", strconv.Itoa(socialMaxInt(0, offset-limit)))
@@ -518,26 +552,6 @@ func socialFlash(notice, errMsg string, q url.Values) (string, string) {
 		errMsg = "点赞没有送出，请稍后再试。"
 	}
 	return notice, errMsg
-}
-
-func (a *App) loadSocialHub(ctx context.Context, userID int64, now time.Time) (db.SocialOverview, db.PraiseState, []db.SocialNotification, int, error) {
-	overview, err := a.db.SocialOverview(ctx, userID, now)
-	if err != nil {
-		return db.SocialOverview{}, db.PraiseState{}, nil, 0, err
-	}
-	praise, err := a.db.PraiseStateFor(ctx, userID, now)
-	if err != nil {
-		return db.SocialOverview{}, db.PraiseState{}, nil, 0, err
-	}
-	notifications, err := a.db.ListNotifications(ctx, userID, 30)
-	if err != nil {
-		return db.SocialOverview{}, db.PraiseState{}, nil, 0, err
-	}
-	unread, err := a.db.UnreadNotificationCount(ctx, userID)
-	if err != nil {
-		return db.SocialOverview{}, db.PraiseState{}, nil, 0, err
-	}
-	return overview, praise, notifications, unread, nil
 }
 
 func mutualViews(o db.SocialOverview) []MutualView {

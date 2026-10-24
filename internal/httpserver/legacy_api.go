@@ -88,7 +88,7 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy home profile failed")
 		return
 	}
-	viewer, err := a.db.GetSocialViewer(ctx, user.ID)
+	bundle, err := a.db.LoadViewerBundle(ctx, user.ID)
 	if errors.Is(err, db.ErrNotFound) {
 		legacyError(w, http.StatusForbidden, "账号目前无法使用，请联络管理员")
 		return
@@ -97,16 +97,22 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy home viewer failed")
 		return
 	}
+	viewer := bundle.Viewer
 	quota, err := a.db.LikeQuotaFor(ctx, user.ID, now)
 	if err != nil {
 		a.logger(r).Warn("legacy home quota failed", "error", err, "user_id", user.ID)
 	}
+	praise, praiseErr := a.db.PraiseStateFor(ctx, user.ID, now)
+	if praiseErr != nil {
+		a.logger(r).Warn("legacy home praise failed", "error", praiseErr, "user_id", user.ID)
+	}
+	viewRole := a.legacyViewRole(r)
 	// The home endpoint stays reachable so the SPA can boot and show the
 	// backfill gate, but an unverified account must not receive cards, likes
 	// or activities through it.
 	if !viewer.IDCardValid {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"user":              legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(ctx, user.ID), a.legacyObserverEnabled(ctx, user.ID), a.legacyViewRole(r), a.legacyProfileHasFace(ctx, user.ID)),
+			"user":              legacyUserMap(user, profile, viewer, quota, bundle.IsAdmin, bundle.ObserverEnabled, viewRole, bundle.HasFace),
 			"cards":             []any{},
 			"cards_total":       0,
 			"likes":             map[string]any{"liked_me": []any{}, "mutual": []any{}},
@@ -119,11 +125,15 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	// 观察员视角只影响卡片筛选；不要改写 viewer 本身，否则账号状态会被
 	// cookie 污染（例如 has_face 误判为 observer 放行）。
 	pageViewer := viewer
-	if a.legacyViewRole(r) == "observer" {
+	if viewRole == "observer" {
 		pageViewer.AccountKind = "observer"
 		pageViewer.AccountStatus = "observer"
 	}
-	page, err := a.buildCardsPageData(ctx, pageViewer, r.URL.Query(), now, 100)
+	deps := cardPageDeps{quota: &quota}
+	if praiseErr == nil {
+		deps.praise = &praise
+	}
+	page, err := a.buildCardsPageData(ctx, pageViewer, r.URL.Query(), now, 20, deps)
 	if errors.Is(err, errGenderMissing) {
 		page = CardsPageData{}
 	} else if err != nil {
@@ -155,9 +165,8 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy home activities failed")
 		return
 	}
-	hasFace := a.legacyProfileHasFace(ctx, user.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user":              legacyUserMap(user, profile, viewer, quota, a.legacyIsAdmin(r.Context(), user.ID), a.legacyObserverEnabled(r.Context(), user.ID), a.legacyViewRole(r), hasFace),
+		"user":              legacyUserMap(user, profile, viewer, quota, bundle.IsAdmin, bundle.ObserverEnabled, viewRole, bundle.HasFace),
 		"cards":             cards,
 		"cards_total":       page.Total,
 		"likes":             likes,
@@ -189,7 +198,7 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		viewer.AccountKind = "observer"
 		viewer.AccountStatus = "observer"
 	}
-	page, err := a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit)
+	page, err := a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit, cardPageDeps{})
 	if errors.Is(err, errGenderMissing) {
 		legacyError(w, http.StatusBadRequest, "你的性别资料尚未完善，请先到「我的资料」填写")
 		return
@@ -470,7 +479,9 @@ func (a *App) handleLegacyActivityDetail(w http.ResponseWriter, r *http.Request)
 }
 
 func (a *App) legacyLikes(ctx context.Context, userID int64, now time.Time) (map[string]any, error) {
-	overview, _, _, _, err := a.loadSocialHub(ctx, userID, now)
+	// 只读：从 mutual 状态读取展示数据；微信号交换通知由写入路径与后台回填补发，
+	// 不再在 GET 里创建通知（旧实现每次 home 都可能开事务写库）。
+	overview, err := a.db.SocialOverview(ctx, userID, now)
 	if err != nil {
 		return nil, err
 	}
@@ -496,9 +507,8 @@ func (a *App) legacyLikes(ctx context.Context, userID int64, now time.Time) (map
 			"waiting_other":    waiting,
 		})
 	}
-	// Sending is idempotent; reading likes is a convenient safety net for
-	// pairs that became ready through a retried write.
-	a.ensureMutualWechatExchanges(ctx, overview)
+	// Sending is idempotent but belongs to write paths and the background
+	// backfill; GET must stay read-only.
 	likedMe := make([]map[string]any, 0)
 	for _, view := range likedMeViews(overview) {
 		likedMe = append(likedMe, map[string]any{

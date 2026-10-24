@@ -103,6 +103,7 @@ func run() error {
 	go cleanupLoop(ctx, database, logger)
 	go inviteLoop(ctx, database, logger)
 	go recommendLoop(ctx, database, logger)
+	go mutualWechatLoop(ctx, database, logger)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -187,6 +188,37 @@ func recommendLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
 		if result.Changed {
 			logger.Info("weekly recommendations generated", "week", result.Week,
 				"viewers", result.Viewers, "entries", result.Entries, "rotated", result.Rotated)
+		}
+	}
+
+	run()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
+}
+
+// mutualWechatLoop 是微信号交换通知的兜底：写入路径（互相喜欢、同意交换、
+// 资料改微信号）会即时补发；这里启动补跑一次并每小时扫一遍，保证漏触发也
+// 不会丢通知。CreateNotificationOnce 去重，重复执行不会重复发。
+func mutualWechatLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	run := func() {
+		runCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		created, err := database.BackfillMutualWechatNotifications(runCtx, 500)
+		if err != nil {
+			logger.Warn("mutual wechat backfill failed", "error", err)
+			return
+		}
+		if created > 0 {
+			logger.Info("mutual wechat notifications backfilled", "created", created)
 		}
 	}
 
