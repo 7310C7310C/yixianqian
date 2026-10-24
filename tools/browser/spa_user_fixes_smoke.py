@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """用户端审计修复回归（UD-02/04/05/06/07 + 管理台广播 / iframe 兜底）。
 
-覆盖（390×844 与 1280×900 两个视口）：
+覆盖（390×844、768×1024、1280×900 三个视口）：
 
 1. 活动：列表卡片显示开始时间（无时间显示「活动时间待定」），详情显示
    「活动时间：…」与地点；
@@ -46,7 +46,16 @@ try:
 except ImportError:  # pragma: no cover - environment guard
     sys.exit("需要 playwright：pip install playwright && python3 -m playwright install chromium")
 
-VIEWPORTS = ((390, 844), (1280, 900))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from guide_guard import (  # noqa: E402 - 依赖上方 playwright 环境检查
+    click,
+    dismiss_guides,
+    wait_clickable,
+    wait_gone,
+    wait_guides_hidden,
+)
+
+VIEWPORTS = ((390, 844), (768, 1024), (1280, 900))
 NETWORK_MSG = "网络不稳定，请稍后重试"
 TAB_CARDS = "牵线"
 TAB_PROFILE = "我的"
@@ -112,16 +121,6 @@ def new_context(browser, base_url: str, cookie: str, width: int, height: int):
     return context
 
 
-def dismiss_overlays(page) -> None:
-    try:
-        btn = page.locator(".sg-btn")
-        if btn.count() and btn.first.is_visible():
-            btn.first.click()
-            page.wait_for_timeout(250)
-    except Exception:  # noqa: BLE001 - 引导层不影响后续断言
-        pass
-
-
 def attach_errors(page) -> list[str]:
     errors: list[str] = []
 
@@ -148,12 +147,15 @@ def shot(page, out_dir: Path, name: str) -> None:
 def wait_app(page, base_url: str, timeout_ms: int = 30000) -> None:
     page.goto(base_url.rstrip("/") + "/", wait_until="domcontentloaded")
     page.wait_for_selector(".van-tabbar", timeout=timeout_ms)
-    page.wait_for_timeout(500)
-    dismiss_overlays(page)
+    # 滑动引导/更新说明在首屏后 500~900ms 才弹，等一轮再关，避免晚到遮罩拦截点击。
+    page.wait_for_timeout(900)
+    dismiss_guides(page)
+    wait_guides_hidden(page)
 
 
 def click_tab(page, label: str) -> None:
-    page.locator(".van-tabbar-item").filter(has_text=label).first.click()
+    item = page.locator(".van-tabbar-item").filter(has_text=label).first
+    click(page, item, label=f"底部 tab「{label}」")
     page.wait_for_timeout(450)
 
 
@@ -162,13 +164,13 @@ def open_profile_edit(page) -> None:
         return   # 已在修改资料页
     if page.locator(".profile-detail").count():
         # 已在「我的资料」详情：子页没有底部 tabbar，直接点「修改资料」
-        page.locator(".van-button").filter(has_text="修改资料").first.click()
+        click(page, page.locator(".van-button").filter(has_text="修改资料").first, label="修改资料")
         page.wait_for_selector(".edit-photo-item", timeout=15000)
         return
     click_tab(page, TAB_PROFILE)
-    page.locator(".van-cell").filter(has_text="我的资料").first.click()
+    click(page, page.locator(".van-cell").filter(has_text="我的资料").first, label="我的资料")
     page.wait_for_selector(".profile-detail", timeout=15000)
-    page.locator(".van-button").filter(has_text="修改资料").first.click()
+    click(page, page.locator(".van-button").filter(has_text="修改资料").first, label="修改资料")
     page.wait_for_selector(".edit-photo-item", timeout=15000)
 
 
@@ -196,7 +198,7 @@ def check_activity_time(page, chk: Checker, tag: str, out_dir: Path) -> None:
     shot(page, out_dir, f"{tag}-activity-list")
 
     target = cards.nth(chosen if chosen is not None else 0)
-    target.click()
+    click(page, target, label="活动卡片")
     page.wait_for_selector(".detail-meta", timeout=20000)
     detail = page.locator(".detail-meta").first.inner_text()
     chk.check("活动时间：" in detail, f"{tag}:活动详情缺少「活动时间：」，实际={detail[:80]!r}")
@@ -206,7 +208,7 @@ def check_activity_time(page, chk: Checker, tag: str, out_dir: Path) -> None:
         chk.check(date is not None and date.group(0) in detail,
                   f"{tag}:详情时间与列表不一致（列表 {list_text[:50]!r} / 详情 {detail[:80]!r}）")
     shot(page, out_dir, f"{tag}-activity-detail")
-    page.locator(".back-nav").first.click()
+    click(page, page.locator(".back-nav").first, label="活动详情返回")
     page.wait_for_timeout(450)
 
 
@@ -224,7 +226,7 @@ def check_photo_delete(page, chk: Checker, tag: str, out_dir: Path) -> None:
     icon_box = page.locator(".edit-photo-del-icon").first.bounding_box() or {}
     chk.check(icon_box.get("width", 99) <= 24 and icon_box.get("height", 99) <= 24,
               f"{tag}:照片删除视觉圆点应保持 20px，实际={icon_box}")
-    delete_btn.click()
+    click(page, delete_btn, label="删除照片")
     dialog = page.locator(".van-dialog").filter(has_text="删除这张照片")
     dialog.wait_for(state="visible", timeout=8000)
     message = dialog.inner_text()
@@ -233,7 +235,7 @@ def check_photo_delete(page, chk: Checker, tag: str, out_dir: Path) -> None:
         chk.check("最后一张" in message and "无法使用" in message,
                   f"{tag}:仅一张照片时未提示人脸门禁风险，实际={message!r}")
     shot(page, out_dir, f"{tag}-photo-delete-confirm")
-    dialog.locator(".van-dialog__cancel").click()
+    click(page, dialog.locator(".van-dialog__cancel"), label="取消删除")
     page.wait_for_timeout(500)
     chk.check(photos.count() == count, f"{tag}:取消删除后照片数量变化")
     still_open = page.locator(".van-dialog").filter(has_text="删除这张照片")
@@ -252,14 +254,14 @@ def check_last_photo_warning(browser, base_url: str, cookie: str, width: int, he
         chk.check(photos.count() == 1, f"{tag}:最后一张照片账号应只有 1 张，实际 {photos.count()}")
         if photos.count() != 1:
             return
-        page.locator(".edit-photo-del").first.click()
+        click(page, page.locator(".edit-photo-del").first, label="删除最后一张照片")
         dialog = page.locator(".van-dialog").filter(has_text="删除这张照片")
         dialog.wait_for(state="visible", timeout=8000)
         text = dialog.inner_text()
         chk.check("最后一张" in text and "无法使用" in text,
                   f"{tag}:最后一张照片未提示人脸门禁，实际={text!r}")
         shot(page, out_dir, f"{tag}-last-photo-warning")
-        dialog.locator(".van-dialog__cancel").click()
+        click(page, dialog.locator(".van-dialog__cancel"), label="取消删除")
         page.wait_for_timeout(300)
     finally:
         context.close()
@@ -279,7 +281,7 @@ def check_phone_change(page, chk: Checker, tag: str, out_dir: Path) -> None:
         return
     changed = digits[:-1] + ("8" if digits[-1] != "8" else "7")
     phone_input.fill(changed)
-    page.locator(".van-button").filter(has_text="保存").first.click()
+    click(page, page.locator(".van-button").filter(has_text="保存").first, label="保存手机号")
     mask = page.locator(".phone-pw-mask")
     mask.wait_for(state="visible", timeout=8000)
     text = mask.inner_text()
@@ -287,15 +289,17 @@ def check_phone_change(page, chk: Checker, tag: str, out_dir: Path) -> None:
               f"{tag}:改手机号未弹出当前密码验证，实际={text[:80]!r}")
     shot(page, out_dir, f"{tag}-phone-password-dialog")
 
-    # 空密码：前端拦截
-    mask.locator(".modal-action-primary").click()
+    # 空密码：前端拦截（先确认密码浮层本身没有被引导层/遮罩挡住）
+    primary = mask.locator(".modal-action-primary")
+    wait_clickable(page, primary, timeout_ms=8000)
+    click(page, primary, label="确认修改（空密码）")
     page.wait_for_timeout(300)
     err = mask.inner_text()
     chk.check("请输入当前密码" in err, f"{tag}:空密码未提示「请输入当前密码」，实际={err[:80]!r}")
 
     # 错误密码：服务端 password_invalid
     mask.locator('input[type="password"]').fill("wrong-password-9x")
-    mask.locator(".modal-action-primary").click()
+    click(page, primary, label="确认修改（错误密码）")
     try:
         page.wait_for_function(
             """() => {
@@ -310,17 +314,18 @@ def check_phone_change(page, chk: Checker, tag: str, out_dir: Path) -> None:
         chk.check(mask.is_visible(), f"{tag}:错误密码后弹层被关闭（应留在弹层重试）")
         shot(page, out_dir, f"{tag}-phone-password-error")
 
-    mask.locator(".modal-action").filter(has_text="取消").click()
+    click(page, mask.locator(".modal-action").filter(has_text="取消"), label="取消修改手机号")
     page.wait_for_timeout(300)
     chk.check(not mask.is_visible(), f"{tag}:取消后密码弹层未关闭")
     # 还原手机号，避免留下未保存改动影响后续导航
     phone_input.fill(original)
     page.wait_for_timeout(200)
     # 返回我的（若脏守卫仍触发，选择放弃）
-    page.locator(".back-nav").first.click()
+    click(page, page.locator(".back-nav").first, label="修改资料返回")
     page.wait_for_timeout(400)
-    if page.locator(".modal-card").filter(has_text="放弃").count():
-        page.locator(".modal-action").filter(has_text="放弃").first.click()
+    unsaved = page.locator(".modal-card").filter(has_text="放弃")
+    if unsaved.count():
+        click(page, page.locator(".modal-action").filter(has_text="放弃").first, label="放弃修改")
         page.wait_for_timeout(400)
 
 
@@ -336,11 +341,13 @@ def check_phone_success(page, chk: Checker, tag: str, out_dir: Path, password: s
     digits = re.sub(r"\D", "", original)
     changed = digits[:-1] + ("7" if digits[-1] != "7" else "8")
     phone_input.fill(changed)
-    page.locator(".van-button").filter(has_text="保存").first.click()
+    click(page, page.locator(".van-button").filter(has_text="保存").first, label="保存手机号")
     mask = page.locator(".phone-pw-mask")
     mask.wait_for(state="visible", timeout=8000)
     mask.locator('input[type="password"]').fill(password)
-    mask.locator(".modal-action-primary").click()
+    primary = mask.locator(".modal-action-primary")
+    wait_clickable(page, primary, timeout_ms=8000)
+    click(page, primary, label="确认修改手机号")
     try:
         page.wait_for_selector(".profile-detail", timeout=20000)
         page.wait_for_function(
@@ -357,11 +364,13 @@ def check_phone_success(page, chk: Checker, tag: str, out_dir: Path, password: s
     open_profile_edit(page)
     row = page.locator(".edit-row").filter(has_text="手机号").first
     row.locator("input").fill(original)
-    page.locator(".van-button").filter(has_text="保存").first.click()
+    click(page, page.locator(".van-button").filter(has_text="保存").first, label="保存手机号")
     mask = page.locator(".phone-pw-mask")
     mask.wait_for(state="visible", timeout=8000)
     mask.locator('input[type="password"]').fill(password)
-    mask.locator(".modal-action-primary").click()
+    primary = mask.locator(".modal-action-primary")
+    wait_clickable(page, primary, timeout_ms=8000)
+    click(page, primary, label="确认改回原号码")
     try:
         page.wait_for_selector(".profile-detail", timeout=20000)
         page.wait_for_function(
@@ -383,7 +392,7 @@ def check_offline(browser, base_url: str, cookie: str, width: int, height: int,
         click_tab(page, TAB_PROFILE)
         context.set_offline(True)
         # 资料页有 gate 预热缓存，断网后点击不会发请求；用每次进入都刷新的「我的活动」验证全局映射。
-        page.locator(".van-cell").filter(has_text="我的活动").first.click()
+        click(page, page.locator(".van-cell").filter(has_text="我的活动").first, label="我的活动")
         try:
             page.wait_for_function(
                 f"""() => {{ const t = document.querySelector('.van-toast'); return !!t && t.innerText.includes({NETWORK_MSG!r}); }}""",
@@ -408,7 +417,7 @@ def check_offline(browser, base_url: str, cookie: str, width: int, height: int,
                   f"{tag}:启动错误页仍有英文原文={boot_text!r}")
         shot(page, out_dir, f"{tag}-offline-boot")
         context.unroute("**/legacy/api/home")
-        page.locator(".boot-error-page .van-button").click()
+        click(page, page.locator(".boot-error-page .van-button").first, label="启动错误页重试")
         page.wait_for_selector(".van-tabbar", timeout=20000)
     finally:
         context.close()
@@ -464,7 +473,7 @@ def check_safe_area(browser, base_url: str, cookie: str, chk: Checker, out_dir: 
                       f"安全区:底部 tabbar 未让出安全区，padding-bottom={tab_metrics['paddingBottom']}")
             chk.check(abs(tab_metrics["bottom"] - tab_metrics["viewport"]) <= 1,
                       f"安全区:底部 tabbar 未贴底 bottom={tab_metrics['bottom']} viewport={tab_metrics['viewport']}")
-        page.locator(".activity-card").first.click()
+        click(page, page.locator(".activity-card").first, label="活动卡片")
         page.wait_for_selector(".detail-meta", timeout=20000)
         metrics = page.evaluate(
             """() => {
@@ -549,6 +558,7 @@ def check_admin_flows(browser, base_url: str, cookie: str, chk: Checker, out_dir
     try:
         # 1) ?admin=1 正常入口：overlay + SSR 概览
         page.goto(base_url.rstrip("/") + "/?admin=1", wait_until="load")
+        dismiss_guides(page)
         page.wait_for_selector(".embed-overlay", timeout=20000)
         page.wait_for_selector(".embed-frame--ready", timeout=20000)
         frame = wait_admin_frame(page, base_url)
@@ -565,13 +575,13 @@ def check_admin_flows(browser, base_url: str, cookie: str, chk: Checker, out_dir
         chk.check(entry.count() > 0, f"{tag}:管理台概览缺少原版活动入口")
         if not entry.count():
             return
-        entry.click()
+        click(frame, entry, label="原版活动入口")
         chk.check(wait_frame_url(page, frame, "/app?native_admin=1", 20000),
                   f"{tag}:未进入原版活动列表 {frame.url}")
         chk.check(wait_text(page, frame, ".ga-title", "活动管理", 20000),
                   f"{tag}:原版活动列表未渲染")
         page.wait_for_timeout(600)
-        frame.locator(".ga-act-row").first.click()
+        click(frame, frame.locator(".ga-act-row").first, label="活动行")
         chk.check(wait_text(page, frame, ".ga-card-title", "模式", 20000),
                   f"{tag}:未进入活动控制台")
         page.wait_for_timeout(500)
@@ -580,7 +590,7 @@ def check_admin_flows(browser, base_url: str, cookie: str, chk: Checker, out_dir
         if broadcast.count():
             box = broadcast.bounding_box() or {}
             chk.check(box.get("height", 0) >= 44, f"{tag}:广播按钮高度不足 44px，实际={box.get('height')}")
-            broadcast.click()
+            click(frame, broadcast, label="广播")
             # 嵌套 iframe：/admin/activities/{id}#broadcast
             nested = None
             deadline = time.time() + 20
@@ -608,17 +618,21 @@ def check_admin_flows(browser, base_url: str, cookie: str, chk: Checker, out_dir
                 back = frame.locator(".embed-back").first
                 chk.check(back.count() > 0, f"{tag}:广播浮层缺少返回按钮")
                 if back.count():
-                    back.click()
-                    page.wait_for_timeout(800)
+                    click(frame, back, label="广播浮层返回")
+                    # 等浮层离场动画结束，避免下一步点击被 .embed-overlay 挡住
+                    wait_gone(frame, ".embed-overlay")
+                    page.wait_for_timeout(300)
                     chk.check(wait_text(page, frame, ".ga-card-title", "模式", 10000),
                               f"{tag}:广播返回后未回到控制台")
                     shot(page, out_dir, f"{tag}-03-back-console")
 
         # 3) iframe 拦截 → 兜底面板 → 返回管理台
-        page.locator(".embed-back").first.click()
-        page.wait_for_timeout(600)
+        click(page, page.locator(".embed-back").first, label="关闭管理台")
+        wait_gone(page, ".embed-overlay")
+        page.wait_for_timeout(300)
         page.route(re.compile(r".*/admin\?embed=1$"), lambda route: route.abort())
         page.goto(base_url.rstrip("/") + "/?admin=1", wait_until="load")
+        dismiss_guides(page)
         try:
             page.wait_for_selector(".embed-fallback", timeout=25000)
             fallback = page.locator(".embed-fallback").inner_text()
@@ -628,7 +642,8 @@ def check_admin_flows(browser, base_url: str, cookie: str, chk: Checker, out_dir
         except PlaywrightTimeoutError:
             chk.check(False, f"{tag}:iframe 失败时 25s 内未出现兜底面板")
         page.unroute(re.compile(r".*/admin\?embed=1$"))
-        page.locator(".embed-fallback .van-button").filter(has_text="返回管理台").first.click()
+        click(page, page.locator(".embed-fallback .van-button").filter(has_text="返回管理台").first,
+              label="返回管理台")
         page.wait_for_selector(".embed-frame--ready", timeout=25000)
         chk.check(admin_frame(page, base_url) is not None, f"{tag}:兜底后未恢复到管理台")
         shot(page, out_dir, f"{tag}-05-admin-recovered")
@@ -695,7 +710,7 @@ def main() -> int:
         for note in chk.notes:
             print(" note:", note)
         return 1
-    print(f"PASS 用户端审计修复（390/1280）：活动时间 / 断网中文 / iOS 安全区 / 照片删除确认 / 改手机号密码 / 管理台广播与 iframe 兜底；截图 {out_dir}")
+    print(f"PASS 用户端审计修复（390/768/1280）：活动时间 / 断网中文 / iOS 安全区 / 照片删除确认 / 改手机号密码 / 管理台广播与 iframe 兜底；截图 {out_dir}")
     for note in chk.notes:
         print(" note:", note)
     return 0

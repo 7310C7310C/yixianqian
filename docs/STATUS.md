@@ -60,7 +60,7 @@ sources:
 - 更新日期：2026-10-24
 - 维护者：项目维护者
 - 下一更新点：P0 身份证门禁决策、下一次 staging 部署、M6 验收；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-24 对 server1 只读复核；代码基线 `main` @ `1a3144e`（staging 已部署）。
+- 事实基准：部署/数据事实于 2026-10-24 对 server1 只读复核；代码基线 `main` @ `2d0e29b`（staging 已部署）。
 
 ## 1. 阶段
 
@@ -84,8 +84,8 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD | `1a3144e` |
-| `/healthz` version | `staging-1a3144e` |
+| 部署 HEAD | `2d0e29b` |
+| `/healthz` version | `staging-2d0e29b` |
 | migration 最大版本 | `5` |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
@@ -158,6 +158,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 深色对比度：新增 `--adm-on-brand`（浅色白字 / 深色 `#2a1a1e`），实心主按钮、选中 chip/tab、徽标对比度由 2.17:1 提到 7.66:1（Chromium 实测）。
 - 验收（2026-10-24，临时库 + 临时服务）：`tools/browser/admin_ui_phase_bc.py` 三视口（390/768/1280）逐页 + 流程截图 108 张，`failures=[]`；覆盖用户列表→详情→审核、匹配→分组控制台→一对一、麦穗调整、举报/反馈处理、角色指派/移除、审计筛选与 CSV 导出，无 console error、无页面/表格横向滚动；模板断言 `TestAdminPhaseBCTemplatesUseDesignSystem` / `TestAdminPointsTabsKeepFormContract` / `TestAdminTopbarIdentityChip`。证据目录 `.team/audits/admin-ui-phase-bc/`（未提交，属团队 artifact）。
 - 验收（2026-10-24，staging `1a3144e`）：`tools/browser/admin_native_activity_smoke.py` 三视口（390/768/1280）PASS：管理台总览→活动列表→控制台（模式/签到码/名单/现场签到）→编辑（嵌套 iframe）→返回，无 console error、无页面/iframe 横向滚动；普通用户访问 native 地址退回首页。名单入口随活动模式出现（分组=未填写、一对一=未提交），缺失时记 NOTE skip，已区分「加载失败」与「数据为空」；截图 `/tmp/opencode/native-activity-live`（团队 artifact，未提交）。
+- 复跑（2026-10-24，staging `2d0e29b`）：真实环境首屏引导/浮层退场会挡住点击；新增 `tools/browser/guide_guard.py` 统一关闭 `.swipe-guide-mask`、`知道了` 与残留 `.van-overlay`，点击前用 trial click 确认无遮挡，并等 `.embed-overlay` 等业务浮层退场。`admin_native_activity_smoke.py`、`spa_user_fixes_smoke.py`（新增 768 视口）三视口 PASS，截图 `/tmp/opencode/native-activity-live`（18 张）、`/tmp/opencode/user-fixes-live`（40 张）。
 - 匹配：`/admin/matching` 清单，分组控制台与一对一会话控制台（预览/执行/重置/轮次结果/名单/聊天概览）；沿用 `matching.run` 权限、CSRF 与审计。
 - 麦穗：`/admin/points` 总览、调整、流水、邀请、兑换、心愿、推荐；调整向用户写入站内通知。
 - 审计：`/admin/audit` 查看与 `/admin/audit.csv` 导出。

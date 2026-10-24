@@ -32,12 +32,29 @@ try:
 except ImportError:  # pragma: no cover - environment guard
     sys.exit("需要 playwright：pip install playwright && python3 -m playwright install chromium")
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from guide_guard import (  # noqa: E402 - 依赖上方 playwright 环境检查
+    click,
+    dismiss_guides,
+    wait_gone,
+    wait_guides_hidden,
+)
+
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:18097").rstrip("/")
 ADMIN_COOKIE = os.environ.get("SESSION_COOKIE", "").strip()
 USER_COOKIE = os.environ.get("USER_SESSION_COOKIE", "").strip()
 OUT_DIR = Path(os.environ.get("SCREENSHOT_DIR", ".team/audits/admin-native-activity"))
 VIEWPORTS = ((390, 844), (768, 1024), (1280, 900))
 NATIVE_PATH = "/app?native_admin=1&p=group_admin"
+# 首屏后 500~900ms 才弹的一次性引导/更新说明：脚本自己点，避免遮住 iframe 内点击。
+GUIDE_INIT_SCRIPT = (
+    "try {"
+    "localStorage.setItem('yxq_swipe_guide_v1','1');"
+    "localStorage.setItem('yxq_self_card_guide_v1','1');"
+    "localStorage.setItem('yxq_update_notes_v1','1');"
+    "sessionStorage.setItem('yxq_activity_promo_v1','1');"
+    "} catch (e) {}"
+)
 
 IGNORED_CONSOLE = ("notifications/stream",)
 
@@ -172,14 +189,26 @@ def find_admin_frame(page):
     return None
 
 
+def wait_admin_frame(page, timeout_ms: int = 20000):
+    """等 /admin iframe 真正挂上；staging 经 server2 relay，首载常超过 1s。"""
+    deadline = time.time() + timeout_ms / 1000
+    while time.time() < deadline:
+        frame = find_admin_frame(page)
+        if frame is not None:
+            return frame
+        page.wait_for_timeout(150)
+    return None
+
+
 def open_admin(page) -> object:
     page.goto(BASE_URL + "/?admin=1", wait_until="load")
+    dismiss_guides(page)
     page.wait_for_selector(".embed-overlay", timeout=20000)
     page.wait_for_selector(".embed-frame", timeout=20000)
-    page.wait_for_timeout(800)
-    frame = find_admin_frame(page)
+    frame = wait_admin_frame(page)
     if frame is None:
         raise AssertionError("未找到 /admin iframe")
+    wait_guides_hidden(page)
     return frame
 
 
@@ -189,7 +218,7 @@ def click_frame_text(page, frame, selector: str, text: str, timeout_ms: int = 10
     while time.time() < deadline:
         if locator.count():
             try:
-                locator.first.click(timeout=3000)
+                click(frame, locator.first, timeout_ms=3500, label=text)
                 return
             except Exception:  # noqa: BLE001 - Vant 过场期间可重试
                 pass
@@ -210,7 +239,7 @@ def click_optional_button(page, frame, labels: tuple[str, ...], timeout_ms: int 
             if not locator.count():
                 continue
             try:
-                locator.first.click(timeout=3000)
+                click(frame, locator.first, timeout_ms=3000, label=label)
                 return label
             except Exception:  # noqa: BLE001 - Vant 过场期间可重试
                 pass
@@ -223,6 +252,7 @@ def run_viewport(browser, viewport: tuple[int, int], chk: Checker) -> None:
     tag = str(width)
     context = browser.new_context(viewport={"width": width, "height": height}, locale="zh-CN")
     add_session_cookie(context, BASE_URL, ADMIN_COOKIE)
+    context.add_init_script(GUIDE_INIT_SCRIPT)
     page = context.new_page()
     console_errors = collect_console(page)
     page.on("dialog", lambda dialog: dialog.accept())
@@ -231,19 +261,19 @@ def run_viewport(browser, viewport: tuple[int, int], chk: Checker) -> None:
     page.wait_for_selector(".embed-frame--ready", timeout=15000)
 
     # 1) 总览：活动入口是 native 地址；匹配分组与两个入口已移除
-    entry = frame.query_selector('.admin-entry[href^="/app?native_admin=1"]')
-    chk.check(entry is not None, f"{tag}:总览缺少活动 native 入口")
+    entry = frame.locator('.admin-entry[href^="/app?native_admin=1"]').first
+    chk.check(entry.count() > 0, f"{tag}:总览缺少活动 native 入口")
     chk.check(frame.query_selector('.admin-entry[href="/admin/matching"]') is None,
               f"{tag}:总览仍渲染匹配入口")
     chk.check("分组匹配" not in (frame.content() or ""), f"{tag}:总览仍渲染「分组匹配」")
     chk.check("一对一匹配" not in (frame.content() or ""), f"{tag}:总览仍渲染「一对一匹配」")
-    if entry is None:
+    if not entry.count():
         context.close()
         return
     shot(page, tag, "01-dashboard")
 
     # 2) 原版活动列表：无 tabbar、无 App 外壳、无横向滚动
-    entry.click()
+    click(frame, entry, label="活动 native 入口")
     wait_frame_url(page, frame, "/app?native_admin=1")
     wait_ga_title(page, frame, "活动管理")
     chk.check(frame.evaluate("() => !!document.querySelector('#app.native-admin')"),
@@ -262,7 +292,7 @@ def run_viewport(browser, viewport: tuple[int, int], chk: Checker) -> None:
     shot(page, tag, "02-native-list")
 
     # 3) 控制台：模式卡 / 签到码 / 现场签到 / 编辑（功能级硬断言）
-    frame.locator(".ga-act-row").first.click()
+    click(frame, frame.locator(".ga-act-row").first, label="活动行")
     wait_detail(frame)
     page.wait_for_timeout(600)
     chk.check(frame.locator(".ga-card-title").filter(has_text="模式").count() > 0,
@@ -301,7 +331,7 @@ def run_viewport(browser, viewport: tuple[int, int], chk: Checker) -> None:
             chk.note(f"{tag}:报名名单为空（数据为空，非功能缺失）")
         no_horizontal_scroll(chk, page, frame, "报名名单", tag)
         shot(page, tag, "04-roster")
-        frame.query_selector(".back-nav").click()
+        click(frame, frame.locator(".back-nav").first, label="报名名单返回")
         page.wait_for_timeout(500)
         wait_detail(frame)
         page.wait_for_timeout(400)
@@ -318,21 +348,25 @@ def run_viewport(browser, viewport: tuple[int, int], chk: Checker) -> None:
         chk.note(f"{tag}:现场签到名册为空（数据为空，非功能缺失）")
     no_horizontal_scroll(chk, page, frame, "现场签到", tag)
     shot(page, tag, "05-checkin")
-    frame.query_selector(".back-nav").click()
+    click(frame, frame.locator(".back-nav").first, label="现场签到返回")
     page.wait_for_timeout(500)
     wait_ga_title(page, frame, "活动管理")
 
     # 6) 再次进控制台 → 编辑（嵌套 iframe）→ 关闭回控制台
-    frame.locator(".ga-act-row").first.click()
+    click(frame, frame.locator(".ga-act-row").first, label="活动行")
     wait_detail(frame)
     page.wait_for_timeout(400)
     click_frame_text(page, frame, "button", "编辑")
-    page.wait_for_timeout(800)
     nested = None
-    for candidate in page.frames:
-        if "/admin/activities/" in candidate.url and "/edit" in candidate.url:
-            nested = candidate
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        for candidate in page.frames:
+            if "/admin/activities/" in candidate.url and "/edit" in candidate.url:
+                nested = candidate
+                break
+        if nested is not None:
             break
+        page.wait_for_timeout(200)
     chk.check(nested is not None, f"{tag}:编辑表单 iframe 未打开")
     if nested is not None:
         try:
@@ -342,18 +376,20 @@ def run_viewport(browser, viewport: tuple[int, int], chk: Checker) -> None:
             shot(page, tag, "06-edit")
         except Exception as exc:  # noqa: BLE001
             chk.check(False, f"{tag}:编辑表单加载失败 {exc}")
-        back = frame.query_selector(".embed-back")
-        chk.check(back is not None, f"{tag}:编辑浮层缺少返回按钮")
-        if back is not None:
-            back.click()
-            page.wait_for_timeout(500)
+        back = frame.locator(".embed-back").first
+        chk.check(back.count() > 0, f"{tag}:编辑浮层缺少返回按钮")
+        if back.count():
+            click(frame, back, label="编辑浮层返回")
+            # 等编辑浮层离场动画结束，避免下一步 back-nav 被 .embed-overlay 挡住
+            wait_gone(frame, ".embed-overlay")
+            page.wait_for_timeout(300)
             wait_detail(frame)
 
     # 7) 控制台返回列表，列表返回管理台总览
-    frame.query_selector(".back-nav").click()
+    click(frame, frame.locator(".back-nav").first, label="控制台返回")
     page.wait_for_timeout(500)
     wait_ga_title(page, frame, "活动管理")
-    frame.query_selector(".back-nav").click()
+    click(frame, frame.locator(".back-nav").first, label="活动列表返回管理台")
     page.wait_for_timeout(800)
     wait_frame_url(page, frame, "/admin")
     chk.check(frame.query_selector(".admin-topbar") is not None,
@@ -369,9 +405,11 @@ def run_normal_user(browser, chk: Checker) -> None:
         return
     context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
     add_session_cookie(context, BASE_URL, USER_COOKIE)
+    context.add_init_script(GUIDE_INIT_SCRIPT)
     page = context.new_page()
     errors = collect_console(page)
     page.goto(BASE_URL + NATIVE_PATH, wait_until="load")
+    dismiss_guides(page)
     # 退回首页发生在 /legacy/api/home 返回、can_admin 校验之后；慢链路需显式等待。
     try:
         page.wait_for_function("() => !location.search.includes('native_admin=1')", timeout=20000)
