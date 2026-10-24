@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strconv"
 	"time"
 
@@ -29,6 +28,7 @@ type PraiseResult struct {
 
 type socialQueryer interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 // PraiseStateFor loads the viewer's daily quota, praised targets and weekly
@@ -42,72 +42,29 @@ func loadPraiseState(ctx context.Context, q socialQueryer, viewerID int64, now t
 	day := DayKey(now)
 	week := WeekKey(now)
 
-	rows, err := q.Query(ctx,
-		`SELECT status, day FROM praises WHERE initiator_id = $1 AND day = $2`, viewerID, day)
+	var used int
+	var praised []int64
+	err := q.QueryRow(ctx,
+		`SELECT
+		   (SELECT count(*) FROM praises
+		     WHERE initiator_id = $1 AND day = $2 AND status = $3),
+		   (SELECT COALESCE(array_agg(DISTINCT target_id ORDER BY target_id), '{}'::bigint[])
+		      FROM praises WHERE initiator_id = $1 AND status = $3),
+		   (SELECT count(*) FROM praises
+		     WHERE target_id = $1 AND week = $4 AND status = $3)`,
+		viewerID, day, PraiseStatusActive, week).
+		Scan(&used, &praised, &state.ReceivedWeek)
 	if err != nil {
-		return state, fmt.Errorf("db: praise daily rows: %w", err)
+		return state, fmt.Errorf("db: praise state: %w", err)
 	}
-	used := 0
-	for rows.Next() {
-		var status, d string
-		if err := rows.Scan(&status, &d); err != nil {
-			rows.Close()
-			return state, fmt.Errorf("db: scan praise daily row: %w", err)
-		}
-		if status == PraiseStatusActive && d == day {
-			used++
-		}
+	if praised != nil {
+		state.Praised = praised
 	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return state, fmt.Errorf("db: iterate praise daily rows: %w", err)
-	}
-	rows.Close()
 	state.Used = used
 	state.Left = DailyPraiseLimit - used
 	if state.Left < 0 {
 		state.Left = 0
 	}
-
-	rows, err = q.Query(ctx,
-		`SELECT DISTINCT target_id FROM praises WHERE initiator_id = $1 AND status = $2`,
-		viewerID, PraiseStatusActive)
-	if err != nil {
-		return state, fmt.Errorf("db: praise targets: %w", err)
-	}
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return state, fmt.Errorf("db: scan praise target: %w", err)
-		}
-		state.Praised = append(state.Praised, id)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return state, fmt.Errorf("db: iterate praise targets: %w", err)
-	}
-	rows.Close()
-	sort.Slice(state.Praised, func(i, j int) bool { return state.Praised[i] < state.Praised[j] })
-
-	rows, err = q.Query(ctx,
-		`SELECT count(*) FROM praises
-		 WHERE target_id = $1 AND week = $2 AND status = $3`,
-		viewerID, week, PraiseStatusActive)
-	if err != nil {
-		return state, fmt.Errorf("db: praise received count: %w", err)
-	}
-	if rows.Next() {
-		if err := rows.Scan(&state.ReceivedWeek); err != nil {
-			rows.Close()
-			return state, fmt.Errorf("db: scan praise received count: %w", err)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return state, fmt.Errorf("db: iterate praise received count: %w", err)
-	}
-	rows.Close()
 	return state, nil
 }
 

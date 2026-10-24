@@ -26,6 +26,30 @@ type CardFilter struct {
 	HeightMax   int
 }
 
+// cardCandidateFilter is the shared eligibility predicate for the card deck.
+// It takes $1..$16 in the same order as the callers below. The photo condition
+// is an EXISTS so the id-only query never materialises the photo array.
+const cardCandidateFilter = `u.status = 'active'
+		   AND u.account_kind = 'user'
+		   AND u.account_status = 'active'
+		   AND u.id <> $1
+		   AND ($2 = '' OR u.gender = $2)
+		   AND EXISTS (SELECT 1 FROM profile_photos pp WHERE pp.user_id = u.id)
+		   AND ($3 = '' OR position(lower($3) in lower(COALESCE(u.nickname, ''))) > 0)
+		   AND ($4 = '' OR position(lower($4) in lower(COALESCE(u.legacy_user_id, ''))) > 0)
+		   AND ($5 = '' OR position(lower($5) in lower(COALESCE(u.city, ''))) > 0)
+		   AND ($6 = '' OR position(lower($6) in lower(COALESCE(u.church, ''))) > 0)
+		   AND ($7 = '' OR position(lower($7) in lower(COALESCE(u.native_place, ''))) > 0)
+		   AND ($8 = '' OR position(lower($8) in lower(COALESCE(u.industry, ''))) > 0)
+		   AND (cardinality($9::text[]) = 0 OR u.education = ANY($9::text[]))
+		   AND (cardinality($10::text[]) = 0 OR COALESCE(NULLIF(u.income, ''), '未填') = ANY($10::text[]))
+		   AND (cardinality($11::text[]) = 0 OR COALESCE(NULLIF(u.house, ''), '未填') = ANY($11::text[]))
+		   AND (cardinality($12::text[]) = 0 OR COALESCE(NULLIF(u.driving, ''), '未填') = ANY($12::text[]))
+		   AND ($13::date IS NULL OR (u.birthday IS NOT NULL AND u.birthday <= $13::date))
+		   AND ($14::date IS NULL OR (u.birthday IS NOT NULL AND u.birthday > $14::date))
+		   AND ($15::int IS NULL OR COALESCE(u.height_cm, 0) >= $15)
+		   AND ($16::int IS NULL OR (u.height_cm IS NOT NULL AND u.height_cm <= $16))`
+
 // ListCardCandidates returns the eligible card pool ordered by user id (a
 // stable input order for OrderCards). targetGender "" means both genders
 // (observer browsing).
@@ -44,26 +68,7 @@ func (d *DB) ListCardCandidates(ctx context.Context, viewerID int64, targetGende
 	rows, err := d.pool.Query(ctx,
 		`SELECT `+socialProfileColumns+`
 		 FROM users u `+socialPhotoJoin+`
-		 WHERE u.status = 'active'
-		   AND u.account_kind = 'user'
-		   AND u.account_status = 'active'
-		   AND u.id <> $1
-		   AND ($2 = '' OR u.gender = $2)
-		   AND ph.photos IS NOT NULL AND cardinality(ph.photos) > 0
-		   AND ($3 = '' OR position(lower($3) in lower(COALESCE(u.nickname, ''))) > 0)
-		   AND ($4 = '' OR position(lower($4) in lower(COALESCE(u.legacy_user_id, ''))) > 0)
-		   AND ($5 = '' OR position(lower($5) in lower(COALESCE(u.city, ''))) > 0)
-		   AND ($6 = '' OR position(lower($6) in lower(COALESCE(u.church, ''))) > 0)
-		   AND ($7 = '' OR position(lower($7) in lower(COALESCE(u.native_place, ''))) > 0)
-		   AND ($8 = '' OR position(lower($8) in lower(COALESCE(u.industry, ''))) > 0)
-		   AND (cardinality($9::text[]) = 0 OR u.education = ANY($9::text[]))
-		   AND (cardinality($10::text[]) = 0 OR COALESCE(NULLIF(u.income, ''), '未填') = ANY($10::text[]))
-		   AND (cardinality($11::text[]) = 0 OR COALESCE(NULLIF(u.house, ''), '未填') = ANY($11::text[]))
-		   AND (cardinality($12::text[]) = 0 OR COALESCE(NULLIF(u.driving, ''), '未填') = ANY($12::text[]))
-		   AND ($13::date IS NULL OR (u.birthday IS NOT NULL AND u.birthday <= $13::date))
-		   AND ($14::date IS NULL OR (u.birthday IS NOT NULL AND u.birthday > $14::date))
-		   AND ($15::int IS NULL OR COALESCE(u.height_cm, 0) >= $15)
-		   AND ($16::int IS NULL OR (u.height_cm IS NOT NULL AND u.height_cm <= $16))
+		 WHERE `+cardCandidateFilter+`
 		 ORDER BY u.id`,
 		viewerID, targetGender, f.Nickname, f.UserID, f.City, f.Church,
 		f.NativePlace, f.Industry, socialNonNilStrings(f.Education), socialNonNilStrings(f.Income),
@@ -83,6 +88,47 @@ func (d *DB) ListCardCandidates(ctx context.Context, viewerID int64, targetGende
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("db: iterate card candidates: %w", err)
+	}
+	return out, nil
+}
+
+// ListCardCandidateIDs returns the same eligible pool as ListCardCandidates
+// but only the ids. The deck can then be ordered and paged without loading
+// every profile row; callers fetch the page with GetSocialProfilesByIDs.
+func (d *DB) ListCardCandidateIDs(ctx context.Context, viewerID int64, targetGender string,
+	f CardFilter, now time.Time) ([]int64, error) {
+	ageMinAt, ageMaxAt := socialAgeThresholds(f.AgeMin, f.AgeMax, now)
+	var heightMin, heightMax *int
+	if f.HeightMin > 0 {
+		v := f.HeightMin
+		heightMin = &v
+	}
+	if f.HeightMax > 0 {
+		v := f.HeightMax
+		heightMax = &v
+	}
+	rows, err := d.pool.Query(ctx,
+		`SELECT u.id FROM users u
+		 WHERE `+cardCandidateFilter+`
+		 ORDER BY u.id`,
+		viewerID, targetGender, f.Nickname, f.UserID, f.City, f.Church,
+		f.NativePlace, f.Industry, socialNonNilStrings(f.Education), socialNonNilStrings(f.Income),
+		socialNonNilStrings(f.House), socialNonNilStrings(f.Driving),
+		ageMinAt, ageMaxAt, heightMin, heightMax)
+	if err != nil {
+		return nil, fmt.Errorf("db: list card candidate ids: %w", err)
+	}
+	defer rows.Close()
+	out := make([]int64, 0, 256)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("db: scan card candidate id: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: iterate card candidate ids: %w", err)
 	}
 	return out, nil
 }
@@ -165,27 +211,37 @@ func (d *DB) LoadCardSocialState(ctx context.Context, viewerID int64, now time.T
 	}
 	praisedRows.Close()
 
-	countRows, err := d.pool.Query(ctx,
-		`SELECT target_user_id, count(*) FROM messages
-		 WHERE status <> '已删除' GROUP BY target_user_id`)
-	if err != nil {
-		return state, fmt.Errorf("db: count messages per target: %w", err)
+	return state, nil
+}
+
+// MessageCountsFor returns how many messages each target has received (from
+// anyone, matching the legacy card badge). It is scoped to the ids on the
+// current page instead of aggregating the whole table on every deck request.
+func (d *DB) MessageCountsFor(ctx context.Context, targetIDs []int64) (map[int64]int, error) {
+	out := make(map[int64]int, len(targetIDs))
+	if len(targetIDs) == 0 {
+		return out, nil
 	}
-	for countRows.Next() {
+	rows, err := d.pool.Query(ctx,
+		`SELECT target_user_id, count(*) FROM messages
+		 WHERE target_user_id = ANY($1) AND status <> '已删除'
+		 GROUP BY target_user_id`, targetIDs)
+	if err != nil {
+		return nil, fmt.Errorf("db: count messages for targets: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
 		var id int64
 		var n int
-		if err := countRows.Scan(&id, &n); err != nil {
-			countRows.Close()
-			return state, fmt.Errorf("db: scan message count: %w", err)
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, fmt.Errorf("db: scan message count: %w", err)
 		}
-		state.MessageCounts[id] = n
+		out[id] = n
 	}
-	if err := countRows.Err(); err != nil {
-		countRows.Close()
-		return state, fmt.Errorf("db: iterate message counts: %w", err)
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: iterate message counts: %w", err)
 	}
-	countRows.Close()
-	return state, nil
+	return out, nil
 }
 
 func (d *DB) listLikesByDirection(ctx context.Context, column string, viewerID int64) ([]Like, error) {
@@ -300,6 +356,97 @@ func OrderCards(cards []SocialProfile, likedMeIDs map[int64]bool, pinnedIDs []in
 	tail = append(tail, others[oi:]...)
 	shuffleSocialCards(tail, rng)
 	out := make([]SocialProfile, 0, len(head)+len(front)+len(tail))
+	out = append(out, head...)
+	out = append(out, front...)
+	out = append(out, tail...)
+	return out
+}
+
+// OrderCardIDs is the id-only twin of OrderCards. It consumes the same stable
+// RNG in the same order, so the sequence is identical to mapping OrderCards
+// over the full profiles (see TestOrderCardIDsMatchesOrderCards).
+func OrderCardIDs(ids []int64, likedMeIDs map[int64]bool, pinnedIDs []int64, seed string) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	present := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		present[id] = true
+	}
+	head := make([]int64, 0, len(pinnedIDs))
+	used := make(map[int64]bool, len(pinnedIDs))
+	for _, id := range pinnedIDs {
+		if used[id] {
+			continue
+		}
+		if present[id] {
+			head = append(head, id)
+			used[id] = true
+		}
+	}
+	rest := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if !used[id] {
+			rest = append(rest, id)
+			used[id] = true
+		}
+	}
+	if len(rest) == 0 {
+		return head
+	}
+	rng := newSocialStableRNG(seed)
+	if len(likedMeIDs) == 0 {
+		shuffleSocialCards(rest, rng)
+		return append(head, rest...)
+	}
+	liked := make([]int64, 0, len(rest))
+	others := make([]int64, 0, len(rest))
+	for _, id := range rest {
+		if likedMeIDs[id] {
+			liked = append(liked, id)
+		} else {
+			others = append(others, id)
+		}
+	}
+	shuffleSocialCards(liked, rng)
+	shuffleSocialCards(others, rng)
+	frontN := len(rest) * 3 / 10
+	if frontN < 1 {
+		frontN = 1
+	}
+	if frontN > len(rest) {
+		frontN = len(rest)
+	}
+	takeLiked := len(liked)
+	if takeLiked > frontN {
+		takeLiked = frontN
+	}
+	positions := rng.samplePositions(frontN, takeLiked)
+	front := make([]int64, 0, frontN)
+	li, oi := 0, 0
+	for i := 0; i < frontN; i++ {
+		if positions[i] {
+			if li < len(liked) {
+				front = append(front, liked[li])
+				li++
+				continue
+			}
+		}
+		if oi < len(others) {
+			front = append(front, others[oi])
+			oi++
+			continue
+		}
+		if li < len(liked) {
+			front = append(front, liked[li])
+			li++
+		}
+	}
+	tail := make([]int64, 0, len(liked)-li+len(others)-oi)
+	tail = append(tail, liked[li:]...)
+	tail = append(tail, others[oi:]...)
+	shuffleSocialCards(tail, rng)
+	out := make([]int64, 0, len(head)+len(front)+len(tail))
 	out = append(out, head...)
 	out = append(out, front...)
 	out = append(out, tail...)

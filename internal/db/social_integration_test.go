@@ -530,3 +530,123 @@ func TestIntegrationSocialOverviewMessageVisibility(t *testing.T) {
 		t.Fatal("expired outgoing anonymous like missing or wrongly active")
 	}
 }
+
+func TestIntegrationCardCandidateIDsMatchProfiles(t *testing.T) {
+	d, ctx := openSocialTestDB(t)
+	now := SocialNow()
+	prefix := "itids-" + randomDigits(t, 8)
+
+	male := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderMale, Nickname: prefix + "-male", WithPhoto: true,
+	})
+	female := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderFemale, Nickname: prefix + "-female", WithPhoto: true, Height: 165,
+	})
+	pending := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderFemale, AccountStatus: "pending", Nickname: prefix + "-pending", WithPhoto: true,
+	})
+	noPhoto := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderFemale, Nickname: prefix + "-nophoto",
+	})
+	filters := []CardFilter{
+		{Nickname: prefix},
+		{Nickname: prefix, HeightMin: 160},
+		{City: prefix, Nickname: prefix},
+	}
+	for _, filter := range filters {
+		profiles, err := d.ListCardCandidates(ctx, male, GenderFemale, filter, now)
+		if err != nil {
+			t.Fatalf("profiles: %v", err)
+		}
+		ids, err := d.ListCardCandidateIDs(ctx, male, GenderFemale, filter, now)
+		if err != nil {
+			t.Fatalf("ids: %v", err)
+		}
+		if len(ids) != len(profiles) {
+			t.Fatalf("filter %+v: ids=%d profiles=%d", filter, len(ids), len(profiles))
+		}
+		for i := range ids {
+			if ids[i] != profiles[i].ID {
+				t.Fatalf("filter %+v: position %d id=%d profile=%d", filter, i, ids[i], profiles[i].ID)
+			}
+		}
+	}
+	ids, err := d.ListCardCandidateIDs(ctx, male, GenderFemale, CardFilter{Nickname: prefix}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != female {
+		t.Fatalf("ids = %v, want exactly female %d (pending=%d nophoto=%d)", ids, female, pending, noPhoto)
+	}
+}
+
+func TestIntegrationBackfillMutualWechatNotifications(t *testing.T) {
+	d, ctx := openSocialTestDB(t)
+	prefix := "itwx-" + randomDigits(t, 8)
+	male := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderMale, Nickname: prefix + "-male", WithPhoto: true,
+		Wechat: "wx-backfill-m", ContactConsent: true,
+	})
+	female := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderFemale, Nickname: prefix + "-female", WithPhoto: true,
+		Wechat: "wx-backfill-f", ContactConsent: true,
+	})
+	if _, err := d.pool.Exec(ctx,
+		`DELETE FROM notifications WHERE user_id = ANY($1)`, []int64{male, female}); err != nil {
+		t.Fatal(err)
+	}
+
+	const message = "很高兴认识你，希望有机会聊聊。"
+	if _, err := d.CreateLike(ctx, CreateLikeParams{
+		InitiatorID: male, TargetID: female, LikeType: LikeTypeReal,
+		Message: message, Now: SocialNow(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.CreateLike(ctx, CreateLikeParams{
+		InitiatorID: female, TargetID: male, LikeType: LikeTypeAnon,
+		Message: message, Now: SocialNow(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	created, err := d.BackfillMutualWechatNotifications(ctx, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created < 2 {
+		t.Fatalf("created = %d, want >= 2", created)
+	}
+	var n int
+	var body string
+	if err := d.pool.QueryRow(ctx,
+		`SELECT count(*), COALESCE(max(body), '') FROM notifications
+		  WHERE user_id = $1 AND kind = 'wechat_exchange'`, male).Scan(&n, &body); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || !strings.Contains(body, "wx-backfill-f") {
+		t.Fatalf("male notifications count=%d body=%q", n, body)
+	}
+	if err := d.pool.QueryRow(ctx,
+		`SELECT count(*), COALESCE(max(body), '') FROM notifications
+		  WHERE user_id = $1 AND kind = 'wechat_exchange'`, female).Scan(&n, &body); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || !strings.Contains(body, "wx-backfill-m") {
+		t.Fatalf("female notifications count=%d body=%q", n, body)
+	}
+
+	// Idempotent: a second sweep creates nothing for this pair.
+	if _, err := d.BackfillMutualWechatNotifications(ctx, 500); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.pool.QueryRow(ctx,
+		`SELECT count(*) FROM notifications
+		  WHERE user_id = ANY($1) AND kind = 'wechat_exchange'`,
+		[]int64{male, female}).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("wechat notifications after second sweep = %d, want 2", n)
+	}
+}

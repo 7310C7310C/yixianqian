@@ -51,7 +51,7 @@ func (a *App) handleAPICards(w http.ResponseWriter, r *http.Request) {
 	if limit == 0 {
 		limit = 50
 	}
-	page, err := a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit)
+	page, err := a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit, cardPageDeps{})
 	if errors.Is(err, errGenderMissing) {
 		writeAPIError(w, http.StatusBadRequest, "gender_missing", "你的性别资料尚未完善，请先完善资料。")
 		return
@@ -183,7 +183,6 @@ func (a *App) handleAPILikesMe(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "暂时无法载入，请稍后再试。")
 		return
 	}
-	a.ensureMutualWechatExchanges(r.Context(), overview)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"liked_me": likedMeAPI(overview),
 		"mutual":   mutualAPI(overview),
@@ -316,7 +315,6 @@ func (a *App) handleAPIMyLikes(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "暂时无法载入，请稍后再试。")
 		return
 	}
-	a.ensureMutualWechatExchanges(r.Context(), overview)
 	list := make([]map[string]any, 0, len(overview.MyLikes))
 	for _, pair := range overview.MyLikes {
 		item := map[string]any{

@@ -273,6 +273,7 @@ sources: []
 | 0005 | `0005_face.sql` | 本地人脸检测结果（YuNet/Haar），只增列，不改既有数据。 |
 | 0006 | `0006_weekly_recommendations_list.sql` | 每周推荐位名单：把 v1「一人一行」的占位表改成真正的名单表。 |
 | 0007 | `0007_id_card_hash.sql` | Deterministic HMAC of the identity number, used only to enforce |
+| 0008 | `0008_perf_indexes.sql` | 性能批次1：卡片页/通知热路径索引。只增不改、不改数据。 |
 
 ## 6. make targets
 
