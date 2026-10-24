@@ -200,6 +200,64 @@ grep -H 'client_max_body_size' /etc/nginx/sites-available/relay-next.conf
 # 期望两处都是 96m；两个文件在不同主机，不要用一条命令同时查
 ```
 
+## 性能批次1：边缘/传输（nginx）
+
+- 目标：server2 上游 keepalive（跨洋每请求 465ms → ~155ms + 源站）、`/static/` 边缘缓存（TTL 1h）、边缘 gzip、SSE 例外；
+  server1 本地 upstream keepalive、恢复 proxy buffering、响应不落临时文件（磁盘余量小）。
+- 变更文件：`deploy/nginx/relay-next.conf`、`deploy/nginx/snippets/relay-next-proxy.conf`、`deploy/nginx/next.nantou.love.conf`。
+- 缓存目录（server2）：`/var/cache/nginx/yxq`，属主用 nginx worker 实际用户（Ubuntu 默认 `www-data`）。
+- 回滚粒度：单文件回滚；两台可独立回滚，互不阻塞。
+
+```bash
+# ===== apply（先 server1，再 server2；每台先备份、nginx -t 通过才 reload）=====
+TS=$(date +%Y%m%d-%H%M)
+install -d -m 0755 /var/backups/yxq-nginx
+
+# --- server1（repo 根目录执行）---
+cp -a /etc/nginx/sites-available/next.nantou.love /var/backups/yxq-nginx/next.nantou.love.$TS
+install -m 0644 deploy/nginx/next.nantou.love.conf /etc/nginx/sites-available/next.nantou.love
+nginx -t && systemctl reload nginx
+
+# --- server2（repo 根目录执行）---
+cp -a /etc/nginx/sites-available/relay-next.conf /var/backups/yxq-nginx/relay-next.conf.$TS
+cp -a /etc/nginx/snippets/relay-next-proxy.conf /var/backups/yxq-nginx/relay-next-proxy.conf.$TS
+install -d -o www-data -g www-data /var/cache/nginx/yxq
+install -D -m 0644 deploy/nginx/snippets/relay-next-proxy.conf /etc/nginx/snippets/relay-next-proxy.conf
+install -m 0644 deploy/nginx/relay-next.conf /etc/nginx/sites-available/relay-next.conf
+nginx -t && systemctl reload nginx
+```
+
+```bash
+# ===== rollback（每台单独执行；把 <file>/$TS 换成实际备份）=====
+cp -a /var/backups/yxq-nginx/next.nantou.love.$TS /etc/nginx/sites-available/next.nantou.love
+nginx -t && systemctl reload nginx
+# server2
+cp -a /var/backups/yxq-nginx/relay-next.conf.$TS /etc/nginx/sites-available/relay-next.conf
+cp -a /var/backups/yxq-nginx/relay-next-proxy.conf.$TS /etc/nginx/snippets/relay-next-proxy.conf
+nginx -t && systemctl reload nginx
+```
+
+```bash
+# ===== 验证（server2）=====
+# 1) 同连接连续两个请求：第 2 条 TTFB 期望 ≤200ms（改前 ~465ms）
+curl -s -o /dev/null -o /dev/null -w 'ttfb=%{time_starttransfer}\n' \
+  https://next.nantou.love/healthz https://next.nantou.love/healthz
+
+# 2) 静态：预热后应命中边缘缓存，TTFB p95 ≤50ms
+for i in 1 2 3; do curl -s -o /dev/null -w '%{http_code} %{time_starttransfer}\n' \
+  https://next.nantou.love/static/legacy/lib/vant.min.js; done
+curl -sI https://next.nantou.love/static/legacy/lib/vant.min.js | tr -d '\r' \
+  | grep -iE 'x-cache-status|strict-transport|content-encoding'
+
+# 3) SSE 仍能收到事件（需登录 cookie；浏览器端或 curl -N）
+curl -N -H "Cookie: <yxq_session>" https://next.nantou.love/legacy/api/notifications/stream | head -3
+```
+
+- `/static/` location 内有 `add_header`，会覆盖 server 级 HSTS，因此该 location 显式重复 HSTS；新增 location 时同理。
+- `proxy_cache_path` 目录必须存在且可写，否则 reload 失败。
+- SSE 会长期占用一个上游连接；关注 server2 `worker_connections` 与 `ss -tn state established`。
+- TTL 先 1h（`lib/*` 无版本参数）；部署后最多 1h 可能取到旧静态资源。
+
 ## 用户端 smoke
 
 ```bash
