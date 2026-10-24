@@ -58,7 +58,7 @@ sources:
 - 更新日期：2026-10-24
 - 维护者：项目维护者
 - 下一更新点：P0 身份证门禁决策、下一次 staging 部署、M6 验收；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-23 对 server1 只读复核；代码基线 `main` @ `26b5eaf`（Phase B/C 为后续提交，未部署）。
+- 事实基准：部署/数据事实于 2026-10-24 对 server1 只读复核；代码基线 `main` @ `1a3144e`（staging 已部署）。
 
 ## 1. 阶段
 
@@ -82,8 +82,8 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD | `3e4d75d` |
-| `/healthz` version | `staging-3e4d75d` |
+| 部署 HEAD | `1a3144e` |
+| `/healthz` version | `staging-1a3144e` |
 | migration 最大版本 | `5` |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
@@ -118,6 +118,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 顶栏身份块：总览右侧改为「盾牌图标 + 管理员 + 姓名」胶囊；staging 管理员姓名是单字「一」，旧裸文本看起来像空按钮（2026-10-24 修复）。
 - 深色对比度：新增 `--adm-on-brand`（浅色白字 / 深色 `#2a1a1e`），实心主按钮、选中 chip/tab、徽标对比度由 2.17:1 提到 7.66:1（Chromium 实测）。
 - 验收（2026-10-24，临时库 + 临时服务）：`tools/browser/admin_ui_phase_bc.py` 三视口（390/768/1280）逐页 + 流程截图 108 张，`failures=[]`；覆盖用户列表→详情→审核、匹配→分组控制台→一对一、麦穗调整、举报/反馈处理、角色指派/移除、审计筛选与 CSV 导出，无 console error、无页面/表格横向滚动；模板断言 `TestAdminPhaseBCTemplatesUseDesignSystem` / `TestAdminPointsTabsKeepFormContract` / `TestAdminTopbarIdentityChip`。证据目录 `.team/audits/admin-ui-phase-bc/`（未提交，属团队 artifact）。
+- 验收（2026-10-24，staging `1a3144e`）：`tools/browser/admin_native_activity_smoke.py` 三视口（390/768/1280）PASS：管理台总览→活动列表→控制台（模式/签到码/名单/现场签到）→编辑（嵌套 iframe）→返回，无 console error、无页面/iframe 横向滚动；普通用户访问 native 地址退回首页。名单入口随活动模式出现（分组=未填写、一对一=未提交），缺失时记 NOTE skip，已区分「加载失败」与「数据为空」；截图 `/tmp/opencode/native-activity-live`（团队 artifact，未提交）。
 - 匹配：`/admin/matching` 清单，分组控制台与一对一会话控制台（预览/执行/重置/轮次结果/名单/聊天概览）；沿用 `matching.run` 权限、CSRF 与审计。
 - 麦穗：`/admin/points` 总览、调整、流水、邀请、兑换、心愿、推荐；调整向用户写入站内通知。
 - 审计：`/admin/audit` 查看与 `/admin/audit.csv` 导出。
@@ -157,8 +158,6 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 验收规格：`docs/product-spec.md` C4；在 PM 决策前，本项保持 P0 上线阻断。
 
 ## 5. 已知缺口/未验收
-
-- **管理入口待部署验收**：管理台总览「活动列表」已改为 iframe 内 v1 原版活动管理（native_admin）；麦穗/举报原生化页面仍不暴露（代码保留）。staging 仍运行旧 binary，部署后需按 runbook 跑 `tools/admin_legacy_api_smoke.py`（管理员 200 / 普通用户 403）并走一遍管理台→活动→控制台→签到→编辑的原生链路留证据。
 
 - **人脸照片缺口**：`104` 个 `active` 普通用户没有 `has_face=true` 的照片，其中 `101` 个完全没有照片；可通过资料页上传修复，不是死锁（与身份证 P0 区分）。
 - **内容合规**：腾讯云照片内容合规（宠物/卡通判定、活体）未实现。
