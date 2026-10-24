@@ -173,6 +173,35 @@ func TestLegacyProfileUpdateIgnoresUnknownOnly(t *testing.T) {
 	}
 }
 
+// samePhone 必须与登录/注册用同一套归一化：带 +86、空格或分隔符的同一个
+// 号码不能被当成换号而要求输入当前密码。
+func TestSamePhoneNormalizesLikeLogin(t *testing.T) {
+	cases := []struct {
+		name string
+		a, b string
+		want bool
+	}{
+		{"国家码与空格", "+86 180 5856 7994", "18058567994", true},
+		{"连字符分隔", "180-5856-7994", "18058567994", true},
+		{"0086 前缀", "0086 180 5856 7994", "18058567994", true},
+		{"两侧空格", " 18058567994 ", "18058567994", true},
+		{"不同号码", "18058567994", "18058567995", false},
+		{"非法值只匹配自身", "not-a-phone", "not-a-phone", true},
+		{"非法值不等于空", "not-a-phone", "", false},
+		{"合法值不等于非法值", "18058567994", "not-a-phone", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := samePhone(tc.a, tc.b); got != tc.want {
+				t.Fatalf("samePhone(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+			}
+			if got := samePhone(tc.b, tc.a); got != tc.want {
+				t.Fatalf("samePhone(%q, %q) = %v, want %v (not symmetric)", tc.b, tc.a, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLegacyPhotoWantsCover(t *testing.T) {
 	parse := func(body string) bool {
 		req := httptest.NewRequest("POST", "/legacy/api/profile/photo",

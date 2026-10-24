@@ -3,6 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"io/fs"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -127,8 +128,8 @@ func TestTemplatesVersionStaticAssets(t *testing.T) {
 	for name, want := range map[string]string{
 		"templates/pages/admin_matching_group.tmpl":    `/static/admin_matching.js?v={{assetVersion}}`,
 		"templates/pages/admin_matching_onetoone.tmpl": `/static/admin_matching.js?v={{assetVersion}}`,
-		"static/admin_points.css":                      `/static/admin.css?v=`,
-		"static/admin_user_detail.css":                 `/static/admin.css?v=`,
+		"static/admin_points.css":                      `/static/admin.css?v=` + assetVersion + `"`,
+		"static/admin_user_detail.css":                 `/static/admin.css?v=` + assetVersion + `"`,
 	} {
 		body, err := fs.ReadFile(webassets.FS, name)
 		if err != nil {
@@ -137,6 +138,33 @@ func TestTemplatesVersionStaticAssets(t *testing.T) {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("%s missing %q", name, want)
 		}
+	}
+}
+
+// TestStaticCSSImportVersionMatches 防止模块 CSS 的 @import 版本漂移：
+// @import 里的版本与 httpserver.assetVersion 不一致时，部署后浏览器仍会命中
+// 上一版 admin.css（静态资源 max-age=3600），样式改动看不到。
+func TestStaticCSSImportVersionMatches(t *testing.T) {
+	names, err := fs.Glob(webassets.FS, "static/*.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	importRE := regexp.MustCompile(`@import\s+url\("(/?static/[^"?]+)\?v=([^"]*)"\)`)
+	seen := 0
+	for _, name := range names {
+		body, err := fs.ReadFile(webassets.FS, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range importRE.FindAllStringSubmatch(string(body), -1) {
+			seen++
+			if match[2] != assetVersion {
+				t.Fatalf("%s imports %s?v=%s, want assetVersion=%s", name, match[1], match[2], assetVersion)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no versioned @import found; cache-busting guard is ineffective")
 	}
 }
 

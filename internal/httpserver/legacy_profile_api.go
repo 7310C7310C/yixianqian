@@ -142,10 +142,20 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "资料已更新"})
 }
 
-// samePhone compares normalized phone numbers; an unparsable value only
-// matches itself so a malformed change still requires verification.
+// samePhone compares phones the same way login/registration do, so a value
+// carrying "+86" or separators still counts as the same account. An unparsable
+// value only matches its identical raw form, keeping a malformed change on the
+// password-verification path.
 func samePhone(a, b string) bool {
-	return strings.TrimSpace(a) == strings.TrimSpace(b)
+	na, nb := auth.NormalizePhone(a), auth.NormalizePhone(b)
+	switch {
+	case na != "" && nb != "":
+		return na == nb
+	case na != "" || nb != "":
+		return false
+	default:
+		return strings.TrimSpace(a) == strings.TrimSpace(b)
+	}
 }
 
 // maskAuditPhone keeps the first three and last four digits for audit trails.

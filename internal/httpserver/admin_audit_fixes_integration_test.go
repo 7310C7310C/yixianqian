@@ -384,6 +384,23 @@ func TestIntegrationPhoneChangeRequiresPassword(t *testing.T) {
 		t.Fatalf("same-phone update status=%d body=%s", resp.StatusCode, readBody(t, resp))
 	}
 
+	// The same number with +86 and separators must not look like a change:
+	// login/registration normalize phones, so profile comparison must too.
+	formatted := "+86 " + newPhone[0:3] + " " + newPhone[3:7] + " " + newPhone[7:]
+	resp = profileJSONRequest(t, ownerClient, http.MethodPut, "/legacy/api/profile", csrf,
+		map[string]any{"手机号": formatted})
+	body = readBody(t, resp)
+	if resp.StatusCode != http.StatusOK || strings.Contains(body, "password_required") {
+		t.Fatalf("formatted same-phone status=%d body=%s", resp.StatusCode, body)
+	}
+	reloaded, err = env.database.GetProfile(env.ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Phone != newPhone {
+		t.Fatalf("phone after formatted update = %q, want %q", reloaded.Phone, newPhone)
+	}
+
 	// Another account's phone: 409 with a stable code.
 	resp = profileJSONRequest(t, ownerClient, http.MethodPut, "/legacy/api/profile", csrf,
 		map[string]any{"手机号": other.Phone, "current_password": password})
