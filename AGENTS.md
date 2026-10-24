@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 sources:
   - Makefile
   - .github/workflows/**
@@ -78,6 +78,15 @@ sources:
 - 小改动可直接在 `main`；较大改动用独立 worktree/分支，合并前跑 `make ci`；
   不默认使用 PR（除非 PM 明确要求）。
 - 不假设有固定团队或角色；按任务需要由维护者/执行者/审查者协作，最终对 PM 负责。
+
+## 交付节奏与快速通道（2026-10-24 PM 批准）
+
+- **绿 CI 即部署**：任何提交在当前 HEAD 的 CI 与 Docs 绿后 15 分钟内必须部署 staging；若在批量等待，必须写入 `.team/status.md` 的「已推送未部署」并在 30 分钟内清空，不允许静默积压。
+- **快速通道（低风险）**：纯文案/样式/排序/静态资源，且不涉及 auth、权限、数据、API、schema、支付 → Dev Lead 自测 + 截图/浏览器 smoke + CI 绿即可直接部署，**无需独立 Reviewer**；同时在 `.team/decisions.md` 记录范围、风险与批准（PM 2026-10-24 授权）。目标 ≤10 分钟（开工→部署）。
+- **常规通道**：行为、逻辑、接口、模板结构变更 → 独立 Reviewer PASS 后部署（不变）。
+- **高风险**：安全/支付/数据/权限/凭据 → Reviewer + Auditor/security gate（不变）。
+- **文档门禁减负**：仅当改动命中 `docs/`、env、route、migration 时跑 `docs-check-stale`；纯前端模板/样式允许 `Docs-Impact: none（理由）`，不强制刷新 `docs/STATUS.md` 的 sources。
+- 超过时间目标要记录原因；不允许用「批量等待」掩盖未部署。
 
 ## 文档自动更新协议
 
