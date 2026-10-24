@@ -117,7 +117,9 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 广播入口（ADM-09）：SSR 工作台头部与活动列表新增「📣 广播」，深链 `#broadcast` 由 `admin.js` 激活。
 - 活动时间窗（UD-03）：状态非「报名中」或已过开始时间的报名、已过开始时间的取消被拒绝；自助签到要求活动进行中（未开始/已结束/已取消均拒绝），错误码 `activity_started`/`activity_not_started`/`activity_ended`。
 - 修改手机号（UD-05）：`PUT /legacy/api/profile` 改号需 `current_password`（缺失 400 `password_required`、错误 400 `password_invalid`、无密码 409 `password_not_set`），保留唯一性 409 `phone_taken`，写 `profile.phone.changed` 脱敏审计；未改号时不要求密码。
-- 证据：`TestIntegrationAdminUserPagination`、`TestIntegrationAdminTempPasswordPRG`、`TestIntegrationAdminActivityFormValidation`、`TestIntegrationAdminErrorPages`、`TestIntegrationPhoneChangeRequiresPassword`、`TestIntegrationActivityTimeWindowRules`、`TestAdminActivityInputValidate`、`TestAdminTemplatesRender`（admin_error）。
+- 同号判定（UD-05 修复细节）：资料更新的手机号比较改用 `auth.NormalizePhone`，与登录/注册同一套归一化；带 `+86`、空格或分隔符的同一号码不再误判为换号而要求当前密码，无法解析的值仍只匹配自身。
+- 静态资源版本（修复细节）：`admin_points.css`/`admin_user_detail.css` 的 `@import` 版本与 `assetVersion=4` 对齐；`TestStaticCSSImportVersionMatches` 断言两者一致，避免部署后仍命中旧 `admin.css`。
+- 证据：`TestIntegrationAdminUserPagination`、`TestIntegrationAdminTempPasswordPRG`、`TestIntegrationAdminActivityFormValidation`、`TestIntegrationAdminErrorPages`、`TestIntegrationPhoneChangeRequiresPassword`、`TestIntegrationActivityTimeWindowRules`、`TestAdminActivityInputValidate`、`TestAdminTemplatesRender`（admin_error）、`TestSamePhoneNormalizesLikeLogin`、`TestStaticCSSImportVersionMatches`。
 - 前端契约：`.team/backend-admin-fixes-2026-10-24.md`（SPA 手机号输入与原生控制台广播按钮由前端 workstream 接入）。
 
 ### 媒体与上传（2026-10-24 修复，待部署）
