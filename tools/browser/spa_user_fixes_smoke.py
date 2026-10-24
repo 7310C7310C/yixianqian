@@ -275,7 +275,7 @@ def check_phone_change(page, chk: Checker, tag: str, out_dir: Path) -> None:
         return
     phone_input = row.locator("input")
     original = phone_input.input_value()
-    digits = re.sub(r"\\D", "", original)
+    digits = re.sub(r"\D", "", original)
     if len(digits) < 8:
         chk.check(False, f"{tag}:测试账号手机号格式异常（{original!r}）")
         return
