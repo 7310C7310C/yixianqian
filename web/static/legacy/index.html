@@ -14,8 +14,10 @@
 <link rel="apple-touch-icon" href="favicon.png?v=__ASSET_URL_VERSION__">
 <link rel="stylesheet" href="lib/vant.min.css?v=__ASSET_URL_VERSION__">
 <link rel="stylesheet" href="app.css?v=__ASSET_URL_VERSION__">
+<!--YXQ_BOOTSTRAP_PRELOAD-->
 <link rel="preload" as="script" href="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__">
 <link rel="preload" as="script" href="lib/vant.min.js?v=__ASSET_URL_VERSION__">
+<link rel="preload" as="script" href="app.render.js?v=__ASSET_URL_VERSION__">
 <link rel="preload" as="script" href="app.js?v=__ASSET_URL_VERSION__">
 
 </head>
@@ -2591,15 +2593,12 @@
 </div>
 <script src="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__" defer></script>
 <script src="lib/vant.min.js?v=__ASSET_URL_VERSION__" defer></script>
+<script>window.__YXQ_BOOTSTRAP__=null;</script>
 <script>
-// 首屏卡片图早于 Vue 启动：先取 home，缩图直接进骨架，LCP 不再等 300KB JS 解析。
+// 首屏卡片图早于 Vue 启动：优先消费服务端 bootstrap；缺失时回退原 API。
 (function(){
   try {
-    var p = fetch('/legacy/api/home', {credentials:'same-origin', headers:{'Accept':'application/json'}})
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .catch(function(){ return null; });
-    window.__YXQ_HOME_PROMISE__ = p;
-    p.then(function(d){
+    function show(d){
       if (!d || !d.cards || !d.cards.length) return;
       var c = d.cards[0];
       var src = c.photo || (c.photos_thumb && c.photos_thumb[0]) || (c.photos && c.photos[0]);
@@ -2610,7 +2609,18 @@
       img.className = 'boot-photo'; img.alt = ''; img.src = src;
       var box = sk.querySelector('.boot-card');
       if (box) box.appendChild(img);
-    });
+    }
+    var boot = window.__YXQ_BOOTSTRAP__;
+    if (boot) {
+      show(boot);
+      window.__YXQ_HOME_PROMISE__ = Promise.resolve(boot);
+      return;
+    }
+    var p = fetch('/legacy/api/home', {credentials:'same-origin', headers:{'Accept':'application/json'}})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .catch(function(){ return null; });
+    window.__YXQ_HOME_PROMISE__ = p;
+    p.then(show);
   } catch (e) {}
 })();
 </script>

@@ -10,7 +10,8 @@ DOCS_BASE ?= origin/main
 LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSION)
 
 .PHONY: all tidy generate fmt fmt-check vet test test-race test-integration test-migration \
-        test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale prepush ci
+        test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale prepush ci \
+        static-gzip static-gzip-check
 
 all: ci
 
@@ -59,6 +60,14 @@ test-broadcast-ui:
 	@BASE_URL="$(BASE_URL)" SESSION_COOKIE="$(SESSION_COOKIE)" ACTIVITY_ID="$(ACTIVITY_ID)" \
 		python3 tools/browser/admin_broadcast_layout.py
 
+# web/static 下文本资源的 .gz 预压缩变体（随 go:embed 发布，生产不需要额外步骤）。
+# 改了 web/static 里任何 .js/.css/.html/.svg 后必须重跑；-check 由 make ci 执行。
+static-gzip:
+	$(GO) run ./tools/static_gzip
+
+static-gzip-check:
+	$(GO) run ./tools/static_gzip -check
+
 build:
 	mkdir -p bin
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/server ./cmd/server
@@ -77,6 +86,6 @@ token:
 	$(GO) run ./cmd/token -legacy-user-id=$(USER_ID)
 
 # 快速本地门禁：push 前必跑；全量仍用 make ci（多 test/test-migration）
-prepush: fmt-check docs-check vet build
+prepush: fmt-check static-gzip-check docs-check vet build
 
-ci: fmt-check docs-check vet test test-migration build
+ci: fmt-check static-gzip-check docs-check vet test test-migration build

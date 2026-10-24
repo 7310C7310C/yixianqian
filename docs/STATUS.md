@@ -226,8 +226,15 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 根模板预编译：`tools/spa_precompile`（Node + `@vue/compiler-dom@3.4.27`，与 `vue.global.prod.js` 一致，package-lock 锁定）从 `index.html` 的 `#app` 抽取模板，生成 `web/static/legacy/app.render.js`（768KB / gzip 69.6KB，挂 `window.__YXQ_RENDER__`，无 eval）；`app.js` 根 options 使用它，文件缺失时回退运行时编译。改模板后必须 `npm run build`，`npm run check` 校验 hash。
 - 首屏图：牌堆只解码当前+下一张照片（其余同尺寸占位），预取只取下一张卡首图；9 张→**2 个图片请求**。
 - `assetVersion` 5→6→7；壳/静态/媒体缓存语义同批次2。`TestRenderManifestMatchesTemplate` 比对 `index.html` 的 `#app` 模板 sha256 与 `app.render.js` 头部，模板改了没重建会让 `make ci` 变红（Reviewer I-1）。
-- 本地（gzip 前置，390×844，1.6Mbps/150ms/CPU×4，N=3 中位）：auth-cold FCP **2.60s**、LCP **6.12s**、524KB/16 请求；warm FCP **1.41s**、LCP **4.96s**；最长任务 1.77s（原 5.6s）。LCP 仍 >2.5s（剩余为 JS 字节/解析与图片下载），待下一批拆包。
-- 未部署；详见 `.team/perf/batch3-report.md`。
+- 本地（gzip 前置，390×844，1.6Mbps/150ms/CPU×4，N=3 中位）：auth-cold FCP **2.60s**、LCP **6.12s**、524KB/16 请求；warm FCP **1.41s**、LCP **4.96s**；最长任务 1.77s（原 5.6s）。
+- **已部署 staging**：`008bd9f`（自动部署 2026-10-25 06:04:55）；真实链路 390×844 实测冷 FCP 2.46s / LCP 5.90s、热 1.34s / 4.50s、521KB/16 请求；瀑布显示剩余瓶颈是 app.render.js 渲染长任务（2.2s）与 ~640KB JS 解析。详见 `.team/perf/batch3-report.md`。
+
+### 性能批次4（2026-10-25，实现待审）
+
+- 首屏数据内联：`/`、`/app` 壳由服务端预取与 `/legacy/api/home` **同一**聚合函数（`buildLegacyHomePayload`，handler 变薄包装）注入 `window.__YXQ_BOOTSTRAP__`（800ms 超时），SPA 启动优先消费、缺失即回退 API；首卡缩图在 `<head>` preload（`fetchpriority=high`）。匿名不注入；ETag 覆盖 `assetVersion`+用户+bootstrap 64bit hash，`Vary: Cookie`、`private, no-cache`，304 只复用逐字节相同的个人数据。
+- 静态预压缩：`make static-gzip` 生成 `web/static/**` 的 `.gz`（gzip -9）随 `go:embed` 发布；Go 按 `Accept-Encoding` 回预压缩变体（`Vary`、编码分离 ETag、304），`make ci` 增加 `static-gzip-check` 与逐字节一致性测试。server2 边缘缓存 key 加入 `$yxq_static_enc`（`gzip;q=0` 判 identity），命中不再压缩，省掉 1 vCPU 的跨洋压缩成本。
+- runtime-only Vue 3.4.27（147KB→90KB）；`GaLoading` 改 `render()`，全仓无运行时模板。
+- 回滚：`git revert` + 重新构建部署（静态在二进制内）；nginx 配置回滚见批次1 §6。详见 `.team/perf/batch4-report.md`。
 
 ### 人脸与数据
 

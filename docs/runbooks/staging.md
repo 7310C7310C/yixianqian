@@ -260,22 +260,22 @@ ssh -i "$KEY" "$RELAY" "set -e
 curl -s -o /dev/null -o /dev/null -w 'ttfb=%{time_starttransfer}\n' \
   https://next.nantou.love/healthz https://next.nantou.love/healthz
 
-# 2) 静态：4 个真实资源 MISS/HIT 都必须 gzip；identity 不压缩
-#    Go 静态 .js 的 MIME 是 text/javascript，gzip_types 必须含它（见 relay-next.conf）。
+# 2) 静态：Go 直接回 .gz 预压缩变体，边缘按编码分开缓存、命中不再压缩
+#    （批次4；gzip/identity 是两个 cache key，见 relay-next-proxy.conf 的 proxy_cache_key）
 V=$(date +%s)
-for f in vant.min.js vue.global.prod.js photoswipe.umd.min.js vant.min.css; do
-  U="https://next.nantou.love/static/legacy/lib/$f?v=$V"
+for f in legacy/app.js legacy/app.css legacy/lib/vant.min.js legacy/lib/vue.global.prod.js legacy/lib/vant.min.css legacy/app.render.js; do
+  U="https://next.nantou.love/static/$f?v=$V"
   echo "== $f"
-  echo -n 'MISS '; curl -sSI -H 'Accept-Encoding: gzip' "$U" | tr -d '\r' \
+  echo -n 'gz MISS '; curl -sS -D - -o /dev/null -H 'Accept-Encoding: gzip' "$U" | tr -d '\r' \
     | grep -iE 'content-encoding|content-length|x-cache-status' | tr '\n' ' '; echo
-  echo -n 'HIT  '; curl -sSI -H 'Accept-Encoding: gzip' "$U" | tr -d '\r' \
+  echo -n 'gz HIT  '; curl -sS -D - -o /dev/null -H 'Accept-Encoding: gzip' "$U" | tr -d '\r' \
     | grep -iE 'content-encoding|content-length|x-cache-status' | tr '\n' ' '; echo
-  echo -n 'IDENT'; curl -sSI "$U" | tr -d '\r' \
+  echo -n 'ident   '; curl -sS -D - -o /dev/null "$U" | tr -d '\r' \
     | grep -iE 'content-encoding|content-length|x-cache-status' | tr '\n' ' '; echo
 done
-# 期望：MISS/HIT 均 content-encoding: gzip；IDENT 无 content-encoding 且 content-length 为原大小
-# 参考（nginx level 4 实测）：vant.min.js 239831→81433、vue 147796→55635、
-# photoswipe 54495→17346、vant.min.css 198331→55322
+# 期望：gz 的 MISS/HIT 都有 content-encoding: gzip 且 content-length 与 web/static/<f>.gz 一致；
+# identity 无 content-encoding、content-length 为源文件大小、且它有自己的 MISS/HIT。
+# 直接用 HEAD 会把 HEAD 结果写进缓存，务必用 -D - -o /dev/null（GET）。
 
 # 4) HSTS 在 /static/ location 仍生效（location 内有 add_header 会覆盖 server 级）
 curl -sSI https://next.nantou.love/static/legacy/lib/vant.min.js | tr -d '\r' \
@@ -300,6 +300,7 @@ ssh -i ~/.ssh/yixianqian_relay root@45.125.16.205 \
 - SSE 会长期占用一个上游连接；关注 server2 `worker_connections`（768，单 worker）与上面第 7 条计数。
 - 静态 TTL：带 `?v=` 的应用/库资源由 Go 发 `public, max-age=31536000, immutable`，边缘按上游 TTL 缓存 1 年；裸路径仍 1h。改静态文件必须同时 bump `httpserver.assetVersion`。
 - 壳 `/app` 为 `private, no-cache` + `ETag`，回访 304；app.css/app.js 与 4 个库均带 `?v=<assetVersion>`。
+- 壳内嵌首页 bootstrap（批次4）：`Vary: Cookie`、`private, no-cache`，ETag 覆盖 `assetVersion`+用户 id+bootstrap 字节 hash（64 bit），因此 304 只会复用**逐字节相同**的个人数据；禁止让边缘缓存 `/`、`/app`。
 
 - migration `0008_perf_indexes.sql` 只加索引；自动部署时 runner 在事务内执行普通 `CREATE INDEX`（当前表小，锁窗口毫秒级）；生产大表另走手工 `CONCURRENTLY`。
 
@@ -334,6 +335,15 @@ curl -s -o /dev/null -w 'media 304=%{http_code}\n' -H "Cookie: yxq_session=$C" -
   然后按静态资源变更 bump `internal/httpserver/templates.go` 的 `assetVersion` 并重新构建部署。
 - `@vue/compiler-dom` 必须与 `lib/vue.global.prod.js` 版本一致（当前 3.4.27）；升级 Vue 必须同步升级并重新生成。
 - 回滚：`app.render.js` 缺失时 `app.js` 自动回退运行时编译；彻底回滚用 `git revert` + 重新部署。
+
+## 性能批次4：首屏数据内联 + 静态预压缩 + runtime-only Vue
+
+- **首屏 bootstrap**：`serveLegacyApp` 复用 `/legacy/api/home` 的同一聚合函数（`buildLegacyHomePayload`，handler 只是 HTTP 包装）生成 `window.__YXQ_BOOTSTRAP__`，800ms 超时；失败/超时只跳过注入，壳照常渲染，前端回退 `fetch('/legacy/api/home')`。匿名请求仍 303 到登录页，不注入任何个人数据。首卡缩图在 `<head>` 通过 `<link rel="preload" as="image" fetchpriority="high">` 提前发起（同源、带 cookie）。
+- 安全：`json.Marshal` 默认转义 HTML，再把 `</` 替换成 `<\/`，昵称含 `</script>` 也不会逃出脚本块；集成测试覆盖 XSS 转义、匿名、ETag/304。
+- **静态预压缩**：`make static-gzip`（`go run ./tools/static_gzip`）为 `web/static/**` 的 `.js/.css/.html/.svg` 生成 gzip -9 兄弟文件并随 `go:embed` 发布；Go 静态 handler 按 `Accept-Encoding` 返回 `.gz`（`Content-Encoding: gzip`、`Vary: Accept-Encoding`、`ETag` 带 `-gzip/-identity`、`If-None-Match` 304），无变体时回退 `FileServer`；直接请求 `*.gz` 返回 404。`make ci` 跑 `static-gzip-check`，`TestStaticGzipFilesMatchSources` 校验每个 `.gz` 解压后与源文件逐字节一致。
+- 兼容：nginx `map $http_accept_encoding $yxq_static_enc` 把 `gzip;q=0` 判为 identity（拒绝规则排在 `~*gzip` 前），`proxy_cache_key` 追加该变量；否则 q=0 客户端会把 identity 字节写进 gzip 缓存条目。
+- **runtime-only Vue**：`lib/vue.global.prod.js` 换成同版本 3.4.27 `vue.runtime.global.prod.js`（147KB→90KB）；全仓已无运行时模板（根模板走 `app.render.js`，`GaLoading` 改为 `render()`）；回退 = 换回带编译器的构建并重新生成 `app.render.js`（生成器不变）。
+- 回滚：`git revert` 本批次提交后重建部署（静态资源与模板都在二进制里，改磁盘无效）；nginx 两个配置文件回滚备份见批次1 §6，回滚后需 `nginx -t && systemctl reload nginx`。
 
 ## 用户端 smoke
 

@@ -83,6 +83,10 @@ class HeldRoute:
         route, self._held = self._held, None
         route.continue_()
 
+    def release_if_held(self) -> None:
+        if self._held is not None:
+            self.release()
+
 
 def require(name: str) -> str:
     value = os.environ.get(name, "").strip()
@@ -369,13 +373,21 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
     try:
         # 1. 已登录刷新：home 挂起时先显示 App 骨架，不出现登录页/「正在登录」。
         page.goto(base_url + "/", wait_until="domcontentloaded")
-        page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=10000)
         if not page.evaluate("window.__YXQ_AUTHENTICATED__ === true"):
             raise SmokeFailure("window.__YXQ_AUTHENTICATED__ 不是 true")
-        assert_no_login_flash(page, f"{width}px 已登录骨架")
-        home_route.release()
-        page.locator(".app-boot-skeleton").wait_for(state="hidden", timeout=20000)
-        page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
+        if page.evaluate("!!window.__YXQ_BOOTSTRAP__"):
+            # 批次4：服务端已注入首页数据，不再等 /legacy/api/home，也不应出现骨架。
+            page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
+            if page.locator(".app-boot-skeleton").count() and page.locator(".app-boot-skeleton").is_visible():
+                raise SmokeFailure(f"{width}px: 有 bootstrap 时仍显示启动骨架")
+            home_route.release_if_held()
+            assert_no_login_flash(page, f"{width}px 已登录 bootstrap")
+        else:
+            page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=10000)
+            assert_no_login_flash(page, f"{width}px 已登录骨架")
+            home_route.release()
+            page.locator(".app-boot-skeleton").wait_for(state="hidden", timeout=20000)
+            page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
         dismiss_guides(page)
         page.screenshot(path=str(out_dir / f"app-home-{tag}.png"))
 

@@ -5,7 +5,9 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
 )
@@ -134,5 +136,91 @@ func TestIntegrationLegacyHomeSelfCard(t *testing.T) {
 	}
 	if pool.Cards[0].IsSelf {
 		t.Fatal("/legacy/api/cards must not include the viewer's own card")
+	}
+}
+
+func TestIntegrationShellBootstrapInjection(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	me, client := env.createUser(t, "U-BOOT", "引导用户", "active", "user")
+	attachTestPhoto(t, env, me.ID)
+	if _, err := env.pool.Exec(env.ctx,
+		`UPDATE users SET gender = $2 WHERE id = $1`, me.ID, db.GenderFemale); err != nil {
+		t.Fatal(err)
+	}
+	resp := client.get("/app")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	body := readBody(t, resp)
+	if !strings.Contains(body, "window.__YXQ_BOOTSTRAP__={") {
+		t.Fatal("shell did not inject the home bootstrap")
+	}
+	if strings.Contains(body, "window.__YXQ_BOOTSTRAP__=null") {
+		t.Fatal("shell kept the empty bootstrap placeholder")
+	}
+	if !strings.Contains(body, `<link rel="preload" as="image"`) {
+		t.Fatal("shell did not preload the first card thumbnail")
+	}
+	etag := resp.Header.Get("ETag")
+	if !strings.Contains(etag, fmt.Sprintf("-u%d-", me.ID)) {
+		t.Fatalf("shell etag %q is not bound to the user", etag)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != "private, no-cache" {
+		t.Fatalf("cache-control=%q", got)
+	}
+	if vary := strings.Join(resp.Header.Values("Vary"), ","); !strings.Contains(vary, "Cookie") {
+		t.Fatalf("vary=%q must cover Cookie (personal data)", vary)
+	}
+
+	// A nickname containing a script terminator must never break out of the
+	// injected JSON script block.
+	if _, err := env.pool.Exec(env.ctx,
+		`UPDATE users SET nickname = $2 WHERE id = $1`,
+		me.ID, `x</script><script>alert(1)</script>`); err != nil {
+		t.Fatal(err)
+	}
+	resp = client.get("/app")
+	body = readBody(t, resp)
+	if strings.Contains(body, "</script><script>alert(1)") {
+		t.Fatal("bootstrap JSON was not escaped against </script> breakout")
+	}
+}
+
+type fixedClock struct{ at time.Time }
+
+func (c fixedClock) Now() time.Time { return c.at }
+
+func TestIntegrationShellBootstrapETagAndAnon(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	me, client := env.createUser(t, "U-BOOT2", "引导用户2", "active", "user")
+	attachTestPhoto(t, env, me.ID)
+	env.app.clock = fixedClock{at: time.Unix(1790000000, 0).UTC()}
+
+	first := client.get("/app")
+	etag := first.Header.Get("ETag")
+	if first.StatusCode != http.StatusOK || etag == "" {
+		t.Fatalf("status=%d etag=%q", first.StatusCode, etag)
+	}
+	req, err := http.NewRequest(http.MethodGet, client.base+"/app", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("If-None-Match", etag)
+	second := client.do(req)
+	if second.StatusCode != http.StatusNotModified {
+		t.Fatalf("revalidation status=%d want 304 (etag covers bootstrap bytes)", second.StatusCode)
+	}
+	if got := readBody(t, second); got != "" {
+		t.Fatalf("304 leaked a body of %d bytes", len(got))
+	}
+
+	// 未登录不注入任何个人数据，直接跳登录页。
+	anon := newWSClient(t, env.server.URL)
+	resp := anon.get("/app")
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("anon status=%d want 303", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/login?next=/" {
+		t.Fatalf("anon location=%q", loc)
 	}
 }

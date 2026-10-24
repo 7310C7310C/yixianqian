@@ -18,7 +18,7 @@ import (
 // change would otherwise stay stale in browsers for an hour after deploy. Bump
 // this whenever web/static content referenced from templates changes; module
 // CSS @import lines carry the same value and must be bumped together.
-const assetVersion = "7"
+const assetVersion = "8"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

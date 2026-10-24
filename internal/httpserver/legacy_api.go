@@ -70,14 +70,12 @@ func (a *App) handleLegacyVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"version": platform.Version})
 }
 
-func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
-	user, ok := a.legacyActor(w, r)
-	if !ok {
-		return
-	}
-	ctx := r.Context()
-	now := a.clock.Now()
+var errLegacyHomeAccountUnavailable = errors.New("legacy home: account unavailable")
 
+// buildLegacyHomePayload builds the same aggregate as GET /legacy/api/home.
+// serveLegacyApp reuses it for window.__YXQ_BOOTSTRAP__; the handler below is a
+// thin HTTP wrapper so both paths cannot drift.
+func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user db.User, now time.Time) (map[string]any, error) {
 	profile, err := a.db.GetProfile(ctx, user.ID)
 	if errors.Is(err, db.ErrNotFound) {
 		profile = db.Profile{
@@ -85,17 +83,14 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 			AccountKind: "user", AccountStatus: "active",
 		}
 	} else if err != nil {
-		legacyServerError(a, w, r, err, "legacy home profile failed")
-		return
+		return nil, err
 	}
 	bundle, err := a.db.LoadViewerBundle(ctx, user.ID)
 	if errors.Is(err, db.ErrNotFound) {
-		legacyError(w, http.StatusForbidden, "账号目前无法使用，请联络管理员")
-		return
+		return nil, errLegacyHomeAccountUnavailable
 	}
 	if err != nil {
-		legacyServerError(a, w, r, err, "legacy home viewer failed")
-		return
+		return nil, err
 	}
 	viewer := bundle.Viewer
 	quota, quotaErr := a.db.LikeQuotaFor(ctx, user.ID, now)
@@ -107,11 +102,8 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		a.logger(r).Warn("legacy home praise failed", "error", praiseErr, "user_id", user.ID)
 	}
 	viewRole := a.legacyViewRole(r)
-	// The home endpoint stays reachable so the SPA can boot and show the
-	// backfill gate, but an unverified account must not receive cards, likes
-	// or activities through it.
 	if !viewer.IDCardValid {
-		writeJSON(w, http.StatusOK, map[string]any{
+		return map[string]any{
 			"user":              legacyUserMap(user, profile, viewer, quota, bundle.IsAdmin, bundle.ObserverEnabled, viewRole, bundle.HasFace),
 			"cards":             []any{},
 			"cards_total":       0,
@@ -119,11 +111,8 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 			"activities":        []any{},
 			"register_form_url": "",
 			"promo_activity_id": "",
-		})
-		return
+		}, nil
 	}
-	// 观察员视角只影响卡片筛选；不要改写 viewer 本身，否则账号状态会被
-	// cookie 污染（例如 has_face 误判为 observer 放行）。
 	pageViewer := viewer
 	if viewRole == "observer" {
 		pageViewer.AccountKind = "observer"
@@ -140,11 +129,8 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, errGenderMissing) {
 		page = CardsPageData{}
 	} else if err != nil {
-		legacyServerError(a, w, r, err, "legacy home cards failed")
-		return
+		return nil, err
 	}
-	// v1 /api/home 把「他人视角的自己」置顶，供前端显示「这是你」并隐藏自操作。
-	// /legacy/api/cards 保持纯候选池，不插入本人卡。
 	views := page.Cards
 	if selfProfile, selfErr := a.db.GetSocialProfile(ctx, user.ID); selfErr == nil {
 		selfView := buildCardView(selfProfile, false, false, 0, now)
@@ -160,15 +146,13 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	cards := a.legacyCards(ctx, views)
 	likes, err := a.legacyLikes(ctx, user.ID, now)
 	if err != nil {
-		legacyServerError(a, w, r, err, "legacy home likes failed")
-		return
+		return nil, err
 	}
 	activities, err := a.legacyActivities(ctx, user.ID)
 	if err != nil {
-		legacyServerError(a, w, r, err, "legacy home activities failed")
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	return map[string]any{
 		"user":              legacyUserMap(user, profile, viewer, quota, bundle.IsAdmin, bundle.ObserverEnabled, viewRole, bundle.HasFace),
 		"cards":             cards,
 		"cards_total":       page.Total,
@@ -176,7 +160,23 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		"activities":        activities,
 		"register_form_url": "",
 		"promo_activity_id": "",
-	})
+	}, nil
+}
+
+func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.legacyActor(w, r)
+	if !ok {
+		return
+	}
+	payload, err := a.buildLegacyHomePayload(r.Context(), r, user, a.clock.Now())
+	switch {
+	case errors.Is(err, errLegacyHomeAccountUnavailable):
+		legacyError(w, http.StatusForbidden, "账号目前无法使用，请联络管理员")
+	case err != nil:
+		legacyServerError(a, w, r, err, "legacy home failed")
+	default:
+		writeJSON(w, http.StatusOK, payload)
+	}
 }
 
 func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {

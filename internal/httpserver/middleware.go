@@ -5,8 +5,10 @@ import (
 	"errors"
 	"hash/fnv"
 	"io/fs"
+	"mime"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -236,34 +238,101 @@ func sanitizeRequestID(raw string) string {
 	return raw
 }
 
+type staticAsset struct {
+	gz []byte
+}
+
 func staticHandler() http.Handler {
 	sub, err := fs.Sub(webassets.FS, "static")
 	if err != nil {
 		panic(err)
 	}
 	files := http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+	assets := make(map[string]staticAsset)
+	_ = fs.WalkDir(sub, ".", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() || strings.HasSuffix(path, ".gz") {
+			return nil
+		}
+		data, readErr := fs.ReadFile(sub, path+".gz")
+		if readErr == nil {
+			assets[path] = staticAsset{gz: data}
+		}
+		return nil
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Versioned URLs (assetVersion query) are immutable for a year; bare
-		// paths keep the previous one-hour policy so old links still update.
-		if r.URL.Query().Get("v") != "" {
+		if strings.HasSuffix(r.URL.Path, ".gz") {
+			http.NotFound(w, r)
+			return
+		}
+		path := strings.TrimPrefix(r.URL.Path, "/static/")
+		versioned := r.URL.Query().Get("v") == assetVersion
+		if versioned {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "public, max-age=3600")
 		}
-		etag := staticETag(r.URL.Path)
+		asset, hasGzip := assets[path]
+		useGzip := hasGzip && acceptsGzip(r.Header.Get("Accept-Encoding"))
+		encoding := "identity"
+		if useGzip {
+			encoding = "gzip"
+			w.Header().Set("Vary", "Accept-Encoding")
+		} else if hasGzip {
+			w.Header().Set("Vary", "Accept-Encoding")
+		}
+		etag := staticETag(path, encoding)
 		w.Header().Set("ETag", etag)
 		if mediaETagMatches(r.Header.Get("If-None-Match"), etag) {
 			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		if useGzip {
+			if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
+				w.Header().Set("Content-Type", ct)
+			}
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Header().Set("Content-Length", strconv.Itoa(len(asset.gz)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(asset.gz)
 			return
 		}
 		files.ServeHTTP(w, r)
 	})
 }
 
-// staticETag is stable for one build: the assetVersion changes whenever the
-// embedded files change, and the path hash keeps different files distinct.
-func staticETag(path string) string {
+// staticETag is stable for one build: assetVersion changes with embedded files,
+// the path hash separates files, and the encoding separates gzip/identity.
+func staticETag(path, encoding string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(path))
-	return `"av` + assetVersion + `-` + strconv.FormatUint(uint64(h.Sum32()), 16) + `"`
+	return `"av` + assetVersion + `-` + strconv.FormatUint(uint64(h.Sum32()), 16) + `-` + encoding + `"`
+}
+
+// acceptsGzip reports whether the Accept-Encoding header allows gzip. The
+// parser only understands the gzip token and its q-value, which is all we send.
+// It must agree with the edge nginx map: q=0 (or q=0.000) is a refusal, while
+// q=0.5 still accepts, so the two layers pick the same cache variant.
+func acceptsGzip(header string) bool {
+	for _, part := range strings.Split(header, ",") {
+		fields := strings.Split(strings.TrimSpace(part), ";")
+		if !strings.EqualFold(strings.TrimSpace(fields[0]), "gzip") {
+			continue
+		}
+		quality := 1.0
+		for _, param := range fields[1:] {
+			key, value, found := strings.Cut(strings.TrimSpace(param), "=")
+			if !found || !strings.EqualFold(strings.TrimSpace(key), "q") {
+				continue
+			}
+			parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err != nil {
+				quality = 0
+				break
+			}
+			quality = parsed
+			break
+		}
+		return quality > 0
+	}
+	return false
 }

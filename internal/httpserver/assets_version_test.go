@@ -1,6 +1,9 @@
 package httpserver
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -122,7 +125,7 @@ func TestPhotoSwipeLoadsOnDemand(t *testing.T) {
 func TestStaticCacheHeadersAndETag(t *testing.T) {
 	h := staticHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/static/app.css?v=5", nil)
+	req := httptest.NewRequest(http.MethodGet, "/static/app.css?v="+assetVersion, nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -136,7 +139,7 @@ func TestStaticCacheHeadersAndETag(t *testing.T) {
 		t.Fatal("missing ETag")
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/static/app.css?v=5", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/static/app.css?v="+assetVersion, nil)
 	req2.Header.Set("If-None-Match", etag)
 	rec2 := httptest.NewRecorder()
 	h.ServeHTTP(rec2, req2)
@@ -167,6 +170,118 @@ func TestMediaETagMatches(t *testing.T) {
 	for _, tc := range cases {
 		if got := mediaETagMatches(tc.header, `"m1-thumb"`); got != tc.want {
 			t.Fatalf("mediaETagMatches(%q) = %v, want %v", tc.header, got, tc.want)
+		}
+	}
+}
+
+func TestStaticGzipFilesMatchSources(t *testing.T) {
+	sub, err := fs.Sub(webassets.FS, "static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	required := []string{
+		"legacy/app.js", "legacy/app.css", "legacy/app.render.js",
+		"legacy/lib/vue.global.prod.js", "legacy/lib/vant.min.js", "legacy/lib/vant.min.css",
+		"shell.css", "app.css",
+	}
+	for _, name := range required {
+		if _, err := fs.Stat(sub, name+".gz"); err != nil {
+			t.Fatalf("missing precompressed %s.gz (run go run ./tools/static_gzip)", name)
+		}
+	}
+	var checked int
+	err = fs.WalkDir(sub, ".", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() || !strings.HasSuffix(path, ".gz") {
+			return walkErr
+		}
+		src, err := fs.ReadFile(sub, strings.TrimSuffix(path, ".gz"))
+		if err != nil {
+			return err
+		}
+		compressed, err := fs.ReadFile(sub, path)
+		if err != nil {
+			return err
+		}
+		zr, err := gzip.NewReader(bytes.NewReader(compressed))
+		if err != nil {
+			return err
+		}
+		plain, err := io.ReadAll(zr)
+		_ = zr.Close()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(plain, src) {
+			t.Fatalf("%s does not match its source (run go run ./tools/static_gzip)", path)
+		}
+		checked++
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checked < len(required) {
+		t.Fatalf("checked %d gzip files", checked)
+	}
+}
+
+func TestStaticGzipVariant(t *testing.T) {
+	h := staticHandler()
+	url := "/static/legacy/app.js?v=" + assetVersion
+	gzData, err := fs.ReadFile(webassets.FS, "static/legacy/app.js.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("gzip status=%d encoding=%q", rec.Code, rec.Header().Get("Content-Encoding"))
+	}
+	if rec.Body.Len() != len(gzData) {
+		t.Fatalf("gzip body=%d want=%d", rec.Body.Len(), len(gzData))
+	}
+	if got := rec.Header().Get("ETag"); !strings.Contains(got, "-gzip") {
+		t.Fatalf("gzip etag=%q", got)
+	}
+	etag := rec.Header().Get("ETag")
+	req2 := httptest.NewRequest(http.MethodGet, url, nil)
+	req2.Header.Set("Accept-Encoding", "gzip")
+	req2.Header.Set("If-None-Match", etag)
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusNotModified {
+		t.Fatalf("gzip conditional=%d", rec2.Code)
+	}
+
+	req3 := httptest.NewRequest(http.MethodGet, url, nil)
+	rec3 := httptest.NewRecorder()
+	h.ServeHTTP(rec3, req3)
+	if rec3.Header().Get("Content-Encoding") != "" {
+		t.Fatalf("identity got encoding %q", rec3.Header().Get("Content-Encoding"))
+	}
+	if got := rec3.Header().Get("ETag"); !strings.Contains(got, "-identity") {
+		t.Fatalf("identity etag=%q", got)
+	}
+
+	req4 := httptest.NewRequest(http.MethodGet, "/static/legacy/app.js.gz", nil)
+	rec4 := httptest.NewRecorder()
+	h.ServeHTTP(rec4, req4)
+	if rec4.Code != http.StatusNotFound {
+		t.Fatalf("direct .gz status=%d", rec4.Code)
+	}
+}
+
+func TestAcceptsGzip(t *testing.T) {
+	for header, want := range map[string]bool{
+		"": false, "gzip": true, "gzip, deflate, br": true, "gzip;q=0": false, "deflate": false,
+		"GZIP": true, "gzip;q=0.0": false, "gzip; q=0.000": false, "gzip;q=0.5": true,
+		"br, gzip;q=0": false, "br;q=1, gzip;q=0.001": true,
+	} {
+		if got := acceptsGzip(header); got != want {
+			t.Fatalf("acceptsGzip(%q)=%v want %v", header, got, want)
 		}
 	}
 }

@@ -38,10 +38,12 @@ const GaLoading = {
     onUnmounted(() => clearTimeout(timer));
     return { slow };
   },
-  template: '<div class="ga-slow-loading">'
-    + '<van-loading :size="size">加载中...</van-loading>'
-    + '<div v-if="slow" class="ga-slow-hint">网络较慢，仍在加载…</div>'
-    + '</div>'
+  render() {
+    return Vue.h('div', { class: 'ga-slow-loading' }, [
+      Vue.h(Vue.resolveComponent('van-loading'), { size: this.size }, { default: () => '加载中...' }),
+      this.slow ? Vue.h('div', { class: 'ga-slow-hint' }, '网络较慢，仍在加载…') : null
+    ]);
+  }
 };
 createApp({
   render: window.__YXQ_RENDER__,

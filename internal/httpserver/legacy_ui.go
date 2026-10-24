@@ -2,9 +2,15 @@ package httpserver
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"html"
 	"io/fs"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/platform"
 	webassets "github.com/7310C7310C/yixianqian/web"
@@ -44,7 +50,8 @@ func loadLegacyIndex() ([]byte, error) {
 // serveLegacyApp returns the v1 SPA shell. It is served with no-store because
 // the asset carries the API prefix and compatibility shims, not user data.
 func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
-	if _, ok := currentUser(r); !ok {
+	user, authenticated := currentUser(r)
+	if !authenticated {
 		http.Redirect(w, r, "/login?next=/", http.StatusSeeOther)
 		return
 	}
@@ -64,11 +71,37 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	// 静态资源版本占位（app.css/app.js/库）由服务端注入，避免壳每次部署换 URL。
 	body = bytes.ReplaceAll(body, []byte(legacyAssetVersionLiteral), []byte(assetVersion))
 	body = bytes.ReplaceAll(body, []byte("__ASSET_URL_VERSION__"), []byte(assetVersion))
-	variant := "anon"
-	if _, ok := currentUser(r); ok {
-		variant = "auth"
+	variant := "auth"
+	// Bootstrap the home aggregate into the shell so the SPA does not have to
+	// wait for /legacy/api/home after 300KB of JS. Failures only skip the
+	// shortcut; the shell must render and the client falls back to the API.
+	boot := []byte("null")
+	preload := ""
+	if a.db != nil {
+		bootCtx, cancel := context.WithTimeout(r.Context(), 800*time.Millisecond)
+		payload, bootErr := a.buildLegacyHomePayload(bootCtx, r, user, a.clock.Now())
+		cancel()
+		if bootErr != nil {
+			a.logger(r).Warn("legacy shell bootstrap skipped", "error", bootErr, "user_id", user.ID)
+		} else if raw, mErr := json.Marshal(payload); mErr != nil {
+			a.logger(r).Warn("legacy shell bootstrap marshal failed", "error", mErr, "user_id", user.ID)
+		} else {
+			// json.Marshal escapes HTML; also neutralise the script terminator.
+			boot = bytes.ReplaceAll(raw, []byte("</"), []byte("<\\/"))
+			if src := bootstrapPreloadURL(payload); src != "" {
+				preload = `<link rel="preload" as="image" href="` + html.EscapeString(src) + `" fetchpriority="high">`
+			}
+		}
 	}
-	etag := `"shell-` + platform.Version + `-` + variant + `"`
+	body = bytes.Replace(body, []byte("window.__YXQ_BOOTSTRAP__=null;"),
+		append(append([]byte("window.__YXQ_BOOTSTRAP__="), boot...), ';'), 1)
+	body = bytes.Replace(body, []byte("<!--YXQ_BOOTSTRAP_PRELOAD-->"), []byte(preload), 1)
+	// The ETag covers the rendered shell *and* the bootstrap bytes, so a 304
+	// only ever reuses a body whose embedded personal data is byte-identical.
+	// 64 bits of the payload hash keeps accidental collisions negligible.
+	bootSum := sha256.Sum256(boot)
+	etag := fmt.Sprintf(`"shell-%s-%s-a%s-u%d-%x"`, platform.Version, variant, assetVersion, user.ID, bootSum[:8])
+	w.Header().Add("Vary", "Cookie")
 	w.Header().Set("ETag", etag)
 	if mediaETagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -80,4 +113,15 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-cache")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
+}
+
+// bootstrapPreloadURL returns the first card thumbnail from the bootstrap
+// payload, if any. Cards are []any of legacy card maps.
+func bootstrapPreloadURL(payload map[string]any) string {
+	cards, ok := payload["cards"].([]map[string]any)
+	if !ok || len(cards) == 0 {
+		return ""
+	}
+	photo, _ := cards[0]["photo"].(string)
+	return photo
 }
