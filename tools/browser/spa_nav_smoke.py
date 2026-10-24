@@ -119,9 +119,11 @@ class NavProbe:
     def __init__(self, context, page):
         self.page = page
         self.armed = False
-        self.navigations: list[str] = []      # 跨文档导航 URL
-        self.doc_requests: list[str] = []     # 主框架文档请求（诊断）
-        self.frame_events: list[str] = []     # Playwright framenavigated（诊断）
+        self.navigations: list[str] = []      # 跨文档导航 URL（自上个 checkpoint）
+        self.doc_requests: list[str] = []     # 主框架文档请求（自上个 checkpoint）
+        self.frame_events: list[str] = []     # Playwright framenavigated（含同文档，诊断）
+        self.same_documents: list[str] = []   # 同文档 history 导航（pushState）
+        self.total = {"nav": 0, "same": 0, "docs": 0}   # 整轮累计（用于报告）
         self.cdp = context.new_cdp_session(page)
         self.cdp.send("Page.enable")
         self.cdp.on("Page.frameNavigated", self._on_frame_navigated)
@@ -132,11 +134,18 @@ class NavProbe:
         frame = params.get("frame") or {}
         if frame.get("parentId"):
             return
-        if params.get("type") != "Navigation":
-            return
         url = frame.get("url") or ""
+        kind = params.get("type")
+        if kind == "SameDocument":
+            if self.armed and url:
+                self.same_documents.append(url)
+                self.total["same"] += 1
+            return
+        if kind != "Navigation":
+            return
         if self.armed and url and url != "about:blank":
             self.navigations.append(url)
+            self.total["nav"] += 1
 
     def _on_request(self, request) -> None:
         try:
@@ -148,6 +157,7 @@ class NavProbe:
             return
         if self.armed:
             self.doc_requests.append(request.url)
+            self.total["docs"] += 1
 
     def _on_pw_navigated(self, frame) -> None:
         if frame != self.page.main_frame:
@@ -163,10 +173,13 @@ class NavProbe:
         self.navigations.clear()
         self.doc_requests.clear()
         self.frame_events.clear()
+        self.same_documents.clear()
 
     def checkpoint(self, name: str) -> None:
         if self.navigations:
             raise NavSmokeFailure(f"{name}: 出现整页导航 {self.navigations}")
+        if self.doc_requests:
+            raise NavSmokeFailure(f"{name}: 主框架发起了文档请求 {self.doc_requests}")
 
 
 def attach_errors(page) -> list[dict[str, str]]:
@@ -402,6 +415,8 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         if errors:
             detail = "; ".join(f"{e['kind']}: {e['text']} ({e['url']})" for e in errors[:5])
             raise NavSmokeFailure(f"出现脚本错误：{detail}")
+        print(f"  [{width}px] 常规操作整页导航 0 次；主框架文档请求 0 次；"
+              f"同文档 pushState {probe.total['same']} 次；用户点击触发整页导航 {probe.total['nav']} 次（更新/重新登录）")
         for note in notes:
             print(f"  [{width}px] {note}")
     except Exception as exc:  # noqa: BLE001 - 汇总两档视口结果
