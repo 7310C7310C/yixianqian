@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 sources:
   - deploy/**
   - .env.example
@@ -247,6 +247,7 @@ tail -n 5 /var/log/yxq-facebackfill.log   # 正常接近空跑：count=0 include
 
 ## 安全与限制
 
+- 管理台纵向权限（2026-10-24）：临时密码、停用/恢复、审核通过/拒绝对 `super_admin`/`admin` 目标仅 `super_admin` 可执行；`approve`/`reject` 只接受 `pending`/`rejected`，active 账号必须走 `user.manage` 停用/启用。handler 与 DB 层双重校验；回归 `TEST_DATABASE_URL=... go test ./internal/db ./internal/httpserver -run 'TestIntegrationAdminRBAC|TestIntegrationAdminPrivilegeBoundaries'`。
 - staging 只放测试资料，不接生产个资；R2 私有，不把 URL 给浏览器。
 - `TRUSTED_PROXY=127.0.0.1`；server2 设 `X-Real-IP`，server1 nginx 转传。
 - app 目前在 LA，staging 延迟不代表最终；上线前搬到 HK app server。

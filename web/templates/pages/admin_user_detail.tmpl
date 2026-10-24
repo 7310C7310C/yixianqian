@@ -58,7 +58,7 @@
   </dl>
 
   <div class="admin-review-forms">
-    {{if ne .Data.User.AccountStatus "active"}}
+    {{if and (or .Data.SuperAdmin (not .Data.User.AdminProtected)) (or (eq .Data.User.AccountStatus "pending") (eq .Data.User.AccountStatus "rejected"))}}
     <form method="post" action="/admin/users/{{$userID}}/approve" class="admin-review-form">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="next" value="{{.Data.Next}}">
@@ -69,6 +69,7 @@
       </div>
     </form>
     {{end}}
+    {{if and (or .Data.SuperAdmin (not .Data.User.AdminProtected)) (or (eq .Data.User.AccountStatus "pending") (eq .Data.User.AccountStatus "rejected"))}}
     <form method="post" action="/admin/users/{{$userID}}/reject" class="admin-review-form">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="next" value="{{.Data.Next}}">
@@ -79,30 +80,33 @@
         <button type="submit" class="button danger" data-adm-confirm="确认拒绝 {{.Data.User.Name}} 的申请？">拒绝申请</button>
       </div>
     </form>
+    {{end}}
   </div>
 
   {{if .Data.CanManage}}
   <div class="admin-danger-zone">
     <h3>账号管理</h3>
     <div class="admin-actions">
-      {{if eq .Data.User.LoginStatus "active"}}
+      {{if and (or .Data.SuperAdmin (not .Data.User.AdminProtected)) (eq .Data.User.LoginStatus "active")}}
       <form method="post" action="/admin/users/{{$userID}}/disable" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input type="hidden" name="next" value="{{.Data.Next}}">
         <button type="submit" class="button small danger" data-adm-confirm="确认停用 {{.Data.User.Name}} 的账号？停用后该用户无法登录。">停用账号</button>
       </form>
       {{end}}
-      {{if and (eq .Data.User.LoginStatus "disabled") (ne .Data.User.AccountStatus "pending") (ne .Data.User.AccountStatus "rejected")}}
+      {{if and (or .Data.SuperAdmin (not .Data.User.AdminProtected)) (eq .Data.User.LoginStatus "disabled") (ne .Data.User.AccountStatus "pending") (ne .Data.User.AccountStatus "rejected")}}
       <form method="post" action="/admin/users/{{$userID}}/enable" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input type="hidden" name="next" value="{{.Data.Next}}">
         <button type="submit" class="button small">恢复账号</button>
       </form>
       {{end}}
+      {{if or .Data.SuperAdmin (not .Data.User.AdminProtected)}}
       <form method="post" action="/admin/users/{{$userID}}/temp-password" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="button small" data-adm-confirm="生成临时密码后，{{.Data.User.Name}} 的旧密码会立即失效。继续？">生成临时密码</button>
       </form>
+      {{end}}
     </div>
     <p class="hint">临时密码沿用列表页行为：生成后会在列表页显示一次，请立即转交用户。</p>
   </div>

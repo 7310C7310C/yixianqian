@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 sources: []
 -->
 
@@ -172,3 +172,13 @@ sources: []
 - 决策：仅对 `/app?native_admin=1` 的同源 iframe 放宽 framing（CSP `frame-ancestors 'self'`、`X-Frame-Options: SAMEORIGIN`）；普通 `/`、`/app` 及登录页仍保持 `frame-ancestors 'none'` / `DENY`，避免扩大点击劫持面。
 - 边界：不改 `/legacy/api/admin/*` 契约与 RBAC/CSRF/审计；不改数据库与匹配算法；不重做原版页面视觉；不改用户端普通 App 模式行为。
 - 后果：管理台活动入口回到 PM 认可的原版交互；匹配操作收敛到单场活动上下文；SSR 活动列表不再从导航暴露。
+
+## 23. 管理台纵向权限边界：临时密码与审核状态机（2026-10-24）
+
+- 背景：后端安全审计（`.team/audits/2026-10-24-bugs-backend.md` P0-1/P1-11）确认 `admin` 可对 `super_admin` 生成临时密码并接管账号；`reviewer` 可借 `approve`/`reject` 停用任意 active 用户或恢复被 `user.manage` 停用的账号。
+- 决策：临时密码在 handler 与 `AdminSetTempPassword` DB 事务内双重校验。目标持有 `super_admin` 或 `admin` 角色时，仅 `super_admin` 可重置；调用者还必须持有 `user.manage` 或 `super_admin`。DB 层先锁目标行再校验，不依赖 handler。
+- 决策：`approve`/`reject` 只处理审核状态（`account_status` 为 `pending` 或 `rejected`）。`active`（含被 `user.manage` 停用但 `account_status=active`）、`left`/`matched` 等状态返回 409，停用/恢复必须走 `POST /admin/users/{id}/disable|enable`（`user.manage`）。`reviewer` 只有 `user.review`，不能停用/恢复。
+- 决策：对 `super_admin`/`admin` 目标的临时密码、停用、恢复、审核通过/拒绝，actor 必须是 `super_admin`；非 super 返回 403。最后一位 `super_admin` 的既有保护（停用/拒绝/移除角色）不变。UI 按同一规则隐藏按钮，服务端仍为最终判定。
+- 审计：`admin.user.temp_password` 记录 actor、target、`target_roles`、`actor_roles`、`actor_super`、`must_change`、`expires_at`；不记录临时密码或 token。
+- 边界：不改数据库 schema、不改路由权限码；`pending`/`rejected` 仍可由 `user.review` 审核，`rejected` 仍可通过 `approve` 重审（恢复路径保留）。非 super 的 `admin` 不能操作同级/上级，也不能重置 reviewer 等非受保护角色之外的管理账号密码——受保护集合明确为 `super_admin`/`admin`。
+- 证据：`TestIntegrationAdminPrivilegeBoundaries`、`TestIntegrationAdminRBAC`、`TestIntegrationAdminHTTP`、`TestIntegrationAdminUserDetailHTTP`；变异验证见 `.team/security/2026-10-24-admin-vertical-rbac.md`。

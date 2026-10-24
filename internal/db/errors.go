@@ -15,11 +15,13 @@ var (
 	ErrPhoneConflict     = errors.New("db: phone already belongs to another account")
 	ErrAccountDisabled   = errors.New("db: account is disabled")
 
-	ErrLastSuperAdmin        = errors.New("db: cannot remove or disable the last super admin")
-	ErrAdminUserPending      = errors.New("db: pending user must be reviewed before enabling")
-	ErrAdminUserRejected     = errors.New("db: rejected user must be approved before enabling")
-	ErrAdminReportAction     = errors.New("db: invalid report action")
-	ErrAdminSuggestionStatus = errors.New("db: invalid suggestion status")
+	ErrLastSuperAdmin         = errors.New("db: cannot remove or disable the last super admin")
+	ErrAdminPrivileged        = errors.New("db: actor may not manage this admin account")
+	ErrAdminUserNotReviewable = errors.New("db: user is not awaiting review")
+	ErrAdminUserPending       = errors.New("db: pending user must be reviewed before enabling")
+	ErrAdminUserRejected      = errors.New("db: rejected user must be approved before enabling")
+	ErrAdminReportAction      = errors.New("db: invalid report action")
+	ErrAdminSuggestionStatus  = errors.New("db: invalid suggestion status")
 )
 
 func mapWriteError(err error) error {

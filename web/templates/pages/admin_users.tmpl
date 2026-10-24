@@ -113,31 +113,31 @@
       </div>
       <div class="admin-record-actions">
         <a class="button small" href="/admin/users/{{.ID}}">详情</a>
-        {{if and $.Data.CanReview (ne .AccountStatus "active")}}
+        {{if and $.Data.CanReview (or $.Data.SuperAdmin (not .AdminProtected)) (or (eq .AccountStatus "pending") (eq .AccountStatus "rejected"))}}
         <form method="post" action="/admin/users/{{.ID}}/approve" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button type="submit" class="button small primary">通过</button>
         </form>
         {{end}}
-        {{if $.Data.CanReview}}
+        {{if and $.Data.CanReview (or $.Data.SuperAdmin (not .AdminProtected)) (or (eq .AccountStatus "pending") (eq .AccountStatus "rejected"))}}
         <form method="post" action="/admin/users/{{.ID}}/reject" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button type="submit" class="button small danger" data-adm-confirm="确认拒绝 {{.Name}} 的申请？">拒绝</button>
         </form>
         {{end}}
-        {{if and $.Data.CanManage (eq .LoginStatus "active")}}
+        {{if and $.Data.CanManage (or $.Data.SuperAdmin (not .AdminProtected)) (eq .LoginStatus "active")}}
         <form method="post" action="/admin/users/{{.ID}}/disable" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button type="submit" class="button small danger" data-adm-confirm="确认停用 {{.Name}} 的账号？停用后该用户无法登录。">停用</button>
         </form>
         {{end}}
-        {{if and $.Data.CanManage (eq .LoginStatus "disabled") (ne .AccountStatus "pending") (ne .AccountStatus "rejected")}}
+        {{if and $.Data.CanManage (or $.Data.SuperAdmin (not .AdminProtected)) (eq .LoginStatus "disabled") (ne .AccountStatus "pending") (ne .AccountStatus "rejected")}}
         <form method="post" action="/admin/users/{{.ID}}/enable" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button type="submit" class="button small">恢复</button>
         </form>
         {{end}}
-        {{if $.Data.CanManage}}
+        {{if and $.Data.CanManage (or $.Data.SuperAdmin (not .AdminProtected))}}
         <form method="post" action="/admin/users/{{.ID}}/temp-password" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <input type="hidden" name="status_filter" value="{{$.Data.StatusFilter}}">

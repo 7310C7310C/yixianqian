@@ -10,6 +10,8 @@ sources:
   - deploy/**
   - internal/httpserver/routes.go
   - internal/httpserver/legacy_api.go
+  - internal/db/admin*.go
+  - internal/db/errors*.go
   - internal/httpserver/admin_*.go
   - internal/httpserver/templates.go
   - internal/httpserver/grouping_admin_routes.go
@@ -113,7 +115,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 分组顺序（2026-10-24）：总览入口分组固定为 用户与权限 → 活动 → 内容与安全 → 麦穗，`CanPoints` 门槛不变；内容与安全不再是末尾宽幅分组，桌面四个分组按 2×2 排布。
 - 活动入口（2026-10-24）：总览「活动列表」在 iframe 内跳到 `/app?native_admin=1&p=group_admin`，复用 v1 原版活动管理（列表/控制台/报名名单/现场签到）；总览不再有「匹配」分组或分组/一对一入口，两种匹配执行都在活动控制台内。`/admin/activities` 的 iframe 请求 303 到该原生地址，顶层 document 仍 303 `/?admin=1`；SSR 活动工作台与新建/编辑表单保留。
 - 活动（SSR，Phase A）：列表（统计条 + 搜索/状态 chips + 活动卡）、新建/编辑（分组表单 + 手机 sticky 操作条）、工作台（模式卡 + 报名名单/签到/广播/设置 tabs + 行内签到 + 广播二次确认）；SSR 列表不再从导航暴露，路由/handler 契约/RBAC/CSRF/审计与表单字段名不变。
-- 用户：审核通过/拒绝、用户详情与受权照片串流、停用/启用、临时密码。
+- 用户：审核通过/拒绝、用户详情与受权照片串流、停用/启用、临时密码。纵向权限（2026-10-24）：对 `super_admin`/`admin` 目标仅 `super_admin` 可重置密码/停用/恢复/审核；`approve`/`reject` 仅接受 `pending`/`rejected`，active 账号走 `user.manage`；handler 与 DB 双重校验，见 DECISIONS §23。
 - 举报与反馈：列表与处理。
 - 活动：列表、创建/编辑、活动工作台（海报上传与私有串流、报名/签到名单与搜索/出席筛选/分页、现场签到、站内广播预览+服务端签名确认、快速设置）。
 - 用户/匹配/麦穗/内容/系统（Phase B/C，2026-10-24）：用户列表与详情、匹配总览与分组/一对一控制台、麦穗 7 个 tab、举报/反馈、角色、审计全部改用同一设计系统（`.admin-page-head` + `.admin-section` + `.admin-record-list` 记录卡 + 状态 chips + 空态/分页 + 44px 触控）；不再用 6–7 列表格承载多字段列表，768 宽不再出现按钮三行堆叠或日期折行。

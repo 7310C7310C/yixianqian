@@ -21,6 +21,8 @@ const (
 	AdminSuggestionHandled  = "已处理"
 	AdminSuggestionIgnored  = "已忽略"
 	adminSuperAdminRoleCode = "super_admin"
+	adminRoleCode           = "admin"
+	adminUserManagePerm     = "user.manage"
 )
 
 // AdminUser is the moderation projection of a user account.
@@ -39,11 +41,25 @@ type AdminUser struct {
 	Roles         []string
 }
 
+// AdminProtected reports whether the account holds a protected admin role
+// (super_admin or admin). Such accounts may only be managed by a super admin.
+func (u AdminUser) AdminProtected() bool { return adminRolesProtected(u.Roles) }
+
 // AdminUserFilter narrows the admin user list.
 type AdminUserFilter struct {
 	Status string
 	Query  string
 	Limit  int
+}
+
+// adminRolesProtected reports whether any role is super_admin or admin.
+func adminRolesProtected(roles []string) bool {
+	for _, role := range roles {
+		if role == adminSuperAdminRoleCode || role == adminRoleCode {
+			return true
+		}
+	}
+	return false
 }
 
 // AdminUserCounts summarises account statuses for the admin dashboard.
@@ -311,6 +327,53 @@ func (d *DB) FindAdminUserByRef(ctx context.Context, ref string) (User, error) {
 		 LIMIT 1`, ref))
 }
 
+// adminRoleCodesTx loads a user's admin role codes inside a transaction.
+func adminRoleCodesTx(ctx context.Context, tx pgx.Tx, userID int64) ([]string, error) {
+	var roles []string
+	if err := tx.QueryRow(ctx,
+		`SELECT COALESCE(array_agg(r.code ORDER BY r.code), '{}'::text[])
+		 FROM admin_user_roles ur
+		 JOIN admin_roles r ON r.id = ur.role_id
+		 WHERE ur.user_id = $1`, userID).Scan(&roles); err != nil {
+		return nil, fmt.Errorf("db: list target admin roles: %w", err)
+	}
+	return roles, nil
+}
+
+// adminActorIsSuperTx reports whether the actor holds super_admin.
+func adminActorIsSuperTx(ctx context.Context, tx pgx.Tx, actorID int64) (bool, error) {
+	var super bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (
+		   SELECT 1 FROM admin_user_roles ur
+		   JOIN admin_roles r ON r.id = ur.role_id
+		   WHERE ur.user_id = $1 AND r.code = $2
+		 )`, actorID, adminSuperAdminRoleCode).Scan(&super); err != nil {
+		return false, fmt.Errorf("db: check actor super admin: %w", err)
+	}
+	return super, nil
+}
+
+// adminActorCanManageTx reports super_admin plus whether the actor holds
+// user.manage. The DB layer re-checks this so a caller that bypasses the
+// handler still cannot reset another account's password.
+func adminActorCanManageTx(ctx context.Context, tx pgx.Tx, actorID int64) (super, manage bool, err error) {
+	if err := tx.QueryRow(ctx,
+		`SELECT
+		   EXISTS (
+		     SELECT 1 FROM admin_user_roles ur
+		     JOIN admin_roles r ON r.id = ur.role_id
+		     WHERE ur.user_id = $1 AND r.code = $2),
+		   EXISTS (
+		     SELECT 1 FROM admin_user_roles ur
+		     JOIN admin_role_permissions rp ON rp.role_id = ur.role_id
+		     WHERE ur.user_id = $1 AND rp.permission = $3)`,
+		actorID, adminSuperAdminRoleCode, adminUserManagePerm).Scan(&super, &manage); err != nil {
+		return false, false, fmt.Errorf("db: check actor admin permissions: %w", err)
+	}
+	return super, manage, nil
+}
+
 // ApproveAdminUser activates a pending/rejected account and records who
 // reviewed it.
 func (d *DB) ApproveAdminUser(ctx context.Context, userID, actorID int64, note string) (string, error) {
@@ -328,6 +391,22 @@ func (d *DB) ApproveAdminUser(ctx context.Context, userID, actorID int64, note s
 	}
 	if err != nil {
 		return "", fmt.Errorf("db: load user for approval: %w", err)
+	}
+	roles, err := adminRoleCodesTx(ctx, tx, userID)
+	if err != nil {
+		return "", err
+	}
+	actorSuper, err := adminActorIsSuperTx(ctx, tx, actorID)
+	if err != nil {
+		return "", err
+	}
+	if adminRolesProtected(roles) && !actorSuper {
+		return "", ErrAdminPrivileged
+	}
+	// Approve/reject only cover the review workflow. Active accounts (even
+	// when login is disabled) must go through user.manage enable/disable.
+	if previous != "pending" && previous != "rejected" {
+		return "", ErrAdminUserNotReviewable
 	}
 	if _, err := tx.Exec(ctx,
 		`UPDATE users
@@ -392,6 +471,22 @@ func (d *DB) RejectAdminUser(ctx context.Context, userID, actorID int64, note st
 		if others == 0 {
 			return "", ErrLastSuperAdmin
 		}
+	}
+	roles, err := adminRoleCodesTx(ctx, tx, userID)
+	if err != nil {
+		return "", err
+	}
+	actorSuper, err := adminActorIsSuperTx(ctx, tx, actorID)
+	if err != nil {
+		return "", err
+	}
+	if adminRolesProtected(roles) && !actorSuper {
+		return "", ErrAdminPrivileged
+	}
+	// Reject is a review action only. Active accounts are disabled through
+	// user.manage; otherwise a reviewer could disable arbitrary users.
+	if previous != "pending" && previous != "rejected" {
+		return "", ErrAdminUserNotReviewable
 	}
 	if _, err := tx.Exec(ctx,
 		`UPDATE users
@@ -473,6 +568,18 @@ func (d *DB) SetAdminUserEnabled(ctx context.Context, userID, actorID int64, ena
 		}
 	}
 
+	roles, err := adminRoleCodesTx(ctx, tx, userID)
+	if err != nil {
+		return "", err
+	}
+	actorSuper, err := adminActorIsSuperTx(ctx, tx, actorID)
+	if err != nil {
+		return "", err
+	}
+	if adminRolesProtected(roles) && !actorSuper {
+		return "", ErrAdminPrivileged
+	}
+
 	newLogin := "active"
 	if !enabled {
 		newLogin = "disabled"
@@ -504,13 +611,30 @@ func (d *DB) AdminSetTempPassword(ctx context.Context, userID int64, passwordHas
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var exists bool
-	if err := tx.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)`, userID).Scan(&exists); err != nil {
-		return fmt.Errorf("db: check user for temp password: %w", err)
-	}
-	if !exists {
+	// Lock the target row so a concurrent role change cannot slip past the
+	// privilege check below.
+	var lockedID int64
+	err = tx.QueryRow(ctx,
+		`SELECT id FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&lockedID)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("db: lock user for temp password: %w", err)
+	}
+	actorSuper, actorManage, err := adminActorCanManageTx(ctx, tx, actorID)
+	if err != nil {
+		return err
+	}
+	if !actorSuper && !actorManage {
+		return ErrAdminPrivileged
+	}
+	roles, err := adminRoleCodesTx(ctx, tx, userID)
+	if err != nil {
+		return err
+	}
+	if adminRolesProtected(roles) && !actorSuper {
+		return ErrAdminPrivileged
 	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO auth_credentials

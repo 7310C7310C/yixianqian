@@ -234,6 +234,7 @@ type adminUsersPageData struct {
 	Query         string
 	CanReview     bool
 	CanManage     bool
+	SuperAdmin    bool
 	TempPassword  string
 	TempExpiresAt string
 	Statuses      []adminStatusOption
@@ -289,6 +290,7 @@ func (a *App) renderAdminUsersPage(w http.ResponseWriter, r *http.Request, acces
 		Query:        query,
 		CanReview:    containsString(access.Permissions, adminPermUserReview),
 		CanManage:    containsString(access.Permissions, adminPermUserManage),
+		SuperAdmin:   access.SuperAdmin,
 		TempPassword: tempPassword,
 		Statuses:     adminUserStatusOptions(),
 	}
@@ -487,6 +489,10 @@ func (a *App) renderAdminUserError(w http.ResponseWriter, r *http.Request, acces
 		a.renderError(w, r, http.StatusNotFound, "找不到用户", "此用户不存在。")
 	case errors.Is(err, db.ErrLastSuperAdmin):
 		a.renderError(w, r, http.StatusConflict, "无法停用最后一位最高管理员", "请先指派另一位最高管理员。")
+	case errors.Is(err, db.ErrAdminPrivileged):
+		a.renderError(w, r, http.StatusForbidden, "权限不足", "只有最高管理员可以操作管理员账号。")
+	case errors.Is(err, db.ErrAdminUserNotReviewable):
+		a.renderError(w, r, http.StatusConflict, "状态不允许", "该用户不处于待审核状态；停用或恢复请使用账号管理。")
 	case errors.Is(err, db.ErrAdminUserPending):
 		a.renderError(w, r, http.StatusConflict, "用户尚未审核", "待审核用户请先使用「通过」操作。")
 	case errors.Is(err, db.ErrAdminUserRejected):
@@ -515,7 +521,34 @@ func (a *App) handleAdminUserTempPassword(w http.ResponseWriter, r *http.Request
 		"已生成临时密码，只会显示这一次，请立即转交用户。", "", raw, expiresAt)
 }
 
+// adminTempPasswordTarget loads the reset target and rejects protected admin
+// accounts unless the actor is a super admin. AdminSetTempPassword repeats the
+// check inside its transaction so a role change cannot race past it.
+func (a *App) adminTempPasswordTarget(ctx context.Context, access adminAccess, userID int64) ([]string, error) {
+	target, err := a.db.GetAdminUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if target.AdminProtected() && !access.SuperAdmin {
+		return target.Roles, db.ErrAdminPrivileged
+	}
+	return target.Roles, nil
+}
+
 func (a *App) issueTempPassword(w http.ResponseWriter, r *http.Request, access adminAccess, userID int64) (string, time.Time, error) {
+	targetRoles, err := a.adminTempPasswordTarget(r.Context(), access, userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, db.ErrNotFound):
+			a.renderError(w, r, http.StatusNotFound, "找不到用户", "此用户不存在。")
+		case errors.Is(err, db.ErrAdminPrivileged):
+			a.renderError(w, r, http.StatusForbidden, "权限不足", "只有最高管理员可以重置管理员账号的密码。")
+		default:
+			a.logger(r).Error("load temp password target failed", "error", err, "user_id", userID)
+			a.renderError(w, r, http.StatusInternalServerError, "操作失败", "系统暂时无法处理，请稍后再试。")
+		}
+		return "", time.Time{}, err
+	}
 	raw, err := auth.GenerateTempPassword()
 	if err != nil {
 		a.logger(r).Error("generate temp password failed", "error", err)
@@ -534,9 +567,12 @@ func (a *App) issueTempPassword(w http.ResponseWriter, r *http.Request, access a
 	}
 	expiresAt := a.clock.Now().Add(adminTempPasswordTTL)
 	if err := a.db.AdminSetTempPassword(r.Context(), userID, hash, expiresAt, access.User.ID); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		switch {
+		case errors.Is(err, db.ErrNotFound):
 			a.renderError(w, r, http.StatusNotFound, "找不到用户", "此用户不存在。")
-		} else {
+		case errors.Is(err, db.ErrAdminPrivileged):
+			a.renderError(w, r, http.StatusForbidden, "权限不足", "只有最高管理员可以重置管理员账号的密码。")
+		default:
 			a.logger(r).Error("set temp password failed", "error", err, "user_id", userID)
 			a.renderError(w, r, http.StatusInternalServerError, "操作失败", "系统暂时无法处理，请稍后再试。")
 		}
@@ -544,8 +580,11 @@ func (a *App) issueTempPassword(w http.ResponseWriter, r *http.Request, access a
 	}
 	a.audit(r, &access.User.ID, "admin.user.temp_password", "user",
 		strconv.FormatInt(userID, 10), map[string]any{
-			"must_change": true,
-			"expires_at":  expiresAt.UTC().Format(time.RFC3339),
+			"must_change":  true,
+			"expires_at":   expiresAt.UTC().Format(time.RFC3339),
+			"target_roles": targetRoles,
+			"actor_roles":  access.Roles,
+			"actor_super":  access.SuperAdmin,
 		})
 	a.adminNotifyUser(r, userID, "security", "登录密码已重置",
 		"管理员已为你设定临时密码，登录后必须立即修改。", "/password")
@@ -1062,6 +1101,10 @@ func (a *App) writeAdminUserAPIError(w http.ResponseWriter, r *http.Request, err
 		writeAPIError(w, http.StatusNotFound, "not_found", "找不到用户。")
 	case errors.Is(err, db.ErrLastSuperAdmin):
 		writeAPIError(w, http.StatusConflict, "last_super_admin", "不能停用最后一位最高管理员。")
+	case errors.Is(err, db.ErrAdminPrivileged):
+		writeAPIError(w, http.StatusForbidden, "target_admin_forbidden", "只有最高管理员可以操作管理员账号。")
+	case errors.Is(err, db.ErrAdminUserNotReviewable):
+		writeAPIError(w, http.StatusConflict, "user_not_reviewable", "该用户不处于待审核状态；停用或恢复请使用账号管理。")
 	case errors.Is(err, db.ErrAdminUserPending):
 		writeAPIError(w, http.StatusConflict, "user_pending", "待审核用户请先使用通过操作。")
 	case errors.Is(err, db.ErrAdminUserRejected):
@@ -1094,6 +1137,19 @@ func (a *App) apiAdminUserTempPassword(w http.ResponseWriter, r *http.Request, a
 }
 
 func (a *App) issueTempPasswordAPI(w http.ResponseWriter, r *http.Request, access adminAccess, userID int64) (string, time.Time, error) {
+	targetRoles, err := a.adminTempPasswordTarget(r.Context(), access, userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, db.ErrNotFound):
+			writeAPIError(w, http.StatusNotFound, "not_found", "找不到用户。")
+		case errors.Is(err, db.ErrAdminPrivileged):
+			writeAPIError(w, http.StatusForbidden, "target_admin_forbidden", "只有最高管理员可以重置管理员账号的密码。")
+		default:
+			a.logger(r).Error("load temp password target failed", "error", err, "user_id", userID)
+			writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")
+		}
+		return "", time.Time{}, err
+	}
 	raw, err := auth.GenerateTempPassword()
 	if err != nil {
 		a.logger(r).Error("generate temp password failed", "error", err)
@@ -1112,9 +1168,12 @@ func (a *App) issueTempPasswordAPI(w http.ResponseWriter, r *http.Request, acces
 	}
 	expiresAt := a.clock.Now().Add(adminTempPasswordTTL)
 	if err := a.db.AdminSetTempPassword(r.Context(), userID, hash, expiresAt, access.User.ID); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		switch {
+		case errors.Is(err, db.ErrNotFound):
 			writeAPIError(w, http.StatusNotFound, "not_found", "找不到用户。")
-		} else {
+		case errors.Is(err, db.ErrAdminPrivileged):
+			writeAPIError(w, http.StatusForbidden, "target_admin_forbidden", "只有最高管理员可以重置管理员账号的密码。")
+		default:
 			a.logger(r).Error("set temp password failed", "error", err, "user_id", userID)
 			writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")
 		}
@@ -1122,8 +1181,11 @@ func (a *App) issueTempPasswordAPI(w http.ResponseWriter, r *http.Request, acces
 	}
 	a.audit(r, &access.User.ID, "admin.user.temp_password", "user",
 		strconv.FormatInt(userID, 10), map[string]any{
-			"must_change": true,
-			"expires_at":  expiresAt.UTC().Format(time.RFC3339),
+			"must_change":  true,
+			"expires_at":   expiresAt.UTC().Format(time.RFC3339),
+			"target_roles": targetRoles,
+			"actor_roles":  access.Roles,
+			"actor_super":  access.SuperAdmin,
 		})
 	a.adminNotifyUser(r, userID, "security", "登录密码已重置",
 		"管理员已为你设定临时密码，登录后必须立即修改。", "/password")

@@ -64,6 +64,7 @@ type adminUserDetailPageData struct {
 	ReviewedAt    string
 	ReviewNote    string
 	PhotoCount    int
+	SuperAdmin    bool
 }
 
 func (a *App) handleAdminUserDetail(w http.ResponseWriter, r *http.Request, access adminAccess) {
@@ -113,6 +114,7 @@ func (a *App) handleAdminUserDetail(w http.ResponseWriter, r *http.Request, acce
 		Groups:        adminUserDetailGroups(profile),
 		Photos:        adminUserPhotoViews(userID, profile.Photos),
 		Audit:         adminUserAuditViews(audit),
+		SuperAdmin:    access.SuperAdmin,
 	}
 	data.PhotoCount = len(data.Photos)
 

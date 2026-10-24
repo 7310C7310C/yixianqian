@@ -51,11 +51,15 @@ func TestIntegrationAdminRBAC(t *testing.T) {
 	super1 := newUser("最高管理员一")
 	super2 := newUser("最高管理员二")
 	reviewer := newUser("审核员")
+	adminUser := newUser("管理员")
+	admin2 := newUser("管理员二")
 	plain := newUser("普通用户")
+	rejectTarget := newUser("待拒绝用户")
 	t.Cleanup(func() {
 		_, _ = database.pool.Exec(context.Background(),
 			`DELETE FROM users WHERE id = ANY($1)`,
-			[]int64{super1.ID, super2.ID, reviewer.ID, plain.ID})
+			[]int64{super1.ID, super2.ID, reviewer.ID, adminUser.ID,
+				admin2.ID, plain.ID, rejectTarget.ID})
 	})
 
 	// super_admin is unconditional.
@@ -88,6 +92,12 @@ func TestIntegrationAdminRBAC(t *testing.T) {
 	}
 	if ok, err := database.UserHasAdminPermission(ctx, reviewer.ID, "admin.manage"); err != nil || ok {
 		t.Fatalf("reviewer admin.manage = %v err=%v", ok, err)
+	}
+	if changed, err := database.AssignAdminRole(ctx, adminUser.ID, "admin", true); err != nil || !changed {
+		t.Fatalf("assign admin: changed=%v err=%v", changed, err)
+	}
+	if changed, err := database.AssignAdminRole(ctx, admin2.ID, "admin", true); err != nil || !changed {
+		t.Fatalf("assign second admin: changed=%v err=%v", changed, err)
 	}
 
 	// The only super_admin cannot lose the role.
@@ -122,30 +132,38 @@ func TestIntegrationAdminRBAC(t *testing.T) {
 	if approved.AccountStatus != "active" || approved.LoginStatus != "active" || approved.ReviewedAt == nil {
 		t.Fatalf("approved user = %+v", approved)
 	}
+	// Review actions stop at active accounts; user.manage owns disable/enable.
+	if _, err := database.ApproveAdminUser(ctx, plain.ID, super2.ID, "重复通过"); !errors.Is(err, ErrAdminUserNotReviewable) {
+		t.Fatalf("approve active user err = %v", err)
+	}
+	if _, err := database.RejectAdminUser(ctx, plain.ID, super2.ID, "资料不实"); !errors.Is(err, ErrAdminUserNotReviewable) {
+		t.Fatalf("reject active user err = %v", err)
+	}
 
+	// Reject a pending account and verify session revocation still happens.
 	raw, hash, err := auth.NewToken()
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = raw
-	if _, err := database.CreateSession(ctx, plain.ID, hash, time.Hour, "", "admin-db-test"); err != nil {
+	if _, err := database.CreateSession(ctx, rejectTarget.ID, hash, time.Hour, "", "admin-db-test"); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	previous, err = database.RejectAdminUser(ctx, plain.ID, super2.ID, "资料不实")
-	if err != nil || previous != "active" {
+	previous, err = database.RejectAdminUser(ctx, rejectTarget.ID, super2.ID, "资料不实")
+	if err != nil || previous != "pending" {
 		t.Fatalf("reject: previous=%q err=%v", previous, err)
 	}
 	if _, _, err := database.GetSession(ctx, hash); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("rejected user session should be revoked: %v", err)
 	}
-	rejected, err := database.GetAdminUser(ctx, plain.ID)
+	rejected, err := database.GetAdminUser(ctx, rejectTarget.ID)
 	if err != nil || rejected.AccountStatus != "rejected" || rejected.LoginStatus != "disabled" {
 		t.Fatalf("rejected user = %+v err=%v", rejected, err)
 	}
-	if _, err := database.SetAdminUserEnabled(ctx, plain.ID, super2.ID, true); !errors.Is(err, ErrAdminUserRejected) {
+	if _, err := database.SetAdminUserEnabled(ctx, rejectTarget.ID, super2.ID, true); !errors.Is(err, ErrAdminUserRejected) {
 		t.Fatalf("enable rejected user err = %v", err)
 	}
-	if _, err := database.ApproveAdminUser(ctx, plain.ID, super2.ID, "覆核通过"); err != nil {
+	if _, err := database.ApproveAdminUser(ctx, rejectTarget.ID, super2.ID, "覆核通过"); err != nil {
 		t.Fatalf("re-approve rejected user: %v", err)
 	}
 
@@ -168,12 +186,52 @@ func TestIntegrationAdminRBAC(t *testing.T) {
 	if err != nil || disabled.LoginStatus != "disabled" || disabled.AccountStatus != "active" {
 		t.Fatalf("disabled user = %+v err=%v", disabled, err)
 	}
+	// A manage-disabled account (account_status still active) must not be
+	// re-enabled through the review endpoint.
+	if _, err := database.ApproveAdminUser(ctx, plain.ID, super2.ID, "绕过停用"); !errors.Is(err, ErrAdminUserNotReviewable) {
+		t.Fatalf("approve manage-disabled user err = %v", err)
+	}
 	if _, err := database.SetAdminUserEnabled(ctx, plain.ID, super2.ID, true); err != nil {
 		t.Fatalf("enable user: %v", err)
 	}
 	enabled, err := database.GetAdminUser(ctx, plain.ID)
 	if err != nil || enabled.LoginStatus != "active" {
 		t.Fatalf("enabled user = %+v err=%v", enabled, err)
+	}
+
+	// Vertical boundaries: a non-super admin cannot reset a super/admin
+	// password, and an actor without user.manage cannot reset anyone.
+	for _, tc := range []struct {
+		name   string
+		target int64
+		actor  int64
+	}{
+		{"admin resets super", super2.ID, adminUser.ID},
+		{"admin resets admin", admin2.ID, adminUser.ID},
+		{"reviewer resets plain", plain.ID, reviewer.ID},
+	} {
+		tempHash, err := auth.HashPassword("temp-password-probe-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := database.AdminSetTempPassword(ctx, tc.target, tempHash, time.Now().Add(time.Hour), tc.actor); !errors.Is(err, ErrAdminPrivileged) {
+			t.Fatalf("%s err = %v", tc.name, err)
+		}
+	}
+	// Protected targets cannot be disabled or approved by a non-super admin.
+	if _, err := database.SetAdminUserEnabled(ctx, admin2.ID, adminUser.ID, false); !errors.Is(err, ErrAdminPrivileged) {
+		t.Fatalf("admin disable admin err = %v", err)
+	}
+	if _, err := database.ApproveAdminUser(ctx, admin2.ID, adminUser.ID, "越权通过"); !errors.Is(err, ErrAdminPrivileged) {
+		t.Fatalf("admin approve admin err = %v", err)
+	}
+	// Same-level resets are allowed for super admins and plain users for any
+	// actor holding user.manage.
+	if err := database.AdminSetTempPassword(ctx, plain.ID, tempHashForTest(t), time.Now().Add(time.Hour), adminUser.ID); err != nil {
+		t.Fatalf("admin reset plain: %v", err)
+	}
+	if err := database.AdminSetTempPassword(ctx, admin2.ID, tempHashForTest(t), time.Now().Add(time.Hour), super2.ID); err != nil {
+		t.Fatalf("super reset admin: %v", err)
 	}
 
 	// Temporary password: hashed, forced change and session revocation.
@@ -287,3 +345,13 @@ func TestIntegrationAdminRBAC(t *testing.T) {
 }
 
 const adminPermCodeForTest = "user.review"
+
+// tempHashForTest hashes a throwaway password for RBAC assertions.
+func tempHashForTest(t *testing.T) string {
+	t.Helper()
+	hash, err := auth.HashPassword("temp-password-probe-1")
+	if err != nil {
+		t.Fatalf("hash probe password: %v", err)
+	}
+	return hash
+}
