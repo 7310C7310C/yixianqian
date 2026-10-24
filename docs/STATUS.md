@@ -112,9 +112,11 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 - 共享 media 删除安全：资料照片删除只移除 attachment；仅当无其它 `profile_photos` 引用且 `media.user_id` 为调用者时才删 media 行与 R2 对象。迁移数据中一个 media 被多人引用时，不再跨用户误删或级联删他人照片。
 - 上传原图入库前重编码：去除 EXIF/GPS/XMP/文本元数据，先按 EXIF 方向 auto-orient 再编码，JPEG/PNG 与缩图同口径；迁移存量原图不做批量重写（见 `docs/MIGRATION.md`）。
-- 上传上限：`MEDIA_MAX_PIXELS` 默认 `13_000_000`，iPhone 12MP（4032×3024=12,192,768）可通过；单张 10MiB、单边 8000px 不变；注册表单理论上限 92MiB 与 nginx `96m` 一致。
+- 上传上限：`MEDIA_MAX_PIXELS` 默认 `12_500_000`，iPhone 12MP（4032×3024=12,192,768）可通过；单张 10MiB、单边 8000px 不变；注册表单理论上限 92MiB 与 nginx `96m` 一致。
 - HEIC/HEIF 仍不支持（不加重依赖）：服务端 400 文案与 SPA 上传前检测均提示「先在相册转成 JPEG，或关闭高效」。
-- 证据：`TestIntegrationProfileSharedMediaDelete`、`TestIntegrationSharedMediaDeleteKeepsObjects`、`TestProcessStripsEXIFAndAppliesOrientation`、`TestProcessAcceptsIPhone12MP`、`TestUploadErrorDetailsHEICActionable`。
+- 重编码不保留 ICC 色彩配置（JPEG APP2/PNG iCCP），按 sRGB 解释；属去元数据的已知取舍，真机反馈偏色再评估。
+- 迁移工具已同步 12.5MP 上限，并在上传前重编码去 EXIF/GPS、按方向校正；迁移报告提示 `byte_size` 可能变化（见 `docs/MIGRATION.md`）。
+- 证据：`TestIntegrationProfileSharedMediaDelete`、`TestIntegrationSharedMediaDeleteKeepsObjects`、`TestProcessStripsEXIFAndAppliesOrientation`、`TestProcessOrientationNonSquare`、`TestProcessPNGEXIFOrientation`、`TestProcessPixelLimitBoundary`、`TestProcessRejectsExactlyOnePixelOver12_5MP`、`TestProcessAcceptsIPhone12MP`、`TestUploadErrorDetailsHEICActionable`、`tools/test_migrate_testapp.py` 的 GPS/方向与像素上限用例。
 
 ### 管理台（SSR + 活动原生 SPA，仅 iframe 承载）
 
@@ -172,6 +174,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 ## 5. 已知缺口/未验收
 
 - **人脸照片缺口**：`104` 个 `active` 普通用户没有 `has_face=true` 的照片，其中 `101` 个完全没有照片；可通过资料页上传修复，不是死锁（与身份证 P0 区分）。
+- **媒体孤儿（P3）**：非属主删除最后一个 `profile_photos` 引用时，按安全规则保留 `media` 行与 R2 对象；当前无 GC，staging 量小（约 29 个共享 media），未造成越权访问。后续可加 refs=0 的离线清理任务。
 - **内容合规**：腾讯云照片内容合规（宠物/卡通判定、活体）未实现。
 - **裁切**：v1 黑边裁切未移植，`faces.tb/lr` 固定 `[0,0]`。
 - **真机与性能**：真机 iOS/Android/微信、旧设备宽度、图片/首屏性能未完成。

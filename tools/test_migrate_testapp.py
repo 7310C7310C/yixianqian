@@ -351,6 +351,61 @@ class PhotoProcessTests(unittest.TestCase):
             self.assertLessEqual(max(thumb.size), m.THUMB_SIZE)
             self.assertEqual(thumb.format, "JPEG")
 
+    def test_strips_metadata_and_applies_orientation(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+        import io
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "with-gps.jpg"
+            image = Image.new("RGB", (40, 20), (200, 30, 90))
+            exif = Image.Exif()
+            exif[0x0112] = 6  # rotate 90 CW
+            exif[0x010F] = "TestCam"
+            gps = exif.get_ifd(0x8825)
+            gps[1] = "N"
+            gps[2] = (25.0, 2.0, 0.0)
+            image.save(path, format="JPEG", quality=95, exif=exif.tobytes())
+            raw = path.read_bytes()
+            self.assertIn(b"Exif\x00\x00", raw)
+            self.assertIn(b"TestCam", raw)
+
+            processed = m.process_photo_bytes(path)
+            self.assertEqual((processed["width"], processed["height"]), (20, 40))
+            self.assertEqual(processed["content_type"], "image/jpeg")
+            out = processed["data"]
+            self.assertNotEqual(out, raw)
+            self.assertNotIn(b"Exif\x00\x00", out)
+            self.assertNotIn(b"TestCam", out)
+            with Image.open(io.BytesIO(out)) as got:
+                got.load()
+                self.assertEqual(got.size, (20, 40))
+                stored = got.getexif()
+                self.assertIsNone(stored.get(0x0112))
+                self.assertIsNone(stored.get(0x010F))
+                self.assertEqual(stored.get_ifd(0x8825), {})
+            with Image.open(io.BytesIO(processed["thumb"])) as thumb:
+                self.assertEqual(thumb.size, (20, 40))
+                self.assertEqual(thumb.format, "JPEG")
+
+    def test_pixel_limit_matches_app(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+
+        self.assertEqual(m.MAX_PHOTO_PIXELS, 12_500_000)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "too-many-pixels.jpg"
+            # 5000*2501 = 12,505,000 > 12,500,000; the tool must reject it
+            # before uploading (Pillow only reads the header for this check).
+            image = Image.new("RGB", (5000, 2501), (1, 2, 3))
+            image.save(path, format="JPEG", quality=50)
+            with self.assertRaises(ValueError):
+                m.process_photo_bytes(path)
+
     def test_rejects_non_image(self):
         try:
             import PIL  # noqa: F401

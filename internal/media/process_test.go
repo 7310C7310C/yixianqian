@@ -183,13 +183,9 @@ func encodeJPEGImage(t *testing.T, img image.Image) []byte {
 	return buf.Bytes()
 }
 
-// withEXIFOrientation inserts an APP1 EXIF segment with the given Orientation
-// tag plus a GPS IFD pointer and GPS data, mimicking an iPhone photo.
-func withEXIFOrientation(t *testing.T, data []byte, orientation uint16) []byte {
-	t.Helper()
-	if len(data) < 2 || data[0] != 0xFF || data[1] != 0xD8 {
-		t.Fatalf("not a jpeg")
-	}
+// exifTIFF builds a minimal little-endian TIFF with an Orientation tag and a
+// GPS IFD pointer, mimicking an iPhone photo.
+func exifTIFF(orientation uint16) []byte {
 	const tiffLen = 56
 	tiff := make([]byte, tiffLen)
 	copy(tiff[0:2], "II")
@@ -212,6 +208,17 @@ func withEXIFOrientation(t *testing.T, data []byte, orientation uint16) []byte {
 	binary.LittleEndian.PutUint16(tiff[42:44], 2)
 	binary.LittleEndian.PutUint32(tiff[44:48], 2)
 	copy(tiff[48:50], "N\x00")
+	return tiff
+}
+
+// withEXIFOrientation inserts an APP1 EXIF segment with the given Orientation
+// tag plus a GPS IFD pointer and GPS data, mimicking an iPhone photo.
+func withEXIFOrientation(t *testing.T, data []byte, orientation uint16) []byte {
+	t.Helper()
+	if len(data) < 2 || data[0] != 0xFF || data[1] != 0xD8 {
+		t.Fatalf("not a jpeg")
+	}
+	tiff := exifTIFF(orientation)
 
 	payload := append([]byte("Exif\x00\x00"), tiff...)
 	segment := make([]byte, 4+len(payload))
@@ -236,6 +243,25 @@ func withPNGText(t *testing.T, data []byte) []byte {
 	copy(chunk[4:8], "tEXt")
 	copy(chunk[8:8+len(text)], text)
 	binary.BigEndian.PutUint32(chunk[8+len(text):12+len(text)], crc32.ChecksumIEEE(chunk[4:8+len(text)]))
+	split := 8 + 8 + int(binary.BigEndian.Uint32(data[8:12])) + 4
+	out := append([]byte{}, data[:split]...)
+	out = append(out, chunk...)
+	out = append(out, data[split:]...)
+	return out
+}
+
+// withPNGEXIF inserts an eXIf chunk (a bare TIFF header) after IHDR.
+func withPNGEXIF(t *testing.T, data []byte, orientation uint16) []byte {
+	t.Helper()
+	if len(data) < 33 || string(data[12:16]) != "IHDR" {
+		t.Fatalf("unexpected png layout")
+	}
+	tiff := exifTIFF(orientation)
+	chunk := make([]byte, 12+len(tiff))
+	binary.BigEndian.PutUint32(chunk[0:4], uint32(len(tiff)))
+	copy(chunk[4:8], "eXIf")
+	copy(chunk[8:], tiff)
+	binary.BigEndian.PutUint32(chunk[8+len(tiff):], crc32.ChecksumIEEE(chunk[4:8+len(tiff)]))
 	split := 8 + 8 + int(binary.BigEndian.Uint32(data[8:12])) + 4
 	out := append([]byte{}, data[:split]...)
 	out = append(out, chunk...)
@@ -308,6 +334,78 @@ func TestProcessStripsPNGTextChunks(t *testing.T) {
 	}
 	if _, format, err := image.DecodeConfig(bytes.NewReader(got.Original)); err != nil || format != "png" {
 		t.Fatalf("decode rewritten png: format=%q err=%v", format, err)
+	}
+}
+
+func TestProcessOrientationNonSquare(t *testing.T) {
+	// 40x20 with orientation 6 (rotate 90 CW) must be stored as 20x40, and
+	// the thumbnail must follow the same orientation. This catches a
+	// regression where only the pixel buffer is rotated but Width/Height keep
+	// the pre-orientation values.
+	data := withEXIFOrientation(t, encodeJPEGImage(t, quadImage(40, 20)), 6)
+	got, err := Process(data, 10)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if got.Width != 20 || got.Height != 40 {
+		t.Fatalf("oriented dimensions = %dx%d, want 20x40", got.Width, got.Height)
+	}
+	thumbCfg, _, err := image.DecodeConfig(bytes.NewReader(got.Thumbnail))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if thumbCfg.Width != 5 || thumbCfg.Height != 10 {
+		t.Fatalf("thumbnail orientation = %dx%d, want 5x10", thumbCfg.Width, thumbCfg.Height)
+	}
+}
+
+func TestProcessPNGEXIFOrientation(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, quadImage(40, 20)); err != nil {
+		t.Fatalf("encode png: %v", err)
+	}
+	data := withPNGEXIF(t, buf.Bytes(), 6)
+	got, err := Process(data, 10)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if got.Width != 20 || got.Height != 40 {
+		t.Fatalf("oriented dimensions = %dx%d, want 20x40", got.Width, got.Height)
+	}
+	if bytes.Contains(got.Original, []byte("eXIf")) {
+		t.Fatal("PNG eXIf chunk survived")
+	}
+	thumbCfg, _, err := image.DecodeConfig(bytes.NewReader(got.Thumbnail))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if thumbCfg.Width != 5 || thumbCfg.Height != 10 {
+		t.Fatalf("thumbnail orientation = %dx%d, want 5x10", thumbCfg.Width, thumbCfg.Height)
+	}
+}
+
+func TestProcessPixelLimitBoundary(t *testing.T) {
+	data := encodeTestImage(t, "png", 100, 100)
+	if _, err := ProcessWithLimits(data, 16, 8000, 10_000); err != nil {
+		t.Fatalf("image exactly at the pixel cap rejected: %v", err)
+	}
+	if _, err := ProcessWithLimits(data, 16, 8000, 9_999); !errors.Is(err, ErrImageDimensions) {
+		t.Fatalf("image one pixel over the cap = %v, want ErrImageDimensions", err)
+	}
+}
+
+func TestProcessRejectsExactlyOnePixelOver12_5MP(t *testing.T) {
+	// 12,500,001 has no integer factorisation into two dimensions <= 8000
+	// (81 x 154,321), so use a wide 1-row PNG and a matching maxDim to make
+	// the pixel branch the one that rejects. ProcessWithLimits rejects from
+	// DecodeConfig, so the 12.5 MP body is never decoded.
+	img := image.NewGray(image.Rect(0, 0, 12_500_001, 1))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode png: %v", err)
+	}
+	if _, err := ProcessWithLimits(buf.Bytes(), 5, 13_000_000, 12_500_000); !errors.Is(err, ErrImageDimensions) {
+		t.Fatalf("12,500,001 pixels = %v, want ErrImageDimensions", err)
 	}
 }
 

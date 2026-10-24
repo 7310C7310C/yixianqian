@@ -44,6 +44,32 @@ func jpegOrientation(data []byte) int {
 	return 1
 }
 
+// pngOrientation reads the EXIF Orientation tag from a PNG eXIf chunk. The
+// chunk payload is a TIFF header without the JPEG "Exif\0\0" prefix. Chunks
+// are scanned until IDAT; malformed data returns 1 (no transform) so uploads
+// never fail because of metadata.
+func pngOrientation(data []byte) int {
+	const signature = "\x89PNG\r\n\x1a\n"
+	if len(data) < 8 || string(data[:8]) != signature {
+		return 1
+	}
+	for off := 8; off+8 <= len(data); {
+		length := int(binary.BigEndian.Uint32(data[off : off+4]))
+		typ := string(data[off+4 : off+8])
+		if off+12+length > len(data) {
+			return 1
+		}
+		if typ == "eXIf" {
+			return exifOrientation(data[off+8 : off+8+length])
+		}
+		if typ == "IDAT" || typ == "IEND" {
+			return 1
+		}
+		off += 12 + length
+	}
+	return 1
+}
+
 // exifOrientation parses the Orientation entry from a TIFF header as embedded
 // in an APP1 segment (II/MM byte order supported).
 func exifOrientation(tiff []byte) int {

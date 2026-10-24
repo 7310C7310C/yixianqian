@@ -80,7 +80,9 @@ RESERVED_USER = "U-0006"
 
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 MAX_PHOTO_DIM = 8000
-MAX_PHOTO_PIXELS = 12_000_000
+# Keep in sync with internal/media.DefaultMaxPixels: 12.5 MP accepts the
+# common iPhone 12 MP frame (4032x3024 = 12,192,768 pixels).
+MAX_PHOTO_PIXELS = 12_500_000
 THUMB_SIZE = 512
 
 # Columns required for the import. A missing column is reported, never created.
@@ -2289,7 +2291,7 @@ def index_photo_files(photos_dir: Path, tokens: set[str]) -> dict[str, Path]:
 
 def process_photo_bytes(path: Path) -> dict[str, Any]:
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
     except ImportError as exc:  # pragma: no cover
         raise MigrationError(
             "Pillow is required for photo import: "
@@ -2319,28 +2321,57 @@ def process_photo_bytes(path: Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - Pillow raises many types
         raise ValueError(f"cannot decode image: {exc}") from exc
 
+    # Apply EXIF/eXIf orientation before re-encoding so stored dimensions and
+    # pixels match what browsers showed for the legacy original.
+    try:
+        source = ImageOps.exif_transpose(source)
+    except Exception:  # noqa: BLE001 - malformed metadata must not block import
+        pass
+    for key in ("exif", "icc_profile", "xmp", "XML:com.adobe.xmp", "pnginfo", "comment"):
+        source.info.pop(key, None)
+
+    width, height = source.size
+    if width > MAX_PHOTO_DIM or height > MAX_PHOTO_DIM:
+        raise ValueError(f"oriented dimensions {width}x{height} exceed limit")
+    if width * height > MAX_PHOTO_PIXELS:
+        raise ValueError(f"oriented pixels {width * height} exceed limit")
+
+    # Re-encode so the uploaded object cannot carry EXIF/GPS/XMP/text chunks.
+    # This means R2 bytes differ from the source file; reports use these bytes.
+    original_buffer = io.BytesIO()
+    if fmt == "JPEG":
+        original = source if source.mode == "RGB" else source.convert("RGB")
+        original.save(original_buffer, format="JPEG", quality=90)
+        content_type = "image/jpeg"
+    else:
+        source.save(original_buffer, format="PNG")
+        content_type = "image/png"
+    original_bytes = original_buffer.getvalue()
+    if len(original_bytes) > MAX_PHOTO_BYTES:
+        raise ValueError(f"re-encoded file exceeds {MAX_PHOTO_BYTES} bytes")
+
+    # Thumbnail: flatten alpha onto white, matching the server's JPEG thumb.
     if source.mode not in ("RGB", "L"):
         rgba = source.convert("RGBA")
         background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
-        source = Image.alpha_composite(background, rgba).convert("RGB")
+        flat = Image.alpha_composite(background, rgba).convert("RGB")
     else:
-        source = source.convert("RGB")
+        flat = source.convert("RGB")
 
-    factor = min(1.0, THUMB_SIZE / float(max(source.size)))
+    factor = min(1.0, THUMB_SIZE / float(max(flat.size)))
     thumb_size = (
-        max(1, int(source.size[0] * factor + 0.5)),
-        max(1, int(source.size[1] * factor + 0.5)),
+        max(1, int(flat.size[0] * factor + 0.5)),
+        max(1, int(flat.size[1] * factor + 0.5)),
     )
     try:
         from PIL import Image as PilImage
-        thumb = source.resize(thumb_size, PilImage.Resampling.LANCZOS)
+        thumb = flat.resize(thumb_size, PilImage.Resampling.LANCZOS)
     except AttributeError:  # pragma: no cover - Pillow < 9
-        thumb = source.resize(thumb_size, Image.LANCZOS)
+        thumb = flat.resize(thumb_size, Image.LANCZOS)
     buffer = io.BytesIO()
     thumb.save(buffer, format="JPEG", quality=82)
-    content_type = "image/jpeg" if fmt == "JPEG" else "image/png"
     return {
-        "data": data,
+        "data": original_bytes,
         "content_type": content_type,
         "width": width,
         "height": height,
@@ -2429,6 +2460,11 @@ def process_media(
         "error_count": 0,
         "notes": [],
     }
+    if files:
+        stats["notes"].append(
+            "photos are re-encoded to strip EXIF/GPS/XMP; byte_size may differ "
+            "from the source files"
+        )
     missing_tokens: set[str] = set()
     if photos_dir is None:
         stats["notes"].append("no --photos-dir supplied; all photo files are missing")

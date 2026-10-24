@@ -17,9 +17,9 @@ import (
 
 const (
 	DefaultMaxDimension = 8000
-	// DefaultMaxPixels accepts 13 MP so the common iPhone 12 MP frame
+	// DefaultMaxPixels is 12.5 MP so the common iPhone 12 MP frame
 	// (4032×3024 = 12,192,768 pixels) is not rejected.
-	DefaultMaxPixels = 13_000_000
+	DefaultMaxPixels = 12_500_000
 )
 
 var (
@@ -81,8 +81,11 @@ func ProcessWithLimits(data []byte, thumbSize, maxDim int, maxPixels int64) (Pro
 	}
 
 	orientation := 1
-	if decodedFormat == "jpeg" {
+	switch decodedFormat {
+	case "jpeg":
 		orientation = jpegOrientation(data)
+	case "png":
+		orientation = pngOrientation(data)
 	}
 	oriented := applyOrientation(src, orientation)
 

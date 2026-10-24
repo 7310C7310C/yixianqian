@@ -37,7 +37,7 @@ sources: []
 - 背景：照片是私人物品，浏览器不得直接取得 R2 URL，同时要控制格式与大小。
 - 决策：上传经 `POST /api/media` 或 `/media/upload`；服务端 sniff + decode 验证 JPEG/PNG，HEIC 拒绝；缩图写入时生成；R2 私有桶，key 由服务端产生。
 - 后果：浏览器只看到 `/media/{id}`，app 鉴权后从 R2 串流；缩图存储加倍但读取便宜。
-- 边界：不使用 presigned URL、不暴露 bucket；EXIF 方向未校正；上传上限 10MiB、单边 8000px、12MP、并发 1。
+- 边界：不使用 presigned URL、不暴露 bucket；EXIF 方向未校正；上传上限 10MiB、单边 8000px、12MP、并发 1（2026-10-24 §24 起：上传前 auto-orient 去元数据，像素上限调整为 12.5MP）。
 
 ## 5. 一次性 activation token（2026-10-21）
 
@@ -183,11 +183,13 @@ sources: []
 - 边界：不改数据库 schema、不改路由权限码；`pending`/`rejected` 仍可由 `user.review` 审核，`rejected` 仍可通过 `approve` 重审（恢复路径保留）。非 super 的 `admin` 不能操作同级/上级，也不能重置 reviewer 等非受保护角色之外的管理账号密码——受保护集合明确为 `super_admin`/`admin`。
 - 证据：`TestIntegrationAdminPrivilegeBoundaries`、`TestIntegrationAdminRBAC`、`TestIntegrationAdminHTTP`、`TestIntegrationAdminUserDetailHTTP`；变异验证见 `.team/security/2026-10-24-admin-vertical-rbac.md`。
 
-## 24. 上传媒体去元数据、共享 media 删除与 13MP 兼容（2026-10-24）
+## 24. 上传媒体去元数据、共享 media 删除与 12.5MP 兼容（2026-10-24）
 
 - 背景：后端审计（`.team/audits/2026-10-24-bugs-backend.md` P1-1/P1-2/P1-3）确认：迁移数据中一个 media 可被上千用户引用，删除照片会误删共享 R2 对象或级联删除他人 attachment；上传原图原样入库，`/cards/photo`、`/profile/photo` 串流时暴露 EXIF/GPS；iPhone 12MP JPEG（4032×3024=12,192,768）超过旧 12,000,000 像素上限，HEIC 直接 400 且文案不可操作。
 - 决策：`DeleteProfilePhoto` 只删调用者的 attachment；仅当「无 `profile_photos` 再引用」且「`media.user_id` == 调用者」时才删 media 行并返回可删对象标志，handler 只有收到该标志才删 R2 原图/缩图。`RemoveMediaOwned`（上传/海报回滚）同样加引用计数与 `RowsAffected` 守卫。非属主删除最后一个 attachment 时保留 media 行，留给属主或离线清理。
-- 决策：上传原图入库前重编码（JPEG q90 / PNG），先解析 EXIF Orientation 并 auto-orient，再生成原图与缩图；JPEG/PNG 均不保留 EXIF/GPS/XMP/文本元数据。缩图沿用同一方向。迁移存量原图**不做批量重写**（见 `docs/MIGRATION.md`）。
-- 决策：`MEDIA_MAX_PIXELS` 默认提升到 `13_000_000`（覆盖 iPhone 12MP），单边 8000px、单张 10MiB 不变；注册表单理论上限 92MiB 与 nginx `96m` 保持一致。HEIC 仍不支持（不新增 pillow-heif 等重依赖）：服务端 400 文案与 SPA 上传前检测均提示「先在相册转成 JPEG 或关闭高效」。
-- 边界：不改 schema、不改公开路由与权限；R2 对象 key 不进日志（错误与清理日志只带 `media_id`）。历史 R2 对象清洗不在本次范围。`docs/PROJECT_CHARTER.md` §3.3 仍写 12MP，属 PM 权威文件，待 PM 批准后同步为 13MP。
-- 证据：`TestIntegrationProfileSharedMediaDelete`、`TestProcessStripsEXIFAndAppliesOrientation`、`TestProcessStripsPNGTextChunks`、`TestProcessAcceptsIPhone12MP`、`TestUploadErrorDetailsHEICActionable`、`TestIntegrationHTTPFlow`（HEIC 400 文案）。
+- 决策：上传原图入库前重编码（JPEG q90 / PNG），先解析 EXIF Orientation（JPEG APP1 与 PNG eXIf）并 auto-orient，再生成原图与缩图；JPEG/PNG 均不保留 EXIF/GPS/XMP/文本元数据。缩图沿用同一方向。迁移存量原图**不做批量重写**；迁移工具在上传前同样用 Pillow 重编码去元数据（见 `docs/MIGRATION.md`）。
+- 决策：`MEDIA_MAX_PIXELS` 默认 `12_500_000`（12.5MP），覆盖 iPhone 12MP 原图 4032×3024=12,192,768；单边 8000px、单张 10MiB 不变；注册表单理论上限 92MiB 与 nginx `96m` 保持一致。HEIC 仍不支持（不新增 pillow-heif 等重依赖）：服务端 400 文案与 SPA 上传前检测均提示「先在相册转成 JPEG 或关闭高效」。
+- 口径：`docs/PROJECT_CHARTER.md` §3.3 仍写 12MP；本实现按 **12.5MP 实现口径**执行（12MP 手机实际输出 4032×3024=12,192,768，12,000,000 的旧上限会拒绝），**不改 Charter**，留 PM 复核后决定是否同步权威文本。
+- 取舍：重编码不保留 ICC 色彩配置（JPEG APP2/PNG iCCP），像素值按 sRGB 解释；属「一律去元数据」的已知代价，若真机反馈 Display P3 偏色，再评估保留 ICC 或色彩管理。
+- 边界：不改 schema、不改公开路由与权限；R2 对象 key 不进日志（错误与清理日志只带 `media_id`）。历史 R2 对象清洗不在本次范围。非属主删除最后一个 attachment 时会留下 refs=0 的 media 行与 R2 对象；当前无 GC，记 P3（staging 量小，未造成越权访问）。
+- 证据：`TestIntegrationProfileSharedMediaDelete`、`TestProcessStripsEXIFAndAppliesOrientation`、`TestProcessOrientationNonSquare`、`TestProcessPNGEXIFOrientation`、`TestProcessStripsPNGTextChunks`、`TestProcessPixelLimitBoundary`、`TestProcessRejectsExactlyOnePixelOver12_5MP`、`TestProcessAcceptsIPhone12MP`、`TestUploadErrorDetailsHEICActionable`、`TestIntegrationHTTPFlow`（HEIC 400 文案）、`tools/test_migrate_testapp.py`（GPS 去元数据、方向、12.5MP 上限）。

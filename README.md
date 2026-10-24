@@ -183,7 +183,7 @@ go run ./cmd/token -phone 13900000000 -name 王小明
 - 从 v1/testapp 迁入时保留 `legacy_open_id`、`legacy_user_id`、`legacy_record_id`，用于对账与回溯。
 - 用户照片与活动海报均为私有媒体；读取必须经过应用鉴权，不能把对象存储 URL 暴露给浏览器。
 - 上传图片在服务端校验后重编码：原图与缩图都不含 EXIF/GPS/XMP/文本元数据，并按 EXIF 方向自动校正（JPEG/PNG 均处理）。
-- 上传上限：单张 10 MiB、单边 8000px、13 MP（iPhone 常见的 4032×3024=12,192,768 像素可通过）、并发 1；HEIC/HEIF 返回 400，并提示先在相册转 JPEG 或关闭「高效」。nginx 请求体上限 `96m` 覆盖注册表单理论上限 `9*10MiB+2MiB=92MiB`。
+- 上传上限：单张 10 MiB、单边 8000px、12.5 MP（iPhone 常见的 4032×3024=12,192,768 像素可通过）、并发 1；HEIC/HEIF 返回 400，并提示先在相册转 JPEG 或关闭「高效」。nginx 请求体上限 `96m` 覆盖注册表单理论上限 `9*10MiB+2MiB=92MiB`。
 - 迁移工具、汇出格式、手机号唯一化与对账流程见 `docs/MIGRATION.md`。
 - 生产数据不得导入开发库；staging 可用脱敏/测试数据。
 
