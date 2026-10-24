@@ -186,12 +186,52 @@ func TestIntegrationObserverStillBlockedByIDCard(t *testing.T) {
 	}
 	resp = client.get("/legacy/api/profile")
 	var profile struct {
-		HasFace bool `json:"has_face"`
-		IDValid bool `json:"id_valid"`
+		HasFace  bool                  `json:"has_face"`
+		IDValid  bool                  `json:"id_valid"`
+		Editable []legacyEditableField `json:"editable"`
 	}
 	legacyJSONDecode(t, resp, &profile)
 	if !profile.HasFace || profile.IDValid {
 		t.Fatalf("observer face/id projection = %+v", profile)
+	}
+	// Observers are read-only, but the ID-card deadlock must be breakable:
+	// the profile form exposes exactly the backfill field.
+	if len(profile.Editable) != 1 || profile.Editable[0].Field != legacyFieldIDCard {
+		t.Fatalf("observer editable = %+v", profile.Editable)
+	}
+	csrf := client.csrfCookie()
+	resp = putJSON(t, client, "/legacy/api/profile", csrf, map[string]any{"昵称": "观察员改名"})
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("observer nickname update status=%d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	resp = putJSON(t, client, "/legacy/api/profile", csrf, map[string]any{
+		"身份证号": makeTestIDCard(t, "19900101", "004"),
+		"昵称":   "夹带改名",
+	})
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("observer mixed update status=%d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	resp = putJSON(t, client, "/legacy/api/profile", csrf, map[string]any{
+		"身份证号": makeTestIDCard(t, "19900101", "005"),
+	})
+	body = readBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("observer backfill status=%d body=%s", resp.StatusCode, body)
+	}
+	if strings.Contains(body, makeTestIDCard(t, "19900101", "005")) {
+		t.Fatal("observer backfill response leaked the full id card")
+	}
+	if resp := client.get("/legacy/api/cards"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("observer cards after backfill status=%d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	resp = client.get("/legacy/api/profile")
+	legacyJSONDecode(t, resp, &profile)
+	if !profile.IDValid || len(profile.Editable) != 0 {
+		t.Fatalf("observer after backfill = %+v editable=%+v", profile, profile.Editable)
+	}
+	resp = putJSON(t, client, "/legacy/api/profile", csrf, map[string]any{"昵称": "再改"})
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("observer stays read-only status=%d body=%s", resp.StatusCode, readBody(t, resp))
 	}
 }
 

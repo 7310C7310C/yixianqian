@@ -60,9 +60,10 @@ sources:
 
 ### 3.2 身份证（P0）
 
-- 迁移只写 `id_card_last4` 与 `id_card_valid`，**不写 `id_card_ciphertext`/`id_card_hash`**；密文与哈希只有注册或资料补填会写入。迁移用户的 `id_card_valid=false` 保持原样，不做 grandfather。
+- 迁移 `0007_id_card_hash.sql` 只新增 `users.id_card_hash` 列与部分唯一索引（`WHERE id_card_hash IS NOT NULL`），只增不改、不回填存量。
+- 数据导入只写 `id_card_last4` 与 `id_card_valid`，**不写 `id_card_ciphertext`/`id_card_hash`**；密文与哈希只有注册或资料补填会写入。迁移用户的 `id_card_valid=false` 保持原样，不做 grandfather。
 - 补填（2026-10-24）：用户端资料编辑在 `id_card_valid=false` 时显示「身份证号」；仅接受 18 位、校验位正确、证内生日与资料生日一致、`id_card_hash` 未被其他账号占用的号码。通过后 AES-GCM 写密文、写后四位与 HMAC 哈希并置 `id_card_valid=true`；审计只记后四位。服务端门禁见 `docs/STATUS.md` §4 / `docs/DECISIONS.md` §27。
-- 观察员不豁免身份证；`has_face` 仍按 v1 豁免。
+- 观察员不豁免身份证；`has_face` 仍按 v1 豁免。观察员可在资料页仅补填身份证号（其他字段只读），补填成功后解除门禁。
 - 存量 1 个有密文的账号不回填哈希（需要部署密钥解密）；其 `id_card_valid` 已为 true，不影响门禁。若后续需要把存量 valid 用户纳入唯一性，可另起一次性离线任务：解密→HMAC→写回，先备份并审计。
 
 ### 3.3 对账与媒体口径

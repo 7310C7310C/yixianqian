@@ -34,7 +34,29 @@ func registerLegacyProfileAPI(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("POST /legacy/api/auth/claim", a.handleLegacyClaimDisabled)
 }
 
+// legacyEditableProfile is the read-write path for full profile edits (e.g.
+// photo upload): observers stay read-only here. The PUT profile handler below
+// uses legacyProfileActor instead so it can allow the ID-card-only backfill.
 func (a *App) legacyEditableProfile(w http.ResponseWriter, r *http.Request) (db.User, db.Profile, bool) {
+	user, profile, ok := a.legacyProfileActor(w, r)
+	if !ok {
+		return db.User{}, db.Profile{}, false
+	}
+	if !profileCanEdit(profile) {
+		message := profileGateMessage(profile)
+		if profileIsObserver(profile) {
+			message = "你是村情六处账号，无此操作权限"
+		}
+		legacyError(w, http.StatusForbidden, message)
+		return db.User{}, db.Profile{}, false
+	}
+	return user, profile, true
+}
+
+// legacyProfileActor authenticates the caller and loads their profile without
+// deciding whether the profile is editable: observers may still PUT the single
+// ID-card backfill field, which is checked against the request body below.
+func (a *App) legacyProfileActor(w http.ResponseWriter, r *http.Request) (db.User, db.Profile, bool) {
 	user, ok := a.legacyActor(w, r)
 	if !ok {
 		return db.User{}, db.Profile{}, false
@@ -46,14 +68,6 @@ func (a *App) legacyEditableProfile(w http.ResponseWriter, r *http.Request) (db.
 	}
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy profile load failed")
-		return db.User{}, db.Profile{}, false
-	}
-	if !profileCanEdit(profile) {
-		message := profileGateMessage(profile)
-		if profileIsObserver(profile) {
-			message = "你是村情六处账号，无此操作权限"
-		}
-		legacyError(w, http.StatusForbidden, message)
 		return db.User{}, db.Profile{}, false
 	}
 	return user, profile, true
@@ -85,8 +99,13 @@ func (a *App) legacyPhotoActor(w http.ResponseWriter, r *http.Request) (db.User,
 }
 
 func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) {
-	user, profile, ok := a.legacyEditableProfile(w, r)
+	user, profile, ok := a.legacyProfileActor(w, r)
 	if !ok {
+		return
+	}
+	observer := profileIsObserver(profile)
+	if !observer && !profileCanEdit(profile) {
+		legacyError(w, http.StatusForbidden, profileGateMessage(profile))
 		return
 	}
 	if !a.legacyWriteCSRF(w, r) {
@@ -94,6 +113,10 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	var body map[string]any
 	if !legacyDecodeJSONBody(w, r, &body) {
+		return
+	}
+	if observer && !legacyIDCardOnlyBody(body) {
+		legacyError(w, http.StatusForbidden, "你是村情六处账号，无此操作权限")
 		return
 	}
 	upd, err := legacyProfileUpdateFromJSON(body)

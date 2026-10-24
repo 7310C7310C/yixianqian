@@ -92,17 +92,39 @@ func legacyProfileEditable(p db.Profile) []legacyEditableField {
 	}
 	// v1 exposed the ID card only while it was missing/invalid; the input is
 	// intentionally empty so the server never echoes plaintext back.
-	observer := p.AccountKind == "observer" || p.AccountStatus == "observer"
-	if !p.IDCardValid && !observer {
-		fields = append([]legacyEditableField{{
-			Field: legacyFieldIDCard,
-			Label: "身份证号",
-			Type:  "text",
-			Value: "",
-			Hint:  "身份证号有误或缺失，请重新填写正确的18位身份证号；仅核验使用，不公开展示。",
-		}}, fields...)
+	observer := profileIsObserver(p)
+	idCardField := legacyEditableField{
+		Field: legacyFieldIDCard,
+		Label: "身份证号",
+		Type:  "text",
+		Value: "",
+		Hint:  "身份证号有误或缺失，请重新填写正确的18位身份证号；仅核验使用，不公开展示。",
+	}
+	if observer {
+		// Observers stay read-only except for the ID card backfill required by
+		// the identity gate (PM 2026-10-22: observers are exempt from has_face,
+		// never from the ID card rule). Returning only this field keeps the SPA
+		// form from offering edits the server rejects.
+		if p.IDCardValid {
+			return []legacyEditableField{}
+		}
+		return []legacyEditableField{idCardField}
+	}
+	if !p.IDCardValid {
+		return append([]legacyEditableField{idCardField}, fields...)
 	}
 	return fields
+}
+
+// legacyIDCardOnlyBody reports whether an observer payload touches nothing but
+// the ID card backfill field. Observers may not edit any other profile field.
+func legacyIDCardOnlyBody(body map[string]any) bool {
+	for key := range body {
+		if key != legacyFieldIDCard && key != "id_card" {
+			return false
+		}
+	}
+	return true
 }
 
 func legacyStringList(values []string) []string {

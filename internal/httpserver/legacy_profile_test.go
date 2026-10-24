@@ -91,6 +91,26 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 	}
 }
 
+func TestLegacyProfileEditableObserverOnlyIDCard(t *testing.T) {
+	observer := db.Profile{AccountKind: "observer", AccountStatus: "observer"}
+	fields := legacyProfileEditable(observer)
+	if len(fields) != 1 || fields[0].Field != legacyFieldIDCard || fields[0].Value != "" {
+		t.Fatalf("observer editable = %+v", fields)
+	}
+	observer.IDCardValid = true
+	if got := legacyProfileEditable(observer); len(got) != 0 {
+		t.Fatalf("verified observer editable = %+v", got)
+	}
+	if !legacyIDCardOnlyBody(map[string]any{"身份证号": "x"}) ||
+		!legacyIDCardOnlyBody(map[string]any{"id_card": "x"}) {
+		t.Fatal("ID-card-only payload rejected")
+	}
+	if legacyIDCardOnlyBody(map[string]any{"身份证号": "x", "昵称": "y"}) ||
+		legacyIDCardOnlyBody(map[string]any{"昵称": "y"}) {
+		t.Fatal("mixed payload accepted for observer")
+	}
+}
+
 func TestIDCardGateAllowlistCannotBeBypassedByDotSegments(t *testing.T) {
 	cases := []string{
 		"/legacy/api/notifications/../cards",

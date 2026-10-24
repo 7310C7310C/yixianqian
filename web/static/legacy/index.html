@@ -2179,7 +2179,7 @@
     </div>
     <div style="height:14px;"></div>
     <div style="padding: 0 16px;">
-      <van-button v-if="!isObserver" type="primary" plain block round size="small" class="btn-44" @click="openProfileEdit">修改资料</van-button>
+      <van-button v-if="!isObserver || (profileData.editable && profileData.editable.length)" type="primary" plain block round size="small" class="btn-44" @click="openProfileEdit">{{ isObserver ? '补填身份证' : '修改资料' }}</van-button>
     </div>
 
     <!-- 基本信息 -->
@@ -2253,8 +2253,9 @@
     <van-icon name="arrow-left"></van-icon> 返回
   </div>
   <div class="profile-detail">
-    <div class="edit-tip">除姓名、圣名、生日、家乡外，其它资料均可修改；手机号是登录账号，修改需验证当前密码</div>
-    <div class="edit-card" style="margin-bottom:12px;">
+    <div class="edit-tip" v-if="!isObserver">除姓名、圣名、生日、家乡外，其它资料均可修改；手机号是登录账号，修改需验证当前密码</div>
+    <div class="edit-tip" v-else>观察员资料只读，仅可补填身份证号；补填后即可解除访问限制</div>
+    <div class="edit-card" style="margin-bottom:12px;" v-if="!isObserver">
       <div class="edit-photo-grid">
         <div v-for="(p, i) in profilePhotos" :key="p" class="edit-photo-item">
           <img :src="p" alt="">
