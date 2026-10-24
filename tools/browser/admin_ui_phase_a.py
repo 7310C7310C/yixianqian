@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """管理台 Phase A 真实浏览器验收（Playwright / Chromium）。
 
-覆盖：总览 → 活动列表 → 新建 → 编辑 → 工作台 → 报名名单 → 签到 → 广播 → 设置。
+覆盖：总览 → 原版活动列表（native SPA）→ 新建 → 编辑 → 工作台 → 报名名单 → 签到 → 广播 → 设置。
 视口：390×844 / 768×1024 / 1280×900，均为 SPA 同源 iframe overlay 内的真实页面。
 断言：无 console error、无页面级横向滚动、关键触控区 ≥44px。
 
@@ -126,11 +126,12 @@ def run_viewport(browser, viewport: tuple[int, int], base_url: str, cookie: str,
     assert_layout("dashboard")
     shot(frame, out_dir, f"01-dashboard-{tag}")
 
-    # 2. 活动列表
+    # 2. 活动列表（管理台 iframe 内已是 v1 原版活动管理 native SPA）
     frame_goto("/admin/activities")
-    assert_layout("activities")
-    check(frame.locator(".admin-activity-card").count() >= 4, f"{tag}: 活动卡不足", failures)
-    check(frame.locator("[data-adm-activity-filter]").count() >= 6, f"{tag}: 状态筛选 chips 不足", failures)
+    page.wait_for_timeout(500)
+    check("/app?native_admin=1" in frame.url, f"{tag}: 活动列表未进入 native SPA {frame.url}", failures)
+    check(frame.locator(".ga-act-row").count() >= 1, f"{tag}: 原版活动列表为空", failures)
+    check(frame.locator(".van-tabbar").count() == 0, f"{tag}: native 活动列表仍有 tabbar", failures)
     shot(frame, out_dir, f"02-activities-{tag}")
 
     # 3. 新建活动

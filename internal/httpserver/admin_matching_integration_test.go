@@ -103,8 +103,8 @@ func TestIntegrationAdminMatchingPagesAccessAndEntryLinks(t *testing.T) {
 
 	resp := managerClient.get("/admin")
 	adminHome := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(adminHome, `href="/admin/matching"`) {
-		t.Fatalf("admin nav missing matching entry: status=%d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK || strings.Contains(adminHome, `href="/admin/matching"`) {
+		t.Fatalf("admin dashboard should not expose matching entry: status=%d", resp.StatusCode)
 	}
 	resp = managerClient.get("/admin/matching")
 	list := readBody(t, resp)

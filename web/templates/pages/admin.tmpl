@@ -37,7 +37,7 @@
   </a>
   {{end}}
   {{if .Data.CanActivity}}
-  <a class="admin-stat" href="/admin/activities">
+  <a class="admin-stat" href="/app?native_admin=1&amp;p=group_admin">
     <span class="admin-stat-icon" aria-hidden="true">{{template "admin_icon_calendar"}}</span>
     <span class="admin-stat-number">{{.Data.Stats.ActivityOpen}}</span>
     <span class="admin-stat-label">进行中活动</span>
@@ -83,11 +83,11 @@
       <h2 id="entry-group-activities">活动</h2>
       <span class="admin-entry-group-count">2 项</span>
     </div>
-    <a class="admin-entry" href="/admin/activities">
+    <a class="admin-entry" href="/app?native_admin=1&amp;p=group_admin">
       <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_calendar"}}</span>
       <span class="admin-entry-body">
         <span class="admin-entry-title">活动列表</span>
-        <span class="admin-entry-desc">报名名单、签到、海报与站内广播</span>
+        <span class="admin-entry-desc">原版活动管理：报名名单、签到、分组与一对一</span>
       </span>
       {{if gt .Data.Stats.ActivityOpen 0}}<span class="admin-entry-badge">{{.Data.Stats.ActivityOpen}}</span>{{end}}
       <span class="admin-entry-arrow" aria-hidden="true">›</span>
@@ -97,29 +97,6 @@
       <span class="admin-entry-body">
         <span class="admin-entry-title">新建活动</span>
         <span class="admin-entry-desc">填写时间地点、名额与签到设置</span>
-      </span>
-      <span class="admin-entry-arrow" aria-hidden="true">›</span>
-    </a>
-  </section>
-
-  <section class="admin-entry-group" aria-labelledby="entry-group-matching">
-    <div class="admin-entry-group-head">
-      <h2 id="entry-group-matching">匹配</h2>
-      <span class="admin-entry-group-count">2 项</span>
-    </div>
-    <a class="admin-entry" href="/admin/matching">
-      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_matching"}}</span>
-      <span class="admin-entry-body">
-        <span class="admin-entry-title">分组匹配</span>
-        <span class="admin-entry-desc">按性别与每组人数生成分组结果</span>
-      </span>
-      <span class="admin-entry-arrow" aria-hidden="true">›</span>
-    </a>
-    <a class="admin-entry" href="/admin/matching">
-      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_heart"}}</span>
-      <span class="admin-entry-body">
-        <span class="admin-entry-title">一对一匹配</span>
-        <span class="admin-entry-desc">按轮次执行一对一，查看配对与聊天情况</span>
       </span>
       <span class="admin-entry-arrow" aria-hidden="true">›</span>
     </a>

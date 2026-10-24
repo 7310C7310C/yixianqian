@@ -28,6 +28,7 @@ sources:
   - internal/db/grouping_admin.go
   - web/static/admin.css
   - web/static/admin.js
+  - web/static/legacy/index.html
   - web/templates/pages/admin.tmpl
   - web/templates/pages/admin_activities.tmpl
   - web/templates/pages/admin_activity_edit.tmpl
@@ -44,7 +45,9 @@ sources:
   - web/static/admin_points.css
   - web/static/admin_user_detail.css
   - internal/httpserver/admin_ui_phase_bc_test.go
+  - internal/httpserver/middleware.go
   - tools/browser/admin_ui_phase_bc.py
+  - tools/browser/admin_native_activity_smoke.py
   - web/templates/partials/admin_nav.tmpl
   - web/templates/partials/admin_ui.tmpl
   - web/templates/layout.tmpl
@@ -96,17 +99,18 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 通知：未读数字红点；`GET /legacy/api/notifications/stream` 推送未读/最新通知变化，EventSource 不可用时轮询兜底。
 - 登录/启用/注册/密码：Go SSR；改密为 SPA 内 Vant 子页，离开时还原滚动位置。
 - 公开首页：匿名访问 `/` 返回 200 服务端页面（品牌介绍、人工审核/匿名喜欢/动态通知、注册主按钮与登录入口、飞书老用户先设密码指引、飞书入口链接）；只保留入口链接，不展示二维码图片。登录后 `/` 仍由旧 SPA 入口。
-- 活动管理（v1 原版 SPA 页面）：`/legacy/api/admin/*` 兼容层与同步执行分支已接入；页面代码保留，但入口已撤回、暂不暴露，管理操作统一经「我的→管理→🛠️ 管理后台」的 SSR iframe。
+- 活动管理（v1 原版 SPA 页面）：管理台总览「活动列表」在 iframe 内直接打开 `/app?native_admin=1&p=group_admin`，复用原版 group_admin/group_detail/group_roster/checkin；`/legacy/api/admin/*` 兼容层与同步执行分支已接入。SSR 活动列表不再从导航暴露，活动工作台与新建/编辑表单保留（编辑仍从原版控制台进入）。
 - 麦穗管理（v1 原版 SPA 页面）：`/legacy/api/admin/points/*` 兼容层已接入（总览/流水/兑换/邀请/单用户详情；调整、退穗、兑换单标记走 CSRF、`points.adjust` 与审计）；页面代码保留，但入口已撤回、暂不暴露。
 - 举报管理（v1 原版 SPA 页面）：列表复用 `/legacy/api/messages/reported`，处理动作补 `POST /legacy/api/messages/{id}/handle`（`content.moderate` + CSRF + 审计）；页面代码保留，但入口已撤回、暂不暴露；`user.is_admin` 语义为「有任一管理角色」，与 `can_admin` 同值。
-- 管理入口收敛回单一管理后台；原生化页面暂不暴露（「我的→管理」只有「🛠️ 管理后台」）。
+- 管理入口：活动管理经管理台 iframe 内的原版 SPA 承载；麦穗/举报原生化页面仍不暴露（「我的→管理」只有「🛠️ 管理后台」）。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
 
-### 管理台（SSR，仅 iframe 承载）
+### 管理台（SSR + 活动原生 SPA，仅 iframe 承载）
 
 - 入口与框架：顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`（不渲染顶层页面），管理台只经 SPA 内 `/?admin=1` 打开 iframe overlay 使用；受权照片/海报原图串流是显式例外。
-- 导航（Phase A，2026-10-23）：取消 9 项平铺 subnav；顶部固定「管理台 / 当前页 / 返回总览」，总览改为 4 个关键统计 + 用户与权限/活动/匹配/麦穗/内容与安全分组入口卡。设计系统在 `web/static/admin.css`（`--adm-*` token、44px 触控、390/768/1280 响应式、浅色 v1 粉；`html.yxq-embed-dark` 有对应深色 token 覆盖），`web/static/admin.js` 负责列表筛选、工作台 tabs/hash 深链与二次确认。
-- 活动（Phase A）：列表（统计条 + 搜索/状态 chips + 活动卡）、新建/编辑（分组表单 + 手机 sticky 操作条）、工作台（模式卡 + 报名名单/签到/广播/设置 tabs + 行内签到 + 广播二次确认）；路由、handler 契约、RBAC、CSRF、审计与表单字段名不变。
+- 导航（Phase A，2026-10-23）：取消 9 项平铺 subnav；顶部固定「管理台 / 当前页 / 返回总览」，总览改为 4 个关键统计 + 用户与权限/活动/麦穗/内容与安全分组入口卡。设计系统在 `web/static/admin.css`（`--adm-*` token、44px 触控、390/768/1280 响应式、浅色 v1 粉；`html.yxq-embed-dark` 有对应深色 token 覆盖），`web/static/admin.js` 负责列表筛选、工作台 tabs/hash 深链与二次确认。
+- 活动入口（2026-10-24）：总览「活动列表」在 iframe 内跳到 `/app?native_admin=1&p=group_admin`，复用 v1 原版活动管理（列表/控制台/报名名单/现场签到）；总览不再有「匹配」分组或分组/一对一入口，两种匹配执行都在活动控制台内。`/admin/activities` 的 iframe 请求 303 到该原生地址，顶层 document 仍 303 `/?admin=1`；SSR 活动工作台与新建/编辑表单保留。
+- 活动（SSR，Phase A）：列表（统计条 + 搜索/状态 chips + 活动卡）、新建/编辑（分组表单 + 手机 sticky 操作条）、工作台（模式卡 + 报名名单/签到/广播/设置 tabs + 行内签到 + 广播二次确认）；SSR 列表不再从导航暴露，路由/handler 契约/RBAC/CSRF/审计与表单字段名不变。
 - 用户：审核通过/拒绝、用户详情与受权照片串流、停用/启用、临时密码。
 - 举报与反馈：列表与处理。
 - 活动：列表、创建/编辑、活动工作台（海报上传与私有串流、报名/签到名单与搜索/出席筛选/分页、现场签到、站内广播预览+服务端签名确认、快速设置）。
@@ -154,7 +158,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ## 5. 已知缺口/未验收
 
-- **管理入口收敛待部署验收**：入口收敛回单一「🛠️ 管理后台」，活动/麦穗/举报原生化页面暂不暴露（代码保留）；staging 仍运行旧 binary，部署后按 runbook 跑 `tools/admin_legacy_api_smoke.py`（管理员 200 / 普通用户 403）留证据。
+- **管理入口待部署验收**：管理台总览「活动列表」已改为 iframe 内 v1 原版活动管理（native_admin）；麦穗/举报原生化页面仍不暴露（代码保留）。staging 仍运行旧 binary，部署后需按 runbook 跑 `tools/admin_legacy_api_smoke.py`（管理员 200 / 普通用户 403）并走一遍管理台→活动→控制台→签到→编辑的原生链路留证据。
 
 - **人脸照片缺口**：`104` 个 `active` 普通用户没有 `has_face=true` 的照片，其中 `101` 个完全没有照片；可通过资料页上传修复，不是死锁（与身份证 P0 区分）。
 - **内容合规**：腾讯云照片内容合规（宠物/卡通判定、活体）未实现。

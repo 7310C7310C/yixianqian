@@ -193,14 +193,16 @@ def run_viewport(browser, viewport: tuple[int, int], chk: Checker) -> None:
         chk.check("管理员" in identity["text"] and identity["text"].strip() != "", f"{tag}:顶栏身份块为空 {identity}")
         chk.check("当前管理员" in identity["label"], f"{tag}:顶栏身份块 aria-label 缺失 {identity}")
     chk.check(frame.query_selector(".admin-topbar-user") is None, f"{tag}:顶栏仍渲染裸用户文本")
-    entry = frame.query_selector('.admin-entry[href="/admin/activities"]')
+    entry = frame.query_selector('.admin-entry[href^="/app?native_admin=1"]')
     chk.check(entry is not None, f"{tag}:总览缺少活动列表入口")
     if entry:
         entry.click()
         wait_frame(page, frame)
-        chk.check("/admin/activities" in frame.url, f"{tag}:活动列表入口未打开 {frame.url}")
-        chk.check(frame.query_selector(".admin-activity-card, .admin-empty") is not None,
-                  f"{tag}:活动列表页未渲染列表/空态")
+        chk.check("/app?native_admin=1" in frame.url, f"{tag}:活动列表入口未打开原版管理 {frame.url}")
+        title = frame.query_selector(".ga-title")
+        chk.check(title is not None and "活动管理" in (title.inner_text() or ""),
+                  f"{tag}:原版活动管理页未渲染列表标题")
+        chk.check(frame.query_selector(".van-tabbar") is None, f"{tag}:native 活动管理仍显示底部 tabbar")
         shot(page, tag, "02-activities-from-entry")
         frame_goto(page, frame, "/admin")
 

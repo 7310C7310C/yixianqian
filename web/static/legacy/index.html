@@ -25,6 +25,8 @@
      overflow-x: clip（而非 hidden）裁掉 tab 左右滑动溢出的 12px，
      同时不建立滚动容器，避免子页 position: sticky 页头失效。 */
   #app { min-height: 100vh; padding-bottom: calc(60px + env(safe-area-inset-bottom)); width: 100%; max-width: 100vw; overflow-x: clip; overscroll-behavior-x: none; }
+  /* 管理台 iframe 内的原版活动管理：没有底部 tabbar，去掉预留区 */
+  #app.native-admin { padding-bottom: 0; }
   /* 旧内核不支持 overflow:clip：回退 hidden 优先保证不横向溢出。
      会牺牲子页 sticky，但现代内核走 clip，不受影响。 */
   @supports not (overflow: clip) {
@@ -950,6 +952,10 @@
 </div>
 <!-- 已登录启动骨架：同版 App 轮廓，不闪登录页 -->
 <div v-else-if="bootLoading" class="app-boot-skeleton" aria-busy="true" aria-label="正在加载">
+  <template v-if="nativeAdmin">
+    <div class="ga-empty" style="padding-top:35vh;"><ga-loading size="24px"></ga-loading></div>
+  </template>
+  <template v-else>
   <div class="boot-brand"><span class="boot-logo">💕</span><span>一线牵</span></div>
   <div class="boot-wrap">
     <div class="boot-card">
@@ -980,6 +986,7 @@
       <span class="boot-shimmer boot-tab-label"></span>
     </div>
   </div>
+  </template>
 </div>
 <!-- 启动加载失败 -->
 <div v-else-if="bootError" class="boot-error-page">
@@ -1593,7 +1600,7 @@
 </div>
 <!-- ========== 管理员·活动管理（总览） ========== -->
 <div v-else-if="page==='group_admin'" key="group_admin" class="page ga-page">
-  <div class="back-nav" @click="handleBack"><van-icon name="arrow-left"></van-icon> 返回</div>
+  <div class="back-nav" @click="gaBack"><van-icon name="arrow-left"></van-icon> 返回</div>
   <div class="ga-title">👥 活动管理</div>
 
   <div v-if="gaLoading" class="ga-empty"><ga-loading size="24px"></ga-loading></div>
@@ -1633,7 +1640,7 @@
 </div>
 <!-- ========== 管理员·活动控制台（模式卡 + 动态 tabs） ========== -->
 <div v-else-if="page==='group_detail'" key="group_detail" class="page ga-page">
-  <div class="back-nav" @click="handleBack"><van-icon name="arrow-left"></van-icon> 返回</div>
+  <div class="back-nav" @click="gaBack"><van-icon name="arrow-left"></van-icon> 返回</div>
   <div class="ga-title" style="display:flex; align-items:center; gap:8px;">
     <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ gaDetail ? (gaDetail.name || '未命名活动') : '活动' }}</span>
     <span v-if="gaDetail" class="ga-chip" :class="gaModeChipClass(gaDetail)"><span class="ga-chip-dot"></span>{{ gaModeChip(gaDetail) }}</span>
@@ -1998,7 +2005,7 @@
 </div>
 <!-- ========== 管理员·报名名单 ========== -->
 <div v-else-if="page==='group_roster'" key="group_roster" class="page ga-page">
-  <div class="back-nav" @click="handleBack"><van-icon name="arrow-left"></van-icon> 返回</div>
+  <div class="back-nav" @click="gaBack"><van-icon name="arrow-left"></van-icon> 返回</div>
   <div class="ga-title">{{ gaDetail ? (gaDetail.name || '活动') : '' }} 报名名单</div>
   <div class="ga-card" style="margin-top:12px;">
     <div v-if="gaRosterLoading" class="ga-empty"><ga-loading size="24px"></ga-loading></div>
@@ -2056,7 +2063,7 @@
 </div>
 <!-- ========== 管理员·现场签到（独立页：只做签到，避免误触其他功能） ========== -->
 <div v-else-if="page==='checkin'" key="checkin" class="page ga-page">
-  <div class="back-nav" @click="handleBack"><van-icon name="arrow-left"></van-icon> 返回</div>
+  <div class="back-nav" @click="gaBack"><van-icon name="arrow-left"></van-icon> 返回</div>
   <div class="ga-title">✅ 现场签到</div>
   <div class="ga-title-name">{{ gaCheckinName || '活动' }}<span class="ga-row-id">{{ gaDetailId }}</span></div>
 
@@ -3410,7 +3417,7 @@
 </van-popup>
 <!-- 底部导航 -->
 <van-tabbar v-model="page" :before-change="guardTabChange" fixed safe-area-inset-bottom active-color="#ff6b81" inactive-color="#969799"
-  v-if="!subPages.includes(page)">
+  v-if="!nativeAdmin && !subPages.includes(page)">
   <van-tabbar-item name="cards" icon="like-o">牵线</van-tabbar-item>
   <van-tabbar-item name="likes" icon="chat-o" :badge="unreadBadge">消息</van-tabbar-item>
   <van-tabbar-item name="home" icon="home-o">活动</van-tabbar-item>
@@ -3419,7 +3426,7 @@
 <!-- 站内嵌入页：仅管理后台（同源 iframe，关闭即返回原 tab） -->
 <Transition name="embed-slide" appear>
 <div v-if="embedOpen" class="embed-overlay" role="dialog" aria-modal="true" :aria-label="embedTitle">
-  <div class="embed-bar" :class="{ 'embed-bar--wide': embedUrl.indexOf('/admin') === 0 }">
+  <div class="embed-bar" :class="{ 'embed-bar--wide': embedUrl.indexOf('/admin') === 0 || embedUrl.indexOf('/app?native_admin=1') === 0 }">
     <div class="embed-bar-inner">
       <button type="button" class="embed-back" aria-label="返回" @click="closeEmbed">
         <van-icon name="arrow-left" />
@@ -3506,6 +3513,21 @@ const GaLoading = {
 createApp({
   components: { 'ga-loading': GaLoading },
   setup() {
+    // 管理台 iframe 内的原版活动管理：/app?native_admin=1&p=group_admin。
+    // 启动期先按请求隐藏 App 外壳；can_admin 校验在首页数据就绪后完成。
+    let nativeAdminRequested = false, nativeAdminEntryPage = 'group_admin';
+    try {
+      const nativeQuery = new URLSearchParams(location.search);
+      nativeAdminRequested = nativeQuery.get('native_admin') === '1';
+      if (nativeQuery.get('p')) nativeAdminEntryPage = nativeQuery.get('p');
+    } catch (e) {}
+    const nativeAdmin = ref(nativeAdminRequested);
+    let nativeAdminEntryPending = false;
+    // #app 是挂载容器，不在模板内，:class 不会被编译；用原生 class 同步去掉底栏预留。
+    watch(nativeAdmin, (v) => {
+      const root = document.getElementById('app');
+      if (root) root.classList.toggle('native-admin', !!v);
+    }, { immediate: true });
     const page = ref('cards');
     // 四 Tab / 子页流畅过渡：按 tab 顺序与子页层级自动选动画
     const pageTransition = ref('tab-transition');
@@ -3560,11 +3582,15 @@ createApp({
       pendingPopConsume++;
       popConsumeStep();
     }
+    // native_admin 模式下保留 query（iframe 刷新/返回仍停留在原生管理页）；普通 App 模式不变。
+    function navURL(){
+      return nativeAdmin.value ? (location.pathname + location.search) : location.pathname;
+    }
     function pushHistory(state){
       if(isHandlingPopState) return;
       // 不带 hash：Safari/部分浏览器会把 hash 变化当锚点导航，导致 tabbar 闪动与进度条。
       // 页面/浮层状态已存在 history.state，back/forward 仍由 popstate 消费。
-      try{ history.pushState(state, '', location.pathname); }catch(e){}
+      try{ history.pushState(state, '', navURL()); }catch(e){}
     }
     function handleBack(){
       // 次序托盘/未保存弹窗打开：返回只关浮层、停留（不触发离开拦截）
@@ -3589,6 +3615,12 @@ createApp({
       }
       // 主Tab下直接返回由容器处理（关闭网页）
       history.back();
+    }
+    // 原版活动管理在 native_admin 下的返回：列表页回管理台总览，子页保持原层级返回。
+    function gaBack(){
+      if (!nativeAdmin.value) { handleBack(); return; }
+      if (page.value === 'group_admin') { location.href = '/admin?embed=1'; return; }
+      handleBack();
     }
     const user = ref(null);
     const isObserver = computed(() => !!(user.value && user.value.is_observer));
@@ -5230,6 +5262,15 @@ createApp({
     // 已登录启动与 doLogin 成功两条路径都走这里，避免行为分叉。
     function afterHomeReady(entryHash) {
       if (!user.value) return;
+      if (nativeAdminRequested) {
+        nativeAdminRequested = false;
+        if (!user.value.can_admin) { location.replace('/'); return; }   // 普通用户退回首页
+        nativeAdmin.value = true;
+        nativeAdminEntryPage = 'group_admin';   // 目前只支持活动管理入口
+        nativeAdminEntryPending = true;
+        page.value = nativeAdminEntryPage;
+        return;   // 管理页不启动通知/引导/身份证人脸门禁
+      }
       if (entryHash === '#/likes') { page.value = 'likes'; }
       else if (entryHash === '#/activities') { page.value = 'home'; }
       loadPraiseState();   // 点赞的今日剩余 / 我点过谁，和切到卡片页时同一份
@@ -6330,7 +6371,11 @@ createApp({
       let path = '', search = '', href = '';
       try { path = win.location.pathname; search = win.location.search || ''; href = win.location.href || ''; } catch (e) { return; }
       if (!path || href === 'about:blank') return;
-      await applyEmbedTheme(doc);
+      // 管理台活动入口在 iframe 内切到 v1 原版 SPA（/app?native_admin=1&p=group_admin）。
+      // SPA 自带自己的主题与布局，不能套 embed-admin.css（会改 body 字号/内边距）。
+      let nativeAdminFrame = false;
+      try { nativeAdminFrame = path === '/app' && new URLSearchParams(search).get('native_admin') === '1'; } catch (e) {}
+      if (!nativeAdminFrame) await applyEmbedTheme(doc);
       // await 期间可能已导航/关闭：旧文档不得把新页面的骨架提前撤掉。
       let currentDoc = null;
       try { currentDoc = frame.contentDocument; } catch (e) { return; }
@@ -6341,7 +6386,7 @@ createApp({
         win.__yxqEmbedBeforeUnload = () => { embedLoading.value = true; embedReady.value = false; };
         win.addEventListener('beforeunload', win.__yxqEmbedBeforeUnload);
       } catch (e) {}
-      const inScope = path === '/admin' || path.indexOf('/admin/') === 0;
+      const inScope = path === '/admin' || path.indexOf('/admin/') === 0 || nativeAdminFrame;
       if (inScope) {
         embedLoading.value = false;
         embedReady.value = true;
@@ -6353,7 +6398,8 @@ createApp({
         window.location.href = path + search;
         return;
       }
-      if (path === '/' || path === '/app') { vant.showToast('已完成'); return; }
+      if (path === '/') { vant.showToast('已完成'); return; }
+      if (path === '/app') { vant.showToast('已完成'); return; }
       vant.showToast('已返回');
     }
     async function openSignupSheet() {
@@ -7000,6 +7046,7 @@ createApp({
     }
     async function checkIdValidForPage(targetPage){
       if(targetPage === 'profile_edit') return;
+      if(nativeAdmin.value) return;   // 管理台原生管理页不受用户端门禁影响
       try{
         // 优先用已加载的 profileData，若未加载或无 id_valid 则拉取
         let valid = profileData.value && typeof profileData.value.id_valid === 'boolean' ? profileData.value.id_valid : null;
@@ -7055,6 +7102,7 @@ createApp({
     }
     async function checkFaceValidForPage(targetPage){
       if(targetPage === 'profile_edit') return;
+      if(nativeAdmin.value) return;   // 管理台原生管理页不受用户端门禁影响
       try{
         let valid = profileData.value && typeof profileData.value.has_face === 'boolean' ? profileData.value.has_face : null;
         if(valid === null){
@@ -7483,6 +7531,8 @@ createApp({
       }
       // 子页回退：优先用 state.page，否则按 parent 映射
       const st = e.state;
+      // native_admin：iframe 内退到主 tab 历史条目时，直接回管理台总览，不渲染用户端 App。
+      if (nativeAdmin.value && st && TAB_ORDER.includes(st.page)) { location.href = '/admin?embed=1'; return; }
       // 从报名名单进他人资料页：上一条历史是名单弹层，回到活动详情并重开名单（即上一界面）；
       // 重开时屏蔽 watcher 的重复 push（当前已在名单历史条目上），下一 tick 再恢复
       if(page.value === 'user_detail' && userDetailFromSheet.value && st && st.overlay === 'signupSheet'){
@@ -7516,6 +7566,7 @@ createApp({
         'user_detail': userDetailFrom.value || 'home',
         'likes': 'cards', 'home': 'cards', 'profile': 'cards'
       };
+      if (nativeAdmin.value && TAB_ORDER.includes(parentMap[page.value])) { location.href = '/admin?embed=1'; return; }
       if(parentMap[page.value]){ page.value = parentMap[page.value]; }
       // 同上：返回消费了一层历史，不再补 push
       nextTick(() => { isHandlingPopState = false; });
@@ -7573,11 +7624,18 @@ createApp({
     watch(page, (nv, ov) => {
       if(isHandlingPopState) return;
       if(nv === ov) return;
+      if(nativeAdminEntryPending && nv === 'group_admin'){
+        // native_admin 首次进入：基条目就地写成 group_admin，不额外压历史；
+        // 这样 iframe 返回键能退到管理台总览，而不是用户端 tab。
+        nativeAdminEntryPending = false;
+        try{ history.replaceState({page: nv}, '', navURL()); }catch(e){}
+        return;
+      }
       if(suppressPagePushOnce && nv === 'checkin'){ suppressPagePushOnce = false; return; }   // 塌缩条目已在位，不补 push
       if(passwordFormDone){
         passwordFormDone = false;
         // 改密成功：当前条目就是 password，直接改写为 profile，避免多压一条可返回的旧表单。
-        try{ history.replaceState({page: nv}, '', location.pathname); }catch(e){}
+        try{ history.replaceState({page: nv}, '', navURL()); }catch(e){}
         return;
       }
       // 四个主 tab 之间切换只是视图状态：不新增历史条目、不改 URL。
@@ -7586,7 +7644,7 @@ createApp({
       // 从主 tab 进入子页前，把当前条目 state 就地改写为所在 tab（不新增条目、不改 URL），
       // 这样从子页返回时 popstate 能落回正确的 tab，而不是启动时的旧 tab。
       if(TAB_ORDER.includes(ov) && !TAB_ORDER.includes(nv)){
-        try{ history.replaceState({page: ov}, '', location.pathname); }catch(e){}
+        try{ history.replaceState({page: ov}, '', navURL()); }catch(e){}
       }
       pushHistory({page: nv});
     });
@@ -7964,7 +8022,7 @@ createApp({
       try { claimEntryFlag = new URLSearchParams(location.search).get('claim') === '1'; } catch(e) { claimEntryFlag = false; }
       // ?admin=1：同样要在清 query 前捕获
       try { adminEntryFlag = new URLSearchParams(location.search).get('admin') === '1'; } catch(e) { adminEntryFlag = false; }
-      try{ history.replaceState({page: page.value}, '', location.pathname); }catch(e){}
+      try{ history.replaceState({page: page.value}, '', navURL()); }catch(e){}
       window.addEventListener('popstate', handlePopState);
       if (SERVER_AUTHENTICATED) {
         bootAuthenticated();
@@ -7990,6 +8048,7 @@ createApp({
     async function restoreDeck(){
       if(deckRestored) return;
       deckRestored = true;
+      if (nativeAdminRequested || nativeAdmin.value) return;   // 管理页不恢复牵线牌堆
       let savedPos = null;
       let restoredPos = null;
       const finish = (ok, reason) => {
@@ -8291,7 +8350,11 @@ createApp({
     }
     function gaAuthBack(e) {
       const m = gaMsg(e, '');
-      if (m.includes('未登录') || m.includes('没有权限')) { vant.showToast(m); page.value = 'profile'; return true; }
+      if (m.includes('未登录') || m.includes('没有权限')) {
+        vant.showToast(m);
+        if (nativeAdmin.value) { location.href = '/admin?embed=1'; } else { page.value = 'profile'; }
+        return true;
+      }
       return false;
     }
     function gaRowSub(a) {
@@ -8357,7 +8420,7 @@ createApp({
       if(page.value === 'group_detail'){
         // 控制台页头入口：把当前 group_detail 条目就地改写为 checkin（塌缩历史，不新增条目），
         // 返回时自然回退 group_admin；一次性旗标让 watch(page) 跳过本 tick 的补 push
-        try{ history.replaceState({page:'checkin'}, '', location.pathname); }catch(e){}
+        try{ history.replaceState({page:'checkin'}, '', navURL()); }catch(e){}
         suppressPagePushOnce = true;
       }
       page.value = 'checkin';
@@ -9188,6 +9251,7 @@ createApp({
       showSuggestionDialog, suggestionType, suggestionText, openSuggestionDialog, onSuggestionBeforeClose, suggestionSubmitting,
       likesData, loadingLikes, loadMyLikesCount, notifications, unreadCount, unreadBadge, markNotificationsRead,
       embedOpen, embedUrl, embedTitle, embedLoading, embedReady, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
+      nativeAdmin, gaBack,
       myLikesList, loadingMyLikes, myLikesCount, openMyLikes, openMutual, openLikedMe,
       myActivitiesList, loadingMyActivities, openMyActivities,
       myGroupsList, loadingMyGroups, openMyGroups, hasGroupEntry,

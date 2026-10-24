@@ -270,7 +270,9 @@ func TestEmbeddedPagesAllowSameOriginFraming(t *testing.T) {
 		{"/password", "SAMEORIGIN", "frame-ancestors 'self'"},
 		{"/admin", "SAMEORIGIN", "frame-ancestors 'self'"},
 		{"/admin/users", "SAMEORIGIN", "frame-ancestors 'self'"},
+		{"/app?native_admin=1&p=group_admin", "SAMEORIGIN", "frame-ancestors 'self'"},
 		{"/", "DENY", "frame-ancestors 'none'"},
+		{"/app", "DENY", "frame-ancestors 'none'"},
 		{"/login", "DENY", "frame-ancestors 'none'"},
 	}
 	for _, tc := range cases {

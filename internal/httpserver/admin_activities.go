@@ -126,6 +126,13 @@ func adminActivityStatusKnown(status string) bool {
 }
 
 func (a *App) handleAdminActivitiesPage(w http.ResponseWriter, r *http.Request, access adminAccess) {
+	// 管理台 iframe 内不再渲染 SSR 活动列表：直接切到 v1 原版活动管理（native_admin）。
+	// 顶层 document 已在 adminHTML 包装层 303 到 /?admin=1；无 header 的 CLI/测试仍渲染 SSR。
+	if r.Header.Get("Sec-Fetch-Dest") == "iframe" {
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, "/app?native_admin=1&p=group_admin", http.StatusSeeOther)
+		return
+	}
 	activities, err := a.db.ListActivities(r.Context())
 	if err != nil {
 		a.logger(r).Error("list admin activities failed", "error", err)

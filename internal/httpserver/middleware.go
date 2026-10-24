@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -29,9 +30,9 @@ func (a *App) withRequestID(next http.Handler) http.Handler {
 func (a *App) withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Content-Security-Policy", securityPolicy(r.URL.Path))
+		h.Set("Content-Security-Policy", securityPolicyWithQuery(r.URL.Path, r.URL.Query()))
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", frameOptions(r.URL.Path))
+		h.Set("X-Frame-Options", frameOptionsWithQuery(r.URL.Path, r.URL.Query()))
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
@@ -46,10 +47,14 @@ func (a *App) withSecurityHeaders(next http.Handler) http.Handler {
 // SPA, whose Vue global build compiles in-DOM templates with new Function.
 // base-uri must allow its <base> tag; every other route keeps the strict policy.
 func securityPolicy(path string) string {
+	return securityPolicyWithQuery(path, nil)
+}
+
+func securityPolicyWithQuery(path string, query url.Values) string {
 	frameAncestors := "'none'"
-	if embeddablePage(path) {
-		// 账号安全页与管理台由用户端 SPA 以同源 iframe 内嵌；只放宽 framing，
-		// 其他 CSP 指令保持严格。
+	if embeddablePage(path, query) {
+		// 账号安全页、管理台与活动管理 native SPA 由用户端 SPA 以同源 iframe 内嵌；
+		// 只放宽 framing，其他 CSP 指令保持严格。
 		frameAncestors = "'self'"
 	}
 	if path == "/" || path == "/app" {
@@ -64,12 +69,23 @@ func securityPolicy(path string) string {
 // embeddablePage lists server-rendered pages that the user SPA opens in a
 // same-origin iframe. Keeping the allowlist narrow avoids weakening clickjacking
 // protection for the rest of the app.
-func embeddablePage(path string) bool {
-	return path == "/password" || path == "/admin" || strings.HasPrefix(path, "/admin/")
+//
+// 活动管理按 PM 决定复用 v1 原版 SPA：管理台 iframe 内的
+// /app?native_admin=1&p=group_admin 只对同源 iframe 放宽 framing；
+// 普通 / 与 /app 仍保持 frame-ancestors 'none' / X-Frame-Options: DENY。
+func embeddablePage(path string, query url.Values) bool {
+	if path == "/password" || path == "/admin" || strings.HasPrefix(path, "/admin/") {
+		return true
+	}
+	return path == "/app" && query.Get("native_admin") == "1"
 }
 
 func frameOptions(path string) string {
-	if embeddablePage(path) {
+	return frameOptionsWithQuery(path, nil)
+}
+
+func frameOptionsWithQuery(path string, query url.Values) string {
+	if embeddablePage(path, query) {
 		return "SAMEORIGIN"
 	}
 	return "DENY"

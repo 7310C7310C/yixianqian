@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -29,7 +30,10 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 		`const APP_VERSION = 'legacy';`,
 		`src="lib/vue.global.prod.js"`,
 		`src="lib/vant.min.js"`,
-		`history.pushState(state, '', location.pathname);`,
+		`history.pushState(state, '', navURL());`,
+		`nativeAdmin`,
+		`function gaBack()`,
+		`native_admin`,
 		`viewport-fit=cover`,
 		`href="favicon.ico"`,
 		`<div class="section-title">管理</div>`,
@@ -161,5 +165,26 @@ func TestSecurityPolicyRelaxesLegacySPAOnly(t *testing.T) {
 	}
 	if !strings.Contains(strict, "base-uri 'none'") {
 		t.Fatalf("strict policy lost base-uri: %s", strict)
+	}
+}
+
+// 活动管理 native SPA 只在 native_admin=1 的同源 iframe 场景放宽 framing；
+// 普通 / 与 /app 仍是 frame-ancestors 'none' / X-Frame-Options: DENY。
+func TestNativeAdminAppAllowsSameOriginFraming(t *testing.T) {
+	native := url.Values{"native_admin": {"1"}, "p": {"group_admin"}}
+	if got := frameOptionsWithQuery("/app", native); got != "SAMEORIGIN" {
+		t.Fatalf("/app?native_admin=1 X-Frame-Options = %q, want SAMEORIGIN", got)
+	}
+	if csp := securityPolicyWithQuery("/app", native); !strings.Contains(csp, "frame-ancestors 'self'") {
+		t.Fatalf("/app?native_admin=1 CSP = %q, want frame-ancestors 'self'", csp)
+	}
+	if got := frameOptions("/app"); got != "DENY" {
+		t.Fatalf("/app X-Frame-Options = %q, want DENY", got)
+	}
+	if csp := securityPolicy("/app"); !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Fatalf("/app CSP = %q, want frame-ancestors 'none'", csp)
+	}
+	if got := frameOptions("/"); got != "DENY" {
+		t.Fatalf("/ X-Frame-Options = %q, want DENY", got)
 	}
 }

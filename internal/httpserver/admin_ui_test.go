@@ -62,20 +62,23 @@ func TestAdminDashboardGroupedNavigation(t *testing.T) {
 		`class="admin-topbar"`,
 		"管理台",
 		"待审核用户", "待处理举报", "待处理反馈", "进行中活动",
-		"用户与权限", "活动", "匹配", "麦穗", "内容与安全",
+		"用户与权限", "活动", "麦穗", "内容与安全",
 		`href="/admin/users?status=pending"`,
 		`href="/admin/roles"`,
-		`href="/admin/activities"`, `href="/admin/activities/new"`,
-		`href="/admin/matching"`, `href="/admin/points"`, `href="/admin/audit"`,
+		`href="/app?native_admin=1&amp;p=group_admin"`, `href="/admin/activities/new"`,
+		`href="/admin/points"`, `href="/admin/audit"`,
 		"super_admin", "新建活动", "活动列表",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("dashboard missing %q", want)
 		}
 	}
-	for _, unwanted := range []string{`class="subnav`, `class="admin-nav`, `aria-label="管理台"`} {
+	for _, unwanted := range []string{
+		`class="subnav`, `class="admin-nav`, `aria-label="管理台"`,
+		`href="/admin/matching"`, `href="/admin/activities"`, "分组匹配", "一对一匹配",
+	} {
 		if strings.Contains(html, unwanted) {
-			t.Fatalf("dashboard still renders flat nav %q", unwanted)
+			t.Fatalf("dashboard still renders removed entry %q", unwanted)
 		}
 	}
 }

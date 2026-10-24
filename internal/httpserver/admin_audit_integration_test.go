@@ -234,8 +234,8 @@ func TestIntegrationAdminAuditHTTP(t *testing.T) {
 	}
 	// Phase A：总览改为分组入口卡，不再渲染 9 项平铺 nav；所有入口仍必须可达。
 	for _, item := range []string{
-		`href="/admin/users"`, `href="/admin/activities"`,
-		`href="/admin/matching"`, `href="/admin/points"`, `href="/admin/reports"`,
+		`href="/admin/users"`, `href="/app?native_admin=1&amp;p=group_admin"`,
+		`href="/admin/points"`, `href="/admin/reports"`,
 		`href="/admin/suggestions"`, `href="/admin/roles"`, `href="/admin/audit"`,
 	} {
 		if !strings.Contains(adminHome, item) {

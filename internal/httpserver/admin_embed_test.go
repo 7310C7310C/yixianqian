@@ -48,6 +48,25 @@ func TestAdminHTMLRedirectsTopLevelDocument(t *testing.T) {
 	}
 }
 
+// 管理台 iframe 打开 /admin/activities 时不再渲染 SSR 列表，303 到 v1 原版活动管理；
+// 顶层 document 仍由 adminHTML 包装层 303 到 /?admin=1（现有测试覆盖）。
+func TestAdminActivitiesIframeRedirectsToNativeConsole(t *testing.T) {
+	app := &App{}
+	req := httptest.NewRequest(http.MethodGet, "/admin/activities", nil)
+	req.Header.Set("Sec-Fetch-Dest", "iframe")
+	rec := httptest.NewRecorder()
+	app.handleAdminActivitiesPage(rec, req, adminAccess{})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/app?native_admin=1&p=group_admin" {
+		t.Fatalf("location = %q", loc)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("cache-control = %q, want no-store", cc)
+	}
+}
+
 // 管理台受权媒体串流（照片原图、活动海报）允许顶层 document 打开：管理台用
 // target="_blank" 在新窗口看原图时，浏览器发的是 Sec-Fetch-Dest: document，
 // 媒体路由不能落进页面路由的 303；鉴权仍先于一切。

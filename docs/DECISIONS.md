@@ -163,3 +163,12 @@ sources: []
 - 决策：不新增第二套设计系统；在 `web/static/admin.css` 的 `Phase B/C` 分区补齐共享组件（身份块、记录卡 `.admin-record-list`、键值网格 `.admin-kv`、角色卡、审计行卡、`.admin-table--stack`），页面统一使用 `.admin-page-head` + `.admin-section` + 状态 partial + 空态/分页；多字段列表改记录卡，不再用 6–7 列表格；顶栏右侧改为「图标 + 管理员 + 姓名」胶囊；实心品牌控件统一用 `--adm-on-brand`（深色 `#2a1a1e`）保证 ≥4.5:1。
 - 边界：只改模板/CSS/交互钩子；路由、handler、字段名、表单 action/method、`data-matching-*`/`data-adm-*` 钩子、RBAC、CSRF 与审计不变；Phase A 的 719px 表格断点不改，新表格卡片化用 `.admin-table--stack`（≤899）。
 - 后果：剩余 10 页在三视口下统一为粉色 Vant 观感；`assetVersion` 提升到 3，两个 `@import` 同步；证据与断言见 `docs/STATUS.md` 管理台章节。
+
+## 22. 活动管理回归 v1 原版 SPA，匹配入口收进活动控制台（2026-10-24）
+
+- 背景：管理台 Phase A 的 SSR 活动工作台替代了 v1 原版活动管理；PM 反馈「原版现场签到很好用，还是喜欢原版的」，要求活动管理基于原版做简约调整，且执行分组/一对一不再作为总览独立管理项。
+- 决策：管理台总览「活动列表」在 iframe 内直接打开 `/app?native_admin=1&p=group_admin`，复用 v1 SPA 的 group_admin/group_detail/group_roster/checkin 页面；native 模式只保留管理页内容与 `.back-nav`（列表页返回 `/admin?embed=1`，子页按层级返回），隐藏 tabbar/App 外壳，仅 `can_admin` 可用，普通用户 `location.replace('/')`。`/admin/activities` 的 iframe 请求 303 到 native 地址，顶层 document 仍 303 `/?admin=1`，无 header 请求仍渲染 SSR；SSR 活动工作台与新建/编辑表单保留（编辑仍由控制台 `openEmbed('/admin/activities/{id}/edit')` 打开）。
+- 决策：总览删除「匹配」分组与「分组匹配/一对一匹配」入口；执行分组、执行一对一保留在活动控制台内。其他管理页（用户/麦穗/举报/反馈/角色/审计）设计不变。
+- 决策：仅对 `/app?native_admin=1` 的同源 iframe 放宽 framing（CSP `frame-ancestors 'self'`、`X-Frame-Options: SAMEORIGIN`）；普通 `/`、`/app` 及登录页仍保持 `frame-ancestors 'none'` / `DENY`，避免扩大点击劫持面。
+- 边界：不改 `/legacy/api/admin/*` 契约与 RBAC/CSRF/审计；不改数据库与匹配算法；不重做原版页面视觉；不改用户端普通 App 模式行为。
+- 后果：管理台活动入口回到 PM 认可的原版交互；匹配操作收敛到单场活动上下文；SSR 活动列表不再从导航暴露。
