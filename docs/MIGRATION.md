@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 sources:
   - migrations/**
   - tools/migrate_testapp.py
@@ -44,6 +44,7 @@ sources:
 ### 3.1 手机号
 
 - staging 用确定的测试号（`1390000xxxx`）；重复手机只保留一笔（优先 U-0006 / 较小 legacy ID），其余分配新测试号。
+- `testapp` 的 `1390000xxxx` 为压测/测试数据，不代表生产存量；生产导出需抽查手机号非空率（不写具体用户信息）。
 - production 必须使用真实手机号；缺失/重复人工处理并写入报告，不能自动乱配。
 
 ### 3.2 身份证（P0）
