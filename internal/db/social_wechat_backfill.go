@@ -79,31 +79,44 @@ func (d *DB) BackfillMutualWechatNotifications(ctx context.Context, limit int) (
 
 	created := 0
 	for _, p := range pairs {
-		sides := []struct {
-			recipient   int64
-			otherID     int64
-			otherName   string
-			otherWechat string
-		}{
-			{p.InitiatorID, p.TargetID, p.TargetName, p.TargetWechat},
-			{p.TargetID, p.InitiatorID, p.InitiatorName, p.InitiatorWechat},
+		n, err := d.ensureMutualWechatPair(ctx, p)
+		if err != nil {
+			return created, err
 		}
-		for _, side := range sides {
-			inserted, err := d.CreateNotificationOnce(ctx, NotificationInput{
-				UserID: side.recipient,
-				Kind:   "wechat_exchange",
-				Title:  "已交换微信号",
-				Body: fmt.Sprintf("你和 %s 已相互同意交换微信号：%s，快去加好友吧。",
-					side.otherName, side.otherWechat),
-				DedupeKey: mutualWechatDedupeKey(p.InitiatorID, p.TargetID, side.recipient),
-				Payload:   map[string]any{"other_id": side.otherID},
-			})
-			if err != nil {
-				return created, fmt.Errorf("db: backfill mutual wechat notification: %w", err)
-			}
-			if inserted {
-				created++
-			}
+		created += n
+	}
+	return created, nil
+}
+
+// ensureMutualWechatPair writes the one-time notice for both sides of one ready
+// pair. Extracted from the sweep so tests can exercise a single pair without
+// depending on the global LIMIT ordering.
+func (d *DB) ensureMutualWechatPair(ctx context.Context, p mutualWechatPair) (int, error) {
+	sides := []struct {
+		recipient   int64
+		otherID     int64
+		otherName   string
+		otherWechat string
+	}{
+		{p.InitiatorID, p.TargetID, p.TargetName, p.TargetWechat},
+		{p.TargetID, p.InitiatorID, p.InitiatorName, p.InitiatorWechat},
+	}
+	created := 0
+	for _, side := range sides {
+		inserted, err := d.CreateNotificationOnce(ctx, NotificationInput{
+			UserID: side.recipient,
+			Kind:   "wechat_exchange",
+			Title:  "已交换微信号",
+			Body: fmt.Sprintf("你和 %s 已相互同意交换微信号：%s，快去加好友吧。",
+				side.otherName, side.otherWechat),
+			DedupeKey: mutualWechatDedupeKey(p.InitiatorID, p.TargetID, side.recipient),
+			Payload:   map[string]any{"other_id": side.otherID},
+		})
+		if err != nil {
+			return created, fmt.Errorf("db: backfill mutual wechat notification: %w", err)
+		}
+		if inserted {
+			created++
 		}
 	}
 	return created, nil

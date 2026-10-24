@@ -610,12 +610,22 @@ func TestIntegrationBackfillMutualWechatNotifications(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	created, err := d.BackfillMutualWechatNotifications(ctx, 500)
+	// Deterministic: exercise one pair directly instead of relying on the
+	// global sweep's LIMIT/order (shared test DBs may hold other ready pairs).
+	pair := mutualWechatPair{
+		InitiatorID:     male,
+		TargetID:        female,
+		InitiatorName:   prefix + "-male",
+		InitiatorWechat: "wx-backfill-m",
+		TargetName:      prefix + "-female",
+		TargetWechat:    "wx-backfill-f",
+	}
+	created, err := d.ensureMutualWechatPair(ctx, pair)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created < 2 {
-		t.Fatalf("created = %d, want >= 2", created)
+	if created != 2 {
+		t.Fatalf("created = %d, want 2", created)
 	}
 	var n int
 	var body string
@@ -636,8 +646,13 @@ func TestIntegrationBackfillMutualWechatNotifications(t *testing.T) {
 		t.Fatalf("female notifications count=%d body=%q", n, body)
 	}
 
-	// Idempotent: a second sweep creates nothing for this pair.
-	if _, err := d.BackfillMutualWechatNotifications(ctx, 500); err != nil {
+	// Idempotent at the pair level and through the global sweep.
+	if again, err := d.ensureMutualWechatPair(ctx, pair); err != nil {
+		t.Fatal(err)
+	} else if again != 0 {
+		t.Fatalf("second pair call created %d, want 0", again)
+	}
+	if _, err := d.BackfillMutualWechatNotifications(ctx, 2000); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.pool.QueryRow(ctx,
@@ -647,6 +662,6 @@ func TestIntegrationBackfillMutualWechatNotifications(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 2 {
-		t.Fatalf("wechat notifications after second sweep = %d, want 2", n)
+		t.Fatalf("wechat notifications after sweep = %d, want 2", n)
 	}
 }

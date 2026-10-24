@@ -98,9 +98,9 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	viewer := bundle.Viewer
-	quota, err := a.db.LikeQuotaFor(ctx, user.ID, now)
-	if err != nil {
-		a.logger(r).Warn("legacy home quota failed", "error", err, "user_id", user.ID)
+	quota, quotaErr := a.db.LikeQuotaFor(ctx, user.ID, now)
+	if quotaErr != nil {
+		a.logger(r).Warn("legacy home quota failed", "error", quotaErr, "user_id", user.ID)
 	}
 	praise, praiseErr := a.db.PraiseStateFor(ctx, user.ID, now)
 	if praiseErr != nil {
@@ -129,7 +129,10 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		pageViewer.AccountKind = "observer"
 		pageViewer.AccountStatus = "observer"
 	}
-	deps := cardPageDeps{quota: &quota}
+	deps := cardPageDeps{}
+	if quotaErr == nil {
+		deps.quota = &quota
+	}
 	if praiseErr == nil {
 		deps.praise = &praise
 	}
