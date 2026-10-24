@@ -144,7 +144,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 活动时间窗（UD-03）：状态非「报名中」或已过开始时间的报名、已过开始时间的取消被拒绝；自助签到要求活动进行中（未开始/已结束/已取消均拒绝），错误码 `activity_started`/`activity_not_started`/`activity_ended`。
 - 修改手机号（UD-05）：`PUT /legacy/api/profile` 改号需 `current_password`（缺失 400 `password_required`、错误 400 `password_invalid`、无密码 409 `password_not_set`），保留唯一性 409 `phone_taken`，写 `profile.phone.changed` 脱敏审计；未改号时不要求密码。
 - 同号判定（UD-05 修复细节）：资料更新的手机号比较改用 `auth.NormalizePhone`，与登录/注册同一套归一化；带 `+86`、空格或分隔符的同一号码不再误判为换号而要求当前密码，无法解析的值仍只匹配自身。
-- 静态资源版本（修复细节）：`admin_points.css`/`admin_user_detail.css` 的 `@import` 版本与 `assetVersion=5` 对齐；`TestStaticCSSImportVersionMatches` 断言两者一致，避免部署后仍命中旧 `admin.css`。
+- 静态资源版本（修复细节）：`admin_points.css`/`admin_user_detail.css` 的 `@import` 版本与 `assetVersion=7` 对齐；`TestStaticCSSImportVersionMatches` 断言两者一致，避免部署后仍命中旧 `admin.css`。
 - 证据：`TestIntegrationAdminUserPagination`、`TestIntegrationAdminTempPasswordPRG`、`TestIntegrationAdminActivityFormValidation`、`TestIntegrationAdminErrorPages`、`TestIntegrationPhoneChangeRequiresPassword`、`TestIntegrationActivityTimeWindowRules`、`TestAdminActivityInputValidate`、`TestAdminTemplatesRender`（admin_error）、`TestSamePhoneNormalizesLikeLogin`、`TestStaticCSSImportVersionMatches`。
 - 前端契约：`.team/backend-admin-fixes-2026-10-24.md`（SPA 手机号输入与原生控制台广播按钮由前端 workstream 接入）。
 
@@ -225,7 +225,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 - 根模板预编译：`tools/spa_precompile`（Node + `@vue/compiler-dom@3.4.27`，与 `vue.global.prod.js` 一致，package-lock 锁定）从 `index.html` 的 `#app` 抽取模板，生成 `web/static/legacy/app.render.js`（768KB / gzip 69.6KB，挂 `window.__YXQ_RENDER__`，无 eval）；`app.js` 根 options 使用它，文件缺失时回退运行时编译。改模板后必须 `npm run build`，`npm run check` 校验 hash。
 - 首屏图：牌堆只解码当前+下一张照片（其余同尺寸占位），预取只取下一张卡首图；9 张→**2 个图片请求**。
-- `assetVersion` 5→6；壳/静态/媒体缓存语义同批次2。
+- `assetVersion` 5→6→7；壳/静态/媒体缓存语义同批次2。`TestRenderManifestMatchesTemplate` 比对 `index.html` 的 `#app` 模板 sha256 与 `app.render.js` 头部，模板改了没重建会让 `make ci` 变红（Reviewer I-1）。
 - 本地（gzip 前置，390×844，1.6Mbps/150ms/CPU×4，N=3 中位）：auth-cold FCP **2.60s**、LCP **6.12s**、524KB/16 请求；warm FCP **1.41s**、LCP **4.96s**；最长任务 1.77s（原 5.6s）。LCP 仍 >2.5s（剩余为 JS 字节/解析与图片下载），待下一批拆包。
 - 未部署；详见 `.team/perf/batch3-report.md`。
 
