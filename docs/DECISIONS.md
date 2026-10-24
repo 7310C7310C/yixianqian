@@ -193,3 +193,11 @@ sources: []
 - 取舍：重编码不保留 ICC 色彩配置（JPEG APP2/PNG iCCP），像素值按 sRGB 解释；属「一律去元数据」的已知代价，若真机反馈 Display P3 偏色，再评估保留 ICC 或色彩管理。
 - 边界：不改 schema、不改公开路由与权限；R2 对象 key 不进日志（错误与清理日志只带 `media_id`）。历史 R2 对象清洗不在本次范围。非属主删除最后一个 attachment 时会留下 refs=0 的 media 行与 R2 对象；当前无 GC，记 P3（staging 量小，未造成越权访问）。
 - 证据：`TestIntegrationProfileSharedMediaDelete`、`TestProcessStripsEXIFAndAppliesOrientation`、`TestProcessOrientationNonSquare`、`TestProcessPNGEXIFOrientation`、`TestProcessStripsPNGTextChunks`、`TestProcessPixelLimitBoundary`、`TestProcessRejectsExactlyOnePixelOver12_5MP`、`TestProcessAcceptsIPhone12MP`、`TestUploadErrorDetailsHEICActionable`、`TestIntegrationHTTPFlow`（HEIC 400 文案）、`tools/test_migrate_testapp.py`（GPS 去元数据、方向、12.5MP 上限）。
+
+## 25. E2 相互喜欢展示微信号、D10 每周推荐位不做（2026-10-24）
+
+- 背景：后端审计（`.team/audits/2026-10-24-bugs-backend.md` P1-8/P1-10）确认 E2 未交付（mutual 列表无微信字段，SPA 只有「微信号已交换」文案）且 D10 `weekly_recommendations` 0 引用；两项均待 PM 决定是否首版 Must-Have。
+- 决策（PM 2026-10-24）：**E2 不做，首版不展示双方微信号；D10 不做，不做推荐位/每周推荐。** 对应产品规格条目保留为历史条目并标注「不做（PM 2026-10-24）」，不删除、不勾选，移出验收与缺口追踪。
+- 后果：相互喜欢仅保留列表与通知，不交换联系方式；`weekly_recommendations` 表与 `CardView.Recommended` 保持未接线，作为已知死表/死代码保留，不再以 D10 名义补实现；`contact_consent` 不再作为 E2 前置，P1-12 的展示门控随之失效。
+- 边界：本次只改文档，不改代码、schema、路由与 UI；SPA mutual 页现有「微信号已交换」文案与实际不符，留后续文案清理；注册硬编码 `contact_consent=true` 的明示同意/合规口径另行处理，不因本决策视为已解决。
+- 证据：`docs/product-spec.md` E2/D10 与「首版明确不做」；`docs/STATUS.md` §5「明确不做」；审计 P1-8/P1-10 标注关闭。
