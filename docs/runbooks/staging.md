@@ -294,6 +294,7 @@ ssh -i ~/.ssh/yixianqian_relay root@45.125.16.205 \
 ```
 
 - `/static/` location 内有 `add_header`，会覆盖 server 级 HSTS，因此该 location 显式重复 HSTS；新增 location 时同理。
+- `ssl_session_cache` 的 zone 名是全局的：server2 另有 vhost 使用 `shared:SSL:10m`，因此 relay-next 用 `shared:YXQNEXT:20m`；改名/调大小前先 `nginx -T | grep ssl_session_cache` 确认不会同名冲突。
 - server2 的 `gzip_types` 在 `deploy/nginx/relay-next.conf` 的 server 段显式声明（主配置 `/etc/nginx/nginx.conf` 的 gzip_types 默认是注释）；改压缩策略时同步这里，否则 js/css 会退回 identity。
 - `proxy_cache_path` 目录必须存在且可写，否则 reload 失败。
 - SSE 会长期占用一个上游连接；关注 server2 `worker_connections`（768，单 worker）与上面第 7 条计数。
