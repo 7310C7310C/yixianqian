@@ -199,7 +199,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 审计：`/admin/audit` 查看与 `/admin/audit.csv` 导出。
 - 角色：RBAC 角色指派；最后一位 `super_admin` 受保护。
 - 响应式：390（iframe 手机）/768/1280 三档；390 单列、列表卡片化，桌面内容 1080 居中；关键触控区 ≥44px，无页面级横向滚动。
-- 静态资源版本：`/static/*` 仍按 `public, max-age=3600` 下发，模板引用的 `app.css`/`shell.css`/`admin.css`/`admin.js`/`admin_matching.js` 统一带 `?v=`（唯一来源 `httpserver.assetVersion`，模块 CSS 的 `@import` 同值），部署后立即取新样式；改静态资源时同步提升该常量。
+- 静态资源版本：`/static/*` 带 `?v=` 的响应为 `public, max-age=31536000, immutable`，裸路径 `max-age=3600`；模板与旧 SPA 引用的 `app.css`/`shell.css`/`admin.css`/`admin.js`/`admin_matching.js`/`app.js` 均带 `?v=`（唯一来源 `httpserver.assetVersion`，模块 CSS 的 `@import` 同值）。**任何 `web/static/**` 变更必须同步提升该常量**，否则 1y immutable 不可逆。
 
 ### 质量门
 
@@ -214,7 +214,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ### 性能批次2（2026-10-25，实现待审）
 
-- 媒体：R2 去掉额外 `Stat()`（单次 GET + 首块再写头）；`/media`、`/cards/photo`、`/profile/photo`、活动海报、管理台照片统一 `ETag` + `private, max-age`（thumb 7d/orig 1d，immutable）+ `If-None-Match` 304；未改授权语义、未做 Range。
+- 媒体：R2 去掉额外 `Stat()`（单次 GET + 首块再写头）；`/media`、`/cards/photo`、`/profile/photo`、活动海报、管理台照片统一 `ETag` + `private, max-age`（thumb 24h/orig 1h，immutable）+ `If-None-Match` 304；未改授权语义、未做 Range。
 - 头像/资料九宫格改用缩图 URL（`photos_thumb`、`photo?size=thumb`）；卡片首图用 `photos_thumb`。
 - SPA：内联 CSS/JS 拆为 `app.css`/`app.js`，壳 583KB→178KB（gzip 141KB→37KB）；库改 `defer`+`preload`；PhotoSwipe 按需加载；首图 eager/high、其余 lazy；骨架 + 首屏缩图早取。
 - 静态：带 `?v=` 的响应 1y immutable，裸路径 1h；壳 `private, no-cache` + ETag。
