@@ -3,10 +3,12 @@ package httpserver
 import (
 	"context"
 	"errors"
+	"hash/fnv"
 	"io/fs"
 	"net/http"
 	"net/url"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -241,7 +243,27 @@ func staticHandler() http.Handler {
 	}
 	files := http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		// Versioned URLs (assetVersion query) are immutable for a year; bare
+		// paths keep the previous one-hour policy so old links still update.
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+		}
+		etag := staticETag(r.URL.Path)
+		w.Header().Set("ETag", etag)
+		if mediaETagMatches(r.Header.Get("If-None-Match"), etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+// staticETag is stable for one build: the assetVersion changes whenever the
+// embedded files change, and the path hash keeps different files distinct.
+func staticETag(path string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(path))
+	return `"av` + assetVersion + `-` + strconv.FormatUint(uint64(h.Sum32()), 16) + `"`
 }

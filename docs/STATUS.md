@@ -144,7 +144,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 活动时间窗（UD-03）：状态非「报名中」或已过开始时间的报名、已过开始时间的取消被拒绝；自助签到要求活动进行中（未开始/已结束/已取消均拒绝），错误码 `activity_started`/`activity_not_started`/`activity_ended`。
 - 修改手机号（UD-05）：`PUT /legacy/api/profile` 改号需 `current_password`（缺失 400 `password_required`、错误 400 `password_invalid`、无密码 409 `password_not_set`），保留唯一性 409 `phone_taken`，写 `profile.phone.changed` 脱敏审计；未改号时不要求密码。
 - 同号判定（UD-05 修复细节）：资料更新的手机号比较改用 `auth.NormalizePhone`，与登录/注册同一套归一化；带 `+86`、空格或分隔符的同一号码不再误判为换号而要求当前密码，无法解析的值仍只匹配自身。
-- 静态资源版本（修复细节）：`admin_points.css`/`admin_user_detail.css` 的 `@import` 版本与 `assetVersion=4` 对齐；`TestStaticCSSImportVersionMatches` 断言两者一致，避免部署后仍命中旧 `admin.css`。
+- 静态资源版本（修复细节）：`admin_points.css`/`admin_user_detail.css` 的 `@import` 版本与 `assetVersion=5` 对齐；`TestStaticCSSImportVersionMatches` 断言两者一致，避免部署后仍命中旧 `admin.css`。
 - 证据：`TestIntegrationAdminUserPagination`、`TestIntegrationAdminTempPasswordPRG`、`TestIntegrationAdminActivityFormValidation`、`TestIntegrationAdminErrorPages`、`TestIntegrationPhoneChangeRequiresPassword`、`TestIntegrationActivityTimeWindowRules`、`TestAdminActivityInputValidate`、`TestAdminTemplatesRender`（admin_error）、`TestSamePhoneNormalizesLikeLogin`、`TestStaticCSSImportVersionMatches`。
 - 前端契约：`.team/backend-admin-fixes-2026-10-24.md`（SPA 手机号输入与原生控制台广播按钮由前端 workstream 接入）。
 
@@ -211,6 +211,15 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 微信号交换通知移出 GET：写入路径触发 + 启动/每小时回填；GET 只读。
 - migration `0008_perf_indexes.sql`：`likes(initiator_id,status)`、`notifications(user_id) WHERE read_at IS NULL`、`users(id) WHERE status='active' AND account_kind='user' AND account_status='active'`（`users_card_pool_idx`），只加索引不改数据。
 - 边缘/传输 nginx 已于 2026-10-25 apply 到 staging：server1 `20261025-0315`；server2 relay `20261025-0320` + snippet `20261025-0322`（首次因 `ssl_session_cache` zone 冲突 `nginx -t` 失败并自动回滚，修正为 `YXQNEXT:20m`）。备份/回滚见 `.team/perf/batch1-report.md` §6。
+
+### 性能批次2（2026-10-25，实现待审）
+
+- 媒体：R2 去掉额外 `Stat()`（单次 GET + 首块再写头）；`/media`、`/cards/photo`、`/profile/photo`、活动海报、管理台照片统一 `ETag` + `private, max-age`（thumb 7d/orig 1d，immutable）+ `If-None-Match` 304；未改授权语义、未做 Range。
+- 头像/资料九宫格改用缩图 URL（`photos_thumb`、`photo?size=thumb`）；卡片首图用 `photos_thumb`。
+- SPA：内联 CSS/JS 拆为 `app.css`/`app.js`，壳 583KB→178KB（gzip 141KB→37KB）；库改 `defer`+`preload`；PhotoSwipe 按需加载；首图 eager/high、其余 lazy；骨架 + 首屏缩图早取。
+- 静态：带 `?v=` 的响应 1y immutable，裸路径 1h；壳 `private, no-cache` + ETag。
+- 本地（gzip 前置）实测：FCP 冷 6.1s→2.3–2.6s、热 4.24s→1.0–1.3s；LCP 仍约 8.4–9.1s（Vue 运行时编译主导，未达 2.5s，下一批需拆模板/预编译）。
+- 未部署；证据与回滚见 `.team/perf/batch2-report.md`。
 
 ### 人脸与数据
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
@@ -281,31 +280,14 @@ func (a *App) handleMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, size, contentType := m.ObjectKey, m.ByteSize, m.ContentType
-	if r.URL.Query().Get("size") == "thumb" {
-		key, size, contentType = m.ThumbKey, m.ThumbSize, "image/jpeg"
-	}
-
-	obj, err := a.store.Get(r.Context(), key)
-	if errors.Is(err, media.ErrObjectNotFound) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		a.logger(r).Error("open media object failed", "error", err, "media_id", id)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	defer obj.Close()
-
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-	w.Header().Set("Content-Disposition", "inline")
-	w.Header().Set("Cache-Control", "private, max-age=300")
-	w.WriteHeader(http.StatusOK)
-	if _, err := io.CopyN(w, obj, size); err != nil {
-		a.logger(r).Debug("stream media interrupted", "error", err, "media_id", id)
-	}
+	a.serveMediaObject(w, r, mediaObject{
+		ID:         m.ID,
+		ObjectKey:  m.ObjectKey,
+		ObjectSize: m.ByteSize,
+		ObjectType: m.ContentType,
+		ThumbKey:   m.ThumbKey,
+		ThumbSize:  m.ThumbSize,
+	}, r.URL.Query().Get("size") == "thumb")
 }
 
 func validMediaID(id string) bool {

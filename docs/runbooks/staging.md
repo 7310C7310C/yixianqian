@@ -298,8 +298,28 @@ ssh -i ~/.ssh/yixianqian_relay root@45.125.16.205 \
 - server2 的 `gzip_types` 在 `deploy/nginx/relay-next.conf` 的 server 段显式声明（主配置 `/etc/nginx/nginx.conf` 的 gzip_types 默认是注释）；改压缩策略时同步这里，否则 js/css 会退回 identity。
 - `proxy_cache_path` 目录必须存在且可写，否则 reload 失败。
 - SSE 会长期占用一个上游连接；关注 server2 `worker_connections`（768，单 worker）与上面第 7 条计数。
-- TTL 先 1h（`lib/*` 无版本参数）；部署后最多 1h 可能取到旧静态资源。
+- 静态 TTL：带 `?v=` 的应用/库资源由 Go 发 `public, max-age=31536000, immutable`，边缘按上游 TTL 缓存 1 年；裸路径仍 1h。改静态文件必须同时 bump `httpserver.assetVersion`。
+- 壳 `/app` 为 `private, no-cache` + `ETag`，回访 304；app.css/app.js 与 4 个库均带 `?v=<assetVersion>`。
+
 - migration `0008_perf_indexes.sql` 只加索引；自动部署时 runner 在事务内执行普通 `CREATE INDEX`（当前表小，锁窗口毫秒级）；生产大表另走手工 `CONCURRENTLY`。
+
+## 性能批次2：媒体缓存与 SPA 首屏
+
+- 媒体：`/media/{id}`、`/cards/photo/{id}`、`/profile/photo/{id}`、活动海报、管理台受权照片统一 `ETag`（`<id>-thumb|orig`）与 `Cache-Control: private, max-age=<thumb 7d|orig 1d>, immutable`；`If-None-Match` 返回 304；**仍为授权后私有串流，未改 public、未做 Range**。
+- R2 读取去掉 `Stat()` 额外 HEAD：单次 GET，先读首块再写响应头，缺对象仍 404。
+- SPA：内联 CSS/JS 拆为 `/static/legacy/app.<assetVersion>.css|js`（实际文件名 `app.css`/`app.js` + `?v=`），壳保留启动配置与骨架；4 个库改 `defer` + `preload`；PhotoSwipe 首次打开图片时动态加载（失败降级直接开原图）；卡片首图 `eager`+`fetchpriority=high`，其余 `lazy`，列表用 `?size=thumb`。
+- 壳 `private, no-cache` + `ETag`；`/static` 带 `?v=` 的上游响应为 1y immutable（nginx 不再 `proxy_ignore_headers Cache-Control`）。
+- 回滚：旧壳保留在 `web/static/legacy/index.legacy.html`，回滚时替换 `index.html` 并 reload；静态文件名不变，靠 `assetVersion` 切缓存。
+
+```bash
+# 验证：壳 304、静态 immutable、媒体 304
+C=<yxq_session>
+E=$(curl -sI -H "Cookie: yxq_session=$C" https://next.nantou.love/app | tr -d '\r' | awk 'tolower($1)=="etag:"{print $2}')
+curl -s -o /dev/null -w 'shell 304=%{http_code}\n' -H "Cookie: yxq_session=$C" -H "If-None-Match: $E" https://next.nantou.love/app
+curl -sI "https://next.nantou.love/static/legacy/app.js?v=<assetVersion>" | tr -d '\r' | grep -iE 'cache-control|etag'
+ME=$(curl -sI -H "Cookie: yxq_session=$C" "https://next.nantou.love/cards/photo/<mediaID>?size=thumb" | tr -d '\r' | awk 'tolower($1)=="etag:"{print $2}')
+curl -s -o /dev/null -w 'media 304=%{http_code}\n' -H "Cookie: yxq_session=$C" -H "If-None-Match: $ME" "https://next.nantou.love/cards/photo/<mediaID>?size=thumb"
+```
 
 ## 用户端 smoke
 

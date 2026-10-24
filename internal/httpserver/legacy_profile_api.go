@@ -582,12 +582,14 @@ func (a *App) handleLegacyPublicProfile(w http.ResponseWriter, r *http.Request) 
 
 	card := buildCardView(social, liked, praised, 0, a.clock.Now())
 	photos := legacyProfilePhotoURLs(target.Photos)
+	photosThumb := legacyProfilePhotoThumbURLs(target.Photos)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"openid":         socialCardOpenID(social),
 		"user_id":        legacyProfileID(target, db.User{}),
 		"nickname":       social.DisplayName(),
 		"gender":         target.Gender,
 		"photos":         photos,
+		"photos_thumb":   photosThumb,
 		"display_fields": card.DisplayFields,
 		"is_self":        isSelf,
 		"liked":          liked,

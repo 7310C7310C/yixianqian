@@ -146,6 +146,14 @@ func legacyProfilePhotoURLs(photos []db.ProfilePhoto) []string {
 	return out
 }
 
+func legacyProfilePhotoThumbURLs(photos []db.ProfilePhoto) []string {
+	out := make([]string, 0, len(photos))
+	for _, photo := range photos {
+		out = append(out, legacyProfilePhotoURL(photo.MediaID)+"?size=thumb")
+	}
+	return out
+}
+
 // legacyProfileUpdateFromJSON maps the v1 edit-form payload to the whitelisted
 // db.ProfileUpdate. Unknown keys are ignored like the old backend; malformed
 // values are rejected instead of being written blindly.
@@ -430,15 +438,20 @@ func legacyPointsError(w http.ResponseWriter, err error) {
 
 func legacyPhotoResponse(photos []db.ProfilePhoto, hasFace bool) map[string]any {
 	urls := legacyProfilePhotoURLs(photos)
+	thumbs := legacyProfilePhotoThumbURLs(photos)
 	photo := ""
+	photoThumb := ""
 	if len(urls) > 0 {
 		photo = urls[0]
+		photoThumb = thumbs[0]
 	}
 	return map[string]any{
-		"ok":       true,
-		"photo":    photo,
-		"photos":   urls,
-		"has_face": hasFace,
+		"ok":           true,
+		"photo":        photo,
+		"photo_thumb":  photoThumb,
+		"photos":       urls,
+		"photos_thumb": thumbs,
+		"has_face":     hasFace,
 	}
 }
 

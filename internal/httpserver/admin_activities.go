@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
-	"github.com/7310C7310C/yixianqian/internal/media"
 	"github.com/7310C7310C/yixianqian/internal/platform"
 )
 
@@ -806,29 +804,14 @@ func (a *App) handleAdminActivityPoster(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	key, size, contentType := poster.ObjectKey, poster.ByteSize, poster.ContentType
-	if r.URL.Query().Get("size") == "thumb" && poster.ThumbKey != "" {
-		key, size, contentType = poster.ThumbKey, poster.ThumbSize, "image/jpeg"
-	}
-	obj, err := a.store.Get(r.Context(), key)
-	if errors.Is(err, media.ErrObjectNotFound) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		a.logger(r).Error("open admin activity poster failed", "error", err, "activity_id", activity.ID)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	defer obj.Close()
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-	w.Header().Set("Content-Disposition", "inline")
-	w.Header().Set("Cache-Control", "private, max-age=300")
-	w.WriteHeader(http.StatusOK)
-	if _, err := io.CopyN(w, obj, size); err != nil {
-		a.logger(r).Debug("stream admin activity poster interrupted", "error", err)
-	}
+	a.serveMediaObject(w, r, mediaObject{
+		ID:         fmt.Sprintf("poster-%d", activity.ID),
+		ObjectKey:  poster.ObjectKey,
+		ObjectSize: poster.ByteSize,
+		ObjectType: poster.ContentType,
+		ThumbKey:   poster.ThumbKey,
+		ThumbSize:  poster.ThumbSize,
+	}, r.URL.Query().Get("size") == "thumb" && poster.ThumbKey != "")
 }
 
 func (a *App) handleAdminActivityPosterUpload(w http.ResponseWriter, r *http.Request, access adminAccess) {

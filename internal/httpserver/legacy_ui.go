@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io/fs"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/7310C7310C/yixianqian/internal/platform"
@@ -21,9 +20,13 @@ var (
 	legacyAuthFlagOn  = []byte("window.__YXQ_AUTHENTICATED__=true;")
 )
 
-// legacyVersionLiteral 是打包文件里的版本占位常量。静态文件保持占位不动，
-// 只有服务端渲染的壳注入真实构建版本，前端据此判断「有新版本」并提示。
-var legacyVersionLiteral = []byte("const APP_VERSION = 'legacy';")
+// legacyVersionLiteral is the shell placeholder replaced with the real build
+// version. app.js reads it through window.__YXQ_VERSION__.
+var legacyVersionLiteral = []byte("__YXQ_VERSION_VALUE__")
+
+// legacyAssetVersionLiteral is replaced in the shell so app.css/app.js and the
+// bundled libraries always carry the current asset version in their URL.
+var legacyAssetVersionLiteral = []byte("__ASSET_VERSION_VALUE__")
 
 var (
 	legacyIndexOnce sync.Once
@@ -57,10 +60,24 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	body = bytes.Replace(body, legacyAuthFlagOff, legacyAuthFlagOn, 1)
 	// 注入本次构建的版本号：前端 checkVersion 比对 /legacy/api/version 后
 	// 只在 App 内提示「有新版本」，刷新由用户点击触发。
-	body = bytes.Replace(body, legacyVersionLiteral,
-		[]byte("const APP_VERSION = "+strconv.Quote(platform.Version)+";"), 1)
+	body = bytes.Replace(body, legacyVersionLiteral, []byte(platform.Version), 1)
+	// 静态资源版本占位（app.css/app.js/库）由服务端注入，避免壳每次部署换 URL。
+	body = bytes.ReplaceAll(body, []byte(legacyAssetVersionLiteral), []byte(assetVersion))
+	body = bytes.ReplaceAll(body, []byte("__ASSET_URL_VERSION__"), []byte(assetVersion))
+	variant := "anon"
+	if _, ok := currentUser(r); ok {
+		variant = "auth"
+	}
+	etag := `"shell-` + platform.Version + `-` + variant + `"`
+	w.Header().Set("ETag", etag)
+	if mediaETagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "private, no-cache")
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Cache-Control", "private, no-cache")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
 }

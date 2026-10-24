@@ -613,6 +613,7 @@ func legacyCardMap(card CardView, faces []db.ProfilePhotoFace) map[string]any {
 		"display_fields":    card.DisplayFields,
 		"photo":             card.Photo,
 		"photos":            card.PhotoURLs,
+		"photos_thumb":      card.PhotoThumbs,
 		"liked":             card.Liked,
 		"praised":           card.Praised,
 		"msg_count":         card.MsgCount,
@@ -695,7 +696,7 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 	}
 	photo := ""
 	if len(profile.Photos) > 0 {
-		photo = "/profile/photo/" + profile.Photos[0].MediaID
+		photo = "/profile/photo/" + profile.Photos[0].MediaID + "?size=thumb"
 	}
 	// is_admin 与 can_admin 同义：v1 SPA 用它决定举报管理等入口，
 	// 语义是「有任一管理角色」；具体操作仍由服务端权限码校验。
@@ -763,8 +764,11 @@ func (a *App) legacyIsAdmin(ctx context.Context, userID int64) bool {
 
 func legacyProfileMap(p db.Profile, quota db.LikeQuota, hasFace bool, faces []db.ProfilePhotoFace) map[string]any {
 	photos := make([]string, 0, len(p.Photos))
+	photoThumbs := make([]string, 0, len(p.Photos))
 	for _, photo := range p.Photos {
-		photos = append(photos, "/profile/photo/"+photo.MediaID)
+		base := "/profile/photo/" + photo.MediaID
+		photos = append(photos, base)
+		photoThumbs = append(photoThumbs, base+"?size=thumb")
 	}
 	photo := ""
 	if len(photos) > 0 {
@@ -827,6 +831,7 @@ func legacyProfileMap(p db.Profile, quota db.LikeQuota, hasFace bool, faces []db
 		"live_with_parents": p.LiveWithParents,
 		"birthday":          profileBirthdayShort(p.Birthday),
 		"photos":            photos,
+		"photos_thumb":      photoThumbs,
 		"faces":             legacyProfileFaces(p.Photos, faces),
 		"real_name":         p.Name,
 		"wechat":            p.Wechat,

@@ -24,28 +24,39 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := string(body)
+	jsRaw, err := fs.ReadFile(webassets.FS, "static/legacy/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	js := string(jsRaw)
+	all := html + "\n" + js
 	for _, want := range []string{
 		`<base href="/static/legacy/">`,
 		`window.__YXQ_AUTHENTICATED__=false;`,
-		`const BASE_PATH = '/legacy';`,
-		`const APP_VERSION = 'legacy';`,
-		`src="lib/vue.global.prod.js"`,
-		`src="lib/vant.min.js"`,
+		`window.__YXQ_VERSION__='__YXQ_VERSION_VALUE__';`,
+		`src="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__"`,
+		`src="lib/vant.min.js?v=__ASSET_URL_VERSION__"`,
+		`src="app.js?v=__ASSET_URL_VERSION__"`,
 		`history.pushState(state, '', navURL());`,
 		`nativeAdmin`,
 		`function gaBack()`,
 		`native_admin`,
 		`viewport-fit=cover`,
-		`href="favicon.ico"`,
+		`href="favicon.ico?v=__ASSET_URL_VERSION__"`,
 		`<div class="section-title">管理</div>`,
 		`fixed safe-area-inset-bottom`,
 		`TAB_ORDER.includes(nv) && TAB_ORDER.includes(ov)`,
 	} {
-		if !strings.Contains(html, want) {
-			t.Fatalf("legacy index missing %q", want)
+		if !strings.Contains(all, want) {
+			t.Fatalf("legacy shell/app missing %q", want)
 		}
 	}
-	if strings.Contains(html, "lf1-cdn-tos") || strings.Contains(html, "h5-js-sdk") {
+	for _, want := range []string{`const BASE_PATH = '/legacy';`, `const APP_VERSION = window.__YXQ_VERSION__`} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("app.js missing %q", want)
+		}
+	}
+	if strings.Contains(all, "lf1-cdn-tos") || strings.Contains(all, "h5-js-sdk") {
 		t.Fatal("legacy index still references the Feishu SDK")
 	}
 	if strings.Contains(html, `location.pathname + '#' + (state.page`) {
@@ -128,7 +139,7 @@ func TestLegacyAppServesHTMLForSignedInUser(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+	if got := rec.Header().Get("Cache-Control"); got != "private, no-cache" {
 		t.Fatalf("cache-control = %q", got)
 	}
 	body := rec.Body.String()
@@ -211,11 +222,16 @@ func TestLegacyAppInjectsBuildVersion(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `const APP_VERSION = "staging-test123";`) {
+	if !strings.Contains(body, `window.__YXQ_VERSION__='staging-test123'`) {
 		t.Fatal("served shell is missing the injected build version")
 	}
-	if strings.Contains(body, `const APP_VERSION = 'legacy';`) {
+	if strings.Contains(body, `__YXQ_VERSION_VALUE__`) {
 		t.Fatal("served shell still carries the version placeholder")
+	}
+	for _, placeholder := range []string{"__ASSET_URL_VERSION__", "__ASSET_VERSION_VALUE__"} {
+		if strings.Contains(body, placeholder) {
+			t.Fatalf("served shell still carries placeholder %s", placeholder)
+		}
 	}
 }
 

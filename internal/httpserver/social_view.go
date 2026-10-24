@@ -70,6 +70,7 @@ type CardView struct {
 	DisplayFields   CardDisplayFields `json:"display_fields"`
 	Photo           string            `json:"photo"`
 	PhotoURLs       []string          `json:"photos"`
+	PhotoThumbs     []string          `json:"photos_thumb"`
 	Photos          []PhotoView       `json:"-"`
 	Liked           bool              `json:"liked"`
 	Praised         bool              `json:"praised"`
@@ -112,11 +113,13 @@ func buildCardView(p db.SocialProfile, liked, praised bool, msgCount int, now ti
 	}
 	photos := make([]PhotoView, 0, len(p.Photos))
 	urls := make([]string, 0, len(p.Photos))
+	thumbs := make([]string, 0, len(p.Photos))
 	photo := ""
 	for i, id := range p.Photos {
 		pv := socialPhotoView(id)
 		photos = append(photos, pv)
 		urls = append(urls, pv.URL)
+		thumbs = append(thumbs, pv.ThumbURL)
 		if i == 0 {
 			photo = pv.ThumbURL
 		}
@@ -174,6 +177,7 @@ func buildCardView(p db.SocialProfile, liked, praised bool, msgCount int, now ti
 		Subtitle:        strings.Join(subParts, " · "),
 		Photo:           photo,
 		PhotoURLs:       urls,
+		PhotoThumbs:     thumbs,
 		Photos:          photos,
 		Liked:           liked,
 		Praised:         praised,

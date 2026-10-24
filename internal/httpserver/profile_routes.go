@@ -859,30 +859,14 @@ func (a *App) handleProfilePhotoServe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	key, size, contentType := photo.ObjectKey, photo.ByteSize, photo.ContentType
-	if r.URL.Query().Get("size") == "thumb" {
-		key, size, contentType = photo.ThumbKey, photo.ThumbSize, "image/jpeg"
-	}
-	obj, err := a.store.Get(r.Context(), key)
-	if errors.Is(err, media.ErrObjectNotFound) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		a.logger(r).Error("open profile photo object failed", "error", err, "media_id", mediaID)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	defer obj.Close()
-
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-	w.Header().Set("Content-Disposition", "inline")
-	w.Header().Set("Cache-Control", "private, max-age=300")
-	w.WriteHeader(http.StatusOK)
-	if _, err := io.CopyN(w, obj, size); err != nil {
-		a.logger(r).Debug("stream profile photo interrupted", "error", err, "media_id", mediaID)
-	}
+	a.serveMediaObject(w, r, mediaObject{
+		ID:         mediaID,
+		ObjectKey:  photo.ObjectKey,
+		ObjectSize: photo.ByteSize,
+		ObjectType: photo.ContentType,
+		ThumbKey:   photo.ThumbKey,
+		ThumbSize:  photo.ThumbSize,
+	}, r.URL.Query().Get("size") == "thumb")
 }
 
 type accountStatusRequest struct {
