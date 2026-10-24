@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/platform"
 	webassets "github.com/7310C7310C/yixianqian/web"
 )
 
@@ -186,5 +187,53 @@ func TestNativeAdminAppAllowsSameOriginFraming(t *testing.T) {
 	}
 	if got := frameOptions("/"); got != "DENY" {
 		t.Fatalf("/ X-Frame-Options = %q, want DENY", got)
+	}
+}
+
+// 服务端渲染的壳要注入本次构建版本：前端比对 /legacy/api/version 后
+// 只在 App 内提示「有新版本」，刷新由用户点击触发。
+func TestLegacyAppInjectsBuildVersion(t *testing.T) {
+	old := platform.Version
+	platform.Version = "staging-test123"
+	defer func() { platform.Version = old }()
+
+	app, err := New(testConfig(), nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := "U-0006"
+	user := &db.User{ID: 6, LegacyUserID: &legacy, Name: "测试用户", Phone: "13800000006"}
+	req := httptest.NewRequest(http.MethodGet, "/app", nil)
+	req = req.WithContext(withUser(req.Context(), user))
+	rec := httptest.NewRecorder()
+	app.serveLegacyApp(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `const APP_VERSION = "staging-test123";`) {
+		t.Fatal("served shell is missing the injected build version")
+	}
+	if strings.Contains(body, `const APP_VERSION = 'legacy';`) {
+		t.Fatal("served shell still carries the version placeholder")
+	}
+}
+
+func TestLegacyVersionReportsBuildVersion(t *testing.T) {
+	old := platform.Version
+	platform.Version = "staging-test123"
+	defer func() { platform.Version = old }()
+
+	app, err := New(testConfig(), nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	app.handleLegacyVersion(rec, httptest.NewRequest(http.MethodGet, "/legacy/api/version", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if got := rec.Body.String(); !strings.Contains(got, `"version":"staging-test123"`) {
+		t.Fatalf("version body = %s", got)
 	}
 }

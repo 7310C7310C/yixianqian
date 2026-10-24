@@ -941,10 +941,24 @@
   /* 消息 tab 未读数：贴在图标右上，限制尺寸，不挤压 tab 文案 */
   .van-tabbar-item__icon .van-badge { min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; line-height: 17px; font-weight: 600; border: 1px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
   .van-theme-dark .van-tabbar-item__icon .van-badge { border-color: #1c1c1e; }
+  /* 新版本提示：右上角轻量胶囊，不压住返回键与正文；只提示，用户点了才刷新 */
+  .update-bar { position: fixed; top: calc(8px + env(safe-area-inset-top)); right: 12px; z-index: 2600;
+    display: flex; align-items: center; gap: 4px; max-width: 70%;
+    padding: 7px 6px 7px 12px; border-radius: 999px; background: #fff0f3; color: var(--yxq-brand-ink, #d64a63);
+    border: 1px solid #ffd6de; font-size: 12.5px; line-height: 1.3; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+  .update-bar-text { flex: 1; min-width: 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .update-bar-close { flex: 0 0 auto; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+    border: 0; padding: 0; background: transparent; color: #969799; font-size: 16px; line-height: 1; cursor: pointer; }
+  .van-theme-dark .update-bar { background: #2a1b1f; color: #ffb3bf; border-color: #43262c; }
 </style>
 </head>
 <body>
 <div id="app" v-cloak>
+<!-- 新版本提示：只提示不自动刷新，用户点击才更新（避免操作中闪整页进度条） -->
+<div v-if="updateReady && !nativeAdmin" class="update-bar" role="status" aria-live="polite">
+  <span class="update-bar-text" @click="applyUpdate">有新版本，点此更新</span>
+  <button type="button" class="update-bar-close" aria-label="稍后更新" @click="dismissUpdatePrompt">×</button>
+</div>
 <!-- 登录中 -->
 <div v-if="loggingIn" class="login-page">
   <div class="login-logo">💕</div>
@@ -3658,7 +3672,7 @@ createApp({
       if (m.includes('已暂时退出')) return '🚪';
       return '⚠️';
     });
-    function retryGate() { window.location.reload(); }
+    function retryGate() { retryBoot(); }   // 原地重试，不整页刷新
     const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_likes','my_activities','my_groups','user_detail','mutual','liked_me','points','points_admin','group_admin','group_detail','group_roster','checkin','password'];
     // 修改密码：App 内子页。不在 URL/hash 留状态，返回用 history 落在 profile。
     const passwordForm = ref({ current: '', password: '', confirm: '' });
@@ -5022,6 +5036,41 @@ createApp({
     // 触摸滑动（卡片/图片分离）
 
     const BASE_PATH = '/legacy';
+    // ===== 会话失效（401）：先出 App 内提示，用户点了才跳登录页 =====
+    // 旧行为是 401 直接 location.href='/login?next=/'，用户操作中途会突然闪整页进度条。
+    const sessionExpiredOpen = ref(false);
+    let sessionPromptAt = 0;
+    function notifySessionExpired(){
+      // 管理台 iframe 内沿用原有处理（gaAuthBack / onEmbedLoad），不在这里弹
+      if (nativeAdmin.value) return;
+      if (sessionExpiredOpen.value) return;
+      if (Date.now() - sessionPromptAt < 300000) return;   // 关掉后 5 分钟内不重复弹
+      sessionExpiredOpen.value = true;
+      sessionPromptAt = Date.now();
+      vant.showConfirmDialog({
+        title: '登录已过期',
+        message: '登录状态已失效，请重新登录后继续。',
+        confirmButtonText: '重新登录',
+        cancelButtonText: '稍后',
+        confirmButtonColor: '#ff6b81'
+      }).then(() => {
+        sessionExpiredOpen.value = false;
+        goLogin();
+      }).catch(() => { sessionExpiredOpen.value = false; });
+    }
+    function goLogin(){ location.href = '/login?next=/'; }   // 登录页是服务端页面，必须整页
+    // 401 已经用对话框提示时，不再叠一条「未登录」toast（会盖住对话框按钮）
+    const toastRaw = vant.showToast.bind(vant);
+    vant.showToast = function(message, options){
+      const text = (message && typeof message === 'object') ? message.message : message;
+      if (sessionExpiredOpen.value && String(text || '').trim() === '未登录') return;
+      return toastRaw(message, options);
+    };
+    function handleApiAuthError(err, options){
+      if (!err || err.status !== 401) return;
+      if (options && options.suppressAuthPrompt) return;
+      notifySessionExpired();
+    }
     async function api(url, options = {}) {
       // 单次请求；每次重新读 CSRF、新建 controller/超时，避免复用已 abort 的 controller。
       const attempt = async () => {
@@ -5079,12 +5128,16 @@ createApp({
         const retryable = first.network === true
           || first.nonJson === true
           || first.status === 502 || first.status === 503 || first.status === 504;
-        if (method !== 'GET' || first.timeout || !retryable) throw first;
+        if (method !== 'GET' || first.timeout || !retryable) {
+          handleApiAuthError(first, options);
+          throw first;
+        }
         await new Promise(r => setTimeout(r, 300));
         try {
           return await attempt();
         } catch(second) {
           // 二次失败仍抛第一次的错误，保留原文案/status/code
+          handleApiAuthError(first, options);
           throw first;
         }
       }
@@ -5222,14 +5275,14 @@ createApp({
 
       // 1. 已有会话（cookie 有效则直接进）
       try {
-        await loadHome();
+        await loadHome({ suppressAuthPrompt: true });
         loggingIn.value = false;
         restoreDeck();
         return;
       } catch (e) {}
 
       // 2. 无会话：交给 v2 登录页，不再走飞书免登
-      location.href = '/login?next=/';
+      goLogin();
       return;
 
       // 2b. 飞书内：网页免登（静默，不弹授权页）；偶发抖动时自动重试，最多 3 次
@@ -5264,7 +5317,7 @@ createApp({
       if (!user.value) return;
       if (nativeAdminRequested) {
         nativeAdminRequested = false;
-        if (!user.value.can_admin) { location.replace('/'); return; }   // 普通用户退回首页
+        if (!user.value.can_admin) { location.replace('/'); return; }   // 普通用户退回首页（管理台 iframe 内）
         nativeAdmin.value = true;
         nativeAdminEntryPage = 'group_admin';   // 目前只支持活动管理入口
         nativeAdminEntryPending = true;
@@ -5288,6 +5341,7 @@ createApp({
     // 已有服务端会话时直接拉首页数据：先展示 App 骨架，不经过登录页/iframe。
     async function bootAuthenticated() {
       bootError.value = '';
+      gateMessage.value = '';   // 重试时先清门禁文案：审核通过后要能正常进站
       bootLoading.value = true;
       try {
         await loadHome();
@@ -5304,7 +5358,9 @@ createApp({
         afterHomeReady(bootEntryHash);
       } catch (e) {
         if (e && (e.status === 401 || e.message === '未登录')) {
-          location.href = '/login?next=/';
+          // 会话在启动时已失效：api() 会弹「登录已过期」提示；这里停在未登录页，
+          // 由用户点提示里的按钮再跳登录页（不自动整页跳转）。
+          bootLoading.value = false;
           return;
         }
         // 非特定文案的 403（如「账号目前无法使用」）同样走 gate 页，不误报成网络错误。
@@ -5320,10 +5376,10 @@ createApp({
     function retryBoot() { bootAuthenticated(); }
 
     // 一次拉取首页全部数据（我的信息 + 卡片 + 喜欢 + 活动）
-    async function loadHome() {
+    async function loadHome(opts) {
       let data;
       try {
-        data = await api('/api/home');
+        data = await api('/api/home', opts || {});
       } catch (e) {
         // 账号状态门禁（待审核/审核不通过/已退出）：整屏提示，不当作登录失败
         if (e.message && (e.message.includes('审核中') || e.message.includes('未通过审核') || e.message.includes('已暂时退出'))) {
@@ -6395,7 +6451,8 @@ createApp({
       // 退出登录或会话失效：关闭 overlay，回到 SPA 的登录入口
       closeEmbed();
       if (path === '/login' || path === '/welcome' || path === '/activate') {
-        window.location.href = path + search;
+        // 会话已失效：先出 App 内提示，用户点了再跳登录页，不自动整页导航
+        notifySessionExpired();
         return;
       }
       if (path === '/') { vant.showToast('已完成'); return; }
@@ -6511,8 +6568,17 @@ createApp({
       actionLoading.value = true;
       try {
         await api('/api/account/switch', { method: 'POST', body: JSON.stringify({ role: target }) });
-        location.reload();  // 让 /api/home 以新身份重新拉取数据
-      } catch(e) { vant.showToast(e.message); actionLoading.value = false; }
+        // 原地按新身份重拉数据（旧实现是 location.reload()，会让浏览器闪整页进度条）
+        await reloadUserInPlace();
+      } catch(e) { vant.showToast(e.message); }
+      finally { actionLoading.value = false; }
+    }
+    // 身份切换后等价于刷新：回到牵线页，走一次「启动已登录」的软重载，不产生整页导航。
+    async function reloadUserInPlace(){
+      deckRestored = false;      // 允许按新身份恢复牌堆位置
+      bootEntryHash = '';
+      page.value = 'cards';
+      await bootAuthenticated();
     }
 
     // 喜欢 - 弹出附言对话框
@@ -7016,7 +7082,7 @@ createApp({
           page.value = 'profile';
         }
       } catch (e) {
-        if (e.status === 401) { location.href = '/login?next=/'; return; }
+        // 401 已由 api() 统一弹「登录已过期」提示，这里只处理字段级错误
         const msg = e.message || '修改失败，请重试';
         // 后端明确指出来源字段时贴在该字段下方，其余错误显示在表单顶部。
         if (msg.includes('目前密码') || msg.includes('密码不正确')) {
@@ -8094,20 +8160,49 @@ createApp({
       }
     }
 
-    // ===== 新版本自动刷新：版本变化即刷新（输入中不打断），带时间戳 query 绕过飞书 TTWebView 缓存 =====
-    const VERSION_RELOAD_COOLDOWN = 30 * 60 * 1000;
-    function versionChanged(server){
-      return !!server && server !== APP_VERSION && server !== '__APP_VERSION__';
+    // ===== 新版本提示：发现新版本只在 App 内提示，用户点了才刷新 =====
+    // 旧行为是检测到版本变化直接 location.replace()，用户操作中途会闪浏览器整页进度条；
+    // 现在只显示一条轻量提示条（.update-bar），刷新完全由用户触发。
+    const VERSION_PROMPT_COOLDOWN = 30 * 60 * 1000;   // 提示过/关掉后 30 分钟内不再打扰
+    const updateReady = ref(false);
+    function currentAppVersion(){
+      return String(APP_VERSION || '');
     }
-    function doVersionReload(reason){
+    function versionChanged(server){
+      const current = currentAppVersion();
+      // 只有服务端注入了真实版本号才比较；静态直开的壳（'legacy'/占位符）永不提示
+      if(!server || server === '__APP_VERSION__') return false;
+      if(!current || current === 'legacy' || current === '__APP_VERSION__') return false;
+      return server !== current;
+    }
+    function versionPromptCoolingDown(){
+      try{
+        const last = Number(localStorage.getItem('yxq_last_version_prompt') || 0);
+        return !!last && Date.now() - last < VERSION_PROMPT_COOLDOWN;
+      }catch(e){ return false; }
+    }
+    function markVersionPrompted(){
+      try{ localStorage.setItem('yxq_last_version_prompt', String(Date.now())); }catch(e){}
+    }
+    function showUpdatePrompt(){
+      if(updateReady.value) return;
+      updateReady.value = true;
+      markVersionPrompted();
+    }
+    function dismissUpdatePrompt(){
+      updateReady.value = false;
+      markVersionPrompted();   // 关掉也记时间：30 分钟内不再弹
+    }
+    // 用户点「有新版本，点此更新」后才刷新；带时间戳 query 绕过飞书 TTWebView 缓存
+    function applyUpdate(){
       saveDeckState();
       try{
         sessionStorage.setItem('yxq_last_reload', String(Date.now()));
-        sessionStorage.setItem('yxq_reload_reason', reason || 'version');
+        sessionStorage.setItem('yxq_reload_reason', 'version');
       }catch(e){}
       // boot 从 localStorage 读原因（跨 WebView 重启保留）；sessionStorage 仍留给旧逻辑
-      try{ localStorage.setItem('yxq_reload_reason', reason || 'version'); }catch(e){}
-      // 加时间戳 query 绕过飞书 TTWebView 对 no-store 的忽略，确保 reload 真正拿到新 HTML
+      try{ localStorage.setItem('yxq_reload_reason', 'version'); }catch(e){}
+      updateReady.value = false;
       const sep = (location.search ? '&' : '?');
       location.replace(location.pathname + location.search + sep + 'yxqv=' + Date.now());
     }
@@ -8118,11 +8213,11 @@ createApp({
         const d = await r.json();
         const server = String(d.version || '');
         if(!versionChanged(server)) return;
+        if(updateReady.value) return;                             // 已在提示，不重复
         const ae = document.activeElement;
-        if(ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) return;
-        const last = Number(sessionStorage.getItem('yxq_last_reload') || 0);
-        if(Date.now() - last < VERSION_RELOAD_COOLDOWN) return;
-        doVersionReload(document.hidden ? 'version-hidden' : 'version-visible');
+        if(ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) return;   // 输入中不打扰，下轮再看
+        if(versionPromptCoolingDown()) return;
+        showUpdatePrompt();
       }catch(e){}
     }
     setInterval(checkVersion, 45000);
@@ -9217,6 +9312,7 @@ createApp({
     return {
       page, pageTransition, user, loggingIn, loginError, showPersonalGuide, loginTip,
       onPageEnter,
+      updateReady, applyUpdate, dismissUpdatePrompt, sessionExpiredOpen,
       bootLoading, bootError, retryBoot,
       showClaim, claimName, claimPhone, claiming, submitClaim, backToLogin, requestBackToLogin,
       isDark, toggleTheme,

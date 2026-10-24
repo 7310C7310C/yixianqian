@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"sync"
 
+	"github.com/7310C7310C/yixianqian/internal/platform"
 	webassets "github.com/7310C7310C/yixianqian/web"
 )
 
@@ -18,6 +20,10 @@ var (
 	legacyAuthFlagOff = []byte("window.__YXQ_AUTHENTICATED__=false;")
 	legacyAuthFlagOn  = []byte("window.__YXQ_AUTHENTICATED__=true;")
 )
+
+// legacyVersionLiteral 是打包文件里的版本占位常量。静态文件保持占位不动，
+// 只有服务端渲染的壳注入真实构建版本，前端据此判断「有新版本」并提示。
+var legacyVersionLiteral = []byte("const APP_VERSION = 'legacy';")
 
 var (
 	legacyIndexOnce sync.Once
@@ -49,6 +55,10 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	// legacy UI existed may not have the cookie yet.
 	a.ensureCSRF(w, r)
 	body = bytes.Replace(body, legacyAuthFlagOff, legacyAuthFlagOn, 1)
+	// 注入本次构建的版本号：前端 checkVersion 比对 /legacy/api/version 后
+	// 只在 App 内提示「有新版本」，刷新由用户点击触发。
+	body = bytes.Replace(body, legacyVersionLiteral,
+		[]byte("const APP_VERSION = "+strconv.Quote(platform.Version)+";"), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)

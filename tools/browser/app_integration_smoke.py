@@ -360,8 +360,10 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
     admin_route = HeldRoute()
     users_route = HeldRoute()
     context.route("**/legacy/api/home", home_route)
-    context.route("**/admin", admin_route)
-    context.route("**/admin/users", users_route)
+    # iframe 首载 URL 带 ?embed=1：glob 会连查询串一起匹配，`**/admin` 匹配不到，
+    # 之前只是靠整页加载慢才偶尔挂住骨架。这里用带查询串/前缀的模式。
+    context.route("**/admin?embed=1", admin_route)
+    context.route("**/admin/users*", users_route)
 
     top_url = base_url.rstrip("/") + "/"
     try:
@@ -439,7 +441,7 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         page.locator(".embed-frame--ready").wait_for(state="visible", timeout=10000)
         wait_frame_path(page, base_url, "/admin")
         admin = frame_for_path(page, "/admin")
-        admin.locator(".admin-nav").first.wait_for(state="visible", timeout=10000)
+        admin.locator(".admin-topbar").first.wait_for(state="visible", timeout=10000)
         display = admin.locator(".shell-header").first.evaluate(
             "el => getComputedStyle(el).display"
         ) if admin.locator(".shell-header").count() else ""
@@ -462,7 +464,7 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         page.screenshot(path=str(out_dir / f"admin-{tag}.png"))
 
         # 管理台内部导航：beforeunload 盖骨架，新页加载后继续隐藏外壳。
-        admin.locator('.admin-nav a[href="/admin/users"]').first.click()
+        admin.locator('a[href^="/admin/users"]').first.click()
         page.locator(".embed-loading .embed-skeleton").wait_for(state="visible", timeout=10000)
         if not page.locator(".embed-overlay").is_visible():
             raise SmokeFailure(f"{width}: 管理台内部导航时 overlay 消失了")
@@ -470,7 +472,7 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         page.locator(".embed-loading").wait_for(state="hidden", timeout=15000)
         wait_frame_path(page, base_url, "/admin/users")
         users = frame_for_path(page, "/admin/users")
-        users.locator(".admin-nav").first.wait_for(state="visible", timeout=10000)
+        users.locator(".admin-topbar").first.wait_for(state="visible", timeout=10000)
         users_display = users.locator(".shell-header").first.evaluate(
             "el => getComputedStyle(el).display"
         ) if users.locator(".shell-header").count() else ""

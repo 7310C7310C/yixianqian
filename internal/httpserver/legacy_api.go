@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/platform"
 )
 
 func init() { registerModule(registerLegacyAPI) }
@@ -64,7 +65,9 @@ func legacyServerError(a *App, w http.ResponseWriter, r *http.Request, err error
 }
 
 func (a *App) handleLegacyVersion(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"version": "legacy"})
+	// 返回本次构建的版本号；与 SPA 壳内注入的 APP_VERSION 一致，
+	// 新版本部署后旧标签页会比对出差异，由前端提示用户手动更新。
+	writeJSON(w, http.StatusOK, map[string]string{"version": platform.Version})
 }
 
 func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
