@@ -78,7 +78,7 @@ func (s *R2Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 // IsObjectNotFound reports whether an object read failed because the key is
 // missing. GetObject is lazy, so this is used after the first Read.
 func IsObjectNotFound(err error) bool {
-	return isNotFound(err)
+	return errors.Is(err, ErrObjectNotFound) || isNotFound(err)
 }
 
 func (s *R2Store) Remove(ctx context.Context, key string) error {

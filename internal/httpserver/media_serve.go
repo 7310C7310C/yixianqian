@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/7310C7310C/yixianqian/internal/db"
 	"github.com/7310C7310C/yixianqian/internal/media"
 )
 
@@ -28,30 +29,24 @@ type mediaObject struct {
 // this helper only handles storage, conditional requests and headers.
 func (a *App) serveMediaObject(w http.ResponseWriter, r *http.Request, m mediaObject, thumb bool) {
 	key, size, contentType, variant := m.ObjectKey, m.ObjectSize, m.ObjectType, "orig"
-	maxAge := 24 * time.Hour
+	maxAge := time.Hour
 	if thumb {
 		key, size, contentType, variant = m.ThumbKey, m.ThumbSize, "image/jpeg", "thumb"
-		maxAge = 7 * 24 * time.Hour
+		maxAge = 24 * time.Hour
 	}
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 	etag := `"` + m.ID + "-" + variant + `"`
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "private, max-age="+strconv.FormatInt(int64(maxAge.Seconds()), 10)+", immutable")
-	if mediaETagMatches(r.Header.Get("If-None-Match"), etag) {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
 
 	obj, err := a.store.Get(r.Context(), key)
 	if errors.Is(err, media.ErrObjectNotFound) {
-		http.NotFound(w, r)
+		mediaFailure(w, r, http.StatusNotFound, "")
 		return
 	}
 	if err != nil {
 		a.logger(r).Error("open media object failed", "error", err, "media_id", m.ID)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		mediaFailure(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 	defer obj.Close()
@@ -67,15 +62,21 @@ func (a *App) serveMediaObject(w http.ResponseWriter, r *http.Request, m mediaOb
 	n, readErr := io.ReadFull(obj, buf)
 	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
 		if media.IsObjectNotFound(readErr) {
-			http.NotFound(w, r)
+			mediaFailure(w, r, http.StatusNotFound, "")
 			return
 		}
 		a.logger(r).Error("open media object failed", "error", readErr, "media_id", m.ID)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		mediaFailure(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 	buf = buf[:n]
 
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, max-age="+strconv.FormatInt(int64(maxAge.Seconds()), 10)+", immutable")
+	if mediaETagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	w.Header().Set("Content-Disposition", "inline")
@@ -88,6 +89,31 @@ func (a *App) serveMediaObject(w http.ResponseWriter, r *http.Request, m mediaOb
 			a.logger(r).Debug("stream media interrupted", "error", err, "media_id", m.ID)
 		}
 	}
+}
+
+// activityPosterObject derives the cache identity from the poster media row, so
+// replacing the poster changes the ETag (URLs are stable).
+func activityPosterObject(p db.ActivityPoster) mediaObject {
+	return mediaObject{
+		ID:         "poster-" + p.MediaID,
+		ObjectKey:  p.ObjectKey,
+		ObjectSize: p.ByteSize,
+		ObjectType: p.ContentType,
+		ThumbKey:   p.ThumbKey,
+		ThumbSize:  p.ThumbSize,
+	}
+}
+
+// mediaFailure writes an uncacheable error response. Long-lived ETag/Cache
+// headers must never survive a 404/500 (browsers would cache the failure).
+func mediaFailure(w http.ResponseWriter, r *http.Request, status int, message string) {
+	w.Header().Del("ETag")
+	w.Header().Set("Cache-Control", "no-store")
+	if status == http.StatusNotFound {
+		http.NotFound(w, r)
+		return
+	}
+	http.Error(w, message, status)
 }
 
 // mediaETagMatches implements the If-None-Match comparison used by our media

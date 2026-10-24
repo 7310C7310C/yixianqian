@@ -756,6 +756,7 @@ func (d *DB) GetSignup(ctx context.Context, activityID, userID int64) (Signup, e
 // ActivityPoster holds the stored object details needed to stream a poster.
 // OriginalName is the sanitized upload name shown in the admin form.
 type ActivityPoster struct {
+	MediaID      string
 	ObjectKey    string
 	ThumbKey     string
 	ContentType  string
@@ -772,13 +773,13 @@ func (d *DB) GetActivityPoster(ctx context.Context, ref string) (ActivityPoster,
 	text, numeric := activityRefQueryArgs(ref)
 	var p ActivityPoster
 	err := d.pool.QueryRow(ctx,
-		`SELECT m.object_key, m.thumb_key, m.content_type, m.byte_size, m.thumb_size,
+		`SELECT m.id, m.object_key, m.thumb_key, m.content_type, m.byte_size, m.thumb_size,
 		        m.width, m.height, COALESCE(m.original_name, '')
 		   FROM activities a
 		   JOIN media m ON m.id = a.poster_media_id
 		  WHERE `+qualifiedActivityRefFilter+`
 		  LIMIT 1`, text, numeric).
-		Scan(&p.ObjectKey, &p.ThumbKey, &p.ContentType, &p.ByteSize, &p.ThumbSize,
+		Scan(&p.MediaID, &p.ObjectKey, &p.ThumbKey, &p.ContentType, &p.ByteSize, &p.ThumbSize,
 			&p.Width, &p.Height, &p.OriginalName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ActivityPoster{}, ErrNotFound

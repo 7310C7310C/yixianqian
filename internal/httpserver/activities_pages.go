@@ -26,12 +26,6 @@ func (a *App) handleActivityPoster(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	a.serveMediaObject(w, r, mediaObject{
-		ID:         "poster-" + activityRefFromRequest(r),
-		ObjectKey:  poster.ObjectKey,
-		ObjectSize: poster.ByteSize,
-		ObjectType: poster.ContentType,
-		ThumbKey:   poster.ThumbKey,
-		ThumbSize:  poster.ThumbSize,
-	}, r.URL.Query().Get("size") == "thumb" && poster.ThumbKey != "")
+	a.serveMediaObject(w, r, activityPosterObject(poster),
+		r.URL.Query().Get("size") == "thumb" && poster.ThumbKey != "")
 }

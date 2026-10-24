@@ -58,6 +58,17 @@ func TestLegacyShellHasNoLargeInlineAssets(t *testing.T) {
 	}
 }
 
+func TestLegacyShellBackupIsNotEmbedded(t *testing.T) {
+	if _, err := fs.Stat(webassets.FS, "static/legacy/index.legacy.html"); err == nil {
+		t.Fatal("index.legacy.html is embedded and publicly served; delete it")
+	}
+	rec := httptest.NewRecorder()
+	staticHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static/legacy/index.legacy.html", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("legacy shell status = %d, want 404", rec.Code)
+	}
+}
+
 func TestPhotoSwipeLoadsOnDemand(t *testing.T) {
 	js := readEmbedded(t, "static/legacy/app.js")
 	for _, want := range []string{"function loadPhotoSwipe", "photoswipe.umd.min.js?v=", "photoswipe-lightbox.umd.min.js?v="} {

@@ -305,11 +305,11 @@ ssh -i ~/.ssh/yixianqian_relay root@45.125.16.205 \
 
 ## 性能批次2：媒体缓存与 SPA 首屏
 
-- 媒体：`/media/{id}`、`/cards/photo/{id}`、`/profile/photo/{id}`、活动海报、管理台受权照片统一 `ETag`（`<id>-thumb|orig`）与 `Cache-Control: private, max-age=<thumb 7d|orig 1d>, immutable`；`If-None-Match` 返回 304；**仍为授权后私有串流，未改 public、未做 Range**。
+- 媒体：`/media/{id}`、`/cards/photo/{id}`、`/profile/photo/{id}`、活动海报、管理台受权照片统一 `ETag`（`<id>-thumb|orig`）与 `Cache-Control: private, max-age=<thumb 24h|orig 1h>, immutable`；`If-None-Match` 返回 304；**仍为授权后私有串流，未改 public、未做 Range**。
 - R2 读取去掉 `Stat()` 额外 HEAD：单次 GET，先读首块再写响应头，缺对象仍 404。
 - SPA：内联 CSS/JS 拆为 `/static/legacy/app.<assetVersion>.css|js`（实际文件名 `app.css`/`app.js` + `?v=`），壳保留启动配置与骨架；4 个库改 `defer` + `preload`；PhotoSwipe 首次打开图片时动态加载（失败降级直接开原图）；卡片首图 `eager`+`fetchpriority=high`，其余 `lazy`，列表用 `?size=thumb`。
 - 壳 `private, no-cache` + `ETag`；`/static` 带 `?v=` 的上游响应为 1y immutable（nginx 不再 `proxy_ignore_headers Cache-Control`）。
-- 回滚：旧壳保留在 `web/static/legacy/index.legacy.html`，回滚时替换 `index.html` 并 reload；静态文件名不变，靠 `assetVersion` 切缓存。
+- 回滚：静态资源已 `go:embed` 进二进制，**改磁盘文件无效**。回滚 = 回退提交（或用上一版 binary）后重新构建/部署；不要保留公开可取的旧壳文件。需要旧壳时从 git 历史取（`git show <commit>:web/static/legacy/index.html`）。
 
 ```bash
 # 验证：壳 304、静态 immutable、媒体 304
