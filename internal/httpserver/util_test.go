@@ -9,6 +9,7 @@ import (
 
 	"github.com/7310C7310C/yixianqian/internal/auth"
 	"github.com/7310C7310C/yixianqian/internal/config"
+	"github.com/7310C7310C/yixianqian/internal/media"
 )
 
 func TestSafeNext(t *testing.T) {
@@ -177,5 +178,17 @@ func TestHomeFlash(t *testing.T) {
 	_, errMsg = homeFlash(r)
 	if strings.Contains(errMsg, "<script>") {
 		t.Fatal("query input reflected into flash")
+	}
+}
+
+func TestUploadErrorDetailsHEICActionable(t *testing.T) {
+	status, code, message := uploadErrorDetails(media.ErrHEIC)
+	if status != http.StatusBadRequest || code != "heic_not_supported" {
+		t.Fatalf("status=%d code=%q", status, code)
+	}
+	for _, want := range []string{"HEIC", "JPEG", "高效"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("message %q missing %q", message, want)
+		}
 	}
 }

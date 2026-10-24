@@ -672,9 +672,9 @@ func (a *App) handleProfilePhotoUpload(w http.ResponseWriter, r *http.Request, a
 	}
 	photo, err := a.db.AddProfilePhoto(r.Context(), user.ID, saved.ID)
 	if err != nil {
-		if m, derr := a.db.RemoveMediaOwned(r.Context(), user.ID, saved.ID); derr == nil {
-			a.removeObject(r, m.ObjectKey)
-			a.removeObject(r, m.ThumbKey)
+		if m, removed, derr := a.db.RemoveMediaOwned(r.Context(), user.ID, saved.ID); derr == nil && removed {
+			a.removeObject(r, m.ID, m.ObjectKey)
+			a.removeObject(r, m.ID, m.ThumbKey)
 		}
 		if !errors.Is(err, db.ErrPhotoLimit) {
 			a.logger(r).Error("attach profile photo failed", "error", err, "user_id", user.ID)
@@ -732,7 +732,7 @@ func (a *App) handleProfilePhotoDelete(w http.ResponseWriter, r *http.Request, a
 		}
 		return
 	}
-	media, err := a.db.DeleteProfilePhoto(r.Context(), user.ID, mediaID)
+	media, objectsRemoved, err := a.db.DeleteProfilePhoto(r.Context(), user.ID, mediaID)
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		if api {
@@ -750,8 +750,10 @@ func (a *App) handleProfilePhotoDelete(w http.ResponseWriter, r *http.Request, a
 		}
 		return
 	}
-	a.removeObject(r, media.ObjectKey)
-	a.removeObject(r, media.ThumbKey)
+	if objectsRemoved {
+		a.removeObject(r, media.ID, media.ObjectKey)
+		a.removeObject(r, media.ID, media.ThumbKey)
+	}
 	a.audit(r, &user.ID, "profile.photo_deleted", "media", mediaID, map[string]any{"media_id": mediaID})
 	photos, err := a.db.ProfilePhotos(r.Context(), user.ID)
 	if err != nil {

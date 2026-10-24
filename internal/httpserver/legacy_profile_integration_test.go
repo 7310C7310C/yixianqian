@@ -412,3 +412,75 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 		t.Fatalf("account switch error = %q", switchBody.Error)
 	}
 }
+
+// TestIntegrationSharedMediaDeleteKeepsObjects proves the HTTP layer only
+// removes R2 objects when no other profile references the media and the caller
+// owns it. Migrated data can share one media row between many users.
+func TestIntegrationSharedMediaDeleteKeepsObjects(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	owner, ownerClient := env.createUser(t, "U-SHAREOBJ-A", "属主", "active", "user")
+	other, otherClient := env.createUser(t, "U-SHAREOBJ-B", "引用者", "active", "user")
+	cleanupHTTPUsers(t, env, owner.ID, other.ID)
+
+	resp := legacyPhotoUpload(t, ownerClient, "/legacy/api/profile/photo", ownerClient.csrfCookie(), "", testJPEG(t))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("upload status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	var payload legacyPhotoPayload
+	legacyJSONDecode(t, resp, &payload)
+	if len(payload.Photos) != 1 {
+		t.Fatalf("photos = %v", payload.Photos)
+	}
+	mediaID := strings.TrimPrefix(payload.Photos[0], "/profile/photo/")
+	if mediaID == payload.Photos[0] {
+		t.Fatalf("unexpected photo url %q", payload.Photos[0])
+	}
+
+	seedShared := func() {
+		if _, err := env.pool.Exec(env.ctx,
+			`INSERT INTO profile_photos (user_id, media_id, sort_order, is_cover)
+			 VALUES ($1, $2, 0, true)`, other.ID, mediaID); err != nil {
+			t.Fatalf("seed shared attachment: %v", err)
+		}
+	}
+	seedShared()
+
+	var key, thumbKey string
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT object_key, thumb_key FROM media WHERE id = $1`, mediaID).Scan(&key, &thumbKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := env.store.objects[key]; !ok {
+		t.Fatal("uploaded original missing from store")
+	}
+
+	resp = profileJSONRequest(t, otherClient, http.MethodDelete, "/legacy/api/profile/photo",
+		otherClient.csrfCookie(), map[string]any{"index": 0})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("non-owner delete status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	if _, ok := env.store.objects[key]; !ok {
+		t.Fatal("non-owner delete removed the shared original")
+	}
+	if _, ok := env.store.objects[thumbKey]; !ok {
+		t.Fatal("non-owner delete removed the shared thumbnail")
+	}
+
+	seedShared()
+	resp = profileJSONRequest(t, ownerClient, http.MethodDelete, "/legacy/api/profile/photo",
+		ownerClient.csrfCookie(), map[string]any{"index": 0})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("owner delete status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	if _, ok := env.store.objects[key]; !ok {
+		t.Fatal("owner delete with a live reference removed the shared original")
+	}
+	var mediaRows int
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT count(*) FROM media WHERE id = $1`, mediaID).Scan(&mediaRows); err != nil {
+		t.Fatal(err)
+	}
+	if mediaRows != 1 {
+		t.Fatalf("media rows = %d, want 1", mediaRows)
+	}
+}

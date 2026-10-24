@@ -108,6 +108,14 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 管理入口：活动管理经管理台 iframe 内的原版 SPA 承载；麦穗/举报原生化页面仍不暴露（「我的→管理」只有「🛠️ 管理后台」）。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
 
+### 媒体与上传（2026-10-24 修复，待部署）
+
+- 共享 media 删除安全：资料照片删除只移除 attachment；仅当无其它 `profile_photos` 引用且 `media.user_id` 为调用者时才删 media 行与 R2 对象。迁移数据中一个 media 被多人引用时，不再跨用户误删或级联删他人照片。
+- 上传原图入库前重编码：去除 EXIF/GPS/XMP/文本元数据，先按 EXIF 方向 auto-orient 再编码，JPEG/PNG 与缩图同口径；迁移存量原图不做批量重写（见 `docs/MIGRATION.md`）。
+- 上传上限：`MEDIA_MAX_PIXELS` 默认 `13_000_000`，iPhone 12MP（4032×3024=12,192,768）可通过；单张 10MiB、单边 8000px 不变；注册表单理论上限 92MiB 与 nginx `96m` 一致。
+- HEIC/HEIF 仍不支持（不加重依赖）：服务端 400 文案与 SPA 上传前检测均提示「先在相册转成 JPEG，或关闭高效」。
+- 证据：`TestIntegrationProfileSharedMediaDelete`、`TestIntegrationSharedMediaDeleteKeepsObjects`、`TestProcessStripsEXIFAndAppliesOrientation`、`TestProcessAcceptsIPhone12MP`、`TestUploadErrorDetailsHEICActionable`。
+
 ### 管理台（SSR + 活动原生 SPA，仅 iframe 承载）
 
 - 入口与框架：顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`（不渲染顶层页面），管理台只经 SPA 内 `/?admin=1` 打开 iframe overlay 使用；受权照片/海报原图串流是显式例外。

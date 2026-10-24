@@ -158,7 +158,7 @@ CI 以当前 HEAD 的 push run 为准；红灯先看 `gh run view <id> --log-fai
 - 所有写入（含 logout、上传）必须验 CSRF；`/api/*` 写入只接受 `X-CSRF-Token`。
 - R2 对象路径不得外泄；媒体一律经 `GET /media/{id}` 鉴权串流。
 - 只有 `TRUSTED_PROXY` 来源可提供 `X-Real-IP` / `X-Forwarded-For`。
-- 图片只接受 JPEG/PNG；HEIC 回 400；不信任 Content-Type，需 sniff + decode。
+- 图片只接受 JPEG/PNG；HEIC/HEIF 回 400 并提示转 JPEG；不信任 Content-Type，需 sniff + decode；原图入库前重编码去除 EXIF/GPS/XMP（保留方向：先 auto-orient 再编码），缩图同样；像素上限 13MP。
 - 不新增 Redis；session 与 rate-limit 以 Postgres / 进程内为限。
 - 浏览器范围：iOS 14.5+/Safari 14.1+、Chrome/WebView 84+、Firefox 74+。
 - 身份证门禁是 P0 上线阻断；补录/放行方式等 PM 决策，不得私自绕过。

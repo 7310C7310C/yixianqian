@@ -23,7 +23,9 @@ const (
 	defaultThumbSize     = 512
 	defaultMaxHashes     = 2
 	defaultMaxMedia      = 1
-	defaultMediaPixels   = 12_000_000
+	// defaultMediaPixels accepts 13 MP: iPhone's 12 MP frame is 4032×3024
+	// (12,192,768 pixels), which the old 12 MP cap rejected.
+	defaultMediaPixels   = 13_000_000
 	defaultMediaDim      = 8000
 	defaultFaceProbeCmd  = "python3 tools/face_probe.py"
 	defaultFaceProbeTime = 8 * time.Second

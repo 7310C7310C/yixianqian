@@ -44,6 +44,10 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.MediaThumbSize != 512 || cfg.MediaMaxBytes != 10<<20 {
 		t.Fatalf("media defaults: %+v", cfg)
 	}
+	// 4032x3024 = 12,192,768 must pass; 13 MP is the documented default.
+	if cfg.MediaMaxPixels != 13_000_000 || cfg.MediaMaxDim != 8000 {
+		t.Fatalf("media pixel defaults: %d / %d", cfg.MediaMaxPixels, cfg.MediaMaxDim)
+	}
 	if len(cfg.TrustedProxies) != 1 || cfg.TrustedProxies[0] != "45.125.16.205/32" {
 		t.Fatalf("trusted proxies = %v", cfg.TrustedProxies)
 	}

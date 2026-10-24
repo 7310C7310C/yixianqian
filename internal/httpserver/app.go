@@ -57,10 +57,10 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		cfg.MaxMedia = 1
 	}
 	if cfg.MediaMaxPixels <= 0 {
-		cfg.MediaMaxPixels = 12_000_000
+		cfg.MediaMaxPixels = media.DefaultMaxPixels
 	}
 	if cfg.MediaMaxDim <= 0 {
-		cfg.MediaMaxDim = 8000
+		cfg.MediaMaxDim = media.DefaultMaxDimension
 	}
 	tpl, err := LoadTemplates()
 	if err != nil {

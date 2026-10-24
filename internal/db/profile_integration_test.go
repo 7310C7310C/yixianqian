@@ -223,12 +223,15 @@ func TestIntegrationProfileUpdateAndPhotos(t *testing.T) {
 		t.Fatalf("cover count = %d", covers)
 	}
 
-	if _, err := database.DeleteProfilePhoto(ctx, other.ID, photos[0].MediaID); !errors.Is(err, ErrNotFound) {
+	if _, _, err := database.DeleteProfilePhoto(ctx, other.ID, photos[0].MediaID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner delete error = %v", err)
 	}
-	deleted, err := database.DeleteProfilePhoto(ctx, owner.ID, photos[0].MediaID)
+	deleted, objectsRemoved, err := database.DeleteProfilePhoto(ctx, owner.ID, photos[0].MediaID)
 	if err != nil {
 		t.Fatalf("delete photo: %v", err)
+	}
+	if !objectsRemoved {
+		t.Fatal("owner delete with no other references should remove the media row")
 	}
 	if deleted.ID != mediaRows[0].ID {
 		t.Fatalf("deleted media = %q", deleted.ID)
@@ -289,5 +292,103 @@ func TestIntegrationProfileUpdateAndPhotos(t *testing.T) {
 	}
 	if _, err := database.SetAccountStatus(ctx, owner.ID, "pending"); err == nil {
 		t.Fatal("invalid status target was accepted")
+	}
+}
+
+// TestIntegrationProfileSharedMediaDelete covers migrated data where one media
+// row is referenced by several users: deleting an attachment must never remove
+// another profile's photo, and R2 objects may only be deleted by the media
+// owner once nobody references them.
+func TestIntegrationProfileSharedMediaDelete(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	database, err := Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	owner := profileTestUser(t, ctx, database, "U-SHARE-A")
+	other := profileTestUser(t, ctx, database, "U-SHARE-B")
+	shared := profileTestMedia(t, ctx, database, owner.ID)
+
+	if _, err := database.AddProfilePhoto(ctx, owner.ID, shared.ID); err != nil {
+		t.Fatalf("owner attach: %v", err)
+	}
+	// Migration-era shared attachment: another user references the owner's media.
+	if _, err := database.pool.Exec(ctx,
+		`INSERT INTO profile_photos (user_id, media_id, sort_order, is_cover)
+		 VALUES ($1, $2, 0, true)`, other.ID, shared.ID); err != nil {
+		t.Fatalf("seed shared attachment: %v", err)
+	}
+
+	// Rollback cleanup must not remove a referenced media row.
+	if _, removed, err := database.RemoveMediaOwned(ctx, owner.ID, shared.ID); err != nil || removed {
+		t.Fatalf("RemoveMediaOwned on referenced media = removed %v err %v", removed, err)
+	}
+
+	// Non-owner delete: detach only, owner's attachment and objects stay.
+	if _, removed, err := database.DeleteProfilePhoto(ctx, other.ID, shared.ID); err != nil || removed {
+		t.Fatalf("non-owner delete = removed %v err %v", removed, err)
+	}
+	if _, err := database.GetProfilePhotoFile(ctx, shared.ID); err != nil {
+		t.Fatalf("owner photo lost after non-owner delete: %v", err)
+	}
+
+	// Re-seed the shared reference: the owner must not remove a media row that
+	// another profile still shows.
+	if _, err := database.pool.Exec(ctx,
+		`INSERT INTO profile_photos (user_id, media_id, sort_order, is_cover)
+		 VALUES ($1, $2, 0, true)`, other.ID, shared.ID); err != nil {
+		t.Fatalf("re-seed shared attachment: %v", err)
+	}
+	// Owner delete while another profile still references it: keep the media row.
+	if _, removed, err := database.DeleteProfilePhoto(ctx, owner.ID, shared.ID); err != nil || removed {
+		t.Fatalf("owner delete while shared = removed %v err %v", removed, err)
+	}
+	var mediaRows int
+	if err := database.pool.QueryRow(ctx,
+		`SELECT count(*) FROM media WHERE id = $1`, shared.ID).Scan(&mediaRows); err != nil {
+		t.Fatal(err)
+	}
+	if mediaRows != 1 {
+		t.Fatalf("media row count = %d, want 1", mediaRows)
+	}
+	if photos, err := database.ProfilePhotos(ctx, other.ID); err != nil || len(photos) != 1 {
+		t.Fatalf("shared attachment lost after owner delete: len=%d err=%v", len(photos), err)
+	}
+
+	// Last reference deleted by a non-owner: the owner's media row must survive.
+	if _, removed, err := database.DeleteProfilePhoto(ctx, other.ID, shared.ID); err != nil || removed {
+		t.Fatalf("non-owner last delete = removed %v err %v", removed, err)
+	}
+	if err := database.pool.QueryRow(ctx,
+		`SELECT count(*) FROM media WHERE id = $1`, shared.ID).Scan(&mediaRows); err != nil {
+		t.Fatal(err)
+	}
+	if mediaRows != 1 {
+		t.Fatalf("non-owner removed the media row: count = %d", mediaRows)
+	}
+
+	// Owner deletes the now-unreferenced media: row and objects go away.
+	if _, err := database.AddProfilePhoto(ctx, owner.ID, shared.ID); err != nil {
+		t.Fatalf("owner re-attach: %v", err)
+	}
+	if _, removed, err := database.DeleteProfilePhoto(ctx, owner.ID, shared.ID); err != nil || !removed {
+		t.Fatalf("owner last delete = removed %v err %v", removed, err)
+	}
+	if err := database.pool.QueryRow(ctx,
+		`SELECT count(*) FROM media WHERE id = $1`, shared.ID).Scan(&mediaRows); err != nil {
+		t.Fatal(err)
+	}
+	if mediaRows != 0 {
+		t.Fatalf("media row still present: count = %d", mediaRows)
+	}
+	if _, err := database.GetProfilePhotoFile(ctx, shared.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted shared photo still resolvable: %v", err)
 	}
 }

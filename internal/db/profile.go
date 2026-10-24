@@ -745,17 +745,21 @@ func (d *DB) SetProfilePhotoCover(ctx context.Context, userID int64, mediaID str
 	return d.ProfilePhotos(ctx, userID)
 }
 
-// DeleteProfilePhoto removes the attachment and its media row. The caller is
-// responsible for deleting the object-store keys.
-func (d *DB) DeleteProfilePhoto(ctx context.Context, userID int64, mediaID string) (Media, error) {
+// DeleteProfilePhoto removes the caller's attachment to a media row. The media
+// row is deleted only when no profile still references it and the caller owns
+// it; the bool reports that the row (and therefore the R2 objects) is gone.
+//
+// Migrated data can share one media row between many users. Deleting the
+// attachment must never remove a photo another profile still shows.
+func (d *DB) DeleteProfilePhoto(ctx context.Context, userID int64, mediaID string) (Media, bool, error) {
 	tx, err := d.pool.Begin(ctx)
 	if err != nil {
-		return Media{}, fmt.Errorf("db: begin delete profile photo: %w", err)
+		return Media{}, false, fmt.Errorf("db: begin delete profile photo: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := lockProfileUser(ctx, tx, userID); err != nil {
-		return Media{}, err
+		return Media{}, false, err
 	}
 	var m Media
 	err = tx.QueryRow(ctx,
@@ -764,52 +768,81 @@ func (d *DB) DeleteProfilePhoto(ctx context.Context, userID int64, mediaID strin
 		 FROM profile_photos pp
 		 JOIN media m ON m.id = pp.media_id
 		 WHERE pp.user_id = $1 AND pp.media_id = $2
-		 FOR UPDATE OF pp`, userID, mediaID).
+		 FOR UPDATE OF pp, m`, userID, mediaID).
 		Scan(&m.ID, &m.UserID, &m.OriginalName, &m.ObjectKey, &m.ThumbKey,
 			&m.ContentType, &m.ByteSize, &m.ThumbSize, &m.Width, &m.Height, &m.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Media{}, ErrNotFound
+		return Media{}, false, ErrNotFound
 	}
 	if err != nil {
-		return Media{}, fmt.Errorf("db: load profile photo: %w", err)
+		return Media{}, false, fmt.Errorf("db: load profile photo: %w", err)
 	}
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM profile_photos WHERE user_id = $1 AND media_id = $2`, userID, mediaID); err != nil {
-		return Media{}, fmt.Errorf("db: delete profile photo: %w", err)
+		return Media{}, false, fmt.Errorf("db: delete profile photo: %w", err)
 	}
-	if _, err := tx.Exec(ctx,
-		`DELETE FROM media WHERE id = $1 AND user_id = $2`, mediaID, userID); err != nil {
-		return Media{}, fmt.Errorf("db: delete profile media: %w", err)
+	var refs int
+	if err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM profile_photos WHERE media_id = $1`, mediaID).Scan(&refs); err != nil {
+		return Media{}, false, fmt.Errorf("db: count profile photo references: %w", err)
+	}
+	removed := false
+	// Only the media owner may delete the shared row, and only once no profile
+	// references it. A non-owner deleting the last attachment leaves the row
+	// for its owner (or an offline cleanup job).
+	if refs == 0 && m.UserID == userID {
+		tag, err := tx.Exec(ctx,
+			`DELETE FROM media WHERE id = $1 AND user_id = $2`, mediaID, userID)
+		if err != nil {
+			return Media{}, false, fmt.Errorf("db: delete profile media: %w", err)
+		}
+		removed = tag.RowsAffected() > 0
 	}
 	if err := renumberProfilePhotos(ctx, tx, userID); err != nil {
-		return Media{}, err
+		return Media{}, false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return Media{}, fmt.Errorf("db: commit delete profile photo: %w", err)
+		return Media{}, false, fmt.Errorf("db: commit delete profile photo: %w", err)
 	}
-	return m, nil
+	return m, removed, nil
 }
 
 // RemoveMediaOwned deletes an unattached media row owned by the user. It is
-// used to roll back an upload that could not be attached to the profile.
-func (d *DB) RemoveMediaOwned(ctx context.Context, userID int64, mediaID string) (Media, error) {
+// used to roll back an upload that could not be attached to the profile; the
+// bool reports whether the row was actually deleted so the caller only removes
+// object-store keys that can no longer be referenced.
+func (d *DB) RemoveMediaOwned(ctx context.Context, userID int64, mediaID string) (Media, bool, error) {
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return Media{}, false, fmt.Errorf("db: begin remove owned media: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var m Media
-	err := d.pool.QueryRow(ctx,
-		"SELECT "+mediaColumns+" FROM media WHERE id = $1 AND user_id = $2",
+	err = tx.QueryRow(ctx,
+		"SELECT "+mediaColumns+" FROM media WHERE id = $1 AND user_id = $2 FOR UPDATE",
 		mediaID, userID).
 		Scan(&m.ID, &m.UserID, &m.OriginalName, &m.ObjectKey, &m.ThumbKey,
 			&m.ContentType, &m.ByteSize, &m.ThumbSize, &m.Width, &m.Height, &m.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Media{}, ErrNotFound
+		return Media{}, false, ErrNotFound
 	}
 	if err != nil {
-		return Media{}, fmt.Errorf("db: load owned media: %w", err)
+		return Media{}, false, fmt.Errorf("db: load owned media: %w", err)
 	}
-	if _, err := d.pool.Exec(ctx,
-		`DELETE FROM media WHERE id = $1 AND user_id = $2`, mediaID, userID); err != nil {
-		return Media{}, fmt.Errorf("db: delete owned media: %w", err)
+	tag, err := tx.Exec(ctx,
+		`DELETE FROM media m
+		 WHERE m.id = $1 AND m.user_id = $2
+		   AND NOT EXISTS (SELECT 1 FROM profile_photos pp WHERE pp.media_id = m.id)`,
+		mediaID, userID)
+	if err != nil {
+		return Media{}, false, fmt.Errorf("db: delete owned media: %w", err)
 	}
-	return m, nil
+	removed := tag.RowsAffected() > 0
+	if err := tx.Commit(ctx); err != nil {
+		return Media{}, false, fmt.Errorf("db: commit remove owned media: %w", err)
+	}
+	return m, removed, nil
 }
 
 // ProfilePhotoFile describes one profile photo for the streaming handler.

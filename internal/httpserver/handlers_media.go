@@ -178,7 +178,7 @@ func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (d
 		return db.Media{}, err
 	}
 	if err := a.store.Put(ctx, thumbKey, processed.Thumbnail, "image/jpeg"); err != nil {
-		a.removeObject(r, key)
+		a.removeObject(r, id, key)
 		return db.Media{}, err
 	}
 
@@ -195,8 +195,8 @@ func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (d
 		Height:       processed.Height,
 	})
 	if err != nil {
-		a.removeObject(r, key)
-		a.removeObject(r, thumbKey)
+		a.removeObject(r, id, key)
+		a.removeObject(r, id, thumbKey)
 		return db.Media{}, err
 	}
 
@@ -209,11 +209,13 @@ func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (d
 	return saved, nil
 }
 
-func (a *App) removeObject(r *http.Request, key string) {
+// removeObject deletes one stored object. The R2 object key is never logged:
+// only the media id may appear in logs and audit trails.
+func (a *App) removeObject(r *http.Request, mediaID, key string) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 	defer cancel()
 	if err := a.store.Remove(ctx, key); err != nil {
-		a.logger(r).Warn("remove object after failed upload failed", "error", err)
+		a.logger(r).Warn("remove media object failed", "error", err, "media_id", mediaID)
 	}
 }
 
@@ -242,7 +244,7 @@ func (a *App) failUpload(w http.ResponseWriter, r *http.Request, user db.User, e
 func uploadErrorDetails(err error) (status int, code, message string) {
 	switch {
 	case errors.Is(err, media.ErrHEIC):
-		return http.StatusBadRequest, "heic_not_supported", "HEIC/HEIF 格式尚未支持，请改用 JPEG 或 PNG。"
+		return http.StatusBadRequest, "heic_not_supported", "iPhone HEIC 照片请先在相册转成 JPEG，或关闭「高效」格式后再上传。"
 	case errors.Is(err, media.ErrFileTooLarge):
 		return http.StatusRequestEntityTooLarge, "file_too_large", "文件超过大小上限。"
 	case errors.Is(err, media.ErrUnsupportedImage):

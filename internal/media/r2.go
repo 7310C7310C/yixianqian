@@ -62,7 +62,7 @@ func (s *R2Store) Put(ctx context.Context, key string, data []byte, contentType 
 			CacheControl: "private, max-age=0, no-store",
 		})
 	if err != nil {
-		return fmt.Errorf("media: put %s: %w", key, err)
+		return fmt.Errorf("media: put object: %w", err)
 	}
 	return nil
 }
@@ -70,14 +70,14 @@ func (s *R2Store) Put(ctx context.Context, key string, data []byte, contentType 
 func (s *R2Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("media: get %s: %w", key, err)
+		return nil, fmt.Errorf("media: get object: %w", err)
 	}
 	if _, err := obj.Stat(); err != nil {
 		_ = obj.Close()
 		if isNotFound(err) {
 			return nil, ErrObjectNotFound
 		}
-		return nil, fmt.Errorf("media: stat %s: %w", key, err)
+		return nil, fmt.Errorf("media: stat object: %w", err)
 	}
 	return obj, nil
 }
@@ -85,7 +85,7 @@ func (s *R2Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 func (s *R2Store) Remove(ctx context.Context, key string) error {
 	err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
-		return fmt.Errorf("media: remove %s: %w", key, err)
+		return fmt.Errorf("media: remove object: %w", err)
 	}
 	return nil
 }

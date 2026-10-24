@@ -14,6 +14,7 @@
   <section class="card register-section">
     <h2>个人照片</h2>
     <p class="hint">请上传 {{.Data.MinPhotos}}–{{.Data.MaxPhotos}} 张 JPEG/PNG 照片；第一张会作为封面，建议使用横版照片。单张上限 {{.Data.MaxMB}} MB。</p>
+    <p class="hint">iPhone 默认的 HEIC 照片无法直接上传：请先在相册转成 JPEG，或在「设置 → 相机 → 格式」选择「兼容性最佳」。</p>
     <div class="register-field">
       <label for="f_photos">选择照片<span class="req" aria-hidden="true">*</span></label>
       <input id="f_photos" name="photos" type="file" accept="image/jpeg,image/png" multiple required>

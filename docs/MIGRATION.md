@@ -57,6 +57,7 @@ sources:
 
 - **对账报告未归档**：工具支持 `--report-out`，但仓库没有历史报告路径/生成物；需补逐表来源→目标笔数、checksum、抽样、照片数与大小、积分余额，并存档。
 - **照片映射**：按 `<photos-dir>/<file_token>.<ext>` 递归匹配；缺失的 token 会报告并继续，不阻断文字导入。`profile_photos` 行数 ≠ `media` 数（多行可引用同一 media；压测账号会共用），回填与对账按 `media_id` 去重。
+- **历史原图元数据**：迁移工具原样上传图片字节，存量 R2 原图可能仍带 EXIF/GPS；2026-10-24 起应用上传会重编码去元数据，但**不对迁移存量原图做批量重写**。需要清洗时另起一次性任务：先备份/清单（media_id、sha256），按用户维度灰度，失败可回滚。
 - **积分对账**：`points_ledger` 以 `SUM(delta)` 对余额；`balance_after` 不作唯一依据；`redemptions`/`invites`/`historical_participants` 分开核对。
 
 ## 4. 工具

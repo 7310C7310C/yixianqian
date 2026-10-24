@@ -369,7 +369,7 @@ func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []
 			return nil, err
 		}
 		if err := a.store.Put(ctx, thumbKey, processed.Thumbnail, "image/jpeg"); err != nil {
-			a.removeStoredObject(ctx, key)
+			a.removeStoredObject(ctx, id, key)
 			return nil, err
 		}
 		saved, err := a.db.CreateMedia(ctx, db.Media{
@@ -385,15 +385,16 @@ func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []
 			Height:       processed.Height,
 		})
 		if err != nil {
-			a.removeStoredObject(ctx, key)
-			a.removeStoredObject(ctx, thumbKey)
+			a.removeStoredObject(ctx, id, key)
+			a.removeStoredObject(ctx, id, thumbKey)
 			return nil, err
 		}
 		photo, err := a.db.AddProfilePhoto(ctx, userID, saved.ID)
 		if err != nil {
-			_, _ = a.db.RemoveMediaOwned(ctx, userID, saved.ID)
-			a.removeStoredObject(ctx, key)
-			a.removeStoredObject(ctx, thumbKey)
+			if _, removed, rerr := a.db.RemoveMediaOwned(ctx, userID, saved.ID); rerr == nil && removed {
+				a.removeStoredObject(ctx, id, key)
+				a.removeStoredObject(ctx, id, thumbKey)
+			}
 			return nil, err
 		}
 		mediaIDs = append(mediaIDs, photo.MediaID)
@@ -401,9 +402,9 @@ func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []
 	return mediaIDs, nil
 }
 
-func (a *App) removeStoredObject(ctx context.Context, key string) {
+func (a *App) removeStoredObject(ctx context.Context, mediaID, key string) {
 	if err := a.store.Remove(ctx, key); err != nil {
-		a.log.Error("remove registration object failed", "error", err)
+		a.log.Error("remove registration object failed", "error", err, "media_id", mediaID)
 	}
 }
 
@@ -427,8 +428,8 @@ func (a *App) cleanupRegistration(r *http.Request, userID int64) {
 		return
 	}
 	for _, row := range rows {
-		a.removeStoredObject(ctx, row.ObjectKey)
-		a.removeStoredObject(ctx, row.ThumbKey)
+		a.removeStoredObject(ctx, row.ID, row.ObjectKey)
+		a.removeStoredObject(ctx, row.ID, row.ThumbKey)
 	}
 }
 

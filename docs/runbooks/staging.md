@@ -135,6 +135,9 @@ nginx -t && systemctl reload nginx
 
 - allow gate 必须用 `$realip_remote_addr`；不要改回 `allow`，否则所有外部请求 403。
 - server1 allow 只包含 server2（`45.125.16.205/32`）与 localhost（`127.0.0.1/32`）；localhost 是本机健康检查/nginx 所需，不要删。
+- 媒体上限（应用默认）：`MEDIA_MAX_BYTES=10MiB`、`MEDIA_MAX_PIXELS=13_000_000`、`MEDIA_MAX_DIMENSION=8000`、`MAX_CONCURRENT_MEDIA=1`。13MP 覆盖 iPhone 12MP（4032×3024=12,192,768）；更高像素或 HEIC/HEIF 返回 400（提示转 JPEG）。改任一上限需同步 nginx 与注册页文案。
+- 上传原图在服务端重编码：去 EXIF/GPS/XMP/文本元数据并按 EXIF 方向校正，缩图同样；迁移导入的历史原图未批量重写（见 `docs/MIGRATION.md`）。
+- 部署本版本前检查 `/opt/yixianqian-next/config/staging.env`：若仍显式设置 `MEDIA_MAX_PIXELS=12000000`，改为 `13000000` 或删除该行以采用新默认，否则 12MP iPhone 原图仍会被拒。
 - 请求体上限必须两端一致：理论值 `9*10MiB+2MiB=92MiB`，向上取整为 `96m` 留 multipart 余量：
 
 ```bash

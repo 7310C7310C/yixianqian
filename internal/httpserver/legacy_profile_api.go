@@ -173,9 +173,9 @@ func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Requ
 	}
 	photo, err := a.db.AddProfilePhoto(r.Context(), user.ID, saved.ID)
 	if err != nil {
-		if m, derr := a.db.RemoveMediaOwned(r.Context(), user.ID, saved.ID); derr == nil {
-			a.removeObject(r, m.ObjectKey)
-			a.removeObject(r, m.ThumbKey)
+		if m, removed, derr := a.db.RemoveMediaOwned(r.Context(), user.ID, saved.ID); derr == nil && removed {
+			a.removeObject(r, m.ID, m.ObjectKey)
+			a.removeObject(r, m.ID, m.ThumbKey)
 		}
 		if errors.Is(err, db.ErrPhotoLimit) {
 			legacyError(w, http.StatusBadRequest,
@@ -226,7 +226,7 @@ func (a *App) legacyPhotoUploadError(w http.ResponseWriter, r *http.Request, err
 	case errors.Is(err, errNoFile):
 		legacyError(w, http.StatusBadRequest, "未收到图片")
 	case errors.Is(err, media.ErrHEIC):
-		legacyError(w, http.StatusBadRequest, "HEIC/HEIF 格式尚未支持，请改用 JPEG 或 PNG")
+		legacyError(w, http.StatusBadRequest, "iPhone HEIC 照片请先在相册转成 JPEG，或关闭「高效」格式后再上传。")
 	case errors.Is(err, media.ErrFileTooLarge):
 		legacyError(w, http.StatusBadRequest, "图片不能超过10MB")
 	case errors.Is(err, media.ErrUnsupportedImage):
@@ -259,7 +259,7 @@ func (a *App) handleLegacyProfilePhotoDelete(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	mediaID := profile.Photos[req.Index].MediaID
-	deleted, err := a.db.DeleteProfilePhoto(r.Context(), user.ID, mediaID)
+	deleted, objectsRemoved, err := a.db.DeleteProfilePhoto(r.Context(), user.ID, mediaID)
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		legacyError(w, http.StatusBadRequest, "照片不存在")
@@ -268,8 +268,10 @@ func (a *App) handleLegacyProfilePhotoDelete(w http.ResponseWriter, r *http.Requ
 		legacyServerError(a, w, r, err, "legacy profile photo delete failed")
 		return
 	}
-	a.removeObject(r, deleted.ObjectKey)
-	a.removeObject(r, deleted.ThumbKey)
+	if objectsRemoved {
+		a.removeObject(r, deleted.ID, deleted.ObjectKey)
+		a.removeObject(r, deleted.ID, deleted.ThumbKey)
+	}
 	a.audit(r, &user.ID, "profile.photo_deleted", "media", mediaID,
 		map[string]any{"media_id": mediaID, "source": "legacy"})
 	photos, err := a.db.ProfilePhotos(r.Context(), user.ID)

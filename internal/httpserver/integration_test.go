@@ -337,8 +337,16 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 
 	resp = client.get("/media/" + uploaded.ID)
 	served := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || served != string(imageBytes) {
-		t.Fatalf("media status=%d bytes=%d want=%d", resp.StatusCode, len(served), len(imageBytes))
+	if resp.StatusCode != http.StatusOK || len(served) == 0 {
+		t.Fatalf("media status=%d bytes=%d", resp.StatusCode, len(served))
+	}
+	// The stored original is re-encoded (metadata stripped), so it must differ
+	// from the upload bytes while keeping the decoded dimensions.
+	if served == string(imageBytes) {
+		t.Fatal("stored original must be re-encoded")
+	}
+	if cfg, format, err := image.DecodeConfig(strings.NewReader(served)); err != nil || format != "jpeg" || cfg.Width != 800 || cfg.Height != 600 {
+		t.Fatalf("stored original not a valid 800x600 jpeg: format=%q cfg=%+v err=%v", format, cfg, err)
 	}
 	if resp.Header.Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("media content type = %q", resp.Header.Get("Content-Type"))
@@ -368,6 +376,9 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 	}
 	if apiErr.Error.Code != "heic_not_supported" {
 		t.Fatalf("heic code = %q", apiErr.Error.Code)
+	}
+	if !strings.Contains(apiErr.Error.Message, "HEIC") || !strings.Contains(apiErr.Error.Message, "JPEG") || !strings.Contains(apiErr.Error.Message, "高效") {
+		t.Fatalf("heic message must be actionable, got %q", apiErr.Error.Message)
 	}
 
 	resp = client.postMultipart("/media/upload", csrf, "form.png", "image/png", testPNG(t))

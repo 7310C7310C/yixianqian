@@ -309,16 +309,19 @@ func (a *App) uploadAdminActivityPoster(w http.ResponseWriter, r *http.Request, 
 func (a *App) rollbackAdminActivityPoster(r *http.Request, userID int64, saved db.Media) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
 	defer cancel()
-	removed, err := a.db.RemoveMediaOwned(ctx, userID, saved.ID)
+	removed, deleted, err := a.db.RemoveMediaOwned(ctx, userID, saved.ID)
 	if err != nil {
 		if !errors.Is(err, db.ErrNotFound) {
 			a.logger(r).Warn("rollback activity poster media row failed", "error", err, "media_id", saved.ID)
 		}
-		removed = saved
+		return
 	}
-	a.removeObject(r, removed.ObjectKey)
+	if !deleted {
+		return
+	}
+	a.removeObject(r, removed.ID, removed.ObjectKey)
 	if removed.ThumbKey != "" {
-		a.removeObject(r, removed.ThumbKey)
+		a.removeObject(r, removed.ID, removed.ThumbKey)
 	}
 }
 

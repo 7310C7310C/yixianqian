@@ -8,7 +8,7 @@ import (
 	"image"
 	"image/draw"
 	"image/jpeg"
-	_ "image/png" // register PNG decoder
+	"image/png"
 	"net/http"
 	"strings"
 
@@ -17,7 +17,9 @@ import (
 
 const (
 	DefaultMaxDimension = 8000
-	DefaultMaxPixels    = 12_000_000
+	// DefaultMaxPixels accepts 13 MP so the common iPhone 12 MP frame
+	// (4032×3024 = 12,192,768 pixels) is not rejected.
+	DefaultMaxPixels = 13_000_000
 )
 
 var (
@@ -41,9 +43,11 @@ func Process(data []byte, thumbSize int) (Processed, error) {
 	return ProcessWithLimits(data, thumbSize, DefaultMaxDimension, DefaultMaxPixels)
 }
 
-// ProcessWithLimits sniffs the container, decodes dimensions, then creates a
-// white-backed JPEG thumbnail constrained to thumbSize. The caller is expected
-// to bound concurrency; decoding a 16-bit image can allocate hundreds of MiB.
+// ProcessWithLimits sniffs the container, decodes dimensions, then rewrites the
+// original without metadata (EXIF/GPS/XMP/IPTC) and creates a white-backed JPEG
+// thumbnail constrained to thumbSize. EXIF orientation is applied to both the
+// re-encoded original and the thumbnail. The caller is expected to bound
+// concurrency; decoding a 16-bit image can allocate hundreds of MiB.
 func ProcessWithLimits(data []byte, thumbSize, maxDim int, maxPixels int64) (Processed, error) {
 	if maxDim <= 0 || maxPixels <= 0 {
 		return Processed{}, ErrImageDimensions
@@ -71,22 +75,53 @@ func ProcessWithLimits(data []byte, thumbSize, maxDim int, maxPixels int64) (Pro
 		return Processed{}, ErrImageDimensions
 	}
 
-	src, _, err := image.Decode(bytes.NewReader(data))
+	src, decodedFormat, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return Processed{}, fmt.Errorf("%w: decode image: %v", ErrUnsupportedImage, err)
 	}
 
-	thumb, err := makeThumbnail(src, thumbSize)
+	orientation := 1
+	if decodedFormat == "jpeg" {
+		orientation = jpegOrientation(data)
+	}
+	oriented := applyOrientation(src, orientation)
+
+	original, err := encodeOriginal(oriented, decodedFormat)
+	if err != nil {
+		return Processed{}, fmt.Errorf("%w: encode original: %v", ErrUnsupportedImage, err)
+	}
+
+	thumb, err := makeThumbnail(oriented, thumbSize)
 	if err != nil {
 		return Processed{}, err
 	}
+	bounds := oriented.Bounds()
 	return Processed{
-		Original:    data,
+		Original:    original,
 		ContentType: contentType,
-		Width:       cfg.Width,
-		Height:      cfg.Height,
+		Width:       bounds.Dx(),
+		Height:      bounds.Dy(),
 		Thumbnail:   thumb,
 	}, nil
+}
+
+// encodeOriginal re-encodes the decoded image so the stored original carries no
+// container metadata (EXIF GPS, camera, timestamps, XMP/IPTC, PNG text chunks).
+func encodeOriginal(img image.Image, format string) ([]byte, error) {
+	var buf bytes.Buffer
+	switch format {
+	case "jpeg":
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}); err != nil {
+			return nil, err
+		}
+	case "png":
+		if err := png.Encode(&buf, img); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, ErrUnsupportedImage
+	}
+	return buf.Bytes(), nil
 }
 
 func makeThumbnail(src image.Image, thumbSize int) ([]byte, error) {
