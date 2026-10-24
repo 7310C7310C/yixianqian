@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
 	"github.com/7310C7310C/yixianqian/internal/platform"
@@ -521,7 +520,6 @@ func TestIntegrationAdminActivityListQuickSettingsAndRedirects(t *testing.T) {
 		"group_enabled":    {"1"},
 		"male_per_group":   {"3"},
 		"female_per_group": {"2"},
-		"onetoone_enabled": {"1"},
 	})
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("quick update status = %d body=%s", resp.StatusCode, readBody(t, resp))
@@ -534,9 +532,10 @@ func TestIntegrationAdminActivityListQuickSettingsAndRedirects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 分组与一对一互斥：快速设置只开启分组，一对一必须保持关闭。
 	if updated.Status != "已结束" || !updated.SigninEnabled || updated.SigninCode != "4321" ||
 		!updated.GroupEnabled || updated.MalePerGroup != 3 || updated.FemalePerGroup != 2 ||
-		!updated.OnetooneEnabled {
+		updated.OnetooneEnabled {
 		t.Fatalf("quick settings not applied: %+v", updated)
 	}
 
@@ -697,7 +696,8 @@ func TestIntegrationAdminActivityAttendanceFilterContext(t *testing.T) {
 
 func createWorkbenchActivity(t *testing.T, ctx context.Context, database *db.DB, pool *pgxpool.Pool, name string) db.Activity {
 	t.Helper()
-	start := time.Now().Add(-time.Hour)
+	// 不排期：报名/签到时间窗规则由 activities_window_integration_test 覆盖，
+	// 工作台用例只验证管理动作。
 	activity, err := database.CreateActivity(ctx, db.AdminActivityInput{
 		Name:          name + " " + randomHTTPDigits(t, 8),
 		Description:   "测试描述",
@@ -709,7 +709,6 @@ func createWorkbenchActivity(t *testing.T, ctx context.Context, database *db.DB,
 		Status:        db.ActivityStatusOpen,
 		SigninEnabled: true,
 		SigninCode:    "0123",
-		StartAt:       &start,
 	})
 	if err != nil {
 		t.Fatalf("create activity: %v", err)

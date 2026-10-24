@@ -2568,6 +2568,40 @@ body.admin-shell .admin-temp-value code {
   color: var(--adm-brand-strong);
 }
 
+/* 列表/详情页内就地展示的一次性临时密码（fetch 增强路径）。 */
+body.admin-shell .admin-temp-inline {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--adm-brand-line);
+  border-radius: var(--adm-radius);
+  background: var(--adm-brand-wash);
+  font-size: 13px;
+}
+
+body.admin-shell .admin-temp-inline[hidden] {
+  display: none !important;
+}
+
+body.admin-shell .admin-temp-inline code {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: var(--adm-surface);
+  color: var(--adm-brand-strong);
+}
+
+body.admin-shell .admin-temp-inline span {
+  color: var(--adm-muted);
+}
+
+body.admin-shell .admin-temp-inline.is-error {
+  border-color: var(--adm-danger, #b3261e);
+  background: var(--adm-danger-wash, #fdecea);
+}
+
 body.admin-shell .admin-role-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

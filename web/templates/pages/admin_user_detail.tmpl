@@ -84,7 +84,7 @@
   </div>
 
   {{if .Data.CanManage}}
-  <div class="admin-danger-zone">
+  <div class="admin-danger-zone" data-adm-temp-scope>
     <h3>账号管理</h3>
     <div class="admin-actions">
       {{if and (or .Data.SuperAdmin (not .Data.User.AdminProtected)) (eq .Data.User.LoginStatus "active")}}
@@ -102,13 +102,15 @@
       </form>
       {{end}}
       {{if or .Data.SuperAdmin (not .Data.User.AdminProtected)}}
-      <form method="post" action="/admin/users/{{$userID}}/temp-password" class="inline-form">
+      <form method="post" action="/admin/users/{{$userID}}/temp-password" class="inline-form"
+            data-adm-temp-form data-user-id="{{$userID}}" data-user-name="{{.Data.User.Name}}">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="button small" data-adm-confirm="生成临时密码后，{{.Data.User.Name}} 的旧密码会立即失效。继续？">生成临时密码</button>
       </form>
       {{end}}
     </div>
-    <p class="hint">临时密码沿用列表页行为：生成后会在列表页显示一次，请立即转交用户。</p>
+    <div class="admin-temp-inline" data-adm-temp-result hidden aria-live="polite"></div>
+    <p class="hint">临时密码只显示一次；生成后旧密码立即失效，请当场转交用户。</p>
   </div>
   {{end}}
 </section>

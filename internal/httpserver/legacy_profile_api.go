@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/7310C7310C/yixianqian/internal/auth"
 	"github.com/7310C7310C/yixianqian/internal/db"
 	"github.com/7310C7310C/yixianqian/internal/media"
 )
@@ -104,6 +105,14 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 		legacyError(w, http.StatusBadRequest, "没有可更新的字段")
 		return
 	}
+	// 手机号同时是登录账号：变更前必须验证当前密码，否则一次误操作或会话
+	// 盗用就能把登录标识改到他人号码上（审计 UD-05）。
+	if upd.Phone != nil && !samePhone(profile.Phone, *upd.Phone) {
+		if !a.verifyProfilePhoneChange(w, r, user.ID, body) {
+			return
+		}
+	}
+	oldPhone := profile.Phone
 	_, err = a.db.UpdateProfile(r.Context(), user.ID, upd)
 	var invalid *db.ValidationError
 	switch {
@@ -111,7 +120,7 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 		legacyError(w, http.StatusBadRequest, invalid.Message)
 		return
 	case errors.Is(err, db.ErrPhoneConflict):
-		legacyError(w, http.StatusConflict, "手机号码已被其他账号使用")
+		legacyErrorCode(w, http.StatusConflict, "phone_taken", "手机号码已被其他账号使用")
 		return
 	case errors.Is(err, db.ErrNotFound):
 		legacyError(w, http.StatusNotFound, "用户不存在")
@@ -122,7 +131,91 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	a.audit(r, &user.ID, "profile.updated", "user", strconv.FormatInt(profile.ID, 10),
 		map[string]any{"fields": profileUpdateFieldNames(upd), "source": "legacy"})
+	if upd.Phone != nil && !samePhone(oldPhone, *upd.Phone) {
+		a.audit(r, &user.ID, "profile.phone.changed", "user", strconv.FormatInt(profile.ID, 10),
+			map[string]any{
+				"old_phone": maskAuditPhone(oldPhone),
+				"new_phone": maskAuditPhone(*upd.Phone),
+				"source":    "legacy",
+			})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "资料已更新"})
+}
+
+// samePhone compares normalized phone numbers; an unparsable value only
+// matches itself so a malformed change still requires verification.
+func samePhone(a, b string) bool {
+	return strings.TrimSpace(a) == strings.TrimSpace(b)
+}
+
+// maskAuditPhone keeps the first three and last four digits for audit trails.
+func maskAuditPhone(phone string) string {
+	runes := []rune(strings.TrimSpace(phone))
+	switch {
+	case len(runes) >= 8:
+		return string(runes[:3]) + "****" + string(runes[len(runes)-4:])
+	case len(runes) >= 4:
+		return string(runes[:1]) + "***" + string(runes[len(runes)-1:])
+	case len(runes) == 0:
+		return ""
+	default:
+		return "***"
+	}
+}
+
+// verifyProfilePhoneChange requires and verifies current_password for phone
+// changes. It writes the JSON error response itself and returns false when the
+// change must not proceed.
+func (a *App) verifyProfilePhoneChange(w http.ResponseWriter, r *http.Request, userID int64, body map[string]any) bool {
+	current := ""
+	if raw, ok := body["current_password"]; ok {
+		value, isString := raw.(string)
+		if !isString {
+			legacyErrorCode(w, http.StatusBadRequest, "password_required", "修改手机号需要输入当前密码。")
+			return false
+		}
+		current = strings.TrimSpace(value)
+	}
+	if current == "" {
+		legacyErrorCode(w, http.StatusBadRequest, "password_required", "修改手机号需要输入当前密码。")
+		return false
+	}
+	if a.profilePasswordLimiter != nil {
+		if ok, retry := a.profilePasswordLimiter.Allow("profile_phone:" + strconv.FormatInt(userID, 10)); !ok {
+			w.Header().Set("Retry-After", retryAfterSeconds(int(retry.Seconds())+1))
+			legacyErrorCode(w, http.StatusTooManyRequests, "rate_limited", "密码尝试过于频繁，请稍后再试。")
+			return false
+		}
+	}
+	hash, err := a.db.GetPasswordHash(r.Context(), userID)
+	if errors.Is(err, db.ErrNotFound) {
+		legacyErrorCode(w, http.StatusConflict, "password_not_set", "该账号尚未设置密码，请联系管理员修改手机号。")
+		return false
+	}
+	if err != nil {
+		legacyServerError(a, w, r, err, "load password hash for phone change failed")
+		return false
+	}
+	acquired, busy := a.acquireHashQuiet(r)
+	if !acquired {
+		if busy {
+			legacyErrorCode(w, http.StatusTooManyRequests, "busy", "目前请求较多，请稍后再试。")
+		}
+		return false
+	}
+	valid, verifyErr := auth.VerifyPassword(current, hash)
+	a.releaseHash()
+	if verifyErr != nil {
+		a.logger(r).Error("verify current password for phone change failed", "error", verifyErr)
+		legacyErrorCode(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理，请稍后再试。")
+		return false
+	}
+	if !valid {
+		a.audit(r, &userID, "profile.phone.change_denied", "user", strconv.FormatInt(userID, 10), nil)
+		legacyErrorCode(w, http.StatusBadRequest, "password_invalid", "当前密码不正确。")
+		return false
+	}
+	return true
 }
 
 func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Request) {

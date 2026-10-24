@@ -272,6 +272,55 @@ func (in AdminActivityInput) clean() AdminActivityInput {
 	return in
 }
 
+// IsFourDigitCode reports whether raw is exactly four ASCII digits. The check
+// lives in the DB package so form parsing and writes agree.
+func IsFourDigitCode(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if len(raw) != 4 {
+		return false
+	}
+	for i := 0; i < len(raw); i++ {
+		if raw[i] < '0' || raw[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// Validate enforces the invariants the edit form only hints at in HTML:
+// grouping and one-to-one are mutually exclusive, an enabled check-in needs a
+// 4-digit code, and the end time cannot precede the start time. Callers must
+// run clean() first so trimmed values are validated.
+func (in AdminActivityInput) Validate() error {
+	if in.GroupEnabled && in.OnetooneEnabled {
+		return &ValidationError{
+			Field:   "onetoone_enabled",
+			Message: "「分组」与「一对一」不能同时开启，请只保留一种模式。",
+		}
+	}
+	if in.SigninEnabled {
+		if in.SigninCode == "" {
+			return &ValidationError{
+				Field:   "signin_code",
+				Message: "开启现场签到后必须填写 4 位数字签到码。",
+			}
+		}
+		if !IsFourDigitCode(in.SigninCode) {
+			return &ValidationError{
+				Field:   "signin_code",
+				Message: "签到码必须是 4 位数字（例如 0123）。",
+			}
+		}
+	}
+	if in.StartAt != nil && in.EndAt != nil && in.EndAt.Before(*in.StartAt) {
+		return &ValidationError{
+			Field:   "end_at",
+			Message: "结束时间不能早于开始时间。",
+		}
+	}
+	return nil
+}
+
 func (d *DB) nextActivityNo(ctx context.Context, tx pgx.Tx) (string, error) {
 	var next int
 	if err := tx.QueryRow(ctx, `
@@ -288,6 +337,9 @@ func scanAdminActivity(row rowScanner) (Activity, error) { return scanActivity(r
 // CreateActivity inserts an activity and returns the persisted row.
 func (d *DB) CreateActivity(ctx context.Context, in AdminActivityInput) (Activity, error) {
 	in = in.clean()
+	if err := in.Validate(); err != nil {
+		return Activity{}, err
+	}
 	tx, err := d.pool.Begin(ctx)
 	if err != nil {
 		return Activity{}, fmt.Errorf("db: begin activity: %w", err)
@@ -321,6 +373,9 @@ func (d *DB) CreateActivity(ctx context.Context, in AdminActivityInput) (Activit
 // UpdateActivity updates the editable fields; current_signup is preserved.
 func (d *DB) UpdateActivity(ctx context.Context, id int64, in AdminActivityInput) (Activity, error) {
 	in = in.clean()
+	if err := in.Validate(); err != nil {
+		return Activity{}, err
+	}
 	row := d.pool.QueryRow(ctx, `
 		UPDATE activities SET
 			name=$2, description=$3, location=$4, condition=$5, max_signup=$6,

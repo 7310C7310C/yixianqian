@@ -45,11 +45,12 @@ type AdminUser struct {
 // (super_admin or admin). Such accounts may only be managed by a super admin.
 func (u AdminUser) AdminProtected() bool { return adminRolesProtected(u.Roles) }
 
-// AdminUserFilter narrows the admin user list.
+// AdminUserFilter narrows and pages the admin user list.
 type AdminUserFilter struct {
 	Status string
 	Query  string
 	Limit  int
+	Offset int
 }
 
 // adminRolesProtected reports whether any role is super_admin or admin.
@@ -143,24 +144,36 @@ func (d *DB) GetAdminUser(ctx context.Context, userID int64) (AdminUser, error) 
 	return u, err
 }
 
+// adminUserFilterSQL returns the shared WHERE clause and its bound arguments so
+// list and count stay in sync (search must cover the whole table, not a page).
+func adminUserFilterSQL(f AdminUserFilter) (string, []any) {
+	query := strings.TrimSpace(f.Query)
+	return `
+		 WHERE ($1 = '' OR u.account_status = $1)
+		   AND ($2 = ''
+		        OR position(lower($2) in lower(u.name)) > 0
+		        OR position(lower($2) in lower(u.nickname)) > 0
+		        OR position(lower($2) in lower(u.phone)) > 0
+		        OR position(lower($2) in lower(COALESCE(u.legacy_user_id, ''))) > 0)`,
+		[]any{f.Status, query}
+}
+
 // ListAdminUsers returns a filtered, newest-first user page.
 func (d *DB) ListAdminUsers(ctx context.Context, f AdminUserFilter) ([]AdminUser, error) {
 	limit := f.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	query := strings.TrimSpace(f.Query)
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	where, args := adminUserFilterSQL(f)
 	rows, err := d.pool.Query(ctx,
-		adminUserSelect+`
-		 WHERE ($1 = '' OR u.account_status = $1)
-		   AND ($2 = ''
-		        OR position(lower($2) in lower(u.name)) > 0
-		        OR position(lower($2) in lower(u.nickname)) > 0
-		        OR position(lower($2) in lower(u.phone)) > 0
-		        OR position(lower($2) in lower(COALESCE(u.legacy_user_id, ''))) > 0)
+		adminUserSelect+where+`
 		 ORDER BY CASE WHEN u.account_status = 'pending' THEN 0 ELSE 1 END,
 		          u.created_at DESC, u.id DESC
-		 LIMIT $3`, f.Status, query, limit)
+		 LIMIT $3 OFFSET $4`, append(args, limit, offset)...)
 	if err != nil {
 		return nil, fmt.Errorf("db: list admin users: %w", err)
 	}
@@ -177,6 +190,17 @@ func (d *DB) ListAdminUsers(ctx context.Context, f AdminUserFilter) ([]AdminUser
 		return nil, err
 	}
 	return out, nil
+}
+
+// CountAdminUsersFiltered counts the rows matching the same filters as
+// ListAdminUsers, so pagination totals never disagree with the page contents.
+func (d *DB) CountAdminUsersFiltered(ctx context.Context, f AdminUserFilter) (int64, error) {
+	where, args := adminUserFilterSQL(f)
+	var total int64
+	if err := d.pool.QueryRow(ctx, `SELECT count(*) FROM users u`+where, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("db: count admin users filtered: %w", err)
+	}
+	return total, nil
 }
 
 // CountAdminUsers groups accounts by the business status used by the console.

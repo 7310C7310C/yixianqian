@@ -35,6 +35,9 @@ type App struct {
 	loginPhoneLimiter *auth.Limiter
 	activationLimiter *auth.Limiter
 	uploadLimiter     *auth.Limiter
+	// profilePasswordLimiter 限制「修改手机号需当前密码」的验证尝试，避免
+	// 已登录会话被用来爆破账号密码。
+	profilePasswordLimiter *auth.Limiter
 
 	hashSem  chan struct{}
 	mediaSem chan struct{}
@@ -88,6 +91,7 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		loginPhoneLimiter:           auth.NewLimiter(10, 15*time.Minute),
 		activationLimiter:           auth.NewLimiter(10, time.Hour),
 		uploadLimiter:               auth.NewLimiter(60, time.Hour),
+		profilePasswordLimiter:      auth.NewLimiter(10, 15*time.Minute),
 		hashSem:                     make(chan struct{}, cfg.MaxHashes),
 		mediaSem:                    make(chan struct{}, cfg.MaxMedia),
 		faceSem:                     make(chan struct{}, maxConcurrentFaceProbes),

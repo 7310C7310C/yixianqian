@@ -108,6 +108,18 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 管理入口：活动管理经管理台 iframe 内的原版 SPA 承载；麦穗/举报原生化页面仍不暴露（「我的→管理」只有「🛠️ 管理后台」）。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
 
+### 管理台与后端审计修复（2026-10-24，ADM/UD，待部署）
+
+- 用户列表分页（ADM-01）：`/admin/users` 支持 `page`/`per_page`（默认 50、上限 200），显示筛选后总数与上一页/下一页，搜索与状态筛选覆盖全量；越界页码夹到最后一页；列表快速操作保留筛选与页码。
+- 活动编辑服务端校验（ADM-02/08）：分组与一对一不能同时开启；开启签到必须 4 位数字签到码；结束时间不得早于开始时间。DB 层 `AdminActivityInput.Validate` 与表单解析双重校验。
+- 临时密码（ADM-06）：HTML POST 改为 303 PRG，密码经一次性内存 token 回显一次；刷新不再重复重置。`admin.js` 用 `POST /api/admin/users/{id}/temp-password` 就地展示，保留无 JS 降级。
+- 管理台 iframe 错误页（ADM-04/05）：`/admin/**` 的 4xx/5xx、CSRF 与会话过期渲染管理台外壳（返回管理台 / 重新登录，`target="_top"`），未匹配路径返回管理台 404；不再落用户端错误页或 303 到 `/login`。
+- 广播入口（ADM-09）：SSR 工作台头部与活动列表新增「📣 广播」，深链 `#broadcast` 由 `admin.js` 激活。
+- 活动时间窗（UD-03）：状态非「报名中」或已过开始时间的报名、已过开始时间的取消被拒绝；自助签到要求活动进行中（未开始/已结束/已取消均拒绝），错误码 `activity_started`/`activity_not_started`/`activity_ended`。
+- 修改手机号（UD-05）：`PUT /legacy/api/profile` 改号需 `current_password`（缺失 400 `password_required`、错误 400 `password_invalid`、无密码 409 `password_not_set`），保留唯一性 409 `phone_taken`，写 `profile.phone.changed` 脱敏审计；未改号时不要求密码。
+- 证据：`TestIntegrationAdminUserPagination`、`TestIntegrationAdminTempPasswordPRG`、`TestIntegrationAdminActivityFormValidation`、`TestIntegrationAdminErrorPages`、`TestIntegrationPhoneChangeRequiresPassword`、`TestIntegrationActivityTimeWindowRules`、`TestAdminActivityInputValidate`、`TestAdminTemplatesRender`（admin_error）。
+- 前端契约：`.team/backend-admin-fixes-2026-10-24.md`（SPA 手机号输入与原生控制台广播按钮由前端 workstream 接入）。
+
 ### 媒体与上传（2026-10-24 修复，待部署）
 
 - 共享 media 删除安全：资料照片删除只移除 attachment；仅当无其它 `profile_photos` 引用且 `media.user_id` 为调用者时才删 media 行与 R2 对象。迁移数据中一个 media 被多人引用时，不再跨用户误删或级联删他人照片。

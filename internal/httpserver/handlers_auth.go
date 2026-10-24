@@ -457,11 +457,31 @@ func (a *App) audit(r *http.Request, actor *int64, action, targetType, targetID 
 	}
 }
 
-// requireUserHTML redirects anonymous visitors to the login page.
+// isEmbeddedAdminRequest reports whether the browser is navigating inside the
+// admin iframe. Newer browsers send Sec-Fetch-Dest; the SPA's first load adds
+// embed=1, which covers older browsers for the entry navigation.
+func isEmbeddedAdminRequest(r *http.Request) bool {
+	return r.Header.Get("Sec-Fetch-Dest") == "iframe" || r.URL.Query().Get("embed") == "1"
+}
+
+// requireUserHTML redirects anonymous visitors to the login page. Admin pages
+// are reached through the SPA iframe, where /login is blocked by
+// frame-ancestors 'none'; those requests get an admin-styled session error
+// with an explicit re-login link instead of a blank iframe.
 func (a *App) requireUserHTML(w http.ResponseWriter, r *http.Request) (db.User, bool) {
 	u, ok := currentUser(r)
 	if ok {
 		return u, true
+	}
+	// 管理台只在同源 iframe 内使用；但 iframe 内跳 /login 会被
+	// frame-ancestors 'none' 拒绝，留下空白 overlay。仅在「带了会话 cookie 但
+	// 已失效」（会话过期/被撤销）时渲染管理台错误页；从未登录的无 cookie
+	// 请求保持登录跳转语义（CLI/测试同样适用）。
+	if isAdminPagePath(r.URL.Path) && isEmbeddedAdminRequest(r) {
+		if _, err := r.Cookie(a.cfg.SessionCookieName); err == nil && a.cfg.SessionCookieName != "" {
+			a.renderAdminError(w, r, http.StatusUnauthorized, "登录已过期", "登录状态已失效，请重新登录后再打开管理台。")
+			return db.User{}, false
+		}
 	}
 	next := "/"
 	if r.Method == http.MethodGet {

@@ -1,0 +1,23 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="admin-page-head">
+  <div class="admin-page-head-main">
+    <p class="admin-eyebrow">管理台</p>
+    <h1 class="admin-page-title">{{.Title}}</h1>
+    <p class="admin-subtitle">{{.Error}}</p>
+  </div>
+</section>
+
+<section class="admin-section">
+  <div class="admin-empty">
+    <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_shield"}}</span>
+    <h2 class="admin-empty-title">{{.Title}}</h2>
+    <p>{{.Error}}</p>
+    <div class="admin-error-actions">
+      <a class="button primary" href="/admin">返回管理台</a>
+      <a class="button" href="/login?next=%2F%3Fadmin%3D1" target="_top" rel="noopener">重新登录</a>
+    </div>
+  </div>
+</section>
+{{end}}

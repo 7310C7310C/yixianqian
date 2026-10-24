@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -192,7 +193,7 @@ func adminUserDetailNextPath(raw string) (string, bool) {
 }
 
 func adminUserActionRedirect(w http.ResponseWriter, r *http.Request, notice string) {
-	target := "/admin/users?status=all&notice=" + notice
+	target := adminUsersURLFromForm(r, url.Values{"notice": {notice}})
 	if next, ok := adminUserDetailNextPath(r.PostFormValue("next")); ok {
 		target = next + "?notice=" + notice
 	}

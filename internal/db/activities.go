@@ -59,6 +59,11 @@ var (
 	ErrSigninCodeNotSet  = errors.New("db: activity signin code is not set")
 	ErrSigninCodeInvalid = errors.New("db: signin code is incorrect")
 	ErrMarkedAbsent      = errors.New("db: signup is already marked absent")
+	// 活动时间窗校验：状态仍是「报名中」但已过开始时间的活动不能再报名/取消，
+	// 自助签到只能在活动开始后、结束前进行。
+	ErrActivityStarted    = errors.New("db: activity has already started")
+	ErrActivityEnded      = errors.New("db: activity has already ended")
+	ErrActivityNotStarted = errors.New("db: activity has not started yet")
 )
 
 // ActivityStatusError reports the activity state that blocked the action.
@@ -340,10 +345,11 @@ func (d *DB) SignupActivity(ctx context.Context, userID int64, ref string) (Sign
 	var activityID int64
 	var status string
 	var maxSignup, currentSignup int
+	var startAt *time.Time
 	err = tx.QueryRow(ctx,
-		`SELECT id, status, max_signup, current_signup
+		`SELECT id, status, max_signup, current_signup, start_at
 		   FROM activities WHERE `+activityRefFilter+` FOR UPDATE`, text, numeric).
-		Scan(&activityID, &status, &maxSignup, &currentSignup)
+		Scan(&activityID, &status, &maxSignup, &currentSignup, &startAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Signup{}, ErrActivityNotFound
 	}
@@ -381,6 +387,11 @@ func (d *DB) SignupActivity(ctx context.Context, userID int64, ref string) (Sign
 	}
 	if status != ActivityStatusOpen {
 		return Signup{}, &ActivityStatusError{Status: status}
+	}
+	// 状态仍是「报名中」但开始时间已过：活动实际已开始，报名入口应收敛，
+	// 否则过期活动会持续接受报名（审计 UD-03）。
+	if startAt != nil && !startAt.After(time.Now()) {
+		return Signup{}, ErrActivityStarted
 	}
 	if maxSignup > 0 && currentSignup >= maxSignup {
 		return Signup{}, ErrActivityFull
@@ -511,6 +522,10 @@ func (d *DB) CancelSignup(ctx context.Context, userID int64, ref string) (Signup
 	}
 	if status != ActivityStatusOpen && status != ActivityStatusFull {
 		return SignupCancelResult{}, &ActivityStatusError{Status: status}
+	}
+	// 已开始的活动不允许再取消：名额与退穗都应在活动开始前结算。
+	if startAt != nil && !startAt.After(time.Now()) {
+		return SignupCancelResult{}, ErrActivityStarted
 	}
 
 	s, err := scanSignup(tx.QueryRow(ctx,
@@ -644,11 +659,12 @@ func (d *DB) SelfSignin(ctx context.Context, userID int64, ref, submitted string
 	text, numeric := activityRefQueryArgs(ref)
 	var activityID int64
 	var signinEnabled bool
-	var expectedCode string
+	var expectedCode, status string
+	var startAt, endAt *time.Time
 	err = tx.QueryRow(ctx,
-		`SELECT id, signin_enabled, signin_code
+		`SELECT id, signin_enabled, signin_code, status, start_at, end_at
 		   FROM activities WHERE `+activityRefFilter, text, numeric).
-		Scan(&activityID, &signinEnabled, &expectedCode)
+		Scan(&activityID, &signinEnabled, &expectedCode, &status, &startAt, &endAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, ErrActivityNotFound
 	}
@@ -678,6 +694,17 @@ func (d *DB) SelfSignin(ctx context.Context, userID int64, ref, submitted string
 	}
 	if currentAttendance != "" {
 		return "", false, ErrMarkedAbsent
+	}
+	// 自助签到只在活动进行期间有效：开始前没有现场码可核，结束后不再补签。
+	now := time.Now()
+	if status == ActivityStatusFinished || status == ActivityStatusCancelled {
+		return "", false, ErrActivityEnded
+	}
+	if startAt != nil && startAt.After(now) {
+		return "", false, ErrActivityNotStarted
+	}
+	if endAt != nil && !endAt.After(now) {
+		return "", false, ErrActivityEnded
 	}
 	if !signinEnabled {
 		return "", false, ErrSigninDisabled

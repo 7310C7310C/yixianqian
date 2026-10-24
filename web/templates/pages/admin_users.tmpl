@@ -69,12 +69,19 @@
       <option value="{{.Value}}"{{if eq $.Data.StatusFilter .Value}} selected{{end}}>{{.Label}}</option>
       {{end}}
     </select>
+    <label class="admin-visually-hidden" for="admin-user-per-page">每页条数</label>
+    <select id="admin-user-per-page" name="per_page" class="admin-select">
+      <option value="20"{{if eq .Data.PerPage 20}} selected{{end}}>每页 20</option>
+      <option value="50"{{if eq .Data.PerPage 50}} selected{{end}}>每页 50</option>
+      <option value="100"{{if eq .Data.PerPage 100}} selected{{end}}>每页 100</option>
+      <option value="200"{{if eq .Data.PerPage 200}} selected{{end}}>每页 200</option>
+    </select>
     <button type="submit" class="button primary">查询</button>
   </form>
 
   <nav class="admin-filter-chips" aria-label="用户状态">
     {{range .Data.Statuses}}
-    <a class="admin-chip-btn" href="/admin/users?status={{.Value}}{{if $.Data.Query}}&amp;q={{$.Data.Query | urlquery}}{{end}}"
+    <a class="admin-chip-btn" href="/admin/users?status={{.Value}}{{if $.Data.Query}}&amp;q={{$.Data.Query | urlquery}}{{end}}{{if ne $.Data.PerPage 50}}&amp;per_page={{$.Data.PerPage}}{{end}}"
        {{if eq $.Data.StatusFilter .Value}}aria-current="page"{{end}}>{{.Label}}</a>
     {{end}}
   </nav>
@@ -84,15 +91,15 @@
   <div class="admin-section-head">
     <div class="admin-section-head-main">
       <h2 class="admin-section-title">会员</h2>
-      <p class="admin-section-desc">{{if .Data.Query}}搜索「{{.Data.Query}}」· {{end}}当前筛选 {{len .Data.Users}} 位</p>
+      <p class="admin-section-desc">{{if .Data.Query}}搜索「{{.Data.Query}}」· {{end}}{{if .Data.Total}}显示第 {{.Data.ShowingFrom}}–{{.Data.ShowingTo}} 位，共 {{.Data.Total}} 位{{else}}没有匹配的会员{{end}}</p>
     </div>
-    <span class="admin-section-meta">{{len .Data.Users}} / {{.Data.Counts.Total}}</span>
+    <span class="admin-section-meta">{{if .Data.TotalPages}}第 {{.Data.Page}} / {{.Data.TotalPages}} 页{{else}}共 {{.Data.Total}} 位{{end}}</span>
   </div>
 
   {{if .Data.Users}}
   <div class="admin-record-list">
     {{range .Data.Users}}
-    <article class="admin-record">
+    <article class="admin-record" data-adm-temp-scope>
       <span class="admin-avatar" aria-hidden="true">{{template "admin_icon_users"}}</span>
       <div class="admin-record-main">
         <h3 class="admin-record-title">
@@ -116,39 +123,51 @@
         {{if and $.Data.CanReview (or $.Data.SuperAdmin (not .AdminProtected)) (or (eq .AccountStatus "pending") (eq .AccountStatus "rejected"))}}
         <form method="post" action="/admin/users/{{.ID}}/approve" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          {{template "admin_user_list_filters" $}}
           <button type="submit" class="button small primary">通过</button>
         </form>
         {{end}}
         {{if and $.Data.CanReview (or $.Data.SuperAdmin (not .AdminProtected)) (or (eq .AccountStatus "pending") (eq .AccountStatus "rejected"))}}
         <form method="post" action="/admin/users/{{.ID}}/reject" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          {{template "admin_user_list_filters" $}}
           <button type="submit" class="button small danger" data-adm-confirm="确认拒绝 {{.Name}} 的申请？">拒绝</button>
         </form>
         {{end}}
         {{if and $.Data.CanManage (or $.Data.SuperAdmin (not .AdminProtected)) (eq .LoginStatus "active")}}
         <form method="post" action="/admin/users/{{.ID}}/disable" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          {{template "admin_user_list_filters" $}}
           <button type="submit" class="button small danger" data-adm-confirm="确认停用 {{.Name}} 的账号？停用后该用户无法登录。">停用</button>
         </form>
         {{end}}
         {{if and $.Data.CanManage (or $.Data.SuperAdmin (not .AdminProtected)) (eq .LoginStatus "disabled") (ne .AccountStatus "pending") (ne .AccountStatus "rejected")}}
         <form method="post" action="/admin/users/{{.ID}}/enable" class="inline-form">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          {{template "admin_user_list_filters" $}}
           <button type="submit" class="button small">恢复</button>
         </form>
         {{end}}
         {{if and $.Data.CanManage (or $.Data.SuperAdmin (not .AdminProtected))}}
-        <form method="post" action="/admin/users/{{.ID}}/temp-password" class="inline-form">
+        <form method="post" action="/admin/users/{{.ID}}/temp-password" class="inline-form"
+              data-adm-temp-form data-user-id="{{.ID}}" data-user-name="{{.Name}}">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-          <input type="hidden" name="status_filter" value="{{$.Data.StatusFilter}}">
-          <input type="hidden" name="q" value="{{$.Data.Query}}">
+          {{template "admin_user_list_filters" $}}
           <button type="submit" class="button small" data-adm-confirm="生成临时密码后，{{.Name}} 的旧密码会立即失效。继续？">临时密码</button>
         </form>
         {{end}}
       </div>
+      <div class="admin-temp-inline" data-adm-temp-result hidden aria-live="polite"></div>
     </article>
     {{end}}
   </div>
+  {{if gt .Data.TotalPages 1}}
+  <nav class="admin-pagination" aria-label="用户分页">
+    {{if .Data.PrevURL}}<a class="button small" href="{{.Data.PrevURL}}" rel="prev">上一页</a>{{else}}<span class="button small" aria-disabled="true">上一页</span>{{end}}
+    <span class="hint">第 {{.Data.Page}} / {{.Data.TotalPages}} 页 · 共 {{.Data.Total}} 位</span>
+    {{if .Data.NextURL}}<a class="button small" href="{{.Data.NextURL}}" rel="next">下一页</a>{{else}}<span class="button small" aria-disabled="true">下一页</span>{{end}}
+  </nav>
+  {{end}}
   {{else}}
   <div class="admin-empty">
     <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_empty"}}</span>
@@ -158,4 +177,11 @@
   </div>
   {{end}}
 </section>
+{{end}}
+
+{{define "admin_user_list_filters"}}
+<input type="hidden" name="status_filter" value="{{.Data.StatusFilter}}">
+<input type="hidden" name="q" value="{{.Data.Query}}">
+<input type="hidden" name="page" value="{{.Data.Page}}">
+<input type="hidden" name="per_page" value="{{.Data.PerPage}}">
 {{end}}

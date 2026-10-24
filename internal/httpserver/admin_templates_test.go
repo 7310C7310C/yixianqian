@@ -105,6 +105,13 @@ func TestAdminTemplatesRender(t *testing.T) {
 				Data: passwordPageData{Required: true}},
 			want: []string{"修改密码", "临时密码", `action="/password"`},
 		},
+		{
+			name: "admin error",
+			page: "admin_error",
+			data: PageData{Title: "登录已过期", User: user, Error: "登录状态已失效，请重新登录后再打开管理台。",
+				ActiveNav: "admin", Data: adminErrorData{Relogin: true}},
+			want: []string{"admin-topbar", "登录已过期", "返回管理台", "重新登录", `target="_top"`},
+		},
 	}
 
 	for _, tc := range cases {

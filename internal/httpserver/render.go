@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"net/http"
+	"strings"
 )
 
 // adminAccessContextKey carries the authenticated admin's permissions to the
@@ -48,10 +49,43 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, status int, page st
 }
 
 func (a *App) renderError(w http.ResponseWriter, r *http.Request, status int, title, message string) {
+	// 管理台在用户端同源 iframe 内使用：错误页若落到用户端模板，唯一的
+	// 「回到首页」链接会被 frame-ancestors 'none' 拒绝，iframe 变空白。
+	// 管理路径统一渲染管理台外壳，提供「返回管理台 / 重新登录」。
+	if isAdminPagePath(r.URL.Path) {
+		a.renderAdminError(w, r, status, title, message)
+		return
+	}
 	a.render(w, r, status, "error", PageData{
 		Title: title,
 		Error: message,
 	})
+}
+
+// isAdminPagePath reports whether the request belongs to the admin console.
+func isAdminPagePath(path string) bool {
+	return path == "/admin" || strings.HasPrefix(path, "/admin/")
+}
+
+// adminErrorData carries error-page state to the admin_error template.
+type adminErrorData struct {
+	Relogin bool
+}
+
+// renderAdminError renders an error page inside the admin shell so iframe
+// users keep navigation and never hit a user-facing page that refuses framing.
+func (a *App) renderAdminError(w http.ResponseWriter, r *http.Request, status int, title, message string) {
+	data := PageData{
+		Title:     title,
+		Error:     message,
+		Data:      adminErrorData{Relogin: status == http.StatusUnauthorized},
+		PageCSS:   "admin.css",
+		ActiveNav: "admin",
+	}
+	if user, ok := currentUser(r); ok {
+		data.User = &user
+	}
+	a.render(w, r, status, "admin_error", data)
 }
 
 // canonicalNav keeps the admin navigation names used by admin_nav.tmpl.

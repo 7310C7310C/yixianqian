@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/7310C7310C/yixianqian/internal/auth"
 	"github.com/7310C7310C/yixianqian/internal/db"
 )
 
@@ -54,6 +55,18 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 	env := setupProfileHTTPEnv(t)
 	owner, ownerClient := env.createUser(t, "U-LEGACYPROFILE", "真实姓名", "active", "user")
 	viewer, viewerClient := env.createUser(t, "U-LEGACYVIEW", "浏览者", "active", "user")
+	// 修改手机号需要当前密码（审计 UD-05）；为 owner 设置一个已知密码。
+	ownerPassword := "legacy-profile-pass-1"
+	ownerHash, err := auth.HashPassword(ownerPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.pool.Exec(env.ctx,
+		`INSERT INTO auth_credentials (user_id, password_hash) VALUES ($1, $2)
+		 ON CONFLICT (user_id) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+		owner.ID, ownerHash); err != nil {
+		t.Fatalf("set owner password: %v", err)
+	}
 	if _, err := env.pool.Exec(env.ctx,
 		`UPDATE users SET gender = '男性', nickname = '' WHERE id = $1`, owner.ID); err != nil {
 		t.Fatal(err)
@@ -111,6 +124,7 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 		"理想中的TA-运动":          []string{"游泳"},
 		"微信号":                "wx-legacy-owner",
 		"手机号":                newPhone,
+		"current_password":   ownerPassword,
 		"name":               "被篡改",
 		"id_card_ciphertext": "leak",
 	}

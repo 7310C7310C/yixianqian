@@ -1198,7 +1198,7 @@ func (a *App) parseAdminActivityForm(r *http.Request, existing *db.Activity) (db
 	if err != nil {
 		return db.AdminActivityInput{}, errors.New("结束时间格式不正确")
 	}
-	return db.AdminActivityInput{
+	in := db.AdminActivityInput{
 		Name: name, Description: r.PostFormValue("description"), Location: r.PostFormValue("location"),
 		Condition: r.PostFormValue("condition"), MaxSignup: maxSignup, Fee: r.PostFormValue("fee"),
 		Food: r.PostFormValue("food"), Status: status,
@@ -1206,7 +1206,11 @@ func (a *App) parseAdminActivityForm(r *http.Request, existing *db.Activity) (db
 		OnetooneEnabled: r.PostFormValue("onetoone_enabled") == "1",
 		SigninEnabled:   r.PostFormValue("signin_enabled") == "1", SigninCode: r.PostFormValue("signin_code"),
 		PublishAt: publish, StartAt: start, EndAt: end,
-	}, nil
+	}
+	if err := in.Validate(); err != nil {
+		return db.AdminActivityInput{}, err
+	}
+	return in, nil
 }
 
 // aFormCSRFValid is kept separate so the activity form can be unit-tested.

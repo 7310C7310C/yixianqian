@@ -286,6 +286,12 @@ func activityActionError(err error, action string) (int, string, string) {
 		return 400, "signin_code_invalid", "签到码不正确，请向现场工作人员确认。"
 	case errors.Is(err, db.ErrMarkedAbsent):
 		return 409, "attendance_marked_absent", "你已被标记为未到，请联系管理员。"
+	case errors.Is(err, db.ErrActivityStarted):
+		return 409, "activity_started", fmt.Sprintf("活动已经开始，无法%s。", action)
+	case errors.Is(err, db.ErrActivityEnded):
+		return 409, "activity_ended", fmt.Sprintf("活动已经结束，无法%s。", action)
+	case errors.Is(err, db.ErrActivityNotStarted):
+		return 409, "activity_not_started", fmt.Sprintf("活动尚未开始，暂时无法%s。", action)
 	default:
 		return 500, "internal_error", "系统暂时无法处理，请稍后再试。"
 	}

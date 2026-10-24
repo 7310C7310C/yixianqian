@@ -132,12 +132,14 @@ func createHTTPActivity(t *testing.T, e *profileHTTPEnv, maxSignup int, signin b
 	t.Helper()
 	activityNo := "A-HTTP-ACT-" + randomHTTPDigits(t, 10)
 	var activityID int64
+	// 默认不排期：报名/签到的时间窗规则由 activities_window_integration_test
+	// 专门覆盖，其余用例只验证业务动作本身。
 	err := e.pool.QueryRow(e.ctx,
 		`INSERT INTO activities (activity_no, name, description, location, condition,
 		                        max_signup, current_signup, fee, food, status,
-		                        signin_enabled, signin_code, start_at)
+		                        signin_enabled, signin_code)
 		 VALUES ($1, $2, '活动描述', '活动地点', '参与条件', $3, 0, '100', '自理',
-		         '报名中', $4, $5, now() - interval '1 hour')
+		         '报名中', $4, $5)
 		 RETURNING id`,
 		activityNo, "测试活动 "+activityNo, maxSignup, signin, code).Scan(&activityID)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,10 @@ const (
 	adminTempPasswordTTL = 7 * 24 * time.Hour
 	adminListLimit       = 100
 	adminMaxNoteRunes    = 500
+	// adminUserPageSizeDefault 是用户列表默认每页条数；管理台用户数会持续增长，
+	// 固定 100 条上限曾导致超过 100 位的用户不可达。
+	adminUserPageSizeDefault = 50
+	adminUserPageSizeMax     = 200
 )
 
 func init() { registerModule(registerAdminRoutes) }
@@ -50,6 +55,8 @@ func registerAdminRoutes(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/activities/{id}/broadcast", a.adminHTML(adminPermActivity, a.handleAdminActivityBroadcast))
 	mux.HandleFunc("GET /admin/roles", a.adminHTML(adminPermAdminManage, a.handleAdminRolesPage))
 	mux.HandleFunc("POST /admin/roles/assign", a.adminHTML(adminPermAdminManage, a.handleAdminRoleAssign))
+	// 未匹配的管理台路径同样渲染管理台错误页，避免 iframe 内出现纯文本 404。
+	mux.HandleFunc("GET /admin/", a.adminHTML("", a.handleAdminUnknownPath))
 
 	mux.HandleFunc("GET /password", a.handlePasswordPage)
 	mux.HandleFunc("POST /password", a.handlePasswordSubmit)
@@ -194,6 +201,12 @@ type adminHomeData struct {
 	CanAudit    bool
 }
 
+// handleAdminUnknownPath renders the admin-styled 404 for unmatched /admin/
+// paths; the mux only reaches it after the admin auth/RBAC wrapper.
+func (a *App) handleAdminUnknownPath(w http.ResponseWriter, r *http.Request, _ adminAccess) {
+	a.renderError(w, r, http.StatusNotFound, "找不到页面", "该管理页面不存在，请返回管理台。")
+}
+
 func (a *App) handleAdminHome(w http.ResponseWriter, r *http.Request, access adminAccess) {
 	stats, err := a.db.AdminStats(r.Context())
 	if err != nil {
@@ -232,6 +245,14 @@ type adminUsersPageData struct {
 	Counts        db.AdminUserCounts
 	StatusFilter  string
 	Query         string
+	Page          int
+	PerPage       int
+	Total         int64
+	TotalPages    int
+	ShowingFrom   int64
+	ShowingTo     int64
+	PrevURL       string
+	NextURL       string
 	CanReview     bool
 	CanManage     bool
 	SuperAdmin    bool
@@ -265,9 +286,120 @@ func normalizeAdminUserStatus(raw string) string {
 	return "pending"
 }
 
+// parseAdminPageParams reads page/per_page from the query, clamping both to a
+// safe range so a hand-edited URL cannot disable the list or skip pages.
+func parseAdminPageParams(r *http.Request) (page, perPage int) {
+	page = 1
+	if raw := strings.TrimSpace(r.URL.Query().Get("page")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	perPage = adminUserPageSizeDefault
+	if raw := strings.TrimSpace(r.URL.Query().Get("per_page")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			perPage = parsed
+		}
+	}
+	if perPage > adminUserPageSizeMax {
+		perPage = adminUserPageSizeMax
+	}
+	return page, perPage
+}
+
+// adminUsersURL builds a user-list URL that keeps the active filters and page.
+func adminUsersURL(status, query string, page, perPage int) string {
+	values := url.Values{}
+	if status == "" {
+		status = "all"
+	}
+	values.Set("status", status)
+	if query != "" {
+		values.Set("q", query)
+	}
+	if page > 1 {
+		values.Set("page", strconv.Itoa(page))
+	}
+	if perPage != adminUserPageSizeDefault {
+		values.Set("per_page", strconv.Itoa(perPage))
+	}
+	return "/admin/users?" + values.Encode()
+}
+
+// adminUsersURLFromForm rebuilds the list URL after a POST from the list/detail
+// forms so approve/reject/disable keep the search, status and page.
+func adminUsersURLFromForm(r *http.Request, extra url.Values) string {
+	status := normalizeAdminUserStatus(r.PostFormValue("status_filter"))
+	query := strings.TrimSpace(r.PostFormValue("q"))
+	page := 1
+	if parsed, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("page"))); err == nil && parsed > 0 {
+		page = parsed
+	}
+	perPage := adminUserPageSizeDefault
+	if parsed, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("per_page"))); err == nil && parsed > 0 {
+		perPage = parsed
+	}
+	if perPage > adminUserPageSizeMax {
+		perPage = adminUserPageSizeMax
+	}
+	values := url.Values{}
+	if status != "" {
+		values.Set("status", status)
+	}
+	if query != "" {
+		values.Set("q", query)
+	}
+	if page > 1 {
+		values.Set("page", strconv.Itoa(page))
+	}
+	if perPage != adminUserPageSizeDefault {
+		values.Set("per_page", strconv.Itoa(perPage))
+	}
+	for key, list := range extra {
+		values[key] = list
+	}
+	return "/admin/users?" + values.Encode()
+}
+
+type adminUsersPageParams struct {
+	Status        string
+	Query         string
+	Page          int
+	PerPage       int
+	Notice        string
+	Error         string
+	TempPassword  string
+	TempExpiresAt time.Time
+}
+
 func (a *App) renderAdminUsersPage(w http.ResponseWriter, r *http.Request, access adminAccess,
-	status, query, notice, errMessage, tempPassword string, tempExpires time.Time) {
-	filter := db.AdminUserFilter{Status: status, Query: query, Limit: adminListLimit}
+	params adminUsersPageParams) {
+	page, perPage := params.Page, params.PerPage
+	if page <= 0 {
+		page = 1
+	}
+	if perPage <= 0 || perPage > adminUserPageSizeMax {
+		perPage = adminUserPageSizeDefault
+	}
+	filter := db.AdminUserFilter{Status: params.Status, Query: params.Query}
+	total, err := a.db.CountAdminUsersFiltered(r.Context(), filter)
+	if err != nil {
+		a.logger(r).Error("count admin users failed", "error", err)
+		a.renderError(w, r, http.StatusInternalServerError, "系统暂时无法处理", "请稍后再试。")
+		return
+	}
+	totalPages := 0
+	if total > 0 {
+		totalPages = int((total + int64(perPage) - 1) / int64(perPage))
+	}
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+	}
+	if totalPages == 0 {
+		page = 1
+	}
+	filter.Limit = perPage
+	filter.Offset = (page - 1) * perPage
 	users, err := a.db.ListAdminUsers(r.Context(), filter)
 	if err != nil {
 		a.logger(r).Error("list admin users failed", "error", err)
@@ -279,7 +411,7 @@ func (a *App) renderAdminUsersPage(w http.ResponseWriter, r *http.Request, acces
 		a.logger(r).Error("count admin users failed", "error", err)
 		counts = db.AdminUserCounts{}
 	}
-	statusValue := status
+	statusValue := params.Status
 	if statusValue == "" {
 		statusValue = "all"
 	}
@@ -287,22 +419,36 @@ func (a *App) renderAdminUsersPage(w http.ResponseWriter, r *http.Request, acces
 		Users:        users,
 		Counts:       counts,
 		StatusFilter: statusValue,
-		Query:        query,
+		Query:        params.Query,
+		Page:         page,
+		PerPage:      perPage,
+		Total:        total,
+		TotalPages:   totalPages,
 		CanReview:    containsString(access.Permissions, adminPermUserReview),
 		CanManage:    containsString(access.Permissions, adminPermUserManage),
 		SuperAdmin:   access.SuperAdmin,
-		TempPassword: tempPassword,
+		TempPassword: params.TempPassword,
 		Statuses:     adminUserStatusOptions(),
 	}
-	if !tempExpires.IsZero() {
-		data.TempExpiresAt = tempExpires.Format("2006-01-02 15:04")
+	if len(users) > 0 {
+		data.ShowingFrom = int64(filter.Offset) + 1
+		data.ShowingTo = int64(filter.Offset) + int64(len(users))
+	}
+	if page > 1 {
+		data.PrevURL = adminUsersURL(params.Status, params.Query, page-1, perPage)
+	}
+	if page < totalPages {
+		data.NextURL = adminUsersURL(params.Status, params.Query, page+1, perPage)
+	}
+	if !params.TempExpiresAt.IsZero() {
+		data.TempExpiresAt = params.TempExpiresAt.Format("2006-01-02 15:04")
 	}
 	a.render(w, r, http.StatusOK, "admin_users", PageData{
 		Title:     "用户管理",
 		User:      &access.User,
 		Data:      data,
-		Notice:    notice,
-		Error:     errMessage,
+		Notice:    params.Notice,
+		Error:     params.Error,
 		PageCSS:   "admin.css",
 		ActiveNav: "users",
 	})
@@ -311,8 +457,21 @@ func (a *App) renderAdminUsersPage(w http.ResponseWriter, r *http.Request, acces
 func (a *App) handleAdminUsersPage(w http.ResponseWriter, r *http.Request, access adminAccess) {
 	status := normalizeAdminUserStatus(r.URL.Query().Get("status"))
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	page, perPage := parseAdminPageParams(r)
 	notice := adminUserNotice(r.URL.Query().Get("notice"))
-	a.renderAdminUsersPage(w, r, access, status, query, notice, "", "", time.Time{})
+	params := adminUsersPageParams{
+		Status: status, Query: query, Page: page, PerPage: perPage, Notice: notice,
+	}
+	// 临时密码走 POST 后 303 回到这里；密码只经一次性 token 回显一次，
+	// 刷新页面不会再生成或再次显示。
+	if token := strings.TrimSpace(r.URL.Query().Get("temp")); token != "" {
+		if raw, expiresAt, ok := adminTempReveals.take(token, access.User.ID); ok {
+			params.TempPassword = raw
+			params.TempExpiresAt = expiresAt
+			params.Notice = adminUserNotice("temp")
+		}
+	}
+	a.renderAdminUsersPage(w, r, access, params)
 }
 
 func adminUserNotice(code string) string {
@@ -326,7 +485,7 @@ func adminUserNotice(code string) string {
 	case "enabled":
 		return "已恢复该账号。"
 	case "temp":
-		return "已生成临时密码，请立即转交用户。"
+		return "已生成临时密码，只会显示这一次，请立即转交用户。"
 	default:
 		return ""
 	}
@@ -515,10 +674,13 @@ func (a *App) handleAdminUserTempPassword(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return
 	}
-	status := normalizeAdminUserStatus(r.PostFormValue("status_filter"))
-	query := strings.TrimSpace(r.PostFormValue("q"))
-	a.renderAdminUsersPage(w, r, access, status, query,
-		"已生成临时密码，只会显示这一次，请立即转交用户。", "", raw, expiresAt)
+	// POST 后一律 303，避免刷新重放并再次重置密码。密码只通过一次性内存
+	// token 在重定向后的 GET 显示一次；无 JS 时也能看到，而不是静默丢弃。
+	extra := url.Values{"notice": {"temp"}}
+	if token := adminTempReveals.put(access.User.ID, raw, expiresAt); token != "" {
+		extra.Set("temp", token)
+	}
+	http.Redirect(w, r, adminUsersURLFromForm(r, extra), http.StatusSeeOther)
 }
 
 // adminTempPasswordTarget loads the reset target and rejects protected admin

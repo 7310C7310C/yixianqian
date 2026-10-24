@@ -98,6 +98,7 @@
 
     <div class="admin-activity-actions">
       <a class="button primary small" href="/admin/activities/{{.ID}}">工作台</a>
+      <a class="button small" href="/admin/activities/{{.ID}}#broadcast">📣 广播</a>
       <a class="button small" href="/admin/activities/{{.ID}}/edit">编辑</a>
       {{if .GroupEnabled}}<a class="button small" href="/admin/matching/group/{{.ID}}">分组控制台</a>{{end}}
       {{if .OnetooneEnabled}}<a class="button small" href="/admin/matching/onetoone/{{.ID}}">一对一控制台</a>{{end}}

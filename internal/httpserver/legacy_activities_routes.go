@@ -129,6 +129,12 @@ func (a *App) writeLegacyActivityError(w http.ResponseWriter, r *http.Request, e
 		legacyError(w, http.StatusBadRequest, "签到码不正确，请向现场工作人员确认")
 	case errors.Is(err, db.ErrMarkedAbsent):
 		legacyError(w, http.StatusBadRequest, "你已被标记为未到，请联系管理员")
+	case errors.Is(err, db.ErrActivityStarted):
+		legacyError(w, http.StatusConflict, "活动已经开始，无法"+action)
+	case errors.Is(err, db.ErrActivityEnded):
+		legacyError(w, http.StatusConflict, "活动已经结束，无法"+action)
+	case errors.Is(err, db.ErrActivityNotStarted):
+		legacyError(w, http.StatusConflict, "活动尚未开始，暂时无法"+action)
 	default:
 		legacyServerError(a, w, r, err, "legacy activity action failed")
 		return

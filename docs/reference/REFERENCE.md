@@ -46,6 +46,7 @@ sources: []
 | POST | `/activate` | `internal/httpserver/routes.go` |
 | GET | `/activities/{id}/poster` | `internal/httpserver/activities_routes.go` |
 | GET | `/admin` | `internal/httpserver/admin_routes.go` |
+| GET | `/admin/` | `internal/httpserver/admin_routes.go` |
 | GET | `/admin/activities` | `internal/httpserver/admin_routes.go` |
 | POST | `/admin/activities` | `internal/httpserver/admin_routes.go` |
 | GET | `/admin/activities/new` | `internal/httpserver/admin_routes.go` |
@@ -216,11 +217,11 @@ sources: []
 
 | 前缀 | 数量 |
 |---|---:|
-| `/admin` | 34 |
+| `/admin` | 35 |
 | `/api` | 28 |
 | `/legacy` | 86 |
 | 其他 | 22 |
-| **合计** | **170** |
+| **合计** | **171** |
 
 ## 4. 环境变量（key 集合对比）
 

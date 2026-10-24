@@ -60,6 +60,7 @@ type activityFixtureOptions struct {
 	SigninEnabled bool
 	SigninCode    string
 	StartAt       *time.Time
+	EndAt         *time.Time
 }
 
 func createActivityFixture(t *testing.T, d *DB, ctx context.Context, opts activityFixtureOptions) Activity {
@@ -71,12 +72,12 @@ func createActivityFixture(t *testing.T, d *DB, ctx context.Context, opts activi
 	a, err := scanActivity(d.pool.QueryRow(ctx,
 		`INSERT INTO activities (legacy_record_id, activity_no, name, description, location,
 		                        condition, max_signup, current_signup, fee, food, status,
-		                        signin_enabled, signin_code, start_at)
+		                        signin_enabled, signin_code, start_at, end_at)
 		 VALUES ($1, $2, $3, '测试活动描述', '测试地点', '测试条件', $4, 0, '100', '自理',
-		         $5, $6, $7, $8)
+		         $5, $6, $7, $8, $9)
 		 RETURNING `+activityColumns,
 		activityNo+"-REC", activityNo, "活动 "+activityNo, opts.MaxSignup, opts.Status,
-		opts.SigninEnabled, opts.SigninCode, opts.StartAt))
+		opts.SigninEnabled, opts.SigninCode, opts.StartAt, opts.EndAt))
 	if err != nil {
 		t.Fatalf("create activity: %v", err)
 	}
@@ -233,9 +234,17 @@ func TestIntegrationSelfSigninRules(t *testing.T) {
 		SigninEnabled: true, SigninCode: "0123", StartAt: &start,
 	})
 	user := createActivityFixtureUser(t, d, ctx, "戊")
-	if _, err := d.SignupActivity(ctx, user, activity.ActivityNo); err != nil {
-		t.Fatal(err)
+	// 活动已开始，报名入口已关闭；这里直接落一条报名记录以测试签到规则。
+	seedSignup := func(userID int64, nickname string) {
+		t.Helper()
+		if _, err := d.pool.Exec(ctx,
+			`INSERT INTO signups (activity_id, user_id, nickname, status)
+			 VALUES ($1, $2, $3, $4)`,
+			activity.ID, userID, nickname, SignupStatusSigned); err != nil {
+			t.Fatalf("seed signup: %v", err)
+		}
 	}
+	seedSignup(user, "戊")
 
 	if _, _, err := d.SelfSignin(ctx, user, activity.ActivityNo, "9999"); !errors.Is(err, ErrSigninCodeInvalid) {
 		t.Fatalf("wrong code err = %v, want ErrSigninCodeInvalid", err)
@@ -256,9 +265,7 @@ func TestIntegrationSelfSigninRules(t *testing.T) {
 	}
 
 	other := createActivityFixtureUser(t, d, ctx, "己")
-	if _, err := d.SignupActivity(ctx, other, activity.ActivityNo); err != nil {
-		t.Fatal(err)
-	}
+	seedSignup(other, "己")
 	if _, err := d.pool.Exec(ctx,
 		`UPDATE signups SET attendance = $3 WHERE activity_id = $1 AND user_id = $2`,
 		activity.ID, other, string(AttendanceAbsent)); err != nil {

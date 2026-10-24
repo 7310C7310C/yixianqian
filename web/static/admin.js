@@ -274,6 +274,92 @@
     });
   }
 
+  /* ------------------------------------------------------------------------
+     临时密码：POST 改为 fetch 调用 API，结果就地显示一次；刷新不重发。
+     表单保持可提交（无 JS 时服务端 303 回列表页，密码经一次性 token 显示）。
+     ---------------------------------------------------------------------- */
+  function initTempPassword() {
+    var forms = toArray(document.querySelectorAll('[data-adm-temp-form]'));
+    if (!forms.length || !window.fetch || !window.FormData) {
+      return;
+    }
+    forms.forEach(function (form) {
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var id = form.getAttribute('data-user-id') || '';
+        var name = form.getAttribute('data-user-name') || '该用户';
+        var csrf = form.querySelector('input[name="csrf_token"]');
+        var button = form.querySelector('button[type="submit"]');
+        var scope = form.closest ? (form.closest('[data-adm-temp-scope]') || document) : document;
+        var box = scope.querySelector('[data-adm-temp-result]');
+        if (!id || !csrf || !csrf.value) {
+          return;
+        }
+        if (button) {
+          button.disabled = true;
+        }
+        if (box) {
+          box.hidden = true;
+          box.textContent = '';
+        }
+        window.fetch('/api/admin/users/' + encodeURIComponent(id) + '/temp-password', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'X-CSRF-Token': csrf.value,
+            'Accept': 'application/json'
+          }
+        }).then(function (response) {
+          return response.json().then(function (body) {
+            return { ok: response.ok, body: body };
+          }, function () {
+            return { ok: false, body: null };
+          });
+        }).then(function (result) {
+          var body = result.body || {};
+          if (!result.ok || !body.temp_password) {
+            throw new Error((body.error && body.error.message) || '生成临时密码失败，请稍后再试。');
+          }
+          if (box) {
+            renderTempPassword(box, name, body.temp_password, body.expires_at);
+          }
+        }).catch(function (err) {
+          if (box) {
+            box.textContent = (err && err.message) || '生成临时密码失败，请稍后再试。';
+            box.className = 'admin-temp-inline is-error';
+            box.hidden = false;
+          }
+        }).then(function () {
+          if (button) {
+            button.disabled = false;
+          }
+        });
+      });
+    });
+  }
+
+  function renderTempPassword(box, name, password, expiresAt) {
+    var title = document.createElement('strong');
+    title.textContent = '临时密码（只显示这一次）';
+    var code = document.createElement('code');
+    code.textContent = password;
+    var hint = document.createElement('span');
+    var when = '';
+    if (expiresAt) {
+      var date = new Date(expiresAt);
+      if (!isNaN(date.getTime())) {
+        when = '有效至 ' + date.toLocaleString('zh-CN', { hour12: false }) + '。';
+      }
+    }
+    hint.textContent = when + '请立即转交 ' + name + '；对方登录后必须修改密码。刷新页面不会再次显示。';
+    box.textContent = '';
+    box.appendChild(title);
+    box.appendChild(code);
+    box.appendChild(hint);
+    box.className = 'admin-temp-inline';
+    box.hidden = false;
+  }
+
   function boot() {
     initActivityFilters();
     initTabs();
@@ -281,6 +367,7 @@
     initSigninPagination();
     initConfirm();
     initCopy();
+    initTempPassword();
   }
 
   if (document.readyState === 'loading') {
