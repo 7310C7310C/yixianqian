@@ -81,11 +81,12 @@ sources:
 
 ## 交付节奏与快速通道（2026-10-24 PM 批准）
 
-- **绿 CI 即部署**：任何提交在当前 HEAD 的 CI 与 Docs 绿后 15 分钟内必须部署 staging；若在批量等待，必须写入 `.team/status.md` 的「已推送未部署」并在 30 分钟内清空，不允许静默积压。
-- **自动部署**：server1 `yxq-autodeploy.timer` 每 60 秒检查 `origin/main`，CI 与 Docs 绿后自动构建/切换/健康校验，失败自动回滚（`deployed.sha` 不推进）。紧急冻结：`systemctl stop yxq-autodeploy.timer`；启用/日志/回滚见 `docs/runbooks/staging.md` 的「自动部署」。
-- **快速通道（低风险）**：纯文案/样式/排序/静态资源，且不涉及 auth、权限、数据、API、schema、支付 → Dev Lead 自测 + 截图/浏览器 smoke + CI 绿即可直接部署，**无需独立 Reviewer**；同时在 `.team/decisions.md` 记录范围、风险与批准（PM 2026-10-24 授权）。目标 ≤10 分钟（开工→部署）。
-- **常规通道**：行为、逻辑、接口、模板结构变更 → 独立 Reviewer PASS 后部署（不变）。
-- **高风险**：安全/支付/数据/权限/凭据 → Reviewer + Auditor/security gate（不变）。
+- **绿 CI 即部署（已自动）**：server1 `yxq-autodeploy.timer` 已启用，每 60 秒检查 `origin/main`；当前 HEAD 的 CI（有文档变更时含 Docs）全绿后自动构建/重启/健康校验，失败自动回滚（`deployed.sha` 不推进）；docs-only 提交只更新 `deployed.sha`，不重启。日志 `/var/log/yxq-autodeploy.log`；紧急冻结 `systemctl stop yxq-autodeploy.timer`。15 分钟部署 SLA 由自动部署满足；人工部署仅用于回滚/热修。细节见 `docs/runbooks/staging.md`「自动部署」。
+- **审查必须前移（push 即部署）**：常规/高风险改动必须在 `git push` 前拿到独立 Reviewer PASS（可审本地 commit）；**禁止「先 push 再等 Review」**。低风险快速通道可直接 push，由自动部署上线。
+- **快速通道（低风险）**：纯文案/样式/排序/静态资源，且不涉及 auth、权限、数据、API、schema、支付 → Dev Lead 自测 + 截图/浏览器 smoke + CI 绿即可直接 push，**无需独立 Reviewer**；同时在 `.team/decisions.md` 记录范围、风险与批准（PM 2026-10-24 授权）。目标 ≤10 分钟（开工→上线）。
+- **常规通道**：行为、逻辑、接口、模板结构变更 → 独立 Reviewer PASS 后 push（自动部署跟进）。
+- **高风险**：安全/支付/数据/权限/凭据 → Reviewer + Auditor/security gate，PASS 后 push（不变）。
+- 自动部署冻结或异常时，未部署提交须登记 `.team/status.md`「已推送未部署」并在 30 分钟内清空。
 - **文档门禁减负**：仅当改动命中 `docs/`、env、route、migration 时跑 `docs-check-stale`；纯前端模板/样式允许 `Docs-Impact: none（理由）`，不强制刷新 `docs/STATUS.md` 的 sources。
 - 超过时间目标要记录原因；不允许用「批量等待」掩盖未部署。
 
