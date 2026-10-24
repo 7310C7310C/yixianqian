@@ -201,3 +201,15 @@ sources: []
 - 后果：相互喜欢仅保留列表与通知，不交换联系方式；`weekly_recommendations` 表与 `CardView.Recommended` 保持未接线，作为已知死表/死代码保留，不再以 D10 名义补实现；`contact_consent` 不再作为 E2 前置，P1-12 的展示门控随之失效。
 - 边界：本次只改文档，不改代码、schema、路由与 UI；SPA mutual 页现有「微信号已交换」文案与实际不符，留后续文案清理；注册硬编码 `contact_consent=true` 的明示同意/合规口径另行处理，不因本决策视为已解决。
 - 证据：`docs/product-spec.md` E2/D10 与「首版明确不做」；`docs/STATUS.md` §5「明确不做」；审计 P1-8/P1-10 标注关闭。
+
+## 26. D10 每周推荐位按 v1 原版补实现（2026-10-24）
+
+- 背景：第 25 节按 PM 2026-10-24 的决定「D10 不做」，`weekly_recommendations` 因此保持 0 引用、`CardView.Recommended` 永远 false。同日 PM 追加要求「按 v1 原版补 D10 每周推荐」，第 25 节中 D10 部分由本节取代；E2（相互喜欢展示微信号）仍不做。
+- 决策：选人规则逐条移植 v1 `lib/recommend.py` 到 `internal/matching/recommend.go`：推荐位总数 `max(7, 必显数)`、算法位保底 3、每周保留 4 个（先被必显占）、必显=匿名喜欢我的异性单身（最近优先、去重、排除自己与相互喜欢）、ISO 周跨年连续、同周只剔除失效并补空位；相似度复用 `matching.MatchScore`（100 分制，缺失中性 0.5），不新增第二套打分。
+- 决策：生成任务用 `cmd/server` 现有后台循环（启动补跑 + 整点检查），不新增常驻进程；`db.GenerateWeeklyRecommendations` 在单事务内读取用户/喜欢/上一周名单，`pg_advisory_xact_lock` 串行化，名单未变化时不重写（幂等且不刷新 `created_at`）。
+- 决策：`weekly_recommendations` 就地修正——主键改为 `(week, user_id, position)`、新增 `target_user_id`；`user_id` 为名单所有者，`pinned_by_user_id` 非空表示必显位且值为喜欢名单主人的用户，只在服务端保存。不新建表，避免再造一张死表。
+- 决策：读取侧在 `buildCardsPageData` 把本周推荐对象作为 `OrderCards` 的 pinned 列表整段置顶（必显在前），并置 `CardView.Recommended=true`；`/legacy/api/cards` 既有 `recommended` 字段直接生效，SPA 既有「推荐」角标不新增前端代码。
+- 决策：管理端不新增页面，`/admin/matching` 加「本周推荐位」只读区块（覆盖人数、条目数、生成时间、最近 20 人）与手动重跑按钮；权限沿用 `matching.run`，CSRF 与审计 `admin.recommend.run` 不变。管理端与用户接口都不展示必显原因。
+- 决策：学历档位补 `大专以下 = 1`（与 v1「高中及以下」同档），否则 v2 资料页新选项在 `MatchScore` 里会被当成未填而拿中性分；golden fixtures 未使用该值，一对一历史结果不受影响。
+- 边界：不恢复 v1 把名单写多维表格/文件的行为；不展示推荐理由；观察员与性别未填用户不生成名单；推荐对象仍需在卡片候选池（有照片、符合筛选）中才可见，候选不足时名单可短于 7 个；不做历史周回填。
+- 证据：`internal/matching/recommend_test.go`（槽位/轮换/必显≥4/幂等/空池/ISO 跨年/打分）、`TestIntegrationWeeklyRecommendations`（16 用户 + 喜欢关系，推荐位/轮换/必显/幂等/失效剔除）、`TestIntegrationRecommendationAdminPage`（RBAC/CSRF/审计/不泄漏必显）、`TestIntegrationWeeklyRecommendationsOnCards`（置顶 + `recommended` + SPA 角标）。

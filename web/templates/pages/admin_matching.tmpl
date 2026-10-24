@@ -89,4 +89,54 @@
   </div>
   {{end}}
 </section>
+
+<section class="admin-section" id="recommend">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">本周推荐位</h2>
+      <p class="admin-section-desc">每周一换批：保留 4 个、其余换新；匿名喜欢你的人必显且排最前。必显原因只存服务端，本页与用户接口都不展示谁暗恋谁。</p>
+    </div>
+    <span class="admin-section-meta">{{.Data.Recommend.Week}}</span>
+  </div>
+
+  <div class="admin-stats-inline" aria-label="本周推荐概况">
+    <div class="admin-stats-inline-item">
+      <span>覆盖用户</span>
+      <strong>{{.Data.Recommend.Viewers}} 人</strong>
+    </div>
+    <div class="admin-stats-inline-item">
+      <span>推荐条目</span>
+      <strong>{{.Data.Recommend.Entries}} 条</strong>
+    </div>
+    <div class="admin-stats-inline-item">
+      <span>生成时间</span>
+      <strong>{{if .Data.Recommend.Pending}}尚未生成{{else}}{{.Data.Recommend.Generated}}{{end}}</strong>
+    </div>
+  </div>
+
+  <form method="post" action="/admin/matching/recommend/run" class="admin-matching-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <div class="admin-form-actions">
+      <button type="submit" class="button primary">重新生成本周名单</button>
+      <span class="hint">同一周重跑只剔除失效并补空位，不会打乱本周名单；跨周才换批。</span>
+    </div>
+  </form>
+
+  {{if .Data.Recommend.Rows}}
+  <div class="admin-record-list">
+    {{range .Data.Recommend.Rows}}
+    <article class="admin-record">
+      <span class="admin-avatar" aria-hidden="true">{{template "admin_icon_users"}}</span>
+      <div class="admin-record-main">
+        <h3 class="admin-record-title">{{if .Nickname}}{{.Nickname}}{{else}}用户 {{.UserID}}{{end}}</h3>
+        <p class="admin-record-sub">本周推荐位 <strong>{{.Count}}</strong> 个 · 更新于 {{.Updated}}</p>
+      </div>
+    </article>
+    {{end}}
+  </div>
+  <p class="hint">仅列出最近更新的 20 人；必显原因不对外展示。</p>
+  {{else}}
+  <p class="admin-alert admin-alert--warn">本周还没有名单。可点击「重新生成本周名单」，或等待整点任务自动补跑。</p>
+  {{end}}
+</section>
 {{end}}

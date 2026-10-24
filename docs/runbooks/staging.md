@@ -291,6 +291,42 @@ tail -n 5 /var/log/yxq-facebackfill.log   # 正常接近空跑：count=0 include
 - 检测失败的照片保持 `face_checked=false`，可直接重跑；日志只含 media_id。
 - 不要给 cron 加 `-all`；不要重跑全量。首次上线的 venv/FACE_* 细节已从本文件移除。
 
+## 每周推荐位（D10）
+
+服务启动时补跑「本周缺失」的名单，之后整点检查一次；ISO 周切换（周一）换批：
+保留 4 个算法位、其余换新，必显（匿名喜欢你的人）永远在且排最前。同周重跑只
+剔除失效并补空位，不会打乱本周名单。生成在事务内完成并用 advisory lock 串行化，
+名单未变化时不重写（`created_at` 即生成时间）。
+
+```bash
+# 本周名单概况（期望：cover 人数与条目数 > 0；日期是本周生成时间）
+runuser -u yxq -- psql -d yixianqian_staging -Atc \
+  "SELECT week, count(DISTINCT user_id) AS viewers, count(*) AS entries, max(created_at)
+     FROM weekly_recommendations
+    WHERE week = to_char(now() AT TIME ZONE 'Asia/Shanghai', 'IYYY-\"W\"IW')
+    GROUP BY week;"
+
+# 某人的本周名单（只输出被推荐对象 ID，不含必显原因）
+runuser -u yxq -- psql -d yixianqian_staging -Atc \
+  "SELECT w.position, w.target_user_id, (w.pinned_by_user_id IS NOT NULL) AS pinned
+     FROM weekly_recommendations w
+     JOIN users u ON u.id = w.user_id
+    WHERE u.legacy_user_id = 'U-0006'
+      AND w.week = to_char(now() AT TIME ZONE 'Asia/Shanghai', 'IYYY-\"W\"IW')
+    ORDER BY w.position;"
+```
+
+- 管理端：`/admin/matching` 底部「本周推荐位」只读展示覆盖人数/条目数/生成时间与最近 20 人；
+  「重新生成本周名单」需 `matching.run`、CSRF，写审计 `admin.recommend.run`。管理端不展示
+  必显原因，`pinned_by_user_id` 只允许在服务端查询。
+- 排障：`journalctl -u yixianqian-next-test | grep 'weekly recommendations'`；启动/整点日志只在
+  名单实际变化时打印，安静是正常的。若本周 0 行，先确认有 `account_status='active'`、
+  `account_kind='user'`、性别为「男性/女性」的用户，再点手动重跑。
+- 回滚：名单是派生数据，可直接 `DELETE FROM weekly_recommendations WHERE week='<week>'` 后重跑；
+  不需要回滚 migration（旧 binary 不读该表）。
+- 隐私：`pinned_by_user_id` 记录「谁暗恋谁」，不得导出、不得进管理台/接口/log。用户接口只暴露
+  `recommended` 布尔值与置顶顺序。
+
 ## 门禁与已知限制
 
 - **身份证门禁死锁（P0，2026-10-23）**：staging 1115 个用户中，1103 个 active + 4 个 observer `id_card_valid=false`；迁移不写 ciphertext，用户端无补录字段。PM 已裁定不 grandfather、不豁免 observer；补录/放行未决。详见 `docs/STATUS.md` §4，部署/验收不得绕过。

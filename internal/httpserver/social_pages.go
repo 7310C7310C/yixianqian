@@ -170,7 +170,17 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 	}
 	seed := socialSeed(strings.TrimSpace(q.Get("seed")), viewer.ID, now)
 	version := cardVersion(seed, filter, targetGender)
-	ordered := db.OrderCards(candidates, state.LikedMe, nil, fmt.Sprintf("%s|%d", seed, version))
+	// 本周推荐位：必显（匿名喜欢我的人）在前、算法位在后，整体置顶。
+	// pinnedIDs 的顺序就是展示顺序，OrderCards 不会打乱它。
+	recommendedIDs, err := a.db.WeeklyRecommendationTargets(ctx, viewer.ID, db.WeekKey(now))
+	if err != nil {
+		return CardsPageData{}, err
+	}
+	recommended := make(map[int64]bool, len(recommendedIDs))
+	for _, id := range recommendedIDs {
+		recommended[id] = true
+	}
+	ordered := db.OrderCards(candidates, state.LikedMe, recommendedIDs, fmt.Sprintf("%s|%d", seed, version))
 
 	offset := socialNonNegative(q.Get("offset"), 0)
 	if offset > len(ordered) {
@@ -192,6 +202,7 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 		view := buildCardView(p, state.LikedTargets[p.ID], state.PraisedTargets[p.ID],
 			state.MessageCounts[p.ID], now)
 		view.IsSelf = p.ID == viewer.ID
+		view.Recommended = recommended[p.ID]
 		views = append(views, view)
 	}
 

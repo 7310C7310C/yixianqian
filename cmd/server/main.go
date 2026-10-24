@@ -102,6 +102,7 @@ func run() error {
 
 	go cleanupLoop(ctx, database, logger)
 	go inviteLoop(ctx, database, logger)
+	go recommendLoop(ctx, database, logger)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -154,6 +155,38 @@ func inviteLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
 		}
 		if finalized > 0 || clawedBack > 0 {
 			logger.Info("invites settled", "finalized", finalized, "clawed_back", clawedBack)
+		}
+	}
+
+	run()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
+}
+
+// recommendLoop 刷新牵线页「每周推荐位」。生成器本身幂等：ISO 周切换时换批，
+// 同周重跑只剔除失效并补空位。启动时先跑一次，补上「本周缺失」的名单；
+// 之后整点检查一次，不新增常驻进程。
+func recommendLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	run := func() {
+		runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		result, err := database.GenerateWeeklyRecommendations(runCtx, db.SocialNow())
+		if err != nil {
+			logger.Warn("weekly recommendations failed", "error", err)
+			return
+		}
+		if result.Changed {
+			logger.Info("weekly recommendations generated", "week", result.Week,
+				"viewers", result.Viewers, "entries", result.Entries, "rotated", result.Rotated)
 		}
 	}
 

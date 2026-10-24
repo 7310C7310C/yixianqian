@@ -28,6 +28,13 @@ sources:
   - internal/db/points_admin_legacy.go
   - internal/db/grouping.go
   - internal/db/grouping_admin.go
+  - internal/db/recommend.go
+  - internal/db/recommend_integration_test.go
+  - internal/matching/recommend.go
+  - internal/matching/onetoone.go
+  - internal/matching/recommend_test.go
+  - internal/httpserver/recommend_integration_test.go
+  - internal/httpserver/social_pages.go
   - web/static/admin.css
   - web/static/admin.js
   - web/static/legacy/index.html
@@ -154,6 +161,16 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 证据：`TestIntegrationApprovalStartsInviteWindow`、`TestIntegrationStartPendingInviteWindows`、`TestIntegrationBackfillLegacyInvite`、`TestIntegrationBackfillSkipsBrokenInvite`、`TestIntegrationInviteConfirmWindowBoundary`、`TestIntegrationCancelRefundPriority`、`TestIntegrationSignupLikesNotifications`、`TestIntegrationAdminActivityBroadcastAudience`、`TestIntegrationAdminActivityBroadcastAllSingles`、`TestIntegrationExtraRealLikeQuota`、`TestAdminBroadcastRecipients`；`make ci` EXIT=0；`go test -race -p 1 ./internal/db ./internal/httpserver` 全量绿。
 - 仍未接线（P1-5 余项，待 PM）：`IsHistoricalParticipant` 注册时校验、封禁/拒绝时 `ClawBackInvitesForInvitee`。
 
+### 每周推荐位（D10，2026-10-24，待部署）
+
+- 规则：按 v1 `lib/recommend.py` 移植到 `internal/matching/recommend.go`——推荐位总数 `max(7, 必显数)`、算法位至少 3 个、每周保留 4 个（先被必显占）、必显（匿名喜欢我的异性单身）排最前且最近优先、ISO 周跨年连续；相似度 100 分制复用 `matching.MatchScore`（爱好 25/运动 15/性格 15/学历 15/MBTI 15/同城 10/同教堂 5，缺失中性 0.5）。
+- 生成：`db.GenerateWeeklyRecommendations` 每周一（ISO 周切换）换批，同周重跑只「剔除失效 + 补空位」；`cmd/server` 启动补跑 + 整点检查，不新增常驻进程；事务 + advisory lock + 幂等（名单未变不重写、不刷 `created_at`）。
+- 数据：迁移 `0006` 就地修正 `weekly_recommendations` 主键为 `(week, user_id, position)`、新增 `target_user_id`；`pinned_by_user_id` 只存服务端必显原因，API 与管理台都不读，不暴露「谁暗恋谁」。
+- 读取：卡片页把本周推荐对象整段置顶（必显在前），`OrderCards` 保持给定顺序；`CardView.recommended` 与 `/legacy/api/cards` 的 `recommended` 已接线，SPA 既有「推荐」角标现在会实际出现。
+- 管理端：`/admin/matching` 新增只读汇总（覆盖人数/条目数/生成时间 + 最近 20 人）与「重新生成本周名单」按钮；权限 `matching.run`、CSRF、审计 `admin.recommend.run`；必显原因不展示。
+- 已知口径：观察员与性别未填用户不生成名单；推荐对象仍需在卡片候选池（有照片、符合筛选）里才会显示；候选不足时名单可短于 7 个。
+- 证据：`TestRecommendBuildSlots`、`TestRecommendNextAlgoRotatesKeepFour`、`TestRecommendNextAlgoPinnedFourKeepsNoAlgo`、`TestRecommendNextAlgoPinnedOneKeepsThree`、`TestRecommendNextAlgoSameWeekKeepsWholeBatch`、`TestRecommendNextAlgoDeduplicatesPinnedFromCandidates`、`TestRecommendWeekKeyISOAcrossYear`、`TestRecommendMatchScore*`、`TestIntegrationWeeklyRecommendations`、`TestIntegrationRecommendationAdminPage`、`TestIntegrationWeeklyRecommendationsOnCards`；staging 未部署。
+
 ### 管理台（SSR + 活动原生 SPA，仅 iframe 承载）
 
 - 入口与框架：顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`（不渲染顶层页面），管理台只经 SPA 内 `/?admin=1` 打开 iframe overlay 使用；受权照片/海报原图串流是显式例外。
@@ -217,7 +234,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - **真机与性能**：真机 iOS/Android/微信、旧设备宽度、图片/首屏性能未完成。
 - **运维演练**：备份还原、回滚演练、安全最终审查未完成。
 - **E2E**：全流程 E2E（登录→卡片→喜欢→留言→活动→分组→结果→麦穗）未建。
-- **验收签核**：`docs/product-spec.md` 仍 `0/83` 未勾选，未经 PM 签核；其中 E2/D10 已由 PM 2026-10-24 明确不做，不参与验收；不要从 0 勾选推断“未做”，也不要当作已完成。
+- **验收签核**：`docs/product-spec.md` 仍 `0/83` 未勾选，未经 PM 签核；其中 E2 已由 PM 2026-10-24 明确不做，不参与验收；D10 已于 2026-10-24 按 v1 原版补实现（见 §3），仍待验收签核。不要从 0 勾选推断“未做”，也不要当作已完成。
 - **生产切换**：v2 未切生产；`app.nantou.love` 仍是 v1。
 - **管理员核对**：v1 `ADMIN_OPEN_IDS` 不在 Bitable 导出中，其余管理员需按 `docs/MIGRATION.md` 人工核对。
 - **账号数差异**：迁移记录为 `1114`，staging 当前 `1115`，多出的 1 个账号来源待核对。
@@ -225,7 +242,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 ### 明确不做（PM 2026-10-24）
 
 - **E2 相互喜欢展示双方微信号**：不做，不展示微信号。原 P1 缺口（后端审计 P1-8）关闭并移出缺口清单；`docs/product-spec.md` 条目保留并标注，不再作为验收项。
-- **D10 推荐位/每周推荐**：不做，推荐位不做。原 P1 缺口（后端审计 P1-10）关闭并移出缺口清单；`weekly_recommendations` 表保持未接线，不再作为验收项。
+- **D10 推荐位/每周推荐（已由 PM 2026-10-24 追加改回实现）**：v1 原版规则已移植（见 §3「每周推荐位」）；`weekly_recommendations` 已接线，不再视为死表。原「不做」的决定保留在 `docs/DECISIONS.md` §25 历史中，由 §26 取代。
 
 ## 6. 文档自动化
 

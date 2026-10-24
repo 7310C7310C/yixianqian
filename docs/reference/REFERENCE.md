@@ -62,6 +62,7 @@ sources: []
 | GET | `/admin/matching` | `internal/httpserver/admin_matching_pages.go` |
 | GET | `/admin/matching/group/{id}` | `internal/httpserver/admin_matching_pages.go` |
 | GET | `/admin/matching/onetoone/{id}` | `internal/httpserver/admin_matching_pages.go` |
+| POST | `/admin/matching/recommend/run` | `internal/httpserver/admin_matching_pages.go` |
 | GET | `/admin/points` | `internal/httpserver/admin_points.go` |
 | POST | `/admin/points/adjust` | `internal/httpserver/admin_points.go` |
 | POST | `/admin/points/redemptions/{id}/mark` | `internal/httpserver/admin_points.go` |
@@ -217,11 +218,11 @@ sources: []
 
 | 前缀 | 数量 |
 |---|---:|
-| `/admin` | 35 |
+| `/admin` | 36 |
 | `/api` | 28 |
 | `/legacy` | 86 |
 | 其他 | 22 |
-| **合计** | **171** |
+| **合计** | **172** |
 
 ## 4. 环境变量（key 集合对比）
 
@@ -269,6 +270,7 @@ sources: []
 | 0003 | `0003_user_numbers.sql` | Give every account a stable display ID. Migrated records already have |
 | 0004 | `0004_observer_roles.sql` | Dual-role users: a v1 user row and an observer row may share one open_id. |
 | 0005 | `0005_face.sql` | 本地人脸检测结果（YuNet/Haar），只增列，不改既有数据。 |
+| 0006 | `0006_weekly_recommendations_list.sql` | 每周推荐位名单：把 v1「一人一行」的占位表改成真正的名单表。 |
 
 ## 6. make targets
 
@@ -325,6 +327,6 @@ sources: []
 | `docs/DECISIONS.md` | — |
 | `docs/MIGRATION.md` | `migrations/**`, `tools/migrate_testapp.py` |
 | `docs/PROJECT_CHARTER.md` | — |
-| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/db/admin*.go`, `internal/db/errors*.go`, `internal/httpserver/admin_*.go`, `internal/httpserver/templates.go`, `internal/httpserver/grouping_admin_routes.go`, `internal/httpserver/grouping_view.go`, `internal/httpserver/onetoone_admin.go`, `internal/httpserver/onetoone_admin_view.go`, `internal/httpserver/legacy_activity_admin_routes.go`, `internal/httpserver/legacy_activity_admin_view.go`, `internal/httpserver/legacy_points_admin_routes.go`, `internal/httpserver/legacy_points_admin_view.go`, `internal/httpserver/legacy_messages_report_handle.go`, `internal/db/admin_activity_legacy.go`, `internal/db/admin_activity_settings.go`, `internal/db/points_admin_legacy.go`, `internal/db/grouping.go`, `internal/db/grouping_admin.go`, `web/static/admin.css`, `web/static/admin.js`, `web/static/legacy/index.html`, `web/templates/pages/admin.tmpl`, `web/templates/pages/admin_activities.tmpl`, `web/templates/pages/admin_activity_edit.tmpl`, `web/templates/pages/admin_activity_detail.tmpl`, `web/templates/pages/admin_users.tmpl`, `web/templates/pages/admin_user_detail.tmpl`, `web/templates/pages/admin_matching.tmpl`, `web/templates/pages/admin_matching_group.tmpl`, `web/templates/pages/admin_matching_onetoone.tmpl`, `web/templates/pages/admin_points.tmpl`, `web/templates/pages/admin_reports.tmpl`, `web/templates/pages/admin_roles.tmpl`, `web/templates/pages/admin_audit.tmpl`, `web/static/admin_points.css`, `web/static/admin_user_detail.css`, `internal/httpserver/admin_ui_phase_bc_test.go`, `internal/httpserver/middleware.go`, `tools/browser/admin_ui_phase_bc.py`, `tools/browser/admin_native_activity_smoke.py`, `web/templates/partials/admin_nav.tmpl`, `web/templates/partials/admin_ui.tmpl`, `web/templates/layout.tmpl`, `tools/browser/admin_ui_phase_a.py`, `.env.example` |
+| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/db/admin*.go`, `internal/db/errors*.go`, `internal/httpserver/admin_*.go`, `internal/httpserver/templates.go`, `internal/httpserver/grouping_admin_routes.go`, `internal/httpserver/grouping_view.go`, `internal/httpserver/onetoone_admin.go`, `internal/httpserver/onetoone_admin_view.go`, `internal/httpserver/legacy_activity_admin_routes.go`, `internal/httpserver/legacy_activity_admin_view.go`, `internal/httpserver/legacy_points_admin_routes.go`, `internal/httpserver/legacy_points_admin_view.go`, `internal/httpserver/legacy_messages_report_handle.go`, `internal/db/admin_activity_legacy.go`, `internal/db/admin_activity_settings.go`, `internal/db/points_admin_legacy.go`, `internal/db/grouping.go`, `internal/db/grouping_admin.go`, `internal/db/recommend.go`, `internal/db/recommend_integration_test.go`, `internal/matching/recommend.go`, `internal/matching/onetoone.go`, `internal/matching/recommend_test.go`, `internal/httpserver/recommend_integration_test.go`, `internal/httpserver/social_pages.go`, `web/static/admin.css`, `web/static/admin.js`, `web/static/legacy/index.html`, `web/templates/pages/admin.tmpl`, `web/templates/pages/admin_activities.tmpl`, `web/templates/pages/admin_activity_edit.tmpl`, `web/templates/pages/admin_activity_detail.tmpl`, `web/templates/pages/admin_users.tmpl`, `web/templates/pages/admin_user_detail.tmpl`, `web/templates/pages/admin_matching.tmpl`, `web/templates/pages/admin_matching_group.tmpl`, `web/templates/pages/admin_matching_onetoone.tmpl`, `web/templates/pages/admin_points.tmpl`, `web/templates/pages/admin_reports.tmpl`, `web/templates/pages/admin_roles.tmpl`, `web/templates/pages/admin_audit.tmpl`, `web/static/admin_points.css`, `web/static/admin_user_detail.css`, `internal/httpserver/admin_ui_phase_bc_test.go`, `internal/httpserver/middleware.go`, `tools/browser/admin_ui_phase_bc.py`, `tools/browser/admin_native_activity_smoke.py`, `web/templates/partials/admin_nav.tmpl`, `web/templates/partials/admin_ui.tmpl`, `web/templates/layout.tmpl`, `tools/browser/admin_ui_phase_a.py`, `.env.example` |
 | `docs/product-spec.md` | — |
 | `docs/runbooks/staging.md` | `deploy/**`, `.env.example`, `migrations/**`, `.github/workflows/ci.yml` |

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -12,6 +13,8 @@ func init() { registerModule(registerAdminMatchingPages) }
 func registerAdminMatchingPages(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/matching",
 		a.adminHTML(adminPermMatchingRun, a.handleAdminMatchingPage))
+	mux.HandleFunc("POST /admin/matching/recommend/run",
+		a.adminHTML(adminPermMatchingRun, a.handleAdminRecommendRun))
 	mux.HandleFunc("GET /admin/matching/group/{id}",
 		a.adminHTML(adminPermMatchingRun, a.handleAdminMatchingGroupPage))
 	mux.HandleFunc("GET /admin/matching/onetoone/{id}",
@@ -28,7 +31,64 @@ type adminMatchingRow struct {
 }
 
 type adminMatchingPageData struct {
-	Rows []adminMatchingRow
+	Rows      []adminMatchingRow
+	Recommend adminRecommendView
+}
+
+// adminRecommendView 是「本周推荐位」区块。它刻意不展示必显原因：
+// 谁暗恋谁只存服务端（weekly_recommendations.pinned_by_user_id），
+// 管理端只看得到覆盖人数、条目数与生成时间。
+type adminRecommendView struct {
+	Week      string
+	Viewers   int
+	Entries   int
+	Generated string
+	Rows      []adminRecommendRow
+	Pending   bool
+}
+
+type adminRecommendRow struct {
+	UserID   int64
+	Nickname string
+	Count    int
+	Updated  string
+}
+
+func adminRecommendNotice(code string) string {
+	switch code {
+	case "recommend":
+		return "本周推荐名单已重新生成。"
+	case "recommend-failed":
+		return "推荐名单生成失败，请稍后重试；旧名单保持不变。"
+	default:
+		return ""
+	}
+}
+
+func (a *App) loadAdminRecommendView(ctx context.Context) (adminRecommendView, error) {
+	week := db.WeekKey(a.clock.Now())
+	summary, err := a.db.WeeklyRecommendationSummary(ctx, week, 20)
+	if err != nil {
+		return adminRecommendView{}, err
+	}
+	view := adminRecommendView{
+		Week:    summary.Week,
+		Viewers: summary.Viewers,
+		Entries: summary.Entries,
+		Pending: summary.Entries == 0,
+	}
+	for _, row := range summary.Sample {
+		view.Rows = append(view.Rows, adminRecommendRow{
+			UserID:   row.UserID,
+			Nickname: row.Nickname,
+			Count:    row.Count,
+			Updated:  db.InSocialTZ(row.UpdatedAt).Format("2006-01-02 15:04"),
+		})
+	}
+	if summary.Entries > 0 {
+		view.Generated = db.InSocialTZ(summary.Generated).Format("2006-01-02 15:04")
+	}
+	return view, nil
 }
 
 func adminMatchingMode(activity db.Activity) string {
@@ -48,6 +108,12 @@ func (a *App) handleAdminMatchingPage(w http.ResponseWriter, r *http.Request, ac
 	activities, err := a.db.ListActivities(r.Context())
 	if err != nil {
 		a.logger(r).Error("list matching activities failed", "error", err)
+		a.renderError(w, r, http.StatusInternalServerError, "系统暂时无法处理", "请稍后再试。")
+		return
+	}
+	recommend, err := a.loadAdminRecommendView(r.Context())
+	if err != nil {
+		a.logger(r).Error("load weekly recommendations failed", "error", err)
 		a.renderError(w, r, http.StatusInternalServerError, "系统暂时无法处理", "请稍后再试。")
 		return
 	}
@@ -93,10 +159,41 @@ func (a *App) handleAdminMatchingPage(w http.ResponseWriter, r *http.Request, ac
 	a.render(w, r, http.StatusOK, "admin_matching", PageData{
 		Title:     "匹配控制台",
 		User:      &access.User,
-		Data:      adminMatchingPageData{Rows: rows},
+		Data:      adminMatchingPageData{Rows: rows, Recommend: recommend},
+		Notice:    adminRecommendNotice(r.URL.Query().Get("notice")),
 		PageCSS:   "admin.css",
 		ActiveNav: "matching",
 	})
+}
+
+// handleAdminRecommendRun 手动重跑本周推荐名单。生成器本身幂等：同一周重跑
+// 只做「剔除失效 + 补空位」，跨周才换批，所以按钮不会把当周名单打乱。
+func (a *App) handleAdminRecommendRun(w http.ResponseWriter, r *http.Request, access adminAccess) {
+	if err := r.ParseForm(); err != nil {
+		a.renderError(w, r, http.StatusBadRequest, "操作失败", "表单格式不正确，请重试。")
+		return
+	}
+	if !a.formCSRFValid(r) {
+		a.renderError(w, r, http.StatusForbidden, "操作被拒绝", "表单已过期，请刷新页面后重试。")
+		return
+	}
+	result, err := a.db.GenerateWeeklyRecommendations(r.Context(), a.clock.Now())
+	if err != nil {
+		a.logger(r).Error("regenerate weekly recommendations failed", "error", err)
+		http.Redirect(w, r, "/admin/matching?notice=recommend-failed", http.StatusSeeOther)
+		return
+	}
+	a.audit(r, &access.User.ID, "admin.recommend.run", "weekly_recommendations", result.Week,
+		map[string]any{
+			"viewers": result.Viewers,
+			"entries": result.Entries,
+			"rotated": result.Rotated,
+			"changed": result.Changed,
+		})
+	a.logger(r).Info("weekly recommendations regenerated", "week", result.Week,
+		"viewers", result.Viewers, "entries", result.Entries,
+		"rotated", result.Rotated, "changed", result.Changed)
+	http.Redirect(w, r, "/admin/matching?notice=recommend", http.StatusSeeOther)
 }
 
 type adminMatchingGroupPageData struct {

@@ -12,6 +12,16 @@ sources:
 > schema 以 `migrations/` 为准，本文只记来源、工具、对账口径与已知限制。
 > 当前 staging 状态与 P0 见 `docs/STATUS.md`；部署与回填见 `docs/runbooks/staging.md`。
 
+## 0. schema 变更（2026-10-24）
+
+- `0006_weekly_recommendations_list.sql`：把 v1 遗留的占位表 `weekly_recommendations`
+  就地修正为名单表——主键 `(week, user_id, position)`、新增 `target_user_id`，
+  `user_id` 表示名单所有者、`pinned_by_user_id` 只存必显原因。旧表在本次改动前
+  全仓库 0 引用、staging 0 行，无数据迁移；迁移会清掉缺 `target_user_id` 的孤儿行。
+- 该表属于派生数据，可由生成任务重建：`DELETE FROM weekly_recommendations WHERE week='<week>'`
+  后由启动补跑或管理端「重新生成本周名单」重算，不需要回填历史周。
+- 不迁移 v1 的多维表格推荐表（原实现只写本地 JSON 文件，且 web 侧从未读取）。
+
 ## 1. 来源盘点（2026-10-19 导出基线）
 
 | 表 | 笔数 | 说明 |
