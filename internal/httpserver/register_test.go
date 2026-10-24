@@ -91,8 +91,29 @@ func TestChineseIDCardValidation(t *testing.T) {
 	}
 	legacy15 := "110105491231002"
 	if normalized, birth, err := validateChineseIDCard(legacy15); err != nil ||
-		normalized != legacy15 || birth.Year() != 1949 {
+		normalized != "11010519491231002X" || birth.Year() != 1949 {
 		t.Fatalf("15-digit id: %q %v %v", normalized, birth, err)
+	}
+	// The legacy 15-digit form must hash like its 18-digit equivalent, or one
+	// card could register two accounts by switching spellings.
+	if idCardHash("test-secret", legacy15) != idCardHash("test-secret", "11010519491231002X") {
+		t.Fatal("15-digit and equivalent 18-digit ids hash differently")
+	}
+	for _, invalid15 := range []string{"110105491331002", "11010549123100", "1101054912310021"} {
+		if _, _, err := validateChineseIDCard(invalid15); err == nil {
+			t.Fatalf("invalid 15-digit id %q accepted", invalid15)
+		}
+	}
+}
+
+func TestParseRegisterInputNormalizesLegacy15DigitID(t *testing.T) {
+	values := validRegisterValues(t, "13800138000", "110105491231002", "1949-12-31")
+	in, ferr := parseRegisterInput(values)
+	if ferr != nil {
+		t.Fatalf("15-digit registration rejected: %+v", ferr)
+	}
+	if in.IDCard != "11010519491231002X" {
+		t.Fatalf("stored id = %q, want canonical 18-digit form", in.IDCard)
 	}
 }
 

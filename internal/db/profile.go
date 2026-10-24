@@ -123,6 +123,7 @@ type Profile struct {
 type ProfileUpdate struct {
 	Nickname        *string
 	HeightCM        *int
+	Birthday        *time.Time
 	Education       *string
 	City            *string
 	Church          *string
@@ -158,7 +159,8 @@ type ProfileUpdate struct {
 
 // Empty reports whether the update contains no whitelisted changes.
 func (u ProfileUpdate) Empty() bool {
-	return u.Nickname == nil && u.HeightCM == nil && u.Education == nil &&
+	return u.Nickname == nil && u.HeightCM == nil && u.Birthday == nil &&
+		u.Education == nil &&
 		u.City == nil && u.Church == nil && u.ChurchGroup == nil &&
 		u.ChurchLocation == nil && u.NativePlace == nil && u.Industry == nil &&
 		u.Position == nil && u.Income == nil && u.House == nil && u.Driving == nil &&
@@ -328,6 +330,9 @@ func (d *DB) UpdateProfile(ctx context.Context, userID int64, upd ProfileUpdate)
 	}
 	if upd.HeightCM != nil {
 		add("height_cm", *upd.HeightCM)
+	}
+	if upd.Birthday != nil {
+		add("birthday", *upd.Birthday)
 	}
 	if upd.Education != nil {
 		add("education", *upd.Education)

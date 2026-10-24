@@ -235,6 +235,137 @@ func TestIntegrationObserverStillBlockedByIDCard(t *testing.T) {
 	}
 }
 
+func clearUserBirthdayAndIDCard(t *testing.T, e *profileHTTPEnv, userID int64) {
+	t.Helper()
+	if _, err := e.pool.Exec(e.ctx,
+		`UPDATE users SET birthday = NULL, id_card_valid = false,
+		        id_card_ciphertext = NULL, id_card_last4 = '', id_card_hash = NULL,
+		        gender = CASE WHEN gender = '' THEN '男性' ELSE gender END
+		  WHERE id = $1`, userID); err != nil {
+		t.Fatalf("clear birthday/id card: %v", err)
+	}
+}
+
+// B1: migrated v1 accounts and test/observer accounts can have no birthday,
+// and the profile form has no birthday editor. A valid 18-digit backfill must
+// derive the birthday in the same update instead of dead-ending the gate.
+func TestIntegrationIDCardBackfillDerivesBirthday(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	user, client := env.createUser(t, "U-IDNOBDAY", "无生日用户", "active", "user")
+	other, otherClient := env.createUser(t, "U-IDMISMATCH", "生日不一致用户", "active", "user")
+	cleanupHTTPUsers(t, env, user.ID, other.ID)
+	clearUserBirthdayAndIDCard(t, env, user.ID)
+	clearUserBirthdayAndIDCard(t, env, other.ID)
+	if _, err := env.pool.Exec(env.ctx,
+		`UPDATE users SET birthday = '1990-01-01' WHERE id = $1`, other.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	id := makeTestIDCard(t, "19900101", randomHTTPDigits(t, 3))
+	resp := putJSON(t, client, "/legacy/api/profile", client.csrfCookie(),
+		map[string]any{"身份证号": id})
+	body := readBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("birthday-less backfill status=%d body=%s", resp.StatusCode, body)
+	}
+	var (
+		birthday time.Time
+		valid    bool
+		hash     string
+	)
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT birthday, id_card_valid, id_card_hash FROM users WHERE id = $1`,
+		user.ID).Scan(&birthday, &valid, &hash); err != nil {
+		t.Fatal(err)
+	}
+	if got := birthday.Format("2006-01-02"); got != "1990-01-01" {
+		t.Fatalf("derived birthday = %q, want 1990-01-01", got)
+	}
+	if !valid || hash != idCardHash(env.cfg.SessionSecret, id) {
+		t.Fatalf("backfill state valid=%v hash=%q", valid, hash)
+	}
+	var auditCount int
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT count(*) FROM audit_log
+		  WHERE action = 'profile.birthday.from_id' AND target_id = $1`,
+		fmt.Sprint(user.ID)).Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if auditCount != 1 {
+		t.Fatalf("birthday-from-id audit rows = %d, want 1", auditCount)
+	}
+	if resp := client.get("/legacy/api/cards"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("cards after derived backfill status=%d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	// Once verified, the number is locked even if the birthday was derived.
+	resp = putJSON(t, client, "/legacy/api/profile", client.csrfCookie(),
+		map[string]any{"身份证号": makeTestIDCard(t, "19900101", randomHTTPDigits(t, 3))})
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(readBody(t, resp), "id_card_locked") {
+		t.Fatalf("second backfill status=%d", resp.StatusCode)
+	}
+
+	// A birthday that already exists still has to match the number.
+	mismatch := makeTestIDCard(t, "19920202", randomHTTPDigits(t, 3))
+	resp = putJSON(t, otherClient, "/legacy/api/profile", otherClient.csrfCookie(),
+		map[string]any{"身份证号": mismatch})
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(readBody(t, resp), "id_card_birthday_mismatch") {
+		t.Fatalf("birthday mismatch status=%d", resp.StatusCode)
+	}
+	var (
+		otherBirthday time.Time
+		otherValid    bool
+		otherHash     *string
+	)
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT birthday, id_card_valid, id_card_hash FROM users WHERE id = $1`,
+		other.ID).Scan(&otherBirthday, &otherValid, &otherHash); err != nil {
+		t.Fatal(err)
+	}
+	if otherBirthday.Format("2006-01-02") != "1990-01-01" || otherValid || otherHash != nil {
+		t.Fatalf("mismatch wrote state: birthday=%s valid=%v hash=%v",
+			otherBirthday.Format("2006-01-02"), otherValid, otherHash)
+	}
+}
+
+func TestIntegrationObserverBackfillDerivesBirthday(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	observer, client := env.createUser(t, "U-IDOBSNOBDAY", "观察员无生日", "observer", "observer")
+	cleanupHTTPUsers(t, env, observer.ID)
+	clearUserBirthdayAndIDCard(t, env, observer.ID)
+
+	id := makeTestIDCard(t, "19930303", randomHTTPDigits(t, 3))
+	resp := putJSON(t, client, "/legacy/api/profile", client.csrfCookie(),
+		map[string]any{"身份证号": id})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("observer birthday-less backfill status=%d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	var (
+		birthday time.Time
+		valid    bool
+	)
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT birthday, id_card_valid FROM users WHERE id = $1`, observer.ID).
+		Scan(&birthday, &valid); err != nil {
+		t.Fatal(err)
+	}
+	if birthday.Format("2006-01-02") != "1993-03-03" || !valid {
+		t.Fatalf("observer birthday=%s valid=%v", birthday.Format("2006-01-02"), valid)
+	}
+	resp = client.get("/legacy/api/profile")
+	var profile struct {
+		IDValid  bool                  `json:"id_valid"`
+		Editable []legacyEditableField `json:"editable"`
+	}
+	legacyJSONDecode(t, resp, &profile)
+	if !profile.IDValid || len(profile.Editable) != 0 {
+		t.Fatalf("observer after derived backfill = %+v editable=%+v", profile, profile.Editable)
+	}
+	if resp := client.get("/legacy/api/cards"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("observer cards after derived backfill status=%d body=%s",
+			resp.StatusCode, readBody(t, resp))
+	}
+}
+
 func TestIntegrationMutualWechatExchange(t *testing.T) {
 	env := setupProfileHTTPEnv(t)
 	male, maleClient := env.createUser(t, "U-WX-M", "微信男", "active", "user")

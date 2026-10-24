@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-24
+last_verified: 2026-10-25
 sources:
   - cmd/**
   - migrations/**
@@ -214,12 +214,14 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ## 4. P0 身份证门禁：补填 + 服务端强制（已实现，待部署/验收）
 
-**结论**：P0 死锁已按 PM 2026-10-24 方案实现：资料编辑提供身份证补填；服务端对 `id_card_valid=false` 的非豁免用户强制 403，补填成功后解除。代码在本地分支，尚未部署；部署前仍需独立 Review 与 staging smoke。
+**结论**：P0 死锁已按 PM 2026-10-24 方案实现：资料编辑提供身份证补填；服务端对 `id_card_valid=false` 的非豁免用户强制 403，补填成功后解除。Reviewer 2026-10-24 判 FAIL 的 B1（无生日账号补填死路）与 I1–I3 已在本地修复，代码尚未部署；部署前仍需 Reviewer 复审与 staging smoke。
 
-- 补填：`legacyProfileEditable` 在 `id_card_valid=false` 时返回「身份证号」字段（普通用户附带其余可编辑字段，观察员只返回该字段）；提交后校验 18 位、校验位、证内生日与资料生日一致、`id_card_hash` 未被其他账号占用；AES-GCM 写 `id_card_ciphertext`、`id_card_last4`、`id_card_hash`，置 `id_card_valid=true`；审计 `profile.id_card.backfilled` 只记后四位，不记明文。
+- 补填：`legacyProfileEditable` 在 `id_card_valid=false` 时返回「身份证号」字段（普通用户附带其余可编辑字段，观察员只返回该字段）；提交后校验 18 位、校验位、`id_card_hash` 未被其他账号占用。资料生日为空时按证内生日补全并在同一次 `UpdateProfile` 写入（审计 `profile.birthday.from_id`）；已有生日与证内生日不一致仍拒绝。AES-GCM 写 `id_card_ciphertext`、`id_card_last4`、`id_card_hash`，置 `id_card_valid=true`；审计 `profile.id_card.backfilled` 只记后四位，不记明文。
+- 15/18 位归一：注册接受旧 15 位号码时先归一为 18 位（`19` 前缀 + 校验位）再加密/HMAC；资料补填仍只收 18 位。同一张证无论 15/18 拼写都命中同一 `id_card_hash`。
 - 服务端门禁：`withSession` 在注册门禁之后执行 `idCardGate`。`id_card_valid=false` 时（观察员同样适用），`/legacy/api/*` 仅放行首页、资料（含照片）、通知、改密、退出、版本/埋点与 mutual 微信号表单；其余返回 403 `id_card_required`。`/app` 与 `/admin` 页面入口返回 403 HTML（带 `X-Error-Code: id_card_required`）。
 - 观察员：继续豁免 `has_face`（资料投影 `has_face=true`），但身份证不豁免；`id_valid=false` 时 `/legacy/api/cards` 等仍 403。资料页对观察员只暴露「身份证号」一个可写字段（其余只读），补填成功后解除门禁，避免只读账号死锁。
-- 数据：staging 现有 `id_card_valid=false` 的 active/observer 用户仍可在部署后第一次进入资料页补填；存量 `id_card_ciphertext` 仅 1 人，不批量解密回填哈希。
+- 数据：staging 现有 `id_card_valid=false` 的 active/observer 用户仍可在部署后第一次进入资料页补填；其中 `birthday IS NULL` 的 4 个观察员与 100 个 active 测试账号会由证号推导生日，不再是死路。存量 `id_card_ciphertext` 仅 1 人，不批量解密回填哈希。
+- 审查修复（2026-10-25，本地未 push）：B1 生日推导 + 集成测试；I1 15/18 位同哈希 + 非法 15 位拒绝；I2 推荐位/管理端测试可在共享库连续重跑；I3 迁移 runner 校验 `schema_migrations.name`（附 v5→7 与名冲突测试），本机开发库错误行已清理并升级到 7。
 - 验收规格：`docs/product-spec.md` C4；证据见 `docs/DECISIONS.md` §27 与集成测试。
 
 ## 5. 已知缺口/未验收

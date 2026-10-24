@@ -98,7 +98,7 @@ func legacyProfileEditable(p db.Profile) []legacyEditableField {
 		Label: "身份证号",
 		Type:  "text",
 		Value: "",
-		Hint:  "身份证号有误或缺失，请重新填写正确的18位身份证号；仅核验使用，不公开展示。",
+		Hint:  "身份证号有误或缺失，请重新填写正确的18位身份证号；资料未填生日时将按证内生日补全。仅核验使用，不公开展示。",
 	}
 	if observer {
 		// Observers stay read-only except for the ID card backfill required by

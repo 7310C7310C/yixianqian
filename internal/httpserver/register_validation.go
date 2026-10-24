@@ -43,15 +43,20 @@ func validateWechatID(raw string) (string, error) {
 
 // idCardHash is a keyed digest of the normalised ID number. It lets the
 // database enforce uniqueness without storing a directly brute-forceable
-// digest: the key is derived from the deployment secret.
+// digest: the key is derived from the deployment secret. The legacy 15-digit
+// form is expanded to 18 digits first, so one card cannot register twice by
+// alternating between the two spellings.
 func idCardHash(secret, plain string) string {
 	mac := hmac.New(sha256.New, idCardKey(secret))
-	mac.Write([]byte(strings.ToUpper(strings.TrimSpace(plain))))
+	mac.Write([]byte(normalizeIDCardForHash(plain)))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // validateChineseIDCard accepts the 18-digit (checksum verified) and legacy
-// 15-digit mainland formats, returning the birth date embedded in the number.
+// 15-digit mainland formats, returning the canonical 18-digit form and the
+// birth date embedded in the number. The 15-digit form is never stored or
+// hashed as-is: callers get the equivalent 18-digit number so ciphertext,
+// last4 and uniqueness all share one spelling.
 func validateChineseIDCard(raw string) (string, time.Time, error) {
 	raw = strings.ToUpper(strings.TrimSpace(raw))
 	switch {
@@ -69,10 +74,40 @@ func validateChineseIDCard(raw string) (string, time.Time, error) {
 		if err != nil || birth.Year() < 1900 {
 			return "", time.Time{}, errIDCardFormat
 		}
-		return raw, birth, nil
+		return idCard18From15(raw), birth, nil
 	default:
 		return "", time.Time{}, errIDCardFormat
 	}
+}
+
+// idCard18From15 expands a legacy 15-digit number to its 18-digit equivalent:
+// insert the century "19" and append the ISO 7064 check digit. The caller must
+// have validated the 15-digit shape.
+func idCard18From15(raw string) string {
+	body := raw[:6] + "19" + raw[6:15]
+	return body + string(idCardCheckDigit(body))
+}
+
+// idCardCheckDigit computes the 18th character for the first 17 digits.
+func idCardCheckDigit(id17 string) byte {
+	weights := [17]int{7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2}
+	codes := "10X98765432"
+	sum := 0
+	for i := 0; i < 17; i++ {
+		sum += int(id17[i]-'0') * weights[i]
+	}
+	return codes[sum%11]
+}
+
+// normalizeIDCardForHash maps the legacy 15-digit form to the canonical
+// 18-digit form. Anything else is upper-cased and trimmed only; validation
+// rejects malformed input before it can be stored or hashed.
+func normalizeIDCardForHash(raw string) string {
+	raw = strings.ToUpper(strings.TrimSpace(raw))
+	if idCard15RE.MatchString(raw) {
+		return idCard18From15(raw)
+	}
+	return raw
 }
 
 // validateBackfillIDCard is the stricter profile-backfill rule: the legacy
@@ -94,17 +129,15 @@ func validateBackfillIDCard(raw string) (string, time.Time, error) {
 }
 
 func idCard18ChecksumValid(id string) bool {
-	weights := [17]int{7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2}
-	codes := "10X98765432"
-	sum := 0
-	for i, weight := range weights {
-		digit := int(id[i] - '0')
-		if digit < 0 || digit > 9 {
+	if len(id) != 18 {
+		return false
+	}
+	for i := 0; i < 17; i++ {
+		if id[i] < '0' || id[i] > '9' {
 			return false
 		}
-		sum += digit * weight
 	}
-	return id[17] == codes[sum%11]
+	return id[17] == idCardCheckDigit(id[:17])
 }
 
 func idCardKey(secret string) []byte {

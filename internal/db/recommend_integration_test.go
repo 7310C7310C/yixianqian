@@ -198,14 +198,75 @@ func TestIntegrationWeeklyRecommendations(t *testing.T) {
 	if pinned := recommendPinnedIDs(t, ctx, pool, week1, female(1)); len(pinned) != 0 {
 		t.Fatalf("same-gender like leaked into pinned: %v", pinned)
 	}
+	// 候选池是 users 全表的 active 用户，共享测试库里还有其它用例留下的
+	// 账号（`make ci` 连续跑两次时会命中）。因此这里只断言规则本身：
+	// 不推荐自己、只推荐异性；不要求每个候选都是本用例的夹具。
 	byID := make(map[int64]string, len(males)+len(females))
+	viewers := append(append([]User{}, males...), females...)
+	viewerIDs := make([]int64, 0, len(viewers))
+	for _, viewer := range viewers {
+		viewerIDs = append(viewerIDs, viewer.ID)
+	}
+	fixtureNicknames := make(map[int64]string, len(viewers))
+	nicknameRows, err := pool.Query(ctx,
+		`SELECT id, nickname FROM users WHERE id = ANY($1)`, viewerIDs)
+	if err != nil {
+		t.Fatalf("load fixture nicknames: %v", err)
+	}
+	for nicknameRows.Next() {
+		var (
+			id       int64
+			nickname string
+		)
+		if err := nicknameRows.Scan(&id, &nickname); err != nil {
+			nicknameRows.Close()
+			t.Fatalf("scan fixture nickname: %v", err)
+		}
+		fixtureNicknames[id] = nickname
+	}
+	nicknameRows.Close()
+	if err := nicknameRows.Err(); err != nil {
+		t.Fatalf("iterate fixture nicknames: %v", err)
+	}
 	for _, u := range males {
 		byID[u.ID] = GenderMale
 	}
 	for _, u := range females {
 		byID[u.ID] = GenderFemale
 	}
-	for _, viewer := range append(append([]User{}, males...), females...) {
+	recommended := make(map[int64]bool)
+	for _, viewer := range viewers {
+		for _, id := range list(viewer.ID) {
+			recommended[id] = true
+		}
+	}
+	recommendedIDs := make([]int64, 0, len(recommended))
+	for id := range recommended {
+		recommendedIDs = append(recommendedIDs, id)
+	}
+	if len(recommendedIDs) > 0 {
+		genderRows, err := pool.Query(ctx,
+			`SELECT id, COALESCE(gender, '') FROM users WHERE id = ANY($1)`, recommendedIDs)
+		if err != nil {
+			t.Fatalf("load recommended genders: %v", err)
+		}
+		for genderRows.Next() {
+			var (
+				id     int64
+				gender string
+			)
+			if err := genderRows.Scan(&id, &gender); err != nil {
+				genderRows.Close()
+				t.Fatalf("scan recommended gender: %v", err)
+			}
+			byID[id] = gender
+		}
+		genderRows.Close()
+		if err := genderRows.Err(); err != nil {
+			t.Fatalf("iterate recommended genders: %v", err)
+		}
+	}
+	for _, viewer := range viewers {
 		for _, id := range list(viewer.ID) {
 			if id == viewer.ID {
 				t.Fatalf("viewer %d recommended self", viewer.ID)
@@ -340,9 +401,14 @@ func TestIntegrationWeeklyRecommendations(t *testing.T) {
 	if summary.Entries <= 0 || summary.Generated.IsZero() {
 		t.Fatalf("summary entries=%d generated=%v", summary.Entries, summary.Generated)
 	}
+	// 样本来自全表，可能包含其它用例残留的账号（昵称可为空），只校验
+	// 管理端真正依赖的字段；本用例夹具的昵称另行确认。
 	for _, row := range summary.Sample {
-		if row.Count <= 0 || row.Nickname == "" {
+		if row.UserID == 0 || row.Count <= 0 || row.UpdatedAt.IsZero() {
 			t.Fatalf("summary row = %+v", row)
+		}
+		if name, ok := fixtureNicknames[row.UserID]; ok && row.Nickname != name {
+			t.Fatalf("fixture summary row = %+v, want nickname %q", row, name)
 		}
 	}
 }

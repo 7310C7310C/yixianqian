@@ -59,18 +59,21 @@ func (d *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 		return fmt.Errorf("db: create schema_migrations: %w", err)
 	}
 
-	rows, err := conn.Query(ctx, "SELECT version FROM schema_migrations")
+	rows, err := conn.Query(ctx, "SELECT version, name FROM schema_migrations")
 	if err != nil {
 		return fmt.Errorf("db: read schema_migrations: %w", err)
 	}
-	applied := make(map[int64]bool)
+	applied := make(map[int64]string)
 	for rows.Next() {
-		var v int64
-		if err := rows.Scan(&v); err != nil {
+		var (
+			v    int64
+			name string
+		)
+		if err := rows.Scan(&v, &name); err != nil {
 			rows.Close()
 			return fmt.Errorf("db: scan schema_migrations: %w", err)
 		}
-		applied[v] = true
+		applied[v] = name
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -78,7 +81,18 @@ func (d *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 	}
 
 	for _, m := range list {
-		if applied[m.version] {
+		// Compare the recorded name, not just the version: a database that was
+		// migrated when files had different numbers (e.g. 0006 = id_card_hash
+		// before 0006 was reused for the weekly list) would otherwise skip the
+		// new file forever and run with a schema that is missing columns.
+		if name, ok := applied[m.version]; ok {
+			if name != m.name {
+				return fmt.Errorf(
+					"db: migration %04d is recorded as %q but the embedded file is %04d_%s; "+
+						"this database was migrated with a different numbering. "+
+						"Recreate it (dropdb/createdb) and rerun migrations; see docs/MIGRATION.md",
+					m.version, name, m.version, m.name)
+			}
 			continue
 		}
 		start := time.Now()

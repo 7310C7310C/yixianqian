@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-24
+last_verified: 2026-10-25
 sources:
   - deploy/**
   - .env.example
@@ -255,6 +255,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' -b /tmp/yxq_cookies \
 
 - 相互喜欢交换：准备两个已相互喜欢的测试账号。只有一方 `contact_consent` 时，双方 `/legacy/api/likes/me` 的 `mutual[].their_wechat` 必须为空且 `wechat_status` 为 `waiting_other`/`need_consent`；另一方在 SPA「相互喜欢」页填写并打开同意开关后，双方应看到对方微信号，且各收到 1 条 `wechat_exchange` 通知（重复刷新不增加）。匿名喜欢者不得出现在 mutual 列表。
 - observer 账号 `has_face=true`、`id_valid=false` 且 `/legacy/api/cards` 403，属预期。
+- 无生日账号回归（B1）：挑 `birthday IS NULL AND id_card_valid=false` 的账号（staging 现有 4 个观察员 + 100 个 active 测试账号），补填合法 18 位证号后应 200，`users.birthday` 写成证内生日、`id_valid=true`、`/legacy/api/cards` 200；已有生日且与证号不一致仍应 400 `id_card_birthday_mismatch`。
 
 ## 管理台 `/admin` smoke
 

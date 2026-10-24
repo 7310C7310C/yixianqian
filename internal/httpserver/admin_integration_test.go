@@ -13,7 +13,56 @@ import (
 
 	"github.com/7310C7310C/yixianqian/internal/auth"
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// stashForeignSuperAdmins removes super_admin assignments held by accounts
+// other than keepID, then restores them when the test ends. It keeps the
+// "last super_admin" guard test deterministic on a shared test database
+// without touching product code. If the fixture is already the only holder it
+// is a no-op.
+func stashForeignSuperAdmins(t *testing.T, ctx context.Context, pool *pgxpool.Pool, keepID int64) {
+	t.Helper()
+	rows, err := pool.Query(ctx, `
+		SELECT aur.user_id
+		  FROM admin_user_roles aur
+		  JOIN admin_roles ar ON ar.id = aur.role_id
+		 WHERE ar.code = 'super_admin' AND aur.user_id <> $1`, keepID)
+	if err != nil {
+		t.Fatalf("list foreign super_admins: %v", err)
+	}
+	var foreign []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			t.Fatalf("scan foreign super_admin: %v", err)
+		}
+		foreign = append(foreign, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate foreign super_admins: %v", err)
+	}
+	if len(foreign) == 0 {
+		return
+	}
+	if _, err := pool.Exec(ctx, `
+		DELETE FROM admin_user_roles
+		 WHERE role_id = (SELECT id FROM admin_roles WHERE code = 'super_admin')
+		   AND user_id = ANY($1)`, foreign); err != nil {
+		t.Fatalf("stash foreign super_admins: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(), `
+			INSERT INTO admin_user_roles (user_id, role_id)
+			SELECT u.id, (SELECT id FROM admin_roles WHERE code = 'super_admin')
+			  FROM users u WHERE u.id = ANY($1)
+			ON CONFLICT DO NOTHING`, foreign); err != nil {
+			t.Errorf("restore foreign super_admins: %v", err)
+		}
+	})
+}
 
 // TestIntegrationAdminHTTP covers server-side RBAC, CSRF, review actions,
 // temporary passwords, forced password changes, reports, suggestions, role
@@ -67,6 +116,14 @@ func TestIntegrationAdminHTTP(t *testing.T) {
 	must(super, "super_admin")
 	must(reviewer, "reviewer")
 	must(moderator, "content_moderator")
+
+	// The "last super_admin" guard asserted below assumes this fixture is the
+	// only holder. A long-lived shared test database can still carry a
+	// super_admin left by an earlier run (server1's yixianqian_test did), which
+	// would turn the expected 409 into a 200. Stash foreign holders for the
+	// duration of this test and restore them afterwards; product code is
+	// unchanged and the shared database ends in its original state.
+	stashForeignSuperAdmins(t, ctx, pool, super.ID)
 
 	plainClient := loginMessageClient(t, database, server, plain)
 	reviewerClient := loginMessageClient(t, database, server, reviewer)

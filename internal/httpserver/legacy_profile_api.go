@@ -133,6 +133,7 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	backfilled := false
+	birthdayFromID := false
 	if hasID {
 		if profile.IDCardValid {
 			legacyErrorCode(w, http.StatusBadRequest, "id_card_locked", "身份证号已核验，不可修改")
@@ -143,11 +144,14 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 			legacyErrorCode(w, http.StatusBadRequest, "invalid_id_card", "身份证号码格式不正确，请填写18位有效身份证号")
 			return
 		}
+		// Registration always asked for a birthday, but migrated v1 accounts
+		// and test/observer accounts can have none, and there is no birthday
+		// editor in the profile form. The ID card is authoritative, so fill a
+		// missing birthday in the same update instead of dead-ending the gate.
 		if profile.Birthday == nil {
-			legacyErrorCode(w, http.StatusBadRequest, "invalid_id_card", "请先在资料中填写生日后再补填身份证号")
-			return
-		}
-		if !sameCalendarDay(*profile.Birthday, birth) {
+			upd.Birthday = &birth
+			birthdayFromID = true
+		} else if !sameCalendarDay(*profile.Birthday, birth) {
 			legacyErrorCode(w, http.StatusBadRequest, "id_card_birthday_mismatch", "身份证上的出生日期与资料生日不一致，请核对后重试")
 			return
 		}
@@ -211,6 +215,10 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	if backfilled {
 		a.audit(r, &user.ID, "profile.id_card.backfilled", "user", strconv.FormatInt(profile.ID, 10),
 			map[string]any{"last4": upd.IDCardLast4, "source": "legacy"})
+	}
+	if birthdayFromID {
+		a.audit(r, &user.ID, "profile.birthday.from_id", "user", strconv.FormatInt(profile.ID, 10),
+			map[string]any{"source": "legacy"})
 	}
 	if upd.Wechat != nil {
 		a.ensureMutualWechatForUser(r.Context(), user.ID)

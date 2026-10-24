@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-24
+last_verified: 2026-10-25
 sources:
   - migrations/**
   - tools/migrate_testapp.py
@@ -21,6 +21,7 @@ sources:
 - 该表属于派生数据，可由生成任务重建：`DELETE FROM weekly_recommendations WHERE week='<week>'`
   后由启动补跑或管理端「重新生成本周名单」重算，不需要回填历史周。
 - 不迁移 v1 的多维表格推荐表（原实现只写本地 JSON 文件，且 web 侧从未读取）。
+- 迁移 runner 卫生（2026-10-25）：读取 `schema_migrations.name` 并与嵌入文件名比对；同一版本号但名字不同直接报错（例如旧编号曾把 `id_card_hash` 记为 `0006`，导致新的 `0006_weekly_recommendations_list` 永久跳过、表缺 `target_user_id`）。按错误提示 `dropdb`/`createdb` 重建后重跑即可；staging 是 v5 正常升级，不受影响。
 
 ## 1. 来源盘点（2026-10-19 导出基线）
 
@@ -62,8 +63,8 @@ sources:
 
 - 迁移 `0007_id_card_hash.sql` 只新增 `users.id_card_hash` 列与部分唯一索引（`WHERE id_card_hash IS NOT NULL`），只增不改、不回填存量。
 - 数据导入只写 `id_card_last4` 与 `id_card_valid`，**不写 `id_card_ciphertext`/`id_card_hash`**；密文与哈希只有注册或资料补填会写入。迁移用户的 `id_card_valid=false` 保持原样，不做 grandfather。
-- 补填（2026-10-24）：用户端资料编辑在 `id_card_valid=false` 时显示「身份证号」；仅接受 18 位、校验位正确、证内生日与资料生日一致、`id_card_hash` 未被其他账号占用的号码。通过后 AES-GCM 写密文、写后四位与 HMAC 哈希并置 `id_card_valid=true`；审计只记后四位。服务端门禁见 `docs/STATUS.md` §4 / `docs/DECISIONS.md` §27。
-- 观察员不豁免身份证；`has_face` 仍按 v1 豁免。观察员可在资料页仅补填身份证号（其他字段只读），补填成功后解除门禁。
+- 补填（2026-10-25）：用户端资料编辑在 `id_card_valid=false` 时显示「身份证号」；仅接受 18 位、校验位正确、`id_card_hash` 未被其他账号占用的号码。资料生日为空时按证内生日补全并在同一次更新写入（审计 `profile.birthday.from_id`）；已有生日与证内生日不一致仍拒绝。注册若提交旧 15 位号码，先归一为 18 位（`19` 前缀 + 校验位）再加密/HMAC，保证同一张证只有一条唯一性记录。通过后 AES-GCM 写密文、写后四位与 HMAC 哈希并置 `id_card_valid=true`；审计只记后四位。服务端门禁见 `docs/STATUS.md` §4 / `docs/DECISIONS.md` §27。
+- 观察员不豁免身份证；`has_face` 仍按 v1 豁免。观察员可在资料页仅补填身份证号（其他字段只读，无生日也可补填），补填成功后解除门禁。
 - 存量 1 个有密文的账号不回填哈希（需要部署密钥解密）；其 `id_card_valid` 已为 true，不影响门禁。若后续需要把存量 valid 用户纳入唯一性，可另起一次性离线任务：解密→HMAC→写回，先备份并审计。
 
 ### 3.3 对账与媒体口径

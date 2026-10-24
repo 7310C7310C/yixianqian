@@ -617,6 +617,7 @@ func profileUpdateFieldNames(upd db.ProfileUpdate) []string {
 	}
 	add("nickname", upd.Nickname != nil)
 	add("height_cm", upd.HeightCM != nil)
+	add("birthday", upd.Birthday != nil)
 	add("education", upd.Education != nil)
 	add("city", upd.City != nil)
 	add("church", upd.Church != nil)
