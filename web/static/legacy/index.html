@@ -192,7 +192,9 @@
   .edit-photo-grid { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px; }
   .edit-photo-item { position: relative; width: 96px; height: 96px; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
   .edit-photo-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .edit-photo-del { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; font-size: 14px; line-height: 18px; text-align: center; cursor: pointer; }
+  /* 删除照片：视觉仍是 20px 圆点，但命中区 44×44（移动端误触照片是不可恢复操作） */
+  .edit-photo-del { position: absolute; top: 0; right: 0; width: 44px; height: 44px; padding: 4px; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: flex-end; background: transparent; cursor: pointer; z-index: 2; }
+  .edit-photo-del-icon { width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; font-size: 14px; line-height: 18px; text-align: center; }
   .edit-photo-cover { position: absolute; left: 4px; top: 4px; padding: 1px 6px; border-radius: 4px; background: #ff6b81; color: #fff; font-size: 11px; }
   .edit-photo-setcover { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 0; background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; text-align: center; cursor: pointer; }
   .edit-photo-add-btn { margin: 0 16px 8px; height: 44px; border: 1px dashed #ff6b81; border-radius: 8px; background: #fff; color: #ff6b81; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; cursor: pointer; }
@@ -259,7 +261,8 @@
   .van-theme-dark .pw-tip { color: #a0a0a4; }
   .van-theme-dark .pw-error { background: #3a1f22; color: #ffb3bf; }
   /* 返回导航 */
-  .back-nav { background: #fff; padding: 14px 12px; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 500; color: #323233; border-bottom: 1px solid #f2f3f5; cursor: pointer; position: sticky; top: 0; z-index: 10; }
+  /* 通用返回列：iPhone 刘海/状态栏下必须让出顶部安全区，否则返回键落进系统手势区 */
+  .back-nav { background: #fff; padding: 14px 12px; padding-top: calc(14px + constant(safe-area-inset-top)); padding-top: calc(14px + env(safe-area-inset-top)); display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 500; color: #323233; border-bottom: 1px solid #f2f3f5; cursor: pointer; position: sticky; top: 0; z-index: 10; }
   .back-nav .van-icon { font-size: 22px; }
   /* 分组 */
   .group-candidate { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
@@ -283,7 +286,7 @@
   .gs-page { padding-bottom: calc(130px + env(safe-area-inset-bottom)); }
   .gs-notice { display: flex; align-items: flex-start; gap: 8px; background: #fff7e6; color: #ed6a0c; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.6; margin-bottom: 10px; }
   .gs-notice .van-icon { flex-shrink: 0; margin-top: 2px; cursor: pointer; font-size: 16px; }
-  .gs-search-sticky { position: sticky; top: 54px; z-index: 9; }
+  .gs-search-sticky { position: sticky; top: 54px; top: calc(54px + constant(safe-area-inset-top)); top: calc(54px + env(safe-area-inset-top)); z-index: 9; }
   .gs-fixed-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: #fff; border-top: 1px solid #f2f3f5; }
   .gs-bottom-bar { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
   .gs-count-text { font-size: 13px; color: #969799; }
@@ -736,6 +739,9 @@
   .van-theme-dark .group-member, .van-theme-dark .back-nav, .van-theme-dark .card-tabs,
   .van-theme-dark .feedback-btn, .van-theme-dark .back-btn, .van-theme-dark .edit-photo-add-btn,
   .van-theme-dark .modal-card { background: #222226; }
+  /* 修改手机号：密码验证浮层要盖住 pageBusy 遮罩（z-index 9997） */
+  .phone-pw-mask { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
+  .van-theme-dark .phone-pw-mask .modal-card { background: #222226; }
   .van-theme-dark .activity-poster, .van-theme-dark .card-photo-wrap { background: #2c2c30; }
   .van-theme-dark .activity-card h3, .van-theme-dark .info-section-content, .van-theme-dark .info-grid-item,
   .van-theme-dark .info-grid-item .df-value, .van-theme-dark .msg-name, .van-theme-dark .msg-content,
@@ -916,6 +922,15 @@
   .embed-slide-enter-from { opacity: 0; transform: translateX(20px); }
   .embed-slide-leave-to { opacity: 0; transform: translateX(20px); }
   .embed-skeleton { width: 100%; max-width: 1080px; min-height: 60vh; margin: 0 auto; padding: 16px 12px 24px; box-sizing: border-box; }
+  /* iframe 载入失败/被拦截时的兜底：不给用户留一块白屏 */
+  .embed-fallback { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px 24px calc(32px + env(safe-area-inset-bottom)); text-align: center; background: #f7f8fa; }
+  .embed-fallback-icon { font-size: 40px; line-height: 1; }
+  .embed-fallback-title { font-size: 17px; font-weight: 600; color: #323233; }
+  .embed-fallback-desc { font-size: 14px; color: #646566; line-height: 1.6; max-width: 320px; }
+  .embed-fallback-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .van-theme-dark .embed-fallback { background: #141416; }
+  .van-theme-dark .embed-fallback-title { color: #f5f5f5; }
+  .van-theme-dark .embed-fallback-desc { color: #c8c9cc; }
   .embed-sk-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   .embed-sk-pill { width: 96px; height: 36px; border-radius: 999px; }
   .embed-sk-card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
@@ -1006,7 +1021,7 @@
 <div v-else-if="bootError" class="boot-error-page">
   <div class="login-logo">💔</div>
   <div class="login-title">加载失败</div>
-  <div class="login-desc">{{ bootError }}<br>请检查网络后重试</div>
+  <div class="login-desc">{{ bootError }}<br><span v-if="!bootError.includes('网络')">请检查网络后重试</span></div>
   <van-button type="primary" color="#ff6b81" style="width:86%;max-width:340px;" @click="retryBoot">重试</van-button>
 </div>
 <!-- 未登录 -->
@@ -1320,6 +1335,7 @@
           <van-tag v-if="act.group_status" plain type="primary">{{ act.group_status }}</van-tag>
         </div>
         <div class="activity-desc">{{ act.description || '暂无描述' }}</div>
+        <div style="font-size:13px; color:#48484a;">{{ activityListTime(act) }}</div>
         <div style="font-size:13px; color:#969799;">📍 {{ act.location || '待定' }}</div>
         <div class="signup-bar" v-if="showSignupInfo">
           <div class="signup-count" v-if="showSignupInfo">已报名 <b>{{ act.current_signup }}</b>/{{ act.max_signup || '不限' }}</div>
@@ -1655,9 +1671,10 @@
 <!-- ========== 管理员·活动控制台（模式卡 + 动态 tabs） ========== -->
 <div v-else-if="page==='group_detail'" key="group_detail" class="page ga-page">
   <div class="back-nav" @click="gaBack"><van-icon name="arrow-left"></van-icon> 返回</div>
-  <div class="ga-title" style="display:flex; align-items:center; gap:8px;">
+  <div class="ga-title" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
     <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ gaDetail ? (gaDetail.name || '未命名活动') : '活动' }}</span>
     <span v-if="gaDetail" class="ga-chip" :class="gaModeChipClass(gaDetail)"><span class="ga-chip-dot"></span>{{ gaModeChip(gaDetail) }}</span>
+    <van-button v-if="gaDetailDbId" size="small" plain type="primary" color="#ff6b81" style="min-height:44px; padding:0 14px;" @click="openBroadcast()">📣 广播</van-button>
     <van-button v-if="gaDetailDbId" size="small" plain type="primary" color="#ff6b81" style="min-height:44px; padding:0 14px;" @click="openEditActivity()">✏️ 编辑</van-button>
     <van-button size="small" plain type="primary" color="#ff6b81" style="min-height:44px; padding:0 14px;" @click="openCheckinPage({activity_id: gaDetailId, name: gaDetail ? (gaDetail.name || '') : ''})">📋 现场签到</van-button>
   </div>
@@ -2226,12 +2243,12 @@
     <van-icon name="arrow-left"></van-icon> 返回
   </div>
   <div class="profile-detail">
-    <div class="edit-tip">除姓名、圣名、生日、家乡外，其它资料均可修改</div>
+    <div class="edit-tip">除姓名、圣名、生日、家乡外，其它资料均可修改；手机号是登录账号，修改需验证当前密码</div>
     <div class="edit-card" style="margin-bottom:12px;">
       <div class="edit-photo-grid">
         <div v-for="(p, i) in profilePhotos" :key="p" class="edit-photo-item">
           <img :src="p" alt="">
-          <div class="edit-photo-del" @click.stop="deletePhoto(i)">×</div>
+          <div class="edit-photo-del" role="button" tabindex="0" :aria-label="'删除第' + (i + 1) + '张照片'" @click.stop="deletePhoto(i)" @keydown.enter.stop="deletePhoto(i)"><span class="edit-photo-del-icon">×</span></div>
           <div v-if="i===0" class="edit-photo-cover">封面</div>
           <div v-else class="edit-photo-setcover" @click.stop="setCover(i)">设为封面</div>
         </div>
@@ -2424,6 +2441,7 @@
             <van-tag v-if="act.group_status" plain type="primary">{{ act.group_status }}</van-tag>
             <van-tag v-if="act.onetoone_status" plain type="primary">{{ act.onetoone_status }}</van-tag>
           </div>
+          <div style="font-size:13px; color:#48484a;">{{ activityListTime(act) }}</div>
           <div style="font-size:13px; color:#969799;">📍 {{ act.location || '待定' }}</div>
         </div>
         <!-- 志愿/结果入口与「活动」页卡片一致（模式开关控制；随时可改、签到未到置灰+提示） -->
@@ -2556,6 +2574,7 @@
         </div>
         <div class="activity-desc">{{ currentActivity.description || '暂无描述' }}</div>
         <div class="detail-meta">
+          <div>🗓️ 活动时间：{{ activityRangeText(currentActivity) }}</div>
           <div>📍 {{ currentActivity.location || '待定' }}</div>
           <div>💰 费用：{{ currentActivity.fee > 0 ? currentActivity.fee + '元' : '免费' }}</div>
           <div>🍚 食宿：{{ currentActivity.food || '无' }}</div>
@@ -2892,6 +2911,23 @@
     <div style="margin-top:10px; font-size:13px; color:#969799;" @click="showPayDialog=false">取消</div>
   </div>
 </van-popup>
+<!-- 修改手机号：登录账号变更需验证当前密码（后端 password_required/password_invalid/...） -->
+<div v-if="showPhonePasswordDialog" class="phone-pw-mask" @click.self="cancelPhonePassword">
+  <div class="modal-card" style="max-width:340px;">
+    <div style="padding:22px 18px 12px;">
+      <div class="modal-title">验证当前密码</div>
+      <div class="modal-body" style="line-height:1.6;">手机号也是登录账号。修改后请用新号码登录，因此需要先验证当前密码。</div>
+      <div style="margin-top:14px; border:1px solid #ebedf0; border-radius:8px; overflow:hidden;">
+        <van-field v-model="phonePassword" type="password" placeholder="请输入当前密码" :border="false" autocomplete="current-password" @keyup.enter="confirmPhonePassword" />
+      </div>
+      <div v-if="phonePasswordError" class="pw-error" style="margin:10px 0 0;" role="alert">{{ phonePasswordError }}</div>
+    </div>
+    <div class="modal-divider" style="display:flex;">
+      <div class="modal-action modal-action-muted" style="flex:1;" @click="cancelPhonePassword">取消</div>
+      <div class="modal-action modal-action-primary" style="flex:1; border-left:1px solid #ebedf0;" :class="{disabled: phonePasswordBusy}" @click="confirmPhonePassword">{{ phonePasswordBusy ? '验证中…' : '确认修改' }}</div>
+    </div>
+  </div>
+</div>
 <!-- 未保存离开提示（守卫注册表全站共用：profile_edit / group_select / 各可编辑浮层） -->
 <div v-if="showUnsavedConfirm" style="position:fixed; top:0; left:0; right:0; bottom:0; z-index:9998; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
   <div class="modal-card" style="max-width:320px;">
@@ -3451,7 +3487,7 @@
     </div>
   </div>
   <div class="embed-body">
-    <div v-if="embedLoading" class="embed-loading">
+    <div v-if="embedLoading && !embedFailed" class="embed-loading">
       <div class="embed-skeleton" aria-hidden="true">
         <div class="embed-sk-tabs">
           <span v-for="n in 4" :key="n" class="embed-sk-pill embed-sk-shimmer"></span>
@@ -3467,8 +3503,17 @@
         </div>
       </div>
     </div>
-    <iframe ref="embedFrame" class="embed-frame" :class="{ 'embed-frame--ready': embedReady }" :src="embedUrl" :title="embedTitle"
+    <iframe v-show="!embedFailed" ref="embedFrame" class="embed-frame" :class="{ 'embed-frame--ready': embedReady }" :src="embedUrl" :title="embedTitle"
       @load="onEmbedLoad"></iframe>
+    <div v-if="embedFailed" class="embed-fallback" role="alert">
+      <div class="embed-fallback-icon" aria-hidden="true">⚠️</div>
+      <div class="embed-fallback-title">管理台加载失败</div>
+      <div class="embed-fallback-desc">请检查网络后重试，或返回管理台。</div>
+      <div class="embed-fallback-actions">
+        <van-button size="small" plain type="primary" color="#ff6b81" style="min-height:44px; padding:0 18px;" @click="retryEmbed">重试</van-button>
+        <van-button size="small" type="primary" color="#ff6b81" style="min-height:44px; padding:0 18px;" @click="returnAdminHome">返回管理台</van-button>
+      </div>
+    </div>
   </div>
 </div>
 </Transition>
@@ -4750,7 +4795,7 @@ createApp({
             else reject(new Error(data.error||'上传失败，请稍后重试'));
           } catch(err){ reject(err); }
         };
-        xhr.onerror = ()=> reject(new Error('网络异常，请重试'));
+        xhr.onerror = ()=> reject(new Error(NETWORK_ERROR_MESSAGE));
         xhr.ontimeout = ()=> reject(new Error('上传超时，请重试'));
         xhr.timeout = 60000;
         xhr.send(formData);
@@ -4791,6 +4836,27 @@ createApp({
     async function deletePhoto(i) {
       if (i < 0 || i >= profilePhotos.value.length) return;
       if (uploadingPhoto.value) { vant.showToast('照片处理中，请稍候'); return; }   // 并发照片操作按索引互踩：在途时禁点
+      // 删除会同时删掉 R2 对象，不可恢复；最后一张还会触发人脸门禁，必须二次确认
+      const isLast = profilePhotos.value.length <= 1;
+      let message;
+      if (isLast) {
+        message = '这是最后一张照片，删除后将无法使用（需重新上传本人清晰照片并通过审核）。删除后无法恢复。';
+      } else if (i === 0) {
+        message = '第一张是头像与牵线封面，删除后会自动顺延下一张。删除后无法恢复。';
+      } else {
+        message = '删除后无法恢复。';
+      }
+      try {
+        await vant.showConfirmDialog({
+          title: '删除这张照片？',
+          message,
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+          confirmButtonColor: '#ee0a24',
+        });
+      } catch (e) {
+        return;   // 取消/关闭
+      }
       // 避免 forbidClick 永久遮罩：用轻量 loading，不阻塞点击
       uploadingPhoto.value = true; uploadStage.value='process'; uploadProgress.value=30;
       let done=false;
@@ -4834,22 +4900,84 @@ createApp({
       const i = arr.indexOf(opt);
       if (i >= 0) arr.splice(i, 1); else arr.push(opt);
     }
+    const showPhonePasswordDialog = ref(false);
+    const phonePassword = ref('');
+    const phonePasswordError = ref('');
+    const phonePasswordBusy = ref(false);
+    function _normalizePhone(v){ return String(v == null ? '' : v).replace(/\D/g, ''); }
+    function _profileField(field){ return editableFields.value.find(f => f.field === field) || null; }
+    // 手机号是登录账号：归一化后与当前号码不同才算「改了手机号」，此时后端强制当前密码。
+    function phoneChangePending(){
+      const f = _profileField('手机号');
+      if (!f) return false;
+      const next = _normalizePhone(f.value);
+      const current = _normalizePhone(profileData.value.phone);
+      return !!next && next !== current;
+    }
     async function saveProfile() {
       if (savingProfile.value) return;
       if (uploadingPhoto.value) { vant.showToast('照片还在处理中，请稍候'); return; }   // 照片在途：保存会让页面与服务端状态对不上
+      if (phoneChangePending()) {
+        phonePassword.value = '';
+        phonePasswordError.value = '';
+        showPhonePasswordDialog.value = true;
+        return;
+      }
+      await _submitProfile('');
+    }
+    function cancelPhonePassword() {
+      if (phonePasswordBusy.value || savingProfile.value) return;
+      showPhonePasswordDialog.value = false;
+      phonePassword.value = '';
+      phonePasswordError.value = '';
+    }
+    async function confirmPhonePassword() {
+      if (phonePasswordBusy.value || savingProfile.value) return;
+      const pw = String(phonePassword.value || '');
+      if (!pw) { phonePasswordError.value = '请输入当前密码'; return; }
+      phonePasswordError.value = '';
+      await _submitProfile(pw);
+    }
+    async function _submitProfile(currentPassword) {
       const payload = {};
       editableFields.value.forEach(f => { payload[f.field] = f.value; });
+      if (currentPassword) payload.current_password = currentPassword;
       savingProfile.value = true;
+      if (currentPassword) phonePasswordBusy.value = true;
       setPageBusy('保存中…');   // 页面级锁：保存在途期间页面不可改（P16）
       try {
         await api('/api/profile', { method: 'PUT', body: JSON.stringify(payload) });
         vant.showToast('保存成功');
+        showPhonePasswordDialog.value = false;
+        phonePassword.value = '';
+        phonePasswordError.value = '';
         try { profileEditSnapshot = _editFingerprint(); } catch(e){}
         profileLoaded.value = false;
-        await openProfileDetail();
-      } catch(e) { vant.showToast(e.message); }
-      savingProfile.value = false;
-      clearPageBusy();
+        await openProfileDetail();   // 成功后重拉资料（手机号等以服务端为准）
+      } catch(e) {
+        const code = (e && e.code) ? e.code : '';
+        if (currentPassword && code === 'password_invalid') {
+          phonePasswordError.value = '当前密码不正确，请重试';
+        } else if (currentPassword && code === 'password_required') {
+          phonePasswordError.value = '请输入当前密码';
+        } else if (code === 'password_not_set') {
+          showPhonePasswordDialog.value = false;
+          vant.showToast('该账号尚未设置密码，请联络管理员修改手机号');
+        } else if (code === 'phone_taken') {
+          showPhonePasswordDialog.value = false;
+          vant.showToast(e.message || '该手机号已被其他账号使用');
+        } else if (currentPassword && code === 'rate_limited') {
+          phonePasswordError.value = e.message || '密码尝试过于频繁，请稍后再试';
+        } else if (currentPassword && showPhonePasswordDialog.value) {
+          phonePasswordError.value = e.message || '保存失败，请重试';
+        } else {
+          vant.showToast(e.message || '保存失败，请重试');
+        }
+      } finally {
+        savingProfile.value = false;
+        phonePasswordBusy.value = false;
+        clearPageBusy();
+      }
     }
 
     // 分组
@@ -4929,6 +5057,9 @@ createApp({
     const embedLoading = ref(false);
     const embedReady = ref(false);
     const embedFrame = ref(null);
+    const embedFailed = ref(false);      // iframe 载入失败/被拦截：显示兜底面板，不留白屏
+    const embedTargetUrl = ref('');      // 重试时回到的原 URL
+    let embedWatchdog = null;
 
     // 报名名单
     const signupSheetShow = ref(false);
@@ -5077,6 +5208,23 @@ createApp({
       if (options && options.suppressAuthPrompt) return;
       notifySessionExpired();
     }
+    // 断网/连接被重置时浏览器只给英文原文（Failed to fetch / Load failed / TypeError），
+    // 用户看不懂；网络层失败统一成中文，业务错误（服务端 error 文案）原样保留。
+    const NETWORK_ERROR_MESSAGE = '网络不稳定，请稍后重试';
+    function isNetworkError(e){
+      if (!e) return false;
+      if (e.network === true) return true;
+      if (e.name === 'TypeError') return true;   // fetch 网络层失败的典型形态
+      const m = String(e.message || '');
+      return m.includes('Failed to fetch') || m.includes('Load failed') || m.includes('NetworkError');
+    }
+    function asNetworkError(e){
+      if (!isNetworkError(e)) return e;
+      const err = new Error(NETWORK_ERROR_MESSAGE);
+      err.network = true;
+      err.cause = e;
+      return err;
+    }
     async function api(url, options = {}) {
       // 单次请求；每次重新读 CSRF、新建 controller/超时，避免复用已 abort 的 controller。
       const attempt = async () => {
@@ -5102,9 +5250,9 @@ createApp({
             err.timeout = true;
             throw err;
           }
-          // fetch 网络层失败（DNS/连接重置等），打标记供 GET 重试判断
-          e.network = true;
-          throw e;
+          // fetch 网络层失败（DNS/连接重置/断网），打标记供 GET 重试判断；文案统一中文
+          const err = asNetworkError(e);
+          throw err;
         }
         clearTimeout(timeout);
         const contentType = resp.headers.get('Content-Type') || '';
@@ -5415,6 +5563,23 @@ createApp({
     }
 
     // 活动
+    // 时间字段来自 legacy 视图：start_time/end_time 为 "2026-10-17 09:00" 或「待定」。
+    function activityListTime(act){
+      const start = String((act && act.start_time) || '').trim();
+      if (!start || start === '待定') return '🗓️ 活动时间待定';
+      return '🗓️ ' + start + ' 开始';
+    }
+    function activityRangeText(act){
+      const start = String((act && act.start_time) || '').trim();
+      const end = String((act && act.end_time) || '').trim();
+      const startOk = start && start !== '待定';
+      const endOk = end && end !== '待定';
+      if (!startOk && !endOk) return '待定';
+      if (!startOk) return '结束 ' + end;
+      if (!endOk) return start + ' 开始';
+      if (start === end) return start;
+      return start + ' – ' + end;
+    }
     // 每次进入活动页都拉一次：活动状态（分组/一对一）由 bot 写入，缓存会让卡片显示
     // 过期的「填志愿/看结果」入口；已有数据时静默替换、不闪加载态，并发去重
     async function loadActivities() {
@@ -6368,18 +6533,52 @@ createApp({
       try { window.scrollTo(0, embedLockY); } catch(e) {}
     }
     function openEmbed(url, title) {
+      embedTargetUrl.value = url;
       embedUrl.value = url;
       embedTitle.value = title || '';
       embedLoading.value = true;
       embedReady.value = false;
+      embedFailed.value = false;
       embedOpen.value = true;
       lockPageScroll();
+      startEmbedWatchdog();
+    }
+    function startEmbedWatchdog() {
+      stopEmbedWatchdog();
+      // 管理台首屏最慢 p99 约 10s；15s 还没 ready 就认为加载失败（断网/被拦/白屏）
+      embedWatchdog = setTimeout(() => {
+        embedWatchdog = null;
+        if (embedOpen.value && !embedReady.value && !embedFailed.value) markEmbedFailed();
+      }, 15000);
+    }
+    function stopEmbedWatchdog() {
+      if (embedWatchdog) { clearTimeout(embedWatchdog); embedWatchdog = null; }
+    }
+    function markEmbedFailed() {
+      if (!embedOpen.value || embedReady.value) return;
+      embedFailed.value = true;
+      embedLoading.value = false;
+      stopEmbedWatchdog();
+    }
+    function retryEmbed() {
+      if (!embedOpen.value) return;
+      const target = embedTargetUrl.value || '/admin?embed=1';
+      const title = embedTitle.value;
+      closeEmbed();
+      nextTick(() => { openEmbed(target, title); });
+    }
+    function returnAdminHome() {
+      const title = '管理后台';
+      closeEmbed();
+      nextTick(() => { openEmbed('/admin?embed=1', title); });
     }
     function closeEmbed() {
       if (!embedOpen.value) return;
+      stopEmbedWatchdog();
       embedOpen.value = false;
       embedLoading.value = false;
       embedReady.value = false;
+      embedFailed.value = false;
       embedUrl.value = '';
       embedTitle.value = '';
       unlockPageScroll();
@@ -6428,10 +6627,10 @@ createApp({
       const frame = embedFrame.value;
       if (!frame) return;
       let doc = null, win = null;
-      try { doc = frame.contentDocument; win = frame.contentWindow; } catch (e) { return; }
-      if (!doc || !win) return;
+      try { doc = frame.contentDocument; win = frame.contentWindow; } catch (e) { markEmbedFailed(); return; }
+      if (!doc || !win) { markEmbedFailed(); return; }
       let path = '', search = '', href = '';
-      try { path = win.location.pathname; search = win.location.search || ''; href = win.location.href || ''; } catch (e) { return; }
+      try { path = win.location.pathname; search = win.location.search || ''; href = win.location.href || ''; } catch (e) { markEmbedFailed(); return; }
       if (!path || href === 'about:blank') return;
       // 管理台活动入口在 iframe 内切到 v1 原版 SPA（/app?native_admin=1&p=group_admin）。
       // SPA 自带自己的主题与布局，不能套 embed-admin.css（会改 body 字号/内边距）。
@@ -6450,8 +6649,18 @@ createApp({
       } catch (e) {}
       const inScope = path === '/admin' || path.indexOf('/admin/') === 0 || nativeAdminFrame;
       if (inScope) {
+        // 被 X-Frame-Options 拦截或被反代返回空白页时，iframe 也会触发 load；
+        // SSR 管理页正文为空就按失败处理，给出「返回管理台」，不要留白屏。
+        // native SPA 首帧是空骨架（文字靠 JS 异步填充），不能按 innerText 判定。
+        if (!nativeAdminFrame) {
+          let bodyText = '';
+          try { bodyText = (doc.body && doc.body.innerText ? doc.body.innerText : '').trim(); } catch (e) {}
+          if (!bodyText) { markEmbedFailed(); return; }
+        }
+        embedFailed.value = false;
         embedLoading.value = false;
         embedReady.value = true;
+        stopEmbedWatchdog();
         return;
       }
       // 退出登录或会话失效：关闭 overlay，回到 SPA 的登录入口
@@ -8427,15 +8636,12 @@ createApp({
 
     // 网络层失败（fetch 断连/换网）→ 浏览器原文是 "Failed to fetch"/"Load failed"，用户看不懂
     function gaNetError(e) {
-      if (!e) return false;
-      if (e.name === 'TypeError') return true;   // fetch 网络层失败的典型形态
-      const m = String(e.message || '');
-      return m.includes('Failed to fetch') || m.includes('Load failed') || m.includes('NetworkError');
+      return isNetworkError(e);
     }
     function gaMsg(e, fallback) {
       const m = (e && e.message) ? e.message : '';
       if (!m) return fallback;
-      if (gaNetError(e)) return '网络不太稳，再试一次看看';
+      if (gaNetError(e)) return NETWORK_ERROR_MESSAGE;
       return m;   // 含「请求超时，请检查网络后重试」等既有文案，原样透出
     }
     // 分组管理台只读 GET：网络层失败隔 600ms 自动重试一次。
@@ -8483,6 +8689,11 @@ createApp({
     function openEditActivity() {
       if (!gaDetailDbId.value) return;
       openEmbed('/admin/activities/' + gaDetailDbId.value + '/edit', '编辑活动');
+    }
+    // 广播：管理台 SSR 活动页的 #broadcast tab（原生控制台只做入口，发送仍在管理台）。
+    function openBroadcast() {
+      if (!gaDetailDbId.value) return;
+      openEmbed('/admin/activities/' + gaDetailDbId.value + '#broadcast', '活动广播');
     }
     async function loadGroupAdminList() {
       if (gaLoading.value) return;
@@ -8721,7 +8932,7 @@ createApp({
       } catch(e) {
         clearTimeout(timeout);
         if (e.name === 'AbortError') throw new Error('请求超时，请检查网络后重试');
-        throw e;
+        throw asNetworkError(e);
       }
     }
     function closeGaRunPopup() { if (!gaRunBusy.value) gaRunPopupShow.value = false; }
@@ -9328,6 +9539,7 @@ createApp({
       gateMessage, gateTitle, gateIcon, retryGate, syncMe,
       accountStatusLabel, toggleAccountStatus, legacyLogout, openAdminConsole,
       activities, loadingActivities, currentActivity, actionLoading, activityDetailFrom,
+      activityListTime, activityRangeText,
       isAttendancePresent, isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
       cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoLoading,
@@ -9353,6 +9565,7 @@ createApp({
       showSuggestionDialog, suggestionType, suggestionText, openSuggestionDialog, onSuggestionBeforeClose, suggestionSubmitting,
       likesData, loadingLikes, loadMyLikesCount, notifications, unreadCount, unreadBadge, markNotificationsRead,
       embedOpen, embedUrl, embedTitle, embedLoading, embedReady, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
+      embedFailed, retryEmbed, returnAdminHome,
       nativeAdmin, gaBack,
       myLikesList, loadingMyLikes, myLikesCount, openMyLikes, openMutual, openLikedMe,
       myActivitiesList, loadingMyActivities, openMyActivities,
@@ -9364,6 +9577,7 @@ createApp({
       profileData, openProfileDetail, loadingProfileDetail,
       editableFields, showSelectPopup, showMultiPopup, pickerField, savingProfile,
       openProfileEdit, openPicker, openMultiPicker, pickSelect, clearPickerField, toggleMulti, saveProfile,
+      showPhonePasswordDialog, phonePassword, phonePasswordError, phonePasswordBusy, confirmPhonePassword, cancelPhonePassword,
       showUnsavedConfirm, unsavedConfirmBody, discardLeaveConfirm, cancelLeaveConfirm,
       photoInput, uploadingPhoto, uploadProgress, uploadStage, faceChecking, pickPhoto, onPhotoChange, profilePhotos, deletePhoto, setCover,
       candidates, selectedChoices, candidateQuery, visibleCandidates, loadingCandidates, candidatesError, gsSlowLoading, gsVerySlowLoading, groupResult, groupResultLoading, myGender,
@@ -9399,7 +9613,7 @@ createApp({
       paUserDetail, paUserDetailShow, paUserDetailLoading, paUserDetailOid,
       openPointsAdmin, paOpenUser, paShowLedger, clearPaFilter,
       gaAdminBadge, openGroupAdmin, loadGroupAdminList, gaLoading, gaError, gaList, gaQ, gaFilteredList, gaStats, gaChipClass, gaModeChip, gaModeChipClass, gaStatusChipText, gaStatusChipClass, gaRowSub, openGroupDetail, openCheckinPage,
-      gaDetailId, gaDetail, gaDetailDbId, openEditActivity, gaDetailLoading, gaDetailError, gaDetailTab, gaDetailMode, gaModeText, gaModeSwitching, switchMode, gaStepDefs, gaStepIndex, gaExpectedGroups, gaNextRound,
+      gaDetailId, gaDetail, gaDetailDbId, openEditActivity, openBroadcast, gaDetailLoading, gaDetailError, gaDetailTab, gaDetailMode, gaModeText, gaModeSwitching, switchMode, gaStepDefs, gaStepIndex, gaExpectedGroups, gaNextRound,
       gaSigninCode, gaSigninCodeBusy, gaSigninCodeOk, saveGaSigninCode,
       gaActivityStatusOptions, gaActivityStatus, gaActivityStatusBusy, gaActivityStatusTarget, gaActivityStatusChipClass, confirmActivityStatus,
       signinDialogShow, signinCode, signinCodeOk, signinSubmitting, openSelfSignin, closeSigninDialog, submitSelfSignin,

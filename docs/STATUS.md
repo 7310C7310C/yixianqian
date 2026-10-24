@@ -108,6 +108,17 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 管理入口：活动管理经管理台 iframe 内的原版 SPA 承载；麦穗/举报原生化页面仍不暴露（「我的→管理」只有「🛠️ 管理后台」）。
 - 管理台只经 App 内同源 iframe 全屏层承载（`/?admin=1` overlay），返回栏关闭回到原 tab；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开 overlay。
 
+### 用户端审计修复（2026-10-24，UD-02/04/05/06/07 + 管理台广播/iframe 兜底，待部署）
+
+- 活动时间（UD-02）：活动列表卡片显示开始时间（无时间显示「活动时间待定」），详情显示「🗓️ 活动时间：开始 – 结束」与地点；字段沿用 legacy 视图 `start_time`/`end_time`/`location`。
+- 断网文案（UD-04）：`api()`、管理台 `gaApi()` 与上传 XHR 的网络层失败统一映射为「网络不稳定，请稍后重试」，业务错误原文保留；启动错误页不再出现 `Failed to fetch`。
+- iOS 安全区（UD-06）：通用 `.back-nav` 增加 `env(safe-area-inset-top)`（含 `constant()` 回退），分组志愿页 sticky 搜索框同步下移；底部 tabbar/操作条保持 `safe-area-inset-bottom`。
+- 照片删除（UD-07）：删除前二次确认，说明不可恢复；最后一张强提示会触发人脸门禁；删除按钮视觉仍 20px 圆点，命中区扩大到 44×44。
+- 改手机号（UD-05）：资料页改号保存时弹出「当前密码」输入并带 `current_password`；`password_required`/`password_invalid`/`password_not_set`/`phone_taken` 给中文提示；成功后重拉资料详情。
+- 原版活动控制台：控制台页头新增「📣 广播」，在站内 iframe 浮层打开 `/admin/activities/{id}#broadcast`，返回回控制台。
+- 管理台 iframe 兜底：载入失败/被拦截/SSR 空白时显示「管理台加载失败」+「重试 / 返回管理台」，不再白屏；`/?admin=1` 入口保持可用。
+- 证据（本地实例 + staging 克隆库，未部署）：`tools/browser/spa_user_fixes_smoke.py` 390/1280 PASS（活动时间、断网、安全区、照片确认、改号密码、广播往返、iframe 兜底、无 console error）；既有 `public_home_smoke`、`spa_nav_smoke`、`tab_scroll_smoke`、`app_integration_smoke` 全 PASS；`make ci` EXIT=0、`make docs-check` 0 errors。
+
 ### 管理台与后端审计修复（2026-10-24，ADM/UD，待部署）
 
 - 用户列表分页（ADM-01）：`/admin/users` 支持 `page`/`per_page`（默认 50、上限 200），显示筛选后总数与上一页/下一页，搜索与状态筛选覆盖全量；越界页码夹到最后一页；列表快速操作保留筛选与页码。
