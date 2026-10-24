@@ -27,6 +27,32 @@
   }catch(e){}
 })();
 const { createApp, ref, computed, onMounted, watch, nextTick, onUnmounted } = Vue;
+// runtime-only Vue（3.4.27 无编译器构建）不能再把 template 当兜底：渲染器或运行库缺失时
+// 必须给出可诊断的可见错误，而不是静默白屏。这里只依赖 DOM，不依赖 Vue。
+function yxqBootFailure(detail){
+  try{
+    var root = document.getElementById('app');
+    if (root){
+      // 壳上的 v-cloak 会一直 display:none（Vue 没挂载就没人摘它），错误页也会跟着隐身。
+      root.removeAttribute('v-cloak');
+      root.setAttribute('data-boot-error','1');
+      root.innerHTML = '<div class="boot-fail">'
+        + '<div class="boot-fail-title">页面加载失败</div>'
+        + '<div class="boot-fail-detail"></div>'
+        + '<button class="boot-fail-retry" type="button">重新加载</button>'
+        + '</div>';
+      var detailEl = root.querySelector('.boot-fail-detail');
+      if (detailEl) detailEl.textContent = detail;
+      var retry = root.querySelector('.boot-fail-retry');
+      if (retry) retry.onclick = function(){ location.reload(); };
+    }
+  }catch(e){}
+  try{ console.error('[yxq] boot failed:', detail); }catch(e){}
+}
+if (typeof Vue === 'undefined') {
+  yxqBootFailure('运行库未加载（vue.global.prod.js）');
+  throw new Error('yxq: Vue runtime missing');
+}
 // 管理台共用「慢载入」loading：超过 6s 在转圈下方追加提示（页面以为卡死而重载是本次要缓解的问题）。
 // 组件卸载自动清定时器；写操作遮罩等不需要的地方不用它。
 const GaLoading = {
@@ -45,7 +71,7 @@ const GaLoading = {
     ]);
   }
 };
-createApp({
+const yxqApp = createApp({
   render: window.__YXQ_RENDER__,
   components: { 'ga-loading': GaLoading },
   setup() {
@@ -6227,6 +6253,16 @@ createApp({
       gaRunShow, gaRunBusy, gaJobId, gaJobRound, gaJobActivityName, gaJobProgress, gaJobKind, gaMaskTitle, gaMaskSecs, gaRunTip, gaUnknownShow, gaUnknownReload, gaUnknownRetry, gaGroups, gaGroupsRound, gaResultRound, gaResultLoading, gaResultError, selectGaResultRound, startRunFlow, resumeGaPolling, refreshAdminBadge
     };
   }
-}).use(vant).mount('#app');
+});
+if (typeof window.__YXQ_RENDER__ !== 'function') {
+  yxqBootFailure('渲染器未加载（app.render.js 缺失或损坏）');
+} else {
+  try {
+    yxqApp.use(vant).mount('#app');
+  } catch (err) {
+    yxqBootFailure(err && err.message ? err.message : String(err));
+    throw err;
+  }
+}
 
 

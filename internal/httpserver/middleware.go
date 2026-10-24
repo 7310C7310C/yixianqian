@@ -308,11 +308,16 @@ func staticETag(path, encoding string) string {
 	return `"av` + assetVersion + `-` + strconv.FormatUint(uint64(h.Sum32()), 16) + `-` + encoding + `"`
 }
 
-// acceptsGzip reports whether the Accept-Encoding header allows gzip. The
-// parser only understands the gzip token and its q-value, which is all we send.
-// It must agree with the edge nginx map: q=0 (or q=0.000) is a refusal, while
-// q=0.5 still accepts, so the two layers pick the same cache variant.
+// acceptsGzip reports whether the Accept-Encoding header allows gzip.
+//
+// The rule is deliberately order-independent and shared with the edge nginx
+// map: every gzip token must accept it, and a single explicit refusal
+// (q=0, q=0.000, a malformed q, or a negative q) wins. Only the exact "gzip"
+// token counts, so legacy aliases such as "x-gzip" stay identity — the relay
+// normalises the header it forwards ($yxq_upstream_ae), which keeps both
+// layers deciding identically.
 func acceptsGzip(header string) bool {
+	accepted := false
 	for _, part := range strings.Split(header, ",") {
 		fields := strings.Split(strings.TrimSpace(part), ";")
 		if !strings.EqualFold(strings.TrimSpace(fields[0]), "gzip") {
@@ -326,13 +331,15 @@ func acceptsGzip(header string) bool {
 			}
 			parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 			if err != nil {
-				quality = 0
-				break
+				return false
 			}
 			quality = parsed
 			break
 		}
-		return quality > 0
+		if quality <= 0 {
+			return false
+		}
+		accepted = true
 	}
-	return false
+	return accepted
 }

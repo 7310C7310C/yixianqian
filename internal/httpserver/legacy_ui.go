@@ -9,6 +9,7 @@ import (
 	"html"
 	"io/fs"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,7 +21,8 @@ import (
 const legacyIndexPath = "static/legacy/index.html"
 
 // SPA 外壳带一个固定的启动旗标，供内嵌的 Vue 应用判断页面是否由已登录
-// 用户请求。这里只替换该字面量，不写入任何账号资料。
+// 用户请求。旗标本身不含账号资料；登录用户的首页数据由 bootstrap 注入，
+// 且只包含通过 sensitiveBootstrapKey 过滤后的非敏感字段。
 var (
 	legacyAuthFlagOff = []byte("window.__YXQ_AUTHENTICATED__=false;")
 	legacyAuthFlagOn  = []byte("window.__YXQ_AUTHENTICATED__=true;")
@@ -47,8 +49,12 @@ func loadLegacyIndex() ([]byte, error) {
 	return legacyIndexHTML, legacyIndexErr
 }
 
-// serveLegacyApp returns the v1 SPA shell. It is served with no-store because
-// the asset carries the API prefix and compatibility shims, not user data.
+// serveLegacyApp returns the v1 SPA shell with the home bootstrap inlined.
+//
+// The shell is private, no-cache: it may be stored by the browser and reused
+// after a 304, so the embedded payload is limited to non-sensitive home data
+// (contact details, ID documents stay behind the no-store profile API). The
+// ETag therefore covers the bootstrap bytes as well as the shell itself.
 func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	user, authenticated := currentUser(r)
 	if !authenticated {
@@ -71,7 +77,6 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	// 静态资源版本占位（app.css/app.js/库）由服务端注入，避免壳每次部署换 URL。
 	body = bytes.ReplaceAll(body, []byte(legacyAssetVersionLiteral), []byte(assetVersion))
 	body = bytes.ReplaceAll(body, []byte("__ASSET_URL_VERSION__"), []byte(assetVersion))
-	variant := "auth"
 	// Bootstrap the home aggregate into the shell so the SPA does not have to
 	// wait for /legacy/api/home after 300KB of JS. Failures only skip the
 	// shortcut; the shell must render and the client falls back to the API.
@@ -83,7 +88,7 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 		cancel()
 		if bootErr != nil {
 			a.logger(r).Warn("legacy shell bootstrap skipped", "error", bootErr, "user_id", user.ID)
-		} else if raw, mErr := json.Marshal(payload); mErr != nil {
+		} else if raw, mErr := json.Marshal(sanitizeBootstrap(payload)); mErr != nil {
 			a.logger(r).Warn("legacy shell bootstrap marshal failed", "error", mErr, "user_id", user.ID)
 		} else {
 			// json.Marshal escapes HTML; also neutralise the script terminator.
@@ -100,7 +105,7 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	// only ever reuses a body whose embedded personal data is byte-identical.
 	// 64 bits of the payload hash keeps accidental collisions negligible.
 	bootSum := sha256.Sum256(boot)
-	etag := fmt.Sprintf(`"shell-%s-%s-a%s-u%d-%x"`, platform.Version, variant, assetVersion, user.ID, bootSum[:8])
+	etag := fmt.Sprintf(`"shell-%s-auth-a%s-u%d-%x"`, platform.Version, assetVersion, user.ID, bootSum[:8])
 	w.Header().Add("Vary", "Cookie")
 	w.Header().Set("ETag", etag)
 	if mediaETagMatches(r.Header.Get("If-None-Match"), etag) {
@@ -124,4 +129,47 @@ func bootstrapPreloadURL(payload map[string]any) string {
 	}
 	photo, _ := cards[0]["photo"].(string)
 	return photo
+}
+
+// sensitiveBootstrapKeys never enter the shell. The shell is private, no-cache
+// (browser-storable and reusable via 304), while these fields are only exposed
+// by the no-store APIs (/legacy/api/home, /legacy/api/profile).
+var sensitiveBootstrapKeys = map[string]struct{}{
+	"phone":          {},
+	"wechat":         {},
+	"wechat_id":      {},
+	"id_card":        {},
+	"id_card_no":     {},
+	"id_card_number": {},
+	"id_card_front":  {},
+	"id_card_back":   {},
+}
+
+func sensitiveBootstrapKey(key string) bool {
+	_, found := sensitiveBootstrapKeys[strings.ToLower(strings.TrimSpace(key))]
+	return found
+}
+
+// sanitizeBootstrap strips sensitive keys at any depth of the home payload and
+// returns the same map so callers cannot accidentally keep an unsanitized copy.
+func sanitizeBootstrap(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if sensitiveBootstrapKey(key) {
+				delete(typed, key)
+				continue
+			}
+			sanitizeBootstrap(child)
+		}
+	case []map[string]any:
+		for _, child := range typed {
+			sanitizeBootstrap(child)
+		}
+	case []any:
+		for _, child := range typed {
+			sanitizeBootstrap(child)
+		}
+	}
+	return value
 }

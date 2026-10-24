@@ -38,6 +38,10 @@ jobs:
         run: go mod download
       - name: 格式检查
         run: test -z "$(gofmt -l .)" || (gofmt -l .; exit 1)
+      # 新增/修改 web/static 源文件却没重生成 .gz 时这里失败（解压后逐字节比对，
+      # 与 Go 版本无关：flate 输出跨版本不同，不能用压缩字节比较）。
+      - name: 静态预压缩
+        run: go run ./tools/static_gzip -check
       - name: 生成
         run: go generate ./...
       - name: vet

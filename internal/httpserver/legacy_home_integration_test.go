@@ -224,3 +224,34 @@ func TestIntegrationShellBootstrapETagAndAnon(t *testing.T) {
 		t.Fatalf("anon location=%q", loc)
 	}
 }
+
+func TestIntegrationShellBootstrapOmitsSensitiveFields(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	me, client := env.createUser(t, "U-BOOT3", "隐私用户", "active", "user")
+	attachTestPhoto(t, env, me.ID)
+	if _, err := env.pool.Exec(env.ctx,
+		`UPDATE users SET wechat = $2 WHERE id = $1`, me.ID, "wx-secret-8888"); err != nil {
+		t.Fatal(err)
+	}
+
+	shell := readBody(t, client.get("/app"))
+	for _, banned := range []string{`"phone"`, `"wechat"`, "wx-secret-8888"} {
+		if strings.Contains(shell, banned) {
+			t.Fatalf("shell bootstrap leaked %s（壳是 private/no-cache 可复用，联系方式只能走 no-store API）", banned)
+		}
+	}
+	// 首页数据本身仍要完整：昵称、额度、门禁字段都在。
+	if !strings.Contains(shell, `"nickname"`) || !strings.Contains(shell, `"id_valid"`) {
+		t.Fatal("shell bootstrap lost non-sensitive home data")
+	}
+
+	// /legacy/api/home 仍是 no-store 的完整载荷（含联系方式），语义未变。
+	apiResp := client.get("/legacy/api/home")
+	if got := apiResp.Header.Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Fatalf("api home cache-control=%q", got)
+	}
+	api := readBody(t, apiResp)
+	if !strings.Contains(api, `"wechat":"wx-secret-8888"`) || !strings.Contains(api, `"phone"`) {
+		t.Fatalf("api home payload lost contact fields: %s", api[:min(len(api), 200)])
+	}
+}

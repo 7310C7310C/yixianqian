@@ -279,6 +279,12 @@ func TestAcceptsGzip(t *testing.T) {
 		"": false, "gzip": true, "gzip, deflate, br": true, "gzip;q=0": false, "deflate": false,
 		"GZIP": true, "gzip;q=0.0": false, "gzip; q=0.000": false, "gzip;q=0.5": true,
 		"br, gzip;q=0": false, "br;q=1, gzip;q=0.001": true,
+		// 与边缘 map 对齐：只认裸 gzip token（x-gzip 不算），
+		// 任一明确拒绝/非法 q 都归 identity（顺序无关）。
+		"x-gzip": false, "x-gzip;q=1": false, "gzipx": false,
+		"gzip;q=abc": false, "gzip;q=": false, "gzip;q=-1": false,
+		"gzip;q=1, gzip;q=0": false, "gzip;q=0, gzip;q=1": false,
+		"gzip;level=1": true, "gzip;q=1;level=1": true,
 	} {
 		if got := acceptsGzip(header); got != want {
 			t.Fatalf("acceptsGzip(%q)=%v want %v", header, got, want)

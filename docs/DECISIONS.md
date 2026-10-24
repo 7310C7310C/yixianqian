@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-24
+last_verified: 2026-10-25
 sources: []
 -->
 
@@ -223,3 +223,13 @@ sources: []
 - 观察员口径：观察员继续豁免 `has_face`，**不豁免身份证**（PM 2026-10-22）；观察员 `id_card_valid=false` 时同样 403，资料接口仍可读到 `id_valid=false`。为拆掉「资料只读 + 门禁拦截」死锁，观察员资料页只暴露「身份证号」一个可写字段（服务端拒绝任何夹带的其他字段），补填成功后恢复只读。
 - 边界：不改注册审核状态机、不改 v1 的喜欢/通知匿名语义；相互喜欢通知只在双方就绪时发送，绝不把匿名喜欢者身份带入 mutual 页。`id_card_hash` 只用于唯一性，不写日志/响应；存量密文不批量解密回填哈希。
 - 证据：`TestIntegrationIDCardGateAndBackfill`、`TestIntegrationIDCardBackfillUniqueness`、`TestIntegrationObserverStillBlockedByIDCard`、`TestIntegrationMutualWechatExchange`、`TestIntegrationMutualWechatDoesNotLeakAnonymousLike`、`TestWechatIDValidation`、`TestBackfillIDCardRequires18Digits`、`tools/test_migrate_testapp.py`（微信号空值不覆盖）。
+
+## 28. 性能批次4：壳内联首页 bootstrap 的数据边界与前端兜底（2026-10-25）
+
+- 背景：把首页聚合内联进 `/`、`/app` 壳后，壳从「无数据」变成「含个人首页数据」。壳仍为 `private, no-cache`（浏览器可落盘、304 可复用），而原 `/legacy/api/home` 是 `no-store`；若整份载荷内联，联系方式与身份证字段的落盘口径会比 API 更宽。
+- 决策：壳内 bootstrap **只含非敏感首页数据**。服务端 `sanitizeBootstrap` 递归删除 `phone`、`wechat`、`wechat_id`、`id_card`、`id_card_no`、`id_card_number`、`id_card_front`、`id_card_back`；门禁类布尔（`id_valid`、`has_face`、`account_status`）与展示字段保留。联系方式/身份证只能经 `no-store` 的 `/legacy/api/home`、`/legacy/api/profile` 获取（「我的」tab 仍走 profile）。壳的 ETag 覆盖 bootstrap 字节（64bit hash）+ `assetVersion` + 用户 id，`Vary: Cookie`，因此 304 只复用逐字节相同的个人数据。
+- 决策：Vue 采用 runtime-only 3.4.27（与官方 `vue.runtime.global.prod.js` 字节一致）后，**不再承诺「`app.render.js` 缺失时回退运行时编译」**。改为显式失败可见：`Vue` 未加载或 `window.__YXQ_RENDER__` 非函数时，`app.js` 渲染 `.boot-fail` 错误页（含原因与「重新加载」）并写 `console.error('[yxq] boot failed')`；相关文档与注释同步改写。
+- 决策：静态预压缩门禁以「内容」为准而非「压缩字节」：`tools/static_gzip -check` 校验 `.gz` 存在且解压后与源文件逐字节一致，`-strict-bytes` 仅本机重生后使用。原因：flate 输出跨 Go 版本不同（1.24.7 与 1.27.3 字节不同、内容相同），go.mod/CI 是 1.24.x；`ci.yml` lint-build 执行该检查，新增源文件忘生成 `.gz` 必红。
+- 决策：边缘 `Accept-Encoding` 两态规整。`map $yxq_static_enc` 只把「裸 gzip token」或「q 值含非零数字」判为 gzip（`x-gzip`、`q=0`、非法 q 落 identity），回源再经 `map $yxq_static_enc $yxq_upstream_ae` 发送 `gzip` 或空值。这样 Go 与边缘永远做同一决定，不会出现「identity 缓存键里存 gzip 字节」这种会伤客户端的错配。
+- 边界：不改媒体授权/隐私语义；不把 bootstrap 写入共享缓存（`private` + `Vary: Cookie`，边缘 `/` 无 `proxy_cache`）；`/legacy/api/home` 与 `/legacy/api/profile` 的字段与 `no-store` 不变。
+- 证据：`TestSanitizeBootstrapStripsSensitiveKeys`、`TestIntegrationShellBootstrapOmitsSensitiveFields`（壳无 phone/wechat/值，API 仍是 no-store 且含联系方式）、`TestAcceptsGzip`（x-gzip/q=abc/冲突 q）、`tools/static_gzip -check` 在 Go 1.24.7 与 1.27.3 均 OK、`app_integration` smoke 新增 `run_bootstrap_fallback`（故障注入走骨架路径）。

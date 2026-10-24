@@ -334,7 +334,9 @@ curl -s -o /dev/null -w 'media 304=%{http_code}\n' -H "Cookie: yxq_session=$C" -
   ```
   然后按静态资源变更 bump `internal/httpserver/templates.go` 的 `assetVersion` 并重新构建部署。
 - `@vue/compiler-dom` 必须与 `lib/vue.global.prod.js` 版本一致（当前 3.4.27）；升级 Vue 必须同步升级并重新生成。
-- 回滚：`app.render.js` 缺失时 `app.js` 自动回退运行时编译；彻底回滚用 `git revert` + 重新部署。
+- **回滚不依赖运行时编译**（批次4 起 Vue 为 runtime-only，没有编译器）：`app.render.js` 缺失/损坏时
+  `app.js` 不白屏，直接渲染「页面加载失败 + 重新加载」错误页并 `console.error`；恢复靠重新部署正确
+  `app.render.js`（或 `git revert` 预编译提交后重建）。
 
 ## 性能批次4：首屏数据内联 + 静态预压缩 + runtime-only Vue
 
@@ -342,7 +344,16 @@ curl -s -o /dev/null -w 'media 304=%{http_code}\n' -H "Cookie: yxq_session=$C" -
 - 安全：`json.Marshal` 默认转义 HTML，再把 `</` 替换成 `<\/`，昵称含 `</script>` 也不会逃出脚本块；集成测试覆盖 XSS 转义、匿名、ETag/304。
 - **静态预压缩**：`make static-gzip`（`go run ./tools/static_gzip`）为 `web/static/**` 的 `.js/.css/.html/.svg` 生成 gzip -9 兄弟文件并随 `go:embed` 发布；Go 静态 handler 按 `Accept-Encoding` 返回 `.gz`（`Content-Encoding: gzip`、`Vary: Accept-Encoding`、`ETag` 带 `-gzip/-identity`、`If-None-Match` 304），无变体时回退 `FileServer`；直接请求 `*.gz` 返回 404。`make ci` 跑 `static-gzip-check`，`TestStaticGzipFilesMatchSources` 校验每个 `.gz` 解压后与源文件逐字节一致。
 - 兼容：nginx `map $http_accept_encoding $yxq_static_enc` 把 `gzip;q=0` 判为 identity（拒绝规则排在 `~*gzip` 前），`proxy_cache_key` 追加该变量；否则 q=0 客户端会把 identity 字节写进 gzip 缓存条目。
-- **runtime-only Vue**：`lib/vue.global.prod.js` 换成同版本 3.4.27 `vue.runtime.global.prod.js`（147KB→90KB）；全仓已无运行时模板（根模板走 `app.render.js`，`GaLoading` 改为 `render()`）；回退 = 换回带编译器的构建并重新生成 `app.render.js`（生成器不变）。
+- **runtime-only Vue**：`lib/vue.global.prod.js` 换成同版本 3.4.27 `vue.runtime.global.prod.js`（147,796→90,713B）；
+  全仓已无运行时模板（根模板走 `app.render.js`，`GaLoading` 改为 `render()`）。
+  **不再有 template 兜底**：`Vue` 未加载或 `window.__YXQ_RENDER__` 不是函数时，`app.js` 渲染可见错误页
+  （`.boot-fail`，含详情与「重新加载」）并 `console.error('[yxq] boot failed')`，不再是白屏。
+  彻底回退 = `git revert` 批次4（同时换回带编译器的 Vue）。
+- **静态预压缩门禁**：`-check` 只校验「`.gz` 存在且解压后与源文件逐字节一致」，因此与生成它的 Go 版本无关
+  （flate 输出跨版本不同；Go 1.24.7 与 1.27.3 的字节不同但内容相同）；`-strict-bytes` 仅用于本机刚重生后的严格比对。
+  `ci.yml` lint-build 已执行 `go run ./tools/static_gzip -check`，新增源文件忘生成 `.gz` 会红。
+- **边缘 Accept-Encoding 规整**：`map $yxq_static_enc $yxq_upstream_ae` 只回源 `gzip` 或空值，
+  两条 map 不可能与 Go 判定分叉（否则会出现 identity 键里存 gzip 字节）；`x-gzip`、`q=0`、非法 q 一律 identity。
 - 回滚：`git revert` 本批次提交后重建部署（静态资源与模板都在二进制里，改磁盘无效）；nginx 两个配置文件回滚备份见批次1 §6，回滚后需 `nginx -t && systemctl reload nginx`。
 
 ## 用户端 smoke

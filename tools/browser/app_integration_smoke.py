@@ -39,6 +39,7 @@ PSQL_CMD 只用于插入/清理标题以「集成测试通知」开头的测试�
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -554,6 +555,82 @@ def run_polling_fallback(browser, base_url: str, cookie: str, user_legacy_id: st
         context.close()
 
 
+def run_bootstrap_fallback(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """故障注入：强制壳不带 bootstrap，验证骨架→数据回退这条路径仍有回归覆盖。
+
+    带 bootstrap 时页面直达 tabbar（批次4），骨架路径平时不会被走到；
+    这里把文档里的 __YXQ_BOOTSTRAP__ 改写成 null 并挂起 /legacy/api/home，
+    断言先出现骨架、放行后骨架消失且 tabbar 可见。
+    """
+    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
+    context.add_cookies([{
+        "name": "yxq_session",
+        "value": cookie,
+        "url": base_url,
+        "httpOnly": True,
+        "sameSite": "Lax",
+    }])
+    page = context.new_page()
+    errors = attach_error_capture(page)
+    home_route = HeldRoute()
+
+    def strip_bootstrap(route) -> None:
+        response = route.fetch()
+        body = re.sub(
+            r"window\.__YXQ_BOOTSTRAP__=\{.*?\};",
+            "window.__YXQ_BOOTSTRAP__=null;",
+            response.text(),
+            count=1,
+            flags=re.S,
+        )
+        route.fulfill(response=response, body=body)
+
+    context.route(base_url.rstrip("/") + "/", strip_bootstrap)
+    context.route("**/legacy/api/home", home_route)
+    try:
+        page.goto(base_url.rstrip("/") + "/", wait_until="domcontentloaded")
+        if page.evaluate("!!window.__YXQ_BOOTSTRAP__"):
+            raise SmokeFailure("故障注入失败：壳里仍是完整 bootstrap")
+        page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=10000)
+        home_route.release()
+        page.locator(".app-boot-skeleton").wait_for(state="hidden", timeout=20000)
+        page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
+        page.screenshot(path=str(out_dir / "app-bootstrap-fallback-390.png"))
+        assert_no_console_errors(errors, "390px bootstrap 回退")
+        return []
+    except Exception as exc:  # noqa: BLE001 - report every failure
+        return [f"390px bootstrap 回退: {exc}"]
+    finally:
+        context.close()
+
+
+def run_render_missing(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """runtime-only Vue：app.render.js 取不到时必须显示可见错误页，而不是白屏。"""
+    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
+    context.add_cookies([{
+        "name": "yxq_session",
+        "value": cookie,
+        "url": base_url,
+        "httpOnly": True,
+        "sameSite": "Lax",
+    }])
+    context.route("**/static/legacy/app.render.js*", lambda route: route.abort())
+    page = context.new_page()
+    try:
+        page.goto(base_url.rstrip("/") + "/", wait_until="domcontentloaded")
+        page.locator(".boot-fail").wait_for(state="visible", timeout=10000)
+        if "页面加载失败" not in page.locator(".boot-fail-title").inner_text():
+            raise SmokeFailure("错误页标题缺失")
+        if not page.locator(".boot-fail-detail").inner_text().strip():
+            raise SmokeFailure("错误页没有可诊断详情")
+        page.screenshot(path=str(out_dir / "app-render-missing-390.png"))
+        return []
+    except Exception as exc:  # noqa: BLE001 - report every failure
+        return [f"390px 渲染器缺失兜底: {exc}"]
+    finally:
+        context.close()
+
+
 def main() -> int:
     base_url = require("BASE_URL").rstrip("/")
     cookie = require("SESSION_COOKIE")
@@ -578,6 +655,8 @@ def main() -> int:
                     browser, width, height, base_url, cookie, user_legacy_id, out_dir,
                     live_sse=True, old_password=old_password, new_password=new_password,
                 ))
+            failures.extend(run_bootstrap_fallback(browser, base_url, cookie, out_dir))
+            failures.extend(run_render_missing(browser, base_url, cookie, out_dir))
             failures.extend(run_polling_fallback(browser, base_url, cookie, user_legacy_id, out_dir))
             browser.close()
     finally:

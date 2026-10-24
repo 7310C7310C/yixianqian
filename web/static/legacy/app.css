@@ -951,3 +951,10 @@
   .van-theme-dark .update-bar { background: #2a1b1f; color: #ffb3bf; border-color: #43262c; }
 
 .card-photo-ghost{background:linear-gradient(90deg,#f1f2f4 25%,#e6e8eb 37%,#f1f2f4 63%);background-size:400% 100%;animation:bootShimmer 1.2s ease infinite;}
+
+/* runtime-only Vue：渲染器/运行库缺失时的可见错误页（替代白屏）。 */
+.boot-fail{min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 20px;text-align:center;color:#323233;}
+.boot-fail-title{font-size:17px;font-weight:600;}
+.boot-fail-detail{font-size:13px;line-height:1.6;color:#969799;word-break:break-all;max-width:32em;}
+.boot-fail-retry{min-height:44px;padding:0 26px;border:0;border-radius:22px;background:#ee5a6f;color:#fff;font-size:15px;}
+.van-theme-dark .boot-fail{color:#f5f6f8;}
