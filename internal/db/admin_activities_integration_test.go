@@ -259,7 +259,7 @@ func TestIntegrationAdminActivityBroadcastAudience(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	audience, err := d.AdminActivityBroadcastAudience(ctx, activity.ID, true, true)
+	audience, err := d.AdminActivityBroadcastAudience(ctx, activity.ID, true, true, true)
 	if err != nil {
 		t.Fatalf("audience: %v", err)
 	}
@@ -278,8 +278,25 @@ func TestIntegrationAdminActivityBroadcastAudience(t *testing.T) {
 			t.Fatalf("observer %d should be excluded: %+v", excluded, audience.ObserverUserIDs)
 		}
 	}
+	// The site-wide singles set is every approved active single, including
+	// members who never signed up and members who cancelled. Pending, matched,
+	// disabled and observer accounts must not be included.
+	singleSet := make(map[int64]bool, len(audience.SingleUserIDs))
+	for _, id := range audience.SingleUserIDs {
+		singleSet[id] = true
+	}
+	for _, included := range []int64{activeUser, cancelledUser} {
+		if !singleSet[included] {
+			t.Fatalf("singles missing fixture %d: %+v", included, audience.SingleUserIDs)
+		}
+	}
+	for _, excluded := range []int64{pendingUser, matchedUser, disabledUser, observer, observerDisabled, observerPending} {
+		if singleSet[excluded] {
+			t.Fatalf("single %d should be excluded: %+v", excluded, audience.SingleUserIDs)
+		}
+	}
 
-	onlyObservers, err := d.AdminActivityBroadcastAudience(ctx, activity.ID, false, true)
+	onlyObservers, err := d.AdminActivityBroadcastAudience(ctx, activity.ID, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,13 +306,16 @@ func TestIntegrationAdminActivityBroadcastAudience(t *testing.T) {
 	if !containsID(onlyObservers.ObserverUserIDs, observer) {
 		t.Fatalf("observers only missing fixture %d: %+v", observer, onlyObservers.ObserverUserIDs)
 	}
+	if len(onlyObservers.SingleUserIDs) != 0 {
+		t.Fatalf("singles should be empty when not requested: %+v", onlyObservers.SingleUserIDs)
+	}
 
-	none, err := d.AdminActivityBroadcastAudience(ctx, activity.ID, false, false)
+	none, err := d.AdminActivityBroadcastAudience(ctx, activity.ID, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if none.SignupUserIDs == nil || none.ObserverUserIDs == nil ||
-		len(none.SignupUserIDs) != 0 || len(none.ObserverUserIDs) != 0 {
+	if none.SignupUserIDs == nil || none.ObserverUserIDs == nil || none.SingleUserIDs == nil ||
+		len(none.SignupUserIDs) != 0 || len(none.ObserverUserIDs) != 0 || len(none.SingleUserIDs) != 0 {
 		t.Fatalf("empty audience = %+v", none)
 	}
 

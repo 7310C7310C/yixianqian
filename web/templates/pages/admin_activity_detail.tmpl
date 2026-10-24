@@ -417,6 +417,7 @@
       <p class="admin-broadcast-audience">
         <span>报名者 <strong>{{.Data.SignupAudienceCount}}</strong> 人</span>
         <span>观察员（全站） <strong>{{.Data.ObserverAudienceCount}}</strong> 人</span>
+        <span>全站单身会员 <strong>{{.Data.SingleAudienceCount}}</strong> 人</span>
         <span>去重后合计 <strong>{{.Data.AudienceTotal}}</strong> 人</span>
       </p>
       {{if .Data.BroadcastNotice}}<div class="admin-alert admin-alert--ok" role="status">{{.Data.BroadcastNotice}}</div>{{end}}
@@ -424,7 +425,7 @@
       {{if .Data.BroadcastPreview}}
       <div class="admin-confirm" role="status">
         <strong>确认发送？</strong>
-        <p>收件人群组：{{if .Data.BroadcastIncludeSignups}}报名者{{end}}{{if and .Data.BroadcastIncludeSignups .Data.BroadcastIncludeObservers}} + {{end}}{{if .Data.BroadcastIncludeObservers}}观察员（全站）{{end}}；去重后 <strong>{{.Data.BroadcastPreviewCount}}</strong> 人。发送后无法撤回，但重复提交不会重复发送。</p>
+        <p>收件人群组：{{.Data.BroadcastAudienceLabel}}；去重后 <strong>{{.Data.BroadcastPreviewCount}}</strong> 人。发送后无法撤回，但重复提交不会重复发送。</p>
       </div>
       {{end}}
       <form method="post" action="/admin/activities/{{$activityID}}/broadcast#broadcast" class="admin-broadcast">
@@ -444,6 +445,13 @@
             <span>全站启用观察员身份的账号，不限本活动</span>
           </span>
           <input type="checkbox" name="include_observers" value="1"{{if .Data.BroadcastIncludeObservers}} checked{{end}}>
+        </label>
+        <label class="admin-check-row">
+          <span class="admin-check-copy">
+            <strong>全站单身会员</strong>
+            <span>全站在册、审核通过的单身会员（不含观察员、待审核、已脱单、已退出与停用账号）</span>
+          </span>
+          <input type="checkbox" name="include_singles" value="1"{{if .Data.BroadcastIncludeSingles}} checked{{end}}>
         </label>
         <label class="admin-field">
           <span class="admin-field-label">通知标题</span>

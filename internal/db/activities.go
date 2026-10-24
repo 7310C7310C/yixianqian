@@ -455,27 +455,13 @@ func (d *DB) bumpActivityAfterSignup(ctx context.Context, tx pgx.Tx, activityID 
 	return nil
 }
 
-// SignupCancelInfo is passed to the future points-refund hook.
-type SignupCancelInfo struct {
-	SignupID        int64
-	ActivityID      int64
-	UserID          int64
-	ActivityNo      string
-	ActivityStartAt *time.Time
-}
-
-// SignupCancelResult reports what the cancellation changed. RefundPoints is
-// always zero until the points module installs the hook.
+// SignupCancelResult reports what the cancellation changed. RefundPoints is the
+// number of wheat ears returned for an active priority order.
 type SignupCancelResult struct {
 	Signup       Signup
 	RefundPoints int
 	RefundErr    error
 }
-
-// SignupCancelRefundHook is the reserved seam for the points module. It runs
-// after the cancellation transaction commits so a ledger failure never makes
-// the user think cancelling failed (the legacy behaviour).
-var SignupCancelRefundHook func(context.Context, SignupCancelInfo) (int, error)
 
 // CancelSignup keeps the signup row as history, decrements the activity count
 // and reopens a full activity. Cancelling is allowed while the activity is
@@ -546,15 +532,22 @@ func (d *DB) CancelSignup(ctx context.Context, userID int64, ref string) (Signup
 		return SignupCancelResult{}, fmt.Errorf("db: commit cancel: %w", err)
 	}
 
+	// The signup is already cancelled: a points failure must not make the user
+	// think the cancellation failed. The priority order is looked up by
+	// activity and stays refundable on a later retry.
 	result := SignupCancelResult{Signup: s}
-	if SignupCancelRefundHook != nil {
-		result.RefundPoints, result.RefundErr = SignupCancelRefundHook(ctx, SignupCancelInfo{
-			SignupID:        s.ID,
-			ActivityID:      activityID,
-			UserID:          userID,
-			ActivityNo:      activityNo,
-			ActivityStartAt: startAt,
-		})
+	var hoursToStart *float64
+	if startAt != nil {
+		hours := startAt.Sub(time.Now()).Hours()
+		hoursToStart = &hours
+	}
+	order, refundErr := d.CancelPriorityOnSignupCancel(ctx, userID, activityNo, hoursToStart, "")
+	if refundErr != nil {
+		result.RefundErr = refundErr
+		return result, nil
+	}
+	if order != nil && order.Refunded {
+		result.RefundPoints = order.Points
 	}
 	return result, nil
 }

@@ -331,7 +331,14 @@ func (d *DB) CreateLike(ctx context.Context, p CreateLikeParams) (CreateLikeResu
 			return CreateLikeResult{}, ErrAlreadyLiked
 		}
 	}
-	quota := ComputeLikeQuota(records, 0, currentMonth)
+	// Redeemed extra real-name slots are permanent monthly additions. Read them
+	// in the same transaction as the like row so the check matches what the
+	// user paid for on /points.
+	permanent, err := extraRealLikeQuotaTx(ctx, tx, p.InitiatorID)
+	if err != nil {
+		return CreateLikeResult{}, err
+	}
+	quota := ComputeLikeQuota(records, permanent, currentMonth)
 	if p.LikeType == LikeTypeReal {
 		if quota.RealLeft <= 0 {
 			return CreateLikeResult{}, ErrLikeQuota
@@ -416,7 +423,7 @@ func (d *DB) CreateLike(ctx context.Context, p CreateLikeParams) (CreateLikeResu
 	if err != nil {
 		return CreateLikeResult{}, err
 	}
-	quota = ComputeLikeQuota(records, 0, currentMonth)
+	quota = ComputeLikeQuota(records, permanent, currentMonth)
 	if err := tx.Commit(ctx); err != nil {
 		return CreateLikeResult{}, fmt.Errorf("db: commit like: %w", err)
 	}
@@ -522,13 +529,18 @@ func listLikesTxBetween(ctx context.Context, tx pgx.Tx, initiatorID, targetID in
 	return out, nil
 }
 
-// LikeQuotaFor computes the viewer's current quota without writing.
+// LikeQuotaFor computes the viewer's current quota without writing. Redeemed
+// extra real-name slots are included so the API matches CreateLike and /points.
 func (d *DB) LikeQuotaFor(ctx context.Context, userID int64, now time.Time) (LikeQuota, error) {
 	records, err := d.listLikeQuotaRecords(ctx, userID)
 	if err != nil {
 		return LikeQuota{}, err
 	}
-	return ComputeLikeQuota(records, 0, MonthKey(now)), nil
+	permanent, err := d.ExtraRealLikeQuota(ctx, userID)
+	if err != nil {
+		return LikeQuota{}, err
+	}
+	return ComputeLikeQuota(records, permanent, MonthKey(now)), nil
 }
 
 func (d *DB) listLikeQuotaRecords(ctx context.Context, userID int64) ([]LikeRecord, error) {

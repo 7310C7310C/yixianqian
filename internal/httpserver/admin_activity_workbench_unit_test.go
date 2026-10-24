@@ -41,6 +41,7 @@ func TestAdminBroadcastPreviewToken(t *testing.T) {
 		Key:              "123e4567-e89b-42d3-a456-426614174000",
 		IncludeSignups:   true,
 		IncludeObservers: false,
+		IncludeSingles:   true,
 		Count:            2,
 		Fingerprint:      adminBroadcastFingerprint([]int64{7, 9}),
 		IssuedAt:         time.Now().Unix(),
@@ -55,6 +56,7 @@ func TestAdminBroadcastPreviewToken(t *testing.T) {
 	}
 	if got.ActivityID != claims.ActivityID || got.Key != claims.Key ||
 		got.IncludeSignups != claims.IncludeSignups || got.IncludeObservers != claims.IncludeObservers ||
+		got.IncludeSingles != claims.IncludeSingles ||
 		got.Count != claims.Count || got.Fingerprint != claims.Fingerprint {
 		t.Fatalf("verified claims = %+v, want %+v", got, claims)
 	}
@@ -83,19 +85,24 @@ func TestAdminBroadcastRecipients(t *testing.T) {
 	audience := db.AdminActivityBroadcastAudience{
 		SignupUserIDs:   []int64{1, 2, 3},
 		ObserverUserIDs: []int64{3, 4},
+		SingleUserIDs:   []int64{2, 5, 1},
 	}
-	if got := adminBroadcastRecipients(audience, true, true); len(got) != 4 ||
-		got[0] != 1 || got[1] != 2 || got[2] != 3 || got[3] != 4 {
+	if got := adminBroadcastRecipients(audience, true, true, true); len(got) != 5 ||
+		got[0] != 1 || got[1] != 2 || got[2] != 3 || got[3] != 4 || got[4] != 5 {
 		t.Fatalf("union = %v", got)
 	}
-	if got := adminBroadcastRecipients(audience, true, false); len(got) != 3 {
+	if got := adminBroadcastRecipients(audience, true, false, false); len(got) != 3 {
 		t.Fatalf("signups only = %v", got)
 	}
-	if got := adminBroadcastRecipients(audience, false, true); len(got) != 2 ||
+	if got := adminBroadcastRecipients(audience, false, true, false); len(got) != 2 ||
 		got[0] != 3 || got[1] != 4 {
 		t.Fatalf("observers only = %v", got)
 	}
-	if got := adminBroadcastRecipients(audience, false, false); len(got) != 0 {
+	if got := adminBroadcastRecipients(audience, false, false, true); len(got) != 3 ||
+		got[0] != 2 || got[1] != 5 || got[2] != 1 {
+		t.Fatalf("singles only = %v", got)
+	}
+	if got := adminBroadcastRecipients(audience, false, false, false); len(got) != 0 {
 		t.Fatalf("empty selection = %v", got)
 	}
 }

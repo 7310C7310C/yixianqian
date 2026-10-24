@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -101,6 +102,125 @@ func (d *DB) CreateNotificationOnce(ctx context.Context, in NotificationInput) (
 		return false, fmt.Errorf("db: commit notification: %w", err)
 	}
 	return tag.RowsAffected() == 1, nil
+}
+
+// CreateNotificationsOnce is the batch form of CreateNotificationOnce used by
+// site-wide broadcasts. It locks every dedupe key in sorted order (so two
+// broadcasts cannot deadlock), filters keys that already exist, and inserts the
+// rest with one statement inside one transaction. Duplicate keys inside the
+// input keep the first entry.
+func (d *DB) CreateNotificationsOnce(ctx context.Context, inputs []NotificationInput) (int, error) {
+	if len(inputs) == 0 {
+		return 0, nil
+	}
+	type row struct {
+		userID    int64
+		kind      string
+		title     string
+		body      string
+		link      string
+		payload   string
+		dedupeKey string
+	}
+	rows := make([]row, 0, len(inputs))
+	seen := make(map[string]bool, len(inputs))
+	keys := make([]string, 0, len(inputs))
+	for _, in := range inputs {
+		if in.UserID == 0 || in.Kind == "" || in.Title == "" {
+			return 0, fmt.Errorf("db: notification user, kind and title are required")
+		}
+		if in.DedupeKey != "" && seen[in.DedupeKey] {
+			continue
+		}
+		payload := make(map[string]any, len(in.Payload)+1)
+		for k, v := range in.Payload {
+			payload[k] = v
+		}
+		if in.DedupeKey != "" {
+			payload["dedupe_key"] = in.DedupeKey
+			seen[in.DedupeKey] = true
+			keys = append(keys, in.DedupeKey)
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return 0, fmt.Errorf("db: marshal notification payload: %w", err)
+		}
+		rows = append(rows, row{
+			userID: in.UserID, kind: in.Kind, title: in.Title,
+			body: in.Body, link: in.Link, payload: string(raw), dedupeKey: in.DedupeKey,
+		})
+	}
+
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("db: begin notifications batch: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	sort.Strings(keys)
+	for _, key := range keys {
+		if _, err := tx.Exec(ctx,
+			`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+			"notification:"+key); err != nil {
+			return 0, fmt.Errorf("db: lock notification key: %w", err)
+		}
+	}
+	existing := make(map[string]bool, len(keys))
+	if len(keys) > 0 {
+		existingRows, err := tx.Query(ctx,
+			`SELECT payload->>'dedupe_key' FROM notifications
+			  WHERE payload->>'dedupe_key' = ANY($1)`, keys)
+		if err != nil {
+			return 0, fmt.Errorf("db: check notification keys: %w", err)
+		}
+		for existingRows.Next() {
+			var key string
+			if err := existingRows.Scan(&key); err != nil {
+				existingRows.Close()
+				return 0, fmt.Errorf("db: scan notification key: %w", err)
+			}
+			existing[key] = true
+		}
+		existingRows.Close()
+		if err := existingRows.Err(); err != nil {
+			return 0, fmt.Errorf("db: iterate notification keys: %w", err)
+		}
+	}
+
+	userIDs := make([]int64, 0, len(rows))
+	kinds := make([]string, 0, len(rows))
+	titles := make([]string, 0, len(rows))
+	bodies := make([]string, 0, len(rows))
+	links := make([]string, 0, len(rows))
+	payloads := make([]string, 0, len(rows))
+	for _, item := range rows {
+		if item.dedupeKey != "" && existing[item.dedupeKey] {
+			continue
+		}
+		userIDs = append(userIDs, item.userID)
+		kinds = append(kinds, item.kind)
+		titles = append(titles, item.title)
+		bodies = append(bodies, item.body)
+		links = append(links, item.link)
+		payloads = append(payloads, item.payload)
+	}
+	created := 0
+	if len(userIDs) > 0 {
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO notifications (user_id, kind, title, body, link, payload)
+			SELECT user_id, kind, title, body, link, payload::jsonb
+			  FROM unnest($1::bigint[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[])
+			       AS batch(user_id, kind, title, body, link, payload)`,
+			userIDs, kinds, titles, bodies, links, payloads)
+		if err != nil {
+			return 0, fmt.Errorf("db: create notifications batch: %w", err)
+		}
+		created = int(tag.RowsAffected())
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("db: commit notifications batch: %w", err)
+	}
+	return created, nil
 }
 
 // ListNotifications returns the current user's notifications, newest first.

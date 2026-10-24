@@ -54,11 +54,12 @@ type AdminActivitySigninStats struct {
 	CheckedInCount int
 }
 
-// AdminActivityBroadcastAudience lists the two independent recipient sets.
-// Cross-set duplicates are kept so the handler can show and dedupe both counts.
+// AdminActivityBroadcastAudience lists the three independent recipient sets.
+// Cross-set duplicates are kept so the handler can show and dedupe all counts.
 type AdminActivityBroadcastAudience struct {
 	SignupUserIDs   []int64
 	ObserverUserIDs []int64
+	SingleUserIDs   []int64
 }
 
 // maskPhone keeps the first three and last four digits for staff recognition.
@@ -200,13 +201,16 @@ func (d *DB) DeleteActivity(ctx context.Context, id int64) error {
 	return nil
 }
 
-// AdminActivityBroadcastAudience resolves the two recipient sets. Signups are
-// limited to active/matched accounts; observers need the observer flag and an
-// active/observer account. The sets stay separate for preview counts.
-func (d *DB) AdminActivityBroadcastAudience(ctx context.Context, activityID int64, includeSignups, includeObservers bool) (AdminActivityBroadcastAudience, error) {
+// AdminActivityBroadcastAudience resolves the three recipient sets. Signups
+// are limited to active/matched accounts; observers need the observer flag and
+// an active/observer account; the site-wide set is every active single member
+// (pending/rejected/matched/left/disabled and observer accounts excluded). The
+// sets stay separate for preview counts and are deduped by the handler.
+func (d *DB) AdminActivityBroadcastAudience(ctx context.Context, activityID int64, includeSignups, includeObservers, includeSingles bool) (AdminActivityBroadcastAudience, error) {
 	out := AdminActivityBroadcastAudience{
 		SignupUserIDs:   make([]int64, 0),
 		ObserverUserIDs: make([]int64, 0),
+		SingleUserIDs:   make([]int64, 0),
 	}
 	if includeSignups {
 		rows, err := d.pool.Query(ctx, `
@@ -254,6 +258,29 @@ func (d *DB) AdminActivityBroadcastAudience(ctx context.Context, activityID int6
 		}
 		if err := rows.Err(); err != nil {
 			return out, fmt.Errorf("db: iterate activity broadcast observers: %w", err)
+		}
+		rows.Close()
+	}
+	if includeSingles {
+		rows, err := d.pool.Query(ctx, `
+			SELECT id FROM users
+			 WHERE status = 'active'
+			   AND account_status = 'active'
+			   AND account_kind = 'user'
+			 ORDER BY id`)
+		if err != nil {
+			return out, fmt.Errorf("db: list activity broadcast singles: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var userID int64
+			if err := rows.Scan(&userID); err != nil {
+				return out, fmt.Errorf("db: scan activity broadcast single: %w", err)
+			}
+			out.SingleUserIDs = append(out.SingleUserIDs, userID)
+		}
+		if err := rows.Err(); err != nil {
+			return out, fmt.Errorf("db: iterate activity broadcast singles: %w", err)
 		}
 		rows.Close()
 	}

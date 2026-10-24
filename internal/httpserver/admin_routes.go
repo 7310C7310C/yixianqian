@@ -609,7 +609,27 @@ func (a *App) handleAdminUserAction(w http.ResponseWriter, r *http.Request, acce
 	}
 	a.audit(r, &access.User.ID, audit, "user", strconv.FormatInt(userID, 10), meta)
 	a.adminNotifyUser(r, userID, "review", adminReviewTitle(action), adminReviewBody(action), "")
+	if action == "approve" {
+		a.startInviteConfirmWindow(r, userID)
+	}
 	adminUserActionRedirect(w, r, notice)
+}
+
+// startInviteConfirmWindow opens the invite reward window once an account is
+// approved. Approval has already committed, so failures are logged and left to
+// the startup backfill instead of failing the admin action.
+func (a *App) startInviteConfirmWindow(r *http.Request, userID int64) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	defer cancel()
+	inviteID, status, err := a.db.StartInviteConfirmWindowForUser(ctx, userID)
+	if err != nil {
+		a.logger(r).Error("start invite confirm window failed", "error", err, "user_id", userID)
+		return
+	}
+	if inviteID > 0 {
+		a.logger(r).Info("invite confirm window started",
+			"invite_id", inviteID, "status", status, "user_id", userID)
+	}
 }
 
 func adminReviewTitle(action string) string {
@@ -1249,6 +1269,9 @@ func (a *App) apiAdminUserAction(w http.ResponseWriter, r *http.Request, access 
 	a.audit(r, &access.User.ID, "admin.user."+action, "user",
 		strconv.FormatInt(userID, 10), meta)
 	a.adminNotifyUser(r, userID, "review", adminReviewTitle(action), adminReviewBody(action), "")
+	if action == "approve" {
+		a.startInviteConfirmWindow(r, userID)
+	}
 	updated, err := a.db.GetAdminUser(r.Context(), userID)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "user_id": userID})

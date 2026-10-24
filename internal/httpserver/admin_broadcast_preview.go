@@ -28,6 +28,7 @@ type adminBroadcastPreviewClaims struct {
 	Key              string `json:"k"`
 	IncludeSignups   bool   `json:"s"`
 	IncludeObservers bool   `json:"o"`
+	IncludeSingles   bool   `json:"g"`
 	Count            int    `json:"c"`
 	Fingerprint      string `json:"f"`
 	IssuedAt         int64  `json:"t"`

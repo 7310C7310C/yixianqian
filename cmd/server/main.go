@@ -101,6 +101,7 @@ func run() error {
 	}
 
 	go cleanupLoop(ctx, database, logger)
+	go inviteLoop(ctx, database, logger)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -128,6 +129,43 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+// inviteLoop settles invite confirmation windows. It runs once at startup (so
+// already-due invites do not wait an hour) and then hourly. Settlement is
+// idempotent: every invite is locked and its reward ledger key is unique.
+func inviteLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	run := func() {
+		runCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		started, err := database.StartPendingInviteWindows(runCtx, 500)
+		if err != nil {
+			logger.Warn("pending invite window backfill failed", "error", err)
+		} else if started > 0 {
+			logger.Info("pending invite windows started", "count", started)
+		}
+		finalized, clawedBack, err := database.SettleDueInvites(runCtx, 500)
+		if err != nil {
+			logger.Warn("invite settlement failed", "error", err)
+			return
+		}
+		if finalized > 0 || clawedBack > 0 {
+			logger.Info("invites settled", "finalized", finalized, "clawed_back", clawedBack)
+		}
+	}
+
+	run()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
 }
 
 func cleanupLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {

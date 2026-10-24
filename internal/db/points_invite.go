@@ -362,6 +362,78 @@ func (d *DB) StartInviteConfirmWindow(ctx context.Context, inviteeID int64, phon
 	return inv.ID, InviteStatusConfirmed, nil
 }
 
+// StartInviteConfirmWindowForUser starts the window for an invitee identified
+// by user id, loading the phone and gender from the account. Approval handlers
+// use it; the call is idempotent so retries and backfills are safe.
+func (d *DB) StartInviteConfirmWindowForUser(ctx context.Context, inviteeID int64) (int64, string, error) {
+	if inviteeID <= 0 {
+		return 0, "", nil
+	}
+	var phone, gender string
+	err := d.pool.QueryRow(ctx,
+		`SELECT phone, gender FROM users WHERE id = $1`, inviteeID).Scan(&phone, &gender)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, "", nil
+	}
+	if err != nil {
+		return 0, "", fmt.Errorf("db: load invitee for confirmation: %w", err)
+	}
+	return d.StartInviteConfirmWindow(ctx, inviteeID, phone, gender)
+}
+
+// StartPendingInviteWindows backfills invites recorded before the approval
+// hook existed (or whose window start failed). Only approved, active singles
+// are eligible; everything else waits for the approval path.
+func (d *DB) StartPendingInviteWindows(ctx context.Context, limit int) (int, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+	rows, err := d.pool.Query(ctx,
+		`SELECT i.invitee_id, u.phone, u.gender
+		   FROM invites i
+		   JOIN users u ON (i.invitee_id = u.id OR (i.invitee_id IS NULL AND u.phone = i.invitee_phone))
+		  WHERE i.status = $1 AND u.status = 'active' AND u.account_status = 'active'
+		  ORDER BY i.id LIMIT $2`,
+		InviteStatusPending, limit)
+	if err != nil {
+		return 0, fmt.Errorf("db: list pending invite windows: %w", err)
+	}
+	type pendingInvite struct {
+		inviteeID int64
+		phone     string
+		gender    string
+	}
+	items := make([]pendingInvite, 0, limit)
+	for rows.Next() {
+		var item pendingInvite
+		if err := rows.Scan(&item.inviteeID, &item.phone, &item.gender); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("db: scan pending invite window: %w", err)
+		}
+		items = append(items, item)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("db: iterate pending invite windows: %w", err)
+	}
+	started := 0
+	var firstErr error
+	for _, item := range items {
+		_, status, err := d.StartInviteConfirmWindow(ctx, item.inviteeID, item.phone, item.gender)
+		if err != nil {
+			// One malformed invite must not block the rest of the batch.
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if status == InviteStatusConfirmed {
+			started++
+		}
+	}
+	return started, firstErr
+}
+
 // pointsInviteBanned treats an explicit administrator disable as the v2
 // equivalent of the old "封禁" status. "left" is deliberately not included:
 // it is a voluntary pause and withdrawing an invite reward for it would be

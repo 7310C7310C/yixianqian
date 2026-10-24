@@ -64,6 +64,7 @@ type adminActivityBroadcastForm struct {
 	Body             string
 	IncludeSignups   bool
 	IncludeObservers bool
+	IncludeSingles   bool
 	Preview          bool
 	PreviewToken     string
 	PreviewCount     int
@@ -91,12 +92,15 @@ type adminActivityDetailPageData struct {
 	RosterNoticeUserID        int64
 	SignupAudienceCount       int
 	ObserverAudienceCount     int
+	SingleAudienceCount       int
 	AudienceTotal             int
 	BroadcastKey              string
 	BroadcastTitle            string
 	BroadcastBody             string
 	BroadcastIncludeSignups   bool
 	BroadcastIncludeObservers bool
+	BroadcastIncludeSingles   bool
+	BroadcastAudienceLabel    string
 	BroadcastPreview          bool
 	BroadcastPreviewToken     string
 	BroadcastPreviewCount     int
@@ -657,6 +661,7 @@ func adminActivityBroadcastFormFromRequest(r *http.Request) adminActivityBroadca
 		Body:             strings.TrimSpace(r.FormValue("broadcast_body")),
 		IncludeSignups:   r.FormValue("include_signups") == "1",
 		IncludeObservers: r.FormValue("include_observers") == "1",
+		IncludeSingles:   r.FormValue("include_singles") == "1",
 	}
 }
 
@@ -674,7 +679,7 @@ func (a *App) renderAdminActivityDetail(w http.ResponseWriter, r *http.Request, 
 		a.renderError(w, r, http.StatusInternalServerError, "系统暂时无法处理", "请稍后再试。")
 		return
 	}
-	audience, err := a.db.AdminActivityBroadcastAudience(r.Context(), activity.ID, true, true)
+	audience, err := a.db.AdminActivityBroadcastAudience(r.Context(), activity.ID, true, true, true)
 	if err != nil {
 		a.logger(r).Error("load admin activity audience failed", "error", err, "activity_id", activity.ID)
 		a.renderError(w, r, http.StatusInternalServerError, "系统暂时无法处理", "请稍后再试。")
@@ -760,12 +765,15 @@ func (a *App) renderAdminActivityDetail(w http.ResponseWriter, r *http.Request, 
 		RosterNoticeUserID:        rosterNoticeUserID,
 		SignupAudienceCount:       len(audience.SignupUserIDs),
 		ObserverAudienceCount:     len(audience.ObserverUserIDs),
-		AudienceTotal:             len(adminBroadcastRecipients(audience, true, true)),
+		SingleAudienceCount:       len(audience.SingleUserIDs),
+		AudienceTotal:             len(adminBroadcastRecipients(audience, true, true, true)),
 		BroadcastKey:              form.Key,
 		BroadcastTitle:            form.Title,
 		BroadcastBody:             form.Body,
 		BroadcastIncludeSignups:   form.IncludeSignups,
 		BroadcastIncludeObservers: form.IncludeObservers,
+		BroadcastIncludeSingles:   form.IncludeSingles,
+		BroadcastAudienceLabel:    adminBroadcastAudienceText(form),
 		BroadcastPreview:          form.Preview,
 		BroadcastPreviewToken:     form.PreviewToken,
 		BroadcastPreviewCount:     form.PreviewCount,
@@ -955,7 +963,7 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 			"请先预览收件人数，确认对象后再发送。", "", "", "")
 		return
 	}
-	if !form.IncludeSignups && !form.IncludeObservers {
+	if !form.IncludeSignups && !form.IncludeObservers && !form.IncludeSingles {
 		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
 			"请至少选择一个收件人群组。", "", "", "")
 		return
@@ -967,13 +975,13 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	audience, err := a.db.AdminActivityBroadcastAudience(r.Context(), activity.ID,
-		form.IncludeSignups, form.IncludeObservers)
+		form.IncludeSignups, form.IncludeObservers, form.IncludeSingles)
 	if err != nil {
 		a.logger(r).Error("load admin activity audience failed", "error", err, "activity_id", activity.ID)
 		a.renderError(w, r, http.StatusInternalServerError, "系统暂时无法处理", "请稍后再试。")
 		return
 	}
-	recipients := adminBroadcastRecipients(audience, form.IncludeSignups, form.IncludeObservers)
+	recipients := adminBroadcastRecipients(audience, form.IncludeSignups, form.IncludeObservers, form.IncludeSingles)
 	if action == "preview" {
 		if len(recipients) == 0 {
 			a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
@@ -988,6 +996,7 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 			Key:              form.Key,
 			IncludeSignups:   form.IncludeSignups,
 			IncludeObservers: form.IncludeObservers,
+			IncludeSingles:   form.IncludeSingles,
 			Count:            len(recipients),
 			Fingerprint:      adminBroadcastFingerprint(recipients),
 			IssuedAt:         a.clock.Now().Unix(),
@@ -1017,7 +1026,8 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 			"预览与当前广播不一致，请重新预览后再发送。", "", "", "")
 		return
 	}
-	if claims.IncludeSignups != form.IncludeSignups || claims.IncludeObservers != form.IncludeObservers {
+	if claims.IncludeSignups != form.IncludeSignups || claims.IncludeObservers != form.IncludeObservers ||
+		claims.IncludeSingles != form.IncludeSingles {
 		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusBadRequest,
 			"收件人群组在预览后已变更，请重新预览后再发送。", "", "", "")
 		return
@@ -1049,9 +1059,12 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
 	defer cancel()
-	sent := 0
+	// One transaction for the whole audience: a site-wide broadcast can target
+	// every active member, and per-recipient transactions would both be slow
+	// and leave partial sends behind on failure.
+	inputs := make([]db.NotificationInput, 0, len(recipients))
 	for _, userID := range recipients {
-		created, err := a.db.CreateNotificationOnce(ctx, db.NotificationInput{
+		inputs = append(inputs, db.NotificationInput{
 			UserID: userID,
 			Kind:   "activity_broadcast",
 			Title:  form.Title,
@@ -1063,23 +1076,20 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 			},
 			DedupeKey: fmt.Sprintf("activity-broadcast:%d:%s:%d", activity.ID, form.Key, userID),
 		})
-		if err != nil {
-			a.logger(r).Error("send activity broadcast failed", "error", err,
-				"activity_id", activity.ID, "user_id", userID)
-			a.audit(r, &access.User.ID, "admin.activity.broadcast", "activity", activity.ActivityNo,
-				map[string]any{
-					"audience":        adminBroadcastAudienceLabels(form),
-					"recipient_count": sent,
-					"title":           form.Title,
-				})
-			a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusInternalServerError,
-				fmt.Sprintf("广播发送中断：已发送 %d 人，请重新提交同一表单继续（不会重复发送）。", sent),
-				"", "", "")
-			return
-		}
-		if created {
-			sent++
-		}
+	}
+	sent, err := a.db.CreateNotificationsOnce(ctx, inputs)
+	if err != nil {
+		a.logger(r).Error("send activity broadcast failed", "error", err, "activity_id", activity.ID)
+		a.audit(r, &access.User.ID, "admin.activity.broadcast", "activity", activity.ActivityNo,
+			map[string]any{
+				"audience":        adminBroadcastAudienceLabels(form),
+				"recipient_count": 0,
+				"title":           form.Title,
+				"failed":          true,
+			})
+		a.renderAdminActivityDetail(w, r, access, activity, form, http.StatusInternalServerError,
+			"广播发送失败，未写入任何通知；请稍后重新提交同一表单。", "", "", "")
+		return
 	}
 	a.audit(r, &access.User.ID, "admin.activity.broadcast", "activity", activity.ActivityNo,
 		map[string]any{
@@ -1094,22 +1104,42 @@ func (a *App) handleAdminActivityBroadcast(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, adminActivityBroadcastHref(activity.ID, notice), http.StatusSeeOther)
 }
 
+// adminBroadcastAudienceText renders the selected groups for the confirmation
+// card; the audit keeps the stable English codes from
+// adminBroadcastAudienceLabels.
+func adminBroadcastAudienceText(form adminActivityBroadcastForm) string {
+	parts := make([]string, 0, 3)
+	if form.IncludeSignups {
+		parts = append(parts, "报名者")
+	}
+	if form.IncludeObservers {
+		parts = append(parts, "观察员（全站）")
+	}
+	if form.IncludeSingles {
+		parts = append(parts, "全站单身会员")
+	}
+	return strings.Join(parts, " + ")
+}
+
 func adminBroadcastAudienceLabels(form adminActivityBroadcastForm) []string {
-	labels := make([]string, 0, 2)
+	labels := make([]string, 0, 3)
 	if form.IncludeSignups {
 		labels = append(labels, "signups")
 	}
 	if form.IncludeObservers {
 		labels = append(labels, "observers")
 	}
+	if form.IncludeSingles {
+		labels = append(labels, "singles")
+	}
 	return labels
 }
 
-// adminBroadcastRecipients unions both sets while preserving signup-first
+// adminBroadcastRecipients unions all three sets while preserving signup-first
 // order; the handler uses it for both preview counts and sending.
-func adminBroadcastRecipients(audience db.AdminActivityBroadcastAudience, includeSignups, includeObservers bool) []int64 {
-	seen := make(map[int64]struct{}, len(audience.SignupUserIDs)+len(audience.ObserverUserIDs))
-	out := make([]int64, 0, len(audience.SignupUserIDs)+len(audience.ObserverUserIDs))
+func adminBroadcastRecipients(audience db.AdminActivityBroadcastAudience, includeSignups, includeObservers, includeSingles bool) []int64 {
+	seen := make(map[int64]struct{}, len(audience.SignupUserIDs)+len(audience.ObserverUserIDs)+len(audience.SingleUserIDs))
+	out := make([]int64, 0, len(audience.SignupUserIDs)+len(audience.ObserverUserIDs)+len(audience.SingleUserIDs))
 	appendIDs := func(ids []int64) {
 		for _, userID := range ids {
 			if _, ok := seen[userID]; ok {
@@ -1124,6 +1154,9 @@ func adminBroadcastRecipients(audience db.AdminActivityBroadcastAudience, includ
 	}
 	if includeObservers {
 		appendIDs(audience.ObserverUserIDs)
+	}
+	if includeSingles {
+		appendIDs(audience.SingleUserIDs)
 	}
 	return out
 }

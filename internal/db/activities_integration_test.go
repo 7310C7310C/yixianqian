@@ -313,26 +313,67 @@ func TestIntegrationSelfSigninGuards(t *testing.T) {
 	}
 }
 
-func TestIntegrationCancelRefundHook(t *testing.T) {
+func TestIntegrationCancelRefundPriority(t *testing.T) {
 	d, ctx := openActivitiesTestDB(t)
-	activity := createActivityFixture(t, d, ctx, activityFixtureOptions{})
 	user := createActivityFixtureUser(t, d, ctx, "壬")
-	if _, err := d.SignupActivity(ctx, user, activity.ActivityNo); err != nil {
+	pointsGrant(t, d, ctx, user, 100, "cancel-refund-priority")
+
+	// More than 48 hours before the start: cancelling refunds the priority
+	// order (there is no hook to inject any more; CancelSignup calls the points
+	// store directly).
+	farStart := time.Now().Add(72 * time.Hour)
+	far := createActivityFixture(t, d, ctx, activityFixtureOptions{MaxSignup: 10, StartAt: &farStart})
+	order, err := d.RedeemPoints(ctx, user, RedeemRequest{Item: RedeemItemPriority, ActivityID: far.ActivityNo})
+	if err != nil {
+		t.Fatalf("redeem priority: %v", err)
+	}
+	if _, err := d.SignupActivity(ctx, user, far.ActivityNo); err != nil {
 		t.Fatal(err)
 	}
-
-	var seen SignupCancelInfo
-	SignupCancelRefundHook = func(_ context.Context, info SignupCancelInfo) (int, error) {
-		seen = info
-		return 30, nil
-	}
-	t.Cleanup(func() { SignupCancelRefundHook = nil })
-
-	result, err := d.CancelSignup(ctx, user, activity.ActivityNo)
+	result, err := d.CancelSignup(ctx, user, far.ActivityNo)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.RefundPoints != 30 || seen.ActivityNo != activity.ActivityNo || seen.UserID != user {
-		t.Fatalf("hook result=%+v info=%+v", result, seen)
+	if result.RefundPoints != order.Cost {
+		t.Fatalf("refund points = %d, want %d", result.RefundPoints, order.Cost)
+	}
+	reloaded, err := d.GetRedemption(ctx, order.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Status != RedeemStatusRefunded {
+		t.Fatalf("priority order status = %q, want refunded", reloaded.Status)
+	}
+	if balance, err := d.PointsBalance(ctx, user); err != nil || balance != 100 {
+		t.Fatalf("balance after refund = %d err=%v, want 100", balance, err)
+	}
+
+	// Less than 48 hours before the start: the order is closed without a
+	// refund, but the slot is released because it no longer counts as active.
+	soonStart := time.Now().Add(24 * time.Hour)
+	soon := createActivityFixture(t, d, ctx, activityFixtureOptions{MaxSignup: 10, StartAt: &soonStart})
+	soonOrder, err := d.RedeemPoints(ctx, user, RedeemRequest{Item: RedeemItemPriority, ActivityID: soon.ActivityNo})
+	if err != nil {
+		t.Fatalf("redeem priority (soon): %v", err)
+	}
+	if _, err := d.SignupActivity(ctx, user, soon.ActivityNo); err != nil {
+		t.Fatal(err)
+	}
+	result, err = d.CancelSignup(ctx, user, soon.ActivityNo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RefundPoints != 0 {
+		t.Fatalf("refund points inside 48h = %d, want 0", result.RefundPoints)
+	}
+	closed, err := d.GetRedemption(ctx, soonOrder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closed.Status != RedeemStatusCancelled {
+		t.Fatalf("priority order inside 48h = %q, want cancelled", closed.Status)
+	}
+	if balance, err := d.PointsBalance(ctx, user); err != nil || balance != 70 {
+		t.Fatalf("balance after cancelled priority = %d err=%v, want 70", balance, err)
 	}
 }

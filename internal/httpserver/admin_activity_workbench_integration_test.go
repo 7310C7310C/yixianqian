@@ -769,3 +769,93 @@ func adminActivityIDFromLocation(t *testing.T, location string) int64 {
 	}
 	return id
 }
+
+func TestIntegrationAdminActivityBroadcastAllSingles(t *testing.T) {
+	database, pool, server, ctx := newMessagesHTTPEnv(t)
+	manager := createMessageUser(t, ctx, database, pool, "全站广播管理员")
+	signer := createMessageUser(t, ctx, database, pool, "全站广播报名者")
+	pending := createMessageUser(t, ctx, database, pool, "全站广播待审核")
+	matched := createMessageUser(t, ctx, database, pool, "全站广播已脱单")
+	disabled := createMessageUser(t, ctx, database, pool, "全站广播已停用")
+	ids := []int64{manager.ID, signer.ID, pending.ID, matched.ID, disabled.ID}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = ANY($1)`, ids) })
+	if changed, err := database.AssignAdminRole(ctx, manager.ID, "activity_manager", true); err != nil || !changed {
+		t.Fatalf("assign activity_manager: changed=%v err=%v", changed, err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE users SET account_status = 'pending' WHERE id = $1`, pending.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE users SET account_status = 'matched' WHERE id = $1`, matched.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE users SET status = 'disabled' WHERE id = $1`, disabled.ID); err != nil {
+		t.Fatal(err)
+	}
+	activity := createWorkbenchActivity(t, ctx, database, pool, "全站单身广播测试")
+	if _, err := database.SignupActivity(ctx, signer.ID, activity.ActivityNo); err != nil {
+		t.Fatalf("signup: %v", err)
+	}
+
+	// Derive the expected audience from the database: other tests may leave
+	// active singles behind in a shared test database.
+	var singleCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM users
+		  WHERE status = 'active' AND account_status = 'active' AND account_kind = 'user'`).
+		Scan(&singleCount); err != nil {
+		t.Fatal(err)
+	}
+
+	client := loginMessageClient(t, database, server, manager)
+	workbenchPath := "/admin/activities/" + strconv.FormatInt(activity.ID, 10)
+	csrf := client.pageCSRF(workbenchPath)
+	key := broadcastKeyFromHTML(t, readBody(t, client.get(workbenchPath)))
+
+	// The site-wide set already contains the signup, so selecting both must
+	// dedupe to exactly the single count.
+	resp := client.postForm(workbenchPath+"/broadcast", url.Values{
+		"csrf_token":       {csrf},
+		"broadcast_key":    {key},
+		"include_signups":  {"1"},
+		"include_singles":  {"1"},
+		"broadcast_action": {"preview"},
+	})
+	previewBody := readBody(t, resp)
+	wantCount := "去重后 <strong>" + strconv.Itoa(singleCount) + "</strong> 人"
+	if resp.StatusCode != http.StatusOK || !strings.Contains(previewBody, wantCount) ||
+		!strings.Contains(previewBody, "全站单身会员；去重后") {
+		t.Fatalf("singles preview status=%d want=%q body=%s", resp.StatusCode, wantCount, previewBody)
+	}
+	previewToken := broadcastPreviewTokenFromHTML(t, previewBody)
+
+	sendValues := url.Values{
+		"csrf_token":              {csrf},
+		"broadcast_key":           {key},
+		"broadcast_preview_token": {previewToken},
+		"include_signups":         {"1"},
+		"include_singles":         {"1"},
+		"broadcast_title":         {"全站活动提醒"},
+		"broadcast_body":          {"新活动已开放报名。"},
+		"broadcast_action":        {"send"},
+	}
+	resp = client.postForm(workbenchPath+"/broadcast", sendValues)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("singles broadcast status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	if got := notificationCount(t, ctx, pool, signer.ID, "activity_broadcast"); got != 1 {
+		t.Fatalf("signer broadcast count = %d, want 1", got)
+	}
+	for _, excluded := range []db.User{pending, matched, disabled} {
+		if got := notificationCount(t, ctx, pool, excluded.ID, "activity_broadcast"); got != 0 {
+			t.Fatalf("excluded user %d received %d broadcasts", excluded.ID, got)
+		}
+	}
+	// Replaying the same key must not duplicate any message.
+	resp = client.postForm(workbenchPath+"/broadcast", sendValues)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("duplicate singles broadcast status = %d", resp.StatusCode)
+	}
+	if got := notificationCount(t, ctx, pool, signer.ID, "activity_broadcast"); got != 1 {
+		t.Fatalf("duplicate signer broadcast count = %d, want 1", got)
+	}
+}

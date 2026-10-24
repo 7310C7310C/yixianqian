@@ -175,6 +175,7 @@ func (a *App) apiActivitySignup(w http.ResponseWriter, r *http.Request) {
 		a.writeActivityError(w, r, err, "报名", true)
 		return
 	}
+	a.notifySignupLikes(r, signup)
 	a.audit(r, &user.ID, "activity.signup", "activity",
 		activityRefFromRequest(r), map[string]any{"signup_id": signup.ID})
 	writeJSON(w, http.StatusOK, map[string]any{

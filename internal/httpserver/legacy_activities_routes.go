@@ -220,6 +220,16 @@ func (a *App) handleLegacyMineGroupsFlag(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"has_group_activity": false})
 }
 
+// notifySignupLikes sends the two-way signup notices after the signup has
+// already committed; a notification failure is logged, never returned.
+func (a *App) notifySignupLikes(r *http.Request, signup db.Signup) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	defer cancel()
+	if _, err := a.db.NotifySignupLikes(ctx, signup.ID, signup.UserID, signup.ActivityID); err != nil {
+		a.logger(r).Error("signup notifications failed", "error", err, "signup_id", signup.ID)
+	}
+}
+
 func (a *App) handleLegacyActivitySignup(w http.ResponseWriter, r *http.Request) {
 	user, ok := a.legacyActivityEditor(w, r)
 	if !ok {
@@ -238,6 +248,7 @@ func (a *App) handleLegacyActivitySignup(w http.ResponseWriter, r *http.Request)
 		a.writeLegacyActivityError(w, r, err, "报名")
 		return
 	}
+	a.notifySignupLikes(r, signup)
 	a.audit(r, &user.ID, "activity.signup", "activity",
 		activityRefFromRequest(r), map[string]any{"signup_id": signup.ID})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "报名成功"})

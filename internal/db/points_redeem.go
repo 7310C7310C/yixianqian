@@ -780,13 +780,27 @@ func (d *DB) ListRedemptionsFor(ctx context.Context, userID int64, limit int, it
 	return out, nil
 }
 
+// activeRealLikeQuotaSQL counts live real_like orders. Refunded, cancelled and
+// resolved orders drop out automatically, so a refund restores the base quota.
+const activeRealLikeQuotaSQL = `SELECT count(*) FROM points_redemptions
+	 WHERE user_id = $1 AND item = $2 AND status = $3`
+
 // ExtraRealLikeQuota is the number of active real_like orders. It plugs
 // directly into ComputeLikeQuota's permanent argument.
 func (d *DB) ExtraRealLikeQuota(ctx context.Context, userID int64) (int, error) {
 	var n int
-	if err := d.pool.QueryRow(ctx,
-		`SELECT count(*) FROM points_redemptions
-		 WHERE user_id = $1 AND item = $2 AND status = $3`,
+	if err := d.pool.QueryRow(ctx, activeRealLikeQuotaSQL,
+		userID, RedeemItemRealLike, RedeemStatusActive).Scan(&n); err != nil {
+		return 0, fmt.Errorf("db: extra real like quota: %w", err)
+	}
+	return n, nil
+}
+
+// extraRealLikeQuotaTx is the transactional twin used by CreateLike so the
+// quota check and the like insert see the same redemption rows.
+func extraRealLikeQuotaTx(ctx context.Context, tx pgx.Tx, userID int64) (int, error) {
+	var n int
+	if err := tx.QueryRow(ctx, activeRealLikeQuotaSQL,
 		userID, RedeemItemRealLike, RedeemStatusActive).Scan(&n); err != nil {
 		return 0, fmt.Errorf("db: extra real like quota: %w", err)
 	}
