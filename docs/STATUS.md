@@ -146,12 +146,12 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ### 后端审计 P1-4/5/6/7/9 功能接线（2026-10-24，待部署）
 
-- 邀请确认窗口（P1-5）：审核通过（HTML `POST /admin/users/{id}/approve` 与 `POST /api/admin/users/{id}/approve`）后幂等调用 `StartInviteConfirmWindowForUser`，以审核时点固定 7 天 `confirm_due_at`；`cmd/server` 启动时先回填「pending 且被邀请人已 active」的邀请，随后每小时调用 `SettleDueInvites` 结算。重复审批或重试不会移动到期时间，也不会重复发穗（`invite_reward:<id>` 唯一键）。
+- 邀请确认窗口（P1-5）：审核通过（HTML `POST /admin/users/{id}/approve` 与 `POST /api/admin/users/{id}/approve`）后幂等调用 `StartInviteConfirmWindowForUser`，以审核时点固定 7 天 `confirm_due_at`；`cmd/server` 启动时先回填「pending 且被邀请人已 active」的邀请，随后每小时调用 `SettleDueInvites` 结算。重复审批或重试不会移动到期时间，也不会重复发穗（`invite_reward:<id>` 唯一键）。回填按手机号 join 解析出的账号（`u.id`）启动窗口，兼容 `invitee_id IS NULL` 的历史邀请；单条冲突只跳过并返回首个错误，不中止整批。
 - 取消报名退穗（P1-6）：删除 `SignupCancelRefundHook`（生产从未赋值），`CancelSignup` 提交后直接调用 `CancelPriorityOnSignupCancel`：距开始 ≥48h 退穗并把兑换单置 `refunded`，<48h 置 `cancelled` 不退穗；两种都会释放优先名额 cap。取消本身不受退穗失败影响，失败写入日志并由管理员/重试处理。
 - 报名双向通知（P1-7）：两个报名入口提交后调用 `NotifySignupLikes`——喜欢报名者的人收到实名「你喜欢的 X 报名了 Y」，报名者喜欢的人收到匿名「喜欢你的人报名了 Y」，相互喜欢只发实名一条；去重键 `signup:<signupID>:<recipient>:real|anon`，匿名通知的标题/正文/payload 均不含报名者身份；沿用现有通知已读/全部已读关闭。
 - 全站活动广播（P1-9）：受众新增「全站单身会员」（`status=active`、`account_status=active`、`account_kind=user`，排除观察员/待审核/已脱单/已退出/停用），保留报名者与观察员；工作台显示三类人数与去重合计，预览签名 token 同时绑定第三类 checkbox；发送改为单事务批量插入（`CreateNotificationsOnce`），全站量级不再逐人开事务。
 - 额外实名喜欢兑换（P1-4）：`CreateLike` 在同事务读取 active `real_like` 订单数作为 `permanent`，`LikeQuotaFor` 同步；兑换后用穗购买的额度立即生效（`real_total/real_permanent` 与 `/points` 一致），退款/取消后立即失效，匿名额度不受影响。语义按现有 `real_permanent`（永久每月 +1）实现，待 PM 最终确认。
-- 证据：`TestIntegrationApprovalStartsInviteWindow`、`TestIntegrationStartPendingInviteWindows`、`TestIntegrationCancelRefundPriority`、`TestIntegrationSignupLikesNotifications`、`TestIntegrationAdminActivityBroadcastAudience`、`TestIntegrationAdminActivityBroadcastAllSingles`、`TestIntegrationExtraRealLikeQuota`、`TestAdminBroadcastRecipients`；`make ci` EXIT=0；`go test -race -p 1 ./internal/db ./internal/httpserver` 全量绿。
+- 证据：`TestIntegrationApprovalStartsInviteWindow`、`TestIntegrationStartPendingInviteWindows`、`TestIntegrationBackfillLegacyInvite`、`TestIntegrationBackfillSkipsBrokenInvite`、`TestIntegrationInviteConfirmWindowBoundary`、`TestIntegrationCancelRefundPriority`、`TestIntegrationSignupLikesNotifications`、`TestIntegrationAdminActivityBroadcastAudience`、`TestIntegrationAdminActivityBroadcastAllSingles`、`TestIntegrationExtraRealLikeQuota`、`TestAdminBroadcastRecipients`；`make ci` EXIT=0；`go test -race -p 1 ./internal/db ./internal/httpserver` 全量绿。
 - 仍未接线（P1-5 余项，待 PM）：`IsHistoricalParticipant` 注册时校验、封禁/拒绝时 `ClawBackInvitesForInvitee`。
 
 ### 管理台（SSR + 活动原生 SPA，仅 iframe 承载）

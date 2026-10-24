@@ -55,6 +55,10 @@ func TestIntegrationApprovalStartsInviteWindow(t *testing.T) {
 	if inviteStatus != db.InviteStatusConfirmed || dueAt == nil || confirmedAt == nil {
 		t.Fatalf("invite after approval = %q due=%v confirmed=%v", inviteStatus, dueAt, confirmedAt)
 	}
+	if window := dueAt.Sub(*confirmedAt); window < 7*24*time.Hour-time.Minute ||
+		window > 7*24*time.Hour+time.Minute {
+		t.Fatalf("confirmation window = %v, want 7 days", window)
+	}
 	firstDue := *dueAt
 	// Approving again (or a retry of the window start) must not move the due
 	// date: the 7-day clock is fixed when the invitee becomes active.

@@ -383,13 +383,21 @@ func (d *DB) StartInviteConfirmWindowForUser(ctx context.Context, inviteeID int6
 
 // StartPendingInviteWindows backfills invites recorded before the approval
 // hook existed (or whose window start failed). Only approved, active singles
-// are eligible; everything else waits for the approval path.
+// are eligible; everything else waits for the approval path. A single bad row
+// is skipped and reported as the first error; it never blocks the rest of the
+// batch.
 func (d *DB) StartPendingInviteWindows(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
+	// Resolve the invitee from the joined account (u.id) because invites
+	// recorded before the approval hook may still have invitee_id NULL; the
+	// phone join is what finds them, and scanning i.invitee_id would abort the
+	// whole batch on that NULL. Keep the invite's own phone: the invitee may
+	// have changed numbers since the invite was recorded, and StartInviteConfirmWindow
+	// locates the invite by its phone first.
 	rows, err := d.pool.Query(ctx,
-		`SELECT i.invitee_id, u.phone, u.gender
+		`SELECT u.id, i.invitee_phone, u.gender
 		   FROM invites i
 		   JOIN users u ON (i.invitee_id = u.id OR (i.invitee_id IS NULL AND u.phone = i.invitee_phone))
 		  WHERE i.status = $1 AND u.status = 'active' AND u.account_status = 'active'
