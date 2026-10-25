@@ -2,6 +2,7 @@
 package httpserver
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -48,6 +49,15 @@ type App struct {
 	// registrationFaceProbeBudget 是注册响应前同步检测的总预算；默认
 	// maxRegistrationFaceProbeBudget，测试可缩短。
 	registrationFaceProbeBudget time.Duration
+
+	// notifier 为 SSE 通知流提供 LISTEN/NOTIFY 唤醒；database 为 nil 的
+	// 纯 handler 单测里保持 nil，流退回 15 秒兜底轮询。
+	notifier *db.NotificationHub
+
+	// homeInflight/cardsInflight 合并同一用户同一查询的并发重复构建，
+	// 不缓存结果，不改变新鲜度。
+	homeInflight  inflightGroup
+	cardsInflight inflightGroup
 }
 
 // New loads templates and constructs the application.
@@ -77,6 +87,10 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	if err != nil {
 		return nil, fmt.Errorf("httpserver: face probe: %w", err)
 	}
+	var notifier *db.NotificationHub
+	if database != nil {
+		notifier = db.NewNotificationHub(context.Background(), database.DSN(), logger)
+	}
 	return &App{
 		cfg:                         cfg,
 		db:                          database,
@@ -96,7 +110,16 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		mediaSem:                    make(chan struct{}, cfg.MaxMedia),
 		faceSem:                     make(chan struct{}, maxConcurrentFaceProbes),
 		registrationFaceProbeBudget: maxRegistrationFaceProbeBudget,
+		notifier:                    notifier,
 	}, nil
+}
+
+// Close releases background resources owned by the app. Callers that build an
+// App in tests must call it so the LISTEN connection does not outlive the DB.
+func (a *App) Close() {
+	if a.notifier != nil {
+		a.notifier.Close()
+	}
 }
 
 // acquireGate bounds expensive in-process work (Argon2, image decode). The

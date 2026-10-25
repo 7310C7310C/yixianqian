@@ -41,7 +41,7 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	database, err := db.Open(ctx, cfg.DatabaseURL)
+	database, err := db.OpenMaintenance(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}

@@ -160,7 +160,9 @@ func (a *App) withSession(next http.Handler) http.Handler {
 				ctx = withUser(ctx, &user)
 
 				touchCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-				if err := a.db.TouchSession(touchCtx, sess.ID, 5*time.Minute); err != nil {
+				// 15 分钟节流：last_seen_at 只用于在线状态，写放大比秒级精度更重要。
+				// SQL 内的条件保证多实例/并发请求下仍最多每 15 分钟更新一次。
+				if err := a.db.TouchSession(touchCtx, sess.ID, 15*time.Minute); err != nil {
 					a.logger(r).Debug("touch session failed", "error", err)
 				}
 				cancel()

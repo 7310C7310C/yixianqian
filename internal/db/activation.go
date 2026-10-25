@@ -190,9 +190,13 @@ func (d *DB) ActivateUser(ctx context.Context, p ActivateParams) (User, error) {
 	}
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO notifications (user_id, kind, title, body)
-		 VALUES ($1, 'account.activated', '账号已启用', '密码已设定完成，可以开始使用。')`,
-		user.ID); err != nil {
+		`WITH inserted AS (
+		   INSERT INTO notifications (user_id, kind, title, body)
+		   VALUES ($1, 'account.activated', '账号已启用', '密码已设定完成，可以开始使用。')
+		   RETURNING user_id
+		 )
+		 SELECT pg_notify($2, user_id::text) FROM inserted`,
+		user.ID, NotificationChannel); err != nil {
 		return User{}, fmt.Errorf("db: create welcome notification: %w", err)
 	}
 

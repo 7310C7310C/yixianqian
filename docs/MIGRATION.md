@@ -23,6 +23,7 @@ sources:
 - 不迁移 v1 的多维表格推荐表（原实现只写本地 JSON 文件，且 web 侧从未读取）。
 - 迁移 runner 卫生（2026-10-25）：读取 `schema_migrations.name` 并与嵌入文件名比对；同一版本号但名字不同直接报错（例如旧编号曾把 `id_card_hash` 记为 `0006`，导致新的 `0006_weekly_recommendations_list` 永久跳过、表缺 `target_user_id`）。按错误提示 `dropdb`/`createdb` 重建后重跑即可；staging 是 v5 正常升级，不受影响。
 - `0008_perf_indexes.sql`（2026-10-25）：只加索引，不改数据（`likes(initiator_id,status)`、`notifications(user_id) WHERE read_at IS NULL`、`users(id) WHERE 活跃普通用户`）。runner 在事务内执行，故用普通 `CREATE INDEX`；生产大表如需 `CONCURRENTLY`，走手工窗口。
+- `0009_perf_indexes_b7.sql`（2026-10-25）：性能批次7 只加索引：`praises(initiator_id,target_id) WHERE status='有效'`、`praises(target_id,week) WHERE status='有效'`、`messages(target_user_id) WHERE status<>'已删除'`、`signups(user_id,activity_id) WHERE status<>'已取消'`、`notifications(user_id,created_at DESC,id DESC)`。临时库 20 万级数据实测：留言计数 11.67ms→0.42ms、报名按用户 22.63ms→0.27ms、周点赞计数 4.62ms→0.44ms；只增不改，回滚只能 drop index（数据不受影响）。
 
 ## 1. 来源盘点（2026-10-19 导出基线）
 

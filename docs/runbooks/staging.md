@@ -200,6 +200,48 @@ grep -H 'client_max_body_size' /etc/nginx/sites-available/relay-next.conf
 # 期望两处都是 96m；两个文件在不同主机，不要用一条命令同时查
 ```
 
+## 性能批次7：PostgreSQL 参数（staging）
+
+> 2026-10-25 18:04 已在 server1 应用；staging 单机 PG 16，重启窗口数秒。业务代码未部署前也可生效；回滚只影响参数。
+
+```bash
+# 备份（本次之前 postgresql.auto.conf 不存在）
+TS=20261025-180401
+ls /var/backups/yxq-pg-b7/postgresql.conf.$TS
+
+# 应用（ALTER SYSTEM 写入 postgresql.auto.conf）
+sudo -u postgres psql -c "ALTER SYSTEM SET shared_buffers = '512MB'"
+sudo -u postgres psql -c "ALTER SYSTEM SET work_mem = '8MB'"
+sudo -u postgres psql -c "ALTER SYSTEM SET random_page_cost = 1.1"
+sudo -u postgres psql -c "ALTER SYSTEM SET effective_io_concurrency = 200"
+sudo -u postgres psql -c "ALTER SYSTEM SET jit = off"
+sudo -u postgres psql -c "ALTER SYSTEM SET track_io_timing = on"
+systemctl restart postgresql
+
+# 验证
+sudo -u postgres psql -tAc "select name||'='||setting||coalesce(unit,'') from pg_settings where name in ('shared_buffers','work_mem','random_page_cost','effective_io_concurrency','jit','track_io_timing')"
+curl -s http://127.0.0.1:8093/healthz
+```
+
+回滚（恢复到批次7 前）：
+
+```bash
+TS=20261025-180401
+# 批次7 前 postgresql.auto.conf 不存在；逐项 RESET 后恢复 postgresql.conf
+sudo -u postgres psql -c "ALTER SYSTEM RESET shared_buffers"
+sudo -u postgres psql -c "ALTER SYSTEM RESET work_mem"
+sudo -u postgres psql -c "ALTER SYSTEM RESET random_page_cost"
+sudo -u postgres psql -c "ALTER SYSTEM RESET effective_io_concurrency"
+sudo -u postgres psql -c "ALTER SYSTEM RESET jit"
+sudo -u postgres psql -c "ALTER SYSTEM RESET track_io_timing"
+cp -a /var/backups/yxq-pg-b7/postgresql.conf.$TS /etc/postgresql/16/main/postgresql.conf
+systemctl restart postgresql
+```
+
+> `postgresql.auto.conf` 在数据目录 `/var/lib/postgresql/16/main/`，不在 `/etc/postgresql/16/main/`；不要手改，用 `ALTER SYSTEM RESET`。
+
+pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、`statement_timeout=5000`；迁移走独立连接 `SET statement_timeout=0`，`cmd/seed`/`cmd/facebackfill` 用 `db.OpenMaintenance`。回滚：改回 `internal/db/db.go` 常量并重启 app（无需 DB 重启）。
+
 ## 性能批次1：边缘/传输（nginx）
 
 - 目标：server2 上游 keepalive（跨洋每请求 465ms → ~155ms + 源站）、`/static/` 边缘缓存（TTL 1h）、边缘 gzip、SSE 例外；

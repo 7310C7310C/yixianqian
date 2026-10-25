@@ -55,6 +55,7 @@ type CardsPageData struct {
 	NextURL       string
 	Seed          string
 	Version       int64
+	Self          *db.SocialProfile
 	Filter        CardFilterView
 	FilterActive  bool
 	GenderFilter  string
@@ -159,8 +160,9 @@ type MyLikesPageData struct {
 // cardPageDeps lets aggregated callers (home) reuse quota/praise they already
 // loaded instead of paying for the same two queries twice.
 type cardPageDeps struct {
-	quota  *db.LikeQuota
-	praise *db.PraiseState
+	quota       *db.LikeQuota
+	praise      *db.PraiseState
+	includeSelf bool
 }
 
 func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q url.Values,
@@ -174,18 +176,25 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 	if err != nil {
 		return CardsPageData{}, err
 	}
-	state, err := a.db.LoadCardSocialState(ctx, viewer.ID, now)
+	// 点赞/点赞我/已赞 + 本周推荐位合并成一条 SQL；推荐位顺序就是展示顺序。
+	// cards 端点没有上游计数器时，额度/点赞状态也在同一条 SQL 里取回。
+	var (
+		state          db.CardSocialState
+		recommendedIDs []int64
+		quota          db.LikeQuota
+		praise         db.PraiseState
+	)
+	if deps.quota != nil && deps.praise != nil {
+		state, recommendedIDs, err = a.db.LoadCardDeckState(ctx, viewer.ID, now, db.WeekKey(now))
+		quota, praise = *deps.quota, *deps.praise
+	} else {
+		state, recommendedIDs, quota, praise, err = a.db.LoadCardPageState(ctx, viewer.ID, now, db.WeekKey(now))
+	}
 	if err != nil {
 		return CardsPageData{}, err
 	}
 	seed := socialSeed(strings.TrimSpace(q.Get("seed")), viewer.ID, now)
 	version := cardVersion(seed, filter, targetGender)
-	// 本周推荐位：必显（匿名喜欢我的人）在前、算法位在后，整体置顶。
-	// pinnedIDs 的顺序就是展示顺序，OrderCardIDs 不会打乱它。
-	recommendedIDs, err := a.db.WeeklyRecommendationTargets(ctx, viewer.ID, db.WeekKey(now))
-	if err != nil {
-		return CardsPageData{}, err
-	}
 	recommended := make(map[int64]bool, len(recommendedIDs))
 	for _, id := range recommendedIDs {
 		recommended[id] = true
@@ -208,15 +217,15 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 		end = len(ordered)
 	}
 	pageIDs := ordered[offset:end]
-	profiles, err := a.db.GetSocialProfilesByIDs(ctx, pageIDs)
+	fetchIDs := pageIDs
+	if deps.includeSelf && viewer.ID > 0 {
+		fetchIDs = append(append([]int64{}, pageIDs...), viewer.ID)
+	}
+	profiles, msgCounts, err := a.db.GetSocialProfilesWithMessageCounts(ctx, fetchIDs)
 	if err != nil {
 		return CardsPageData{}, err
 	}
 	// 留言数只统计当前页收件人（语义仍是「该收件人收到的留言总数」）。
-	msgCounts, err := a.db.MessageCountsFor(ctx, pageIDs)
-	if err != nil {
-		return CardsPageData{}, err
-	}
 	for id, n := range msgCounts {
 		state.MessageCounts[id] = n
 	}
@@ -233,24 +242,6 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 		views = append(views, view)
 	}
 
-	quota := db.LikeQuota{}
-	if deps.quota != nil {
-		quota = *deps.quota
-	} else {
-		quota, err = a.db.LikeQuotaFor(ctx, viewer.ID, now)
-		if err != nil {
-			return CardsPageData{}, err
-		}
-	}
-	praise := db.PraiseState{}
-	if deps.praise != nil {
-		praise = *deps.praise
-	} else {
-		praise, err = a.db.PraiseStateFor(ctx, viewer.ID, now)
-		if err != nil {
-			return CardsPageData{}, err
-		}
-	}
 	prevValues := socialCloneValues(q)
 	prevValues.Set("offset", strconv.Itoa(socialMaxInt(0, offset-limit)))
 	prevValues.Set("seed", seed)
@@ -293,6 +284,11 @@ func (a *App) buildCardsPageData(ctx context.Context, viewer db.SocialViewer, q 
 		data.NextURL = "/cards?" + nextValues.Encode()
 	}
 	data.DisplayNumber = data.StartNumber + data.Index
+	if deps.includeSelf {
+		if self, ok := profiles[viewer.ID]; ok {
+			data.Self = &self
+		}
+	}
 	return data, nil
 }
 

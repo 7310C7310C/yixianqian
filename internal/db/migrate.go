@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/7310C7310C/yixianqian/migrations"
+	"github.com/jackc/pgx/v5"
 )
 
 var migrationNameRE = regexp.MustCompile(`^(\d{4})_([a-z0-9_]+)\.sql$`)
@@ -34,11 +35,20 @@ func (d *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 		return err
 	}
 
-	conn, err := d.pool.Acquire(ctx)
+	// 迁移用独立连接：业务 pool 带 statement_timeout=5s，而建索引/回填可能
+	// 超过该上限。独立连接显式关闭超时，也不长期占用 pool 的并发额度。
+	conn, err := pgx.Connect(ctx, d.dsn)
 	if err != nil {
-		return fmt.Errorf("db: acquire migration connection: %w", err)
+		return fmt.Errorf("db: connect migration connection: %w", err)
 	}
-	defer conn.Release()
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = conn.Close(closeCtx)
+	}()
+	if _, err := conn.Exec(ctx, "SET statement_timeout = 0"); err != nil {
+		return fmt.Errorf("db: reset migration statement timeout: %w", err)
+	}
 
 	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey); err != nil {
 		return fmt.Errorf("db: acquire migration lock: %w", err)

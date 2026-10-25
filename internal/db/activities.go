@@ -213,6 +213,63 @@ func activityRefQueryArgs(ref string) (string, int64) {
 
 // ListActivities returns every non-cancelled activity in signup order: open
 // events first, then full/upcoming/past ones.
+// ListActivitiesForUser returns the public activity list with the viewer's
+// active signup attached in one statement. It replaces ListActivities +
+// ListMyActivities on the home aggregate; ordering and cancellation filters
+// stay identical to those two queries.
+func (d *DB) ListActivitiesForUser(ctx context.Context, userID int64) ([]MyActivity, error) {
+	rows, err := d.pool.Query(ctx,
+		`SELECT `+qualifiedActivityColumns("a")+`,
+		        s.status, COALESCE(s.attendance, '')
+		   FROM activities a
+		   LEFT JOIN LATERAL (
+		     SELECT status, attendance FROM signups
+		      WHERE activity_id = a.id AND user_id = $1 AND status <> $2
+		      ORDER BY id DESC LIMIT 1
+		   ) s ON true
+		  WHERE a.status <> $3
+		  ORDER BY CASE a.status
+		            WHEN $4 THEN 0
+		            WHEN $5 THEN 1
+		            WHEN $6 THEN 2
+		            WHEN $7 THEN 3
+		            ELSE 4 END,
+		          a.start_at NULLS LAST, a.id`,
+		userID, SignupStatusCancelled, ActivityStatusCancelled,
+		ActivityStatusOpen, ActivityStatusNotStarted,
+		ActivityStatusFull, ActivityStatusFinished)
+	if err != nil {
+		return nil, fmt.Errorf("db: list activities for user: %w", err)
+	}
+	defer rows.Close()
+	out := make([]MyActivity, 0)
+	for rows.Next() {
+		var (
+			item       MyActivity
+			status     *string
+			attendance string
+		)
+		a := &item.Activity
+		if err := rows.Scan(&a.ID, &a.LegacyRecordID, &a.ActivityNo, &a.Name, &a.Description,
+			&a.Location, &a.Condition, &a.MaxSignup, &a.CurrentSignup, &a.Fee, &a.Food,
+			&a.Status, &a.PosterMediaID, &a.GroupStatus, &a.MalePerGroup, &a.FemalePerGroup,
+			&a.GroupEnabled, &a.OnetooneStatus, &a.OnetooneEnabled, &a.SigninEnabled, &a.SigninCode,
+			&a.PublishAt, &a.StartAt, &a.EndAt, &a.CreatedAt, &a.UpdatedAt,
+			&status, &attendance); err != nil {
+			return nil, fmt.Errorf("db: scan activity for user: %w", err)
+		}
+		if status != nil {
+			item.SignupStatus = *status
+			item.Attendance = Attendance(strings.TrimSpace(attendance))
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: iterate activities for user: %w", err)
+	}
+	return out, nil
+}
+
 func (d *DB) ListActivities(ctx context.Context) ([]Activity, error) {
 	rows, err := d.pool.Query(ctx,
 		"SELECT "+activityColumns+` FROM activities

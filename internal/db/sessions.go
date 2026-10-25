@@ -48,7 +48,8 @@ func (d *DB) GetSession(ctx context.Context, tokenHash string) (Session, User, e
 		Scan(&s.ID, &s.UserID, &s.ExpiresAt, &s.CreatedAt, &s.LastSeenAt,
 			&s.MustChangePassword, &s.TempExpiresAt,
 			&u.ID, &u.LegacyUserID, &u.Phone, &u.Name, &u.Status,
-			&u.FailedLoginCount, &u.LastFailedAt, &u.LockedUntil, &u.CreatedAt, &u.UpdatedAt)
+			&u.FailedLoginCount, &u.LastFailedAt, &u.LockedUntil, &u.CreatedAt, &u.UpdatedAt,
+			&u.IDCardValid)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Session{}, User{}, ErrNotFound
 	}

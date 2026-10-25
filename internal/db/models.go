@@ -20,6 +20,9 @@ type User struct {
 	LockedUntil      *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	// IDCardValid lets the request middleware enforce the P0 ID gate without a
+	// second users lookup; GetSession is the only place that fills it.
+	IDCardValid bool
 }
 
 // Locked reports whether the account is currently in a failed-login lockout.
@@ -76,7 +79,7 @@ const userColumns = `id, legacy_user_id, phone, name, status, failed_login_count
 func qualifiedUserColumns(alias string) string {
 	return alias + `.id, ` + alias + `.legacy_user_id, ` + alias + `.phone, ` + alias + `.name, ` +
 		alias + `.status, ` + alias + `.failed_login_count, ` + alias + `.last_failed_at, ` +
-		alias + `.locked_until, ` + alias + `.created_at, ` + alias + `.updated_at`
+		alias + `.locked_until, ` + alias + `.created_at, ` + alias + `.updated_at, ` + alias + `.id_card_valid`
 }
 
 func scanUser(row rowScanner) (User, error) {
