@@ -38,6 +38,7 @@ import sys
 from pathlib import Path
 
 try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
 except ImportError:  # pragma: no cover - environment guard
     sys.exit("需要 playwright：pip install playwright && python3 -m playwright install chromium")

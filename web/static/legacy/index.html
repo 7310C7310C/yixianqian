@@ -58,10 +58,14 @@
     img.onerror = function(){ root.classList.add('boot-hero-failed'); try{ img.removeAttribute('src'); }catch(e){} };
     img.src = src;
   }
+  function setObjectPosition(pos){
+    if (img && pos && !state.dismissed) img.style.objectPosition = pos;
+  }
   function dismiss(reason){
     if (state.dismissed) return;
     state.dismissed = true;
     state.reason = reason || '';
+    state.removedAt = Math.round(performance.now());
     document.removeEventListener('pointerdown', onInteract, true);
     document.removeEventListener('touchstart', onInteract, true);
     document.removeEventListener('keydown', onInteract, true);
@@ -76,10 +80,16 @@
   document.addEventListener('wheel', onInteract, true);
   window.__YXQ_HERO__ = {
     setPhoto: setPhoto,
+    setObjectPosition: setObjectPosition,
     dismiss: dismiss,
     loaded: function(){ return state.loaded; },
-    dismissed: function(){ return state.dismissed; }
+    dismissed: function(){ return state.dismissed; },
+    reason: function(){ return state.reason || ''; },
+    removedAt: function(){ return state.removedAt || null; }
   };
+  // 冷启硬上限：从壳脚本执行起算 4s；app 已挂载时即使 loadHome 卡住也移除，
+  // 露出 Vue 启动骨架（未挂载则保留 hero，避免白屏，app.js 挂载后会再兜底）。
+  setTimeout(function(){ if (!state.dismissed && window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_STARTED__ === true && window.__YXQ_LOAD_HOME_DONE__ !== true) dismiss('load-timeout'); }, 4000);
 })();
 </script>
 <div id="app" v-cloak>

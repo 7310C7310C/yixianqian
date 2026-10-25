@@ -30,7 +30,7 @@ except ImportError:  # pragma: no cover - environment guard
     sys.exit("需要 playwright：pip install playwright && python3 -m playwright install chromium")
 
 INIT = """
-window.__yxq_perf = {fcp: 0, lcp: 0, lcpEl: '', longtasks: [], cls: 0, shifts: []};
+window.__yxq_perf = {fcp: 0, lcp: 0, lcpEl: '', lcpClass: '', longtasks: [], cls: 0, shifts: []};
 try {
   new PerformanceObserver(function (l) {
     for (const e of l.getEntries()) {
@@ -43,6 +43,7 @@ try {
     for (const e of l.getEntries()) {
       window.__yxq_perf.lcp = e.startTime;
       window.__yxq_perf.lcpEl = (e.element && (e.element.currentSrc || e.element.src)) || e.url || '';
+      window.__yxq_perf.lcpClass = (e.element && typeof e.element.className === 'string') ? e.element.className : '';
     }
   }).observe({type: 'largest-contentful-paint', buffered: true});
 } catch (e) {}
@@ -82,7 +83,7 @@ def collect(page) -> dict:
           if (nav) { transfer += nav.transferSize || 0; encoded += nav.encodedBodySize || 0; }
           const lt = p.longtasks.slice().sort((a, b) => b.dur - a.dur);
           return {
-            fcp: Math.round(p.fcp), lcp: Math.round(p.lcp), lcp_el: p.lcpEl,
+            fcp: Math.round(p.fcp), lcp: Math.round(p.lcp), lcp_el: p.lcpEl, lcp_class: p.lcpClass,
             longtask_count: p.longtasks.length,
             longtask_total: Math.round(p.longtasks.reduce((s, e) => s + e.dur, 0)),
             longest_task: Math.round(lt.length ? lt[0].dur : 0),
@@ -177,6 +178,7 @@ def main() -> int:
                     vals = [r[key] for r in runs if r.get(key) is not None]
                     med[key] = median(vals)
                 med["lcp_el"] = runs[-1].get("lcp_el", "")
+                med["lcp_class"] = runs[-1].get("lcp_class", "")
                 med["cls"] = max((r.get("cls") or 0) for r in runs)
                 med["dom"] = max((r.get("dom") or 0) for r in runs)
                 med["cards"] = max((r.get("cards") or 0) for r in runs)

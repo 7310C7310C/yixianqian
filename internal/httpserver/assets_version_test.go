@@ -116,6 +116,8 @@ func TestLegacyShellRendersStaticHero(t *testing.T) {
 		".boot-hero-ready",
 		"#boot-skeleton.boot-hero-out",
 		"#boot-skeleton .boot-tab-text",
+		"object-position: 50% 0",
+		"height: calc(50px + env(safe-area-inset-bottom))",
 		"prefers-reduced-motion",
 	} {
 		if !strings.Contains(css, want) {
@@ -132,6 +134,9 @@ func TestLegacyShellRendersStaticHero(t *testing.T) {
 		"yxqAfterFirstPaint",
 		"yxq-mount-start",
 		"yxq-boot-end",
+		"setObjectPosition",
+		"__YXQ_LOAD_HOME_DONE__",
+		"load-timeout",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("app.js is missing hero lifecycle marker %q", want)

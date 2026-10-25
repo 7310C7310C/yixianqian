@@ -2098,6 +2098,7 @@ const yxqApp = createApp({
 
     // 一次拉取首页全部数据（我的信息 + 卡片 + 喜欢 + 活动）
     async function loadHome(opts) {
+      window.__YXQ_LOAD_HOME_STARTED__ = true;
       let data = null;
       if (window.__YXQ_HOME_PROMISE__) {
         try { data = await window.__YXQ_HOME_PROMISE__; } catch (e) { data = null; }
@@ -4959,8 +4960,47 @@ const yxqApp = createApp({
     // 这里只决定何时淡出：首卡图 decode+paint 后；无卡/无图/切页/换卡/门禁/失败立即移除。
     let bootHeroAnchor = null;
     let bootHeroSettled = false;
+    let bootHeroHardTimer = null;
+    let bootHeroLastLongTaskEnd = 0;
+    try {
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) {
+          bootHeroLastLongTaskEnd = Math.max(bootHeroLastLongTaskEnd, e.startTime + e.duration);
+        }
+      }).observe({type: 'longtask', buffered: true});
+    } catch (_) {}
     function dismissBootHero(reason) {
       try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss(reason); } catch (_) {}
+    }
+    // 硬上限从 navigationStart 起算 4s：loadHome 卡住时 settleBootHero 不会启动，
+    // 这里确保 hero 不会无限覆盖；移除后露出 Vue 启动骨架（bootLoading 仍为 true）。
+    function armBootHeroHardLimit() {
+      if (bootHeroHardTimer) return;
+      const remain = Math.max(0, 4000 - performance.now());
+      bootHeroHardTimer = setTimeout(() => {
+        bootHeroHardTimer = null;
+        // 只在 loadHome 仍挂起时强制移除；正常慢图由 settleBootHero 的绘制/超时路径处理，
+        // 避免把已经下载中的 hero 首图在 4s 时误删、反而推后 LCP。
+        if (bootLoading.value && window.__YXQ_LOAD_HOME_STARTED__) dismissBootHero('load-timeout');
+      }, remain);
+    }
+    // 等首屏长任务（Vant 执行/mount/数据渲染）结束并完成一帧绘制后再移除 hero。
+    // 只等 complete 会让 hero 在长任务开始前被移除，真实卡成为新的 LCP 候选（实测 6.5s）。
+    function dismissHeroAfterPaint() {
+      // 2s 窗口覆盖首屏 mount/Vant/数据渲染长任务的启动；之后要求长任务静默 200ms。
+      const notBefore = performance.now() + 2000;
+      const started = Date.now();
+      const step = () => {
+        if (window.__YXQ_HERO__.dismissed()) return;
+        const now = performance.now();
+        if (now < notBefore || now - bootHeroLastLongTaskEnd < 200) {
+          if (Date.now() - started > 10000) { dismissBootHero('paint-timeout'); return; }
+          setTimeout(step, 100);
+          return;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(() => dismissBootHero('painted')));
+      };
+      step();
     }
     function settleBootHero() {
       if (bootHeroSettled) return;
@@ -4973,7 +5013,7 @@ const yxqApp = createApp({
         oid: currentCard.value.openid || '',
       };
       if (!currentPhotoList.value[0]) { dismissBootHero('no-photo'); return; }
-      const deadline = Date.now() + 4000;
+      const deadline = Date.now() + 8000;
       const step = () => {
         if (window.__YXQ_HERO__.dismissed()) return;
         if (page.value !== 'cards' || !currentCard.value ||
@@ -4983,8 +5023,13 @@ const yxqApp = createApp({
         }
         const img = document.querySelector('.swipe-card .card-photo-item');
         if (img && img.complete && img.naturalWidth) {
-          // 双 rAF：确保真实卡片图已经绘制完成，再让 hero 淡出。
-          requestAnimationFrame(() => requestAnimationFrame(() => dismissBootHero('painted')));
+          // 把真实卡的 object-position（人脸裁切）复制给 hero，避免淡出瞬间垂直跳。
+          try {
+            const pos = getComputedStyle(img).objectPosition;
+            if (pos && window.__YXQ_HERO__.setObjectPosition) window.__YXQ_HERO__.setObjectPosition(pos);
+          } catch (_) {}
+          // 等首屏长任务结束 + 至少一帧绘制；见 dismissHeroAfterPaint 注释。
+          dismissHeroAfterPaint();
           return;
         }
         if (Date.now() > deadline) { dismissBootHero('timeout'); return; }
@@ -4992,7 +5037,10 @@ const yxqApp = createApp({
       };
       step();
     }
-    watch(bootLoading, (v) => { if (!v) nextTick(settleBootHero); });
+    watch(bootLoading, (v) => {
+      window.__YXQ_LOAD_HOME_DONE__ = !v;
+      if (!v) nextTick(settleBootHero);
+    });
     watch(page, (v) => { if (v !== 'cards') dismissBootHero('tab'); });
     watch([cardIndex, cardsStart], ([idx, start]) => {
       if (!bootHeroAnchor) return;
@@ -5002,6 +5050,9 @@ const yxqApp = createApp({
 
     onMounted(() => {
       window.__YXQ_APP_MOUNTED__ = true;
+      window.__YXQ_LOAD_HOME_STARTED__ = false;
+      window.__YXQ_LOAD_HOME_DONE__ = false;
+      armBootHeroHardLimit();
       // 入口深链：必须在下方 replaceState 清掉 hash 前留存（机器人「报名活动」按钮 → #/activities 直达活动页）
       const entryHash = window.location.hash;
       bootEntryHash = entryHash;

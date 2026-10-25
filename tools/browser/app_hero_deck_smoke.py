@@ -57,13 +57,23 @@ window.__hero_snapshot = null;
       bg: getComputedStyle(h).backgroundColor,
       cardBg: c && getComputedStyle(c).backgroundColor,
       imgDisplay: i && getComputedStyle(i).display,
+      objectPosition: i && getComputedStyle(i).objectPosition,
+      tabbarHeight: (h.querySelector('.boot-tabbar') || {getBoundingClientRect: () => null}).getBoundingClientRect()?.height || null,
       ready: h.classList.contains('boot-hero-ready'),
       failed: h.classList.contains('boot-hero-failed')
     };
   }
   new MutationObserver(snap).observe(document.documentElement || document, {
-    childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class']
+    childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class', 'style']
   });
+  window.__heroRemovedAt = null;
+  window.__heroSeen = false;
+  new MutationObserver(function () {
+    if (document.getElementById('boot-skeleton')) { window.__heroSeen = true; return; }
+    if (window.__heroSeen && window.__heroRemovedAt === null) {
+      window.__heroRemovedAt = Math.round(performance.now());
+    }
+  }).observe(document, {childList: true, subtree: true});
   document.addEventListener('readystatechange', snap);
   document.addEventListener('DOMContentLoaded', snap);
   setTimeout(snap, 0);
@@ -71,11 +81,12 @@ window.__hero_snapshot = null;
 """
 
 PERF_INIT = """
-window.__b5 = {lcp: 0, lcpEl: '', cls: 0, longtasks: []};
+window.__b5 = {lcp: 0, lcpEl: '', lcpClass: '', cls: 0, longtasks: []};
 try { new PerformanceObserver(function (l) {
   for (const e of l.getEntries()) {
     window.__b5.lcp = e.startTime;
     window.__b5.lcpEl = (e.element && (e.element.currentSrc || e.element.src)) || e.url || '';
+    window.__b5.lcpClass = (e.element && typeof e.element.className === 'string') ? e.element.className : '';
   }
 }).observe({type: 'largest-contentful-paint', buffered: true}); } catch (e) {}
 try { new PerformanceObserver(function (l) {
@@ -225,9 +236,31 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
             raise SmokeFailure(f"{tag}: 没有渲染真实卡片")
         assert_close(hero["card"], real["card"], f"{tag} hero/真实卡")
         assert_close(hero["photo"], real["photo"], f"{tag} hero/真实卡照片区")
+        detail = page.evaluate("""() => {
+          const img = document.querySelector('.swipe-card .card-photo-item');
+          const extra = document.querySelectorAll('.swipe-card .card-photo-item')[1];
+          const tab = document.querySelector('.van-tabbar');
+          return {
+            objectPosition: img ? getComputedStyle(img).objectPosition : '',
+            nextObjectPosition: extra ? getComputedStyle(extra).objectPosition : '',
+            tabbarHeight: tab ? tab.getBoundingClientRect().height : null,
+          };
+        }""")
+        if hero.get("objectPosition") and detail["objectPosition"]:
+            # 真实卡可能按人脸写 object-position；hero 默认/复制值必须一致。
+            if hero["objectPosition"] != detail["objectPosition"]:
+                raise SmokeFailure(
+                    f"{tag}: hero 裁切 {hero['objectPosition']!r} != 真实卡 {detail['objectPosition']!r}"
+                )
+        if hero.get("tabbarHeight") and detail["tabbarHeight"] is not None:
+            if abs(float(hero["tabbarHeight"]) - float(detail["tabbarHeight"])) > 1.5:
+                raise SmokeFailure(
+                    f"{tag}: hero 假 tabbar {hero['tabbarHeight']}px != 真 tabbar {detail['tabbarHeight']}px"
+                )
 
         stats = page.evaluate("""() => ({
           cls: window.__b5.cls, lcp: Math.round(window.__b5.lcp), lcpEl: window.__b5.lcpEl,
+          lcpClass: window.__b5.lcpClass,
           longtasks: window.__b5.longtasks.length,
           cards: document.querySelectorAll('.swipe-card').length,
           photos: document.querySelectorAll('.card-photo-item').length,
@@ -240,8 +273,10 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
             raise SmokeFailure(f"{tag}: hero 仍在 DOM")
         if stats["cls"] > 0.01:
             raise SmokeFailure(f"{tag}: CLS {stats['cls']} 超过 0.01")
-        if "/cards/photo/" not in stats["lcpEl"]:
-            raise SmokeFailure(f"{tag}: LCP 元素不是首卡图 {stats['lcpEl']!r}")
+        if "/cards/photo/" not in stats["lcpEl"] or "boot-photo" not in stats["lcpClass"]:
+            raise SmokeFailure(
+                f"{tag}: LCP 不是壳内 hero（class={stats['lcpClass']!r}, url={stats['lcpEl']!r}）"
+            )
         if stats["cards"] != 1:
             raise SmokeFailure(f"{tag}: 牌堆应只挂当前 1 张，实际 {stats['cards']}")
         if stats["photos"] > 2:
@@ -424,6 +459,59 @@ def run_fallbacks(browser, base_url: str, cookie: str, out_dir: Path) -> list[st
     return failures
 
 
+def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """loadHome 挂起时，壳脚本/app.js 的 4s 硬上限必须移除 hero 并露出启动骨架。"""
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        # 不节流：本用例验证「已挂载后 loadHome 挂起」的 4s 硬上限，
+        # 避免 CPU×4 下 mount 本身超过 4s 把场景变成「尚未开始 loadHome」。
+        held = {}
+
+        def hold_home(route) -> None:
+            if "route" not in held:
+                held["route"] = route
+                return
+            route.continue_()
+
+        def strip_bootstrap(route) -> None:
+            response = route.fetch()
+            body = re.sub(
+                r"window\.__YXQ_BOOTSTRAP__=\{.*?\};",
+                "window.__YXQ_BOOTSTRAP__=null;",
+                response.text(), count=1, flags=re.S,
+            )
+            route.fulfill(response=response, body=body)
+
+        context.route(base_url.rstrip("/") + "/app", strip_bootstrap)
+        context.route("**/legacy/api/home", hold_home)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=15000)
+        page.locator("#boot-skeleton").wait_for(state="detached", timeout=6000)
+        removed = page.evaluate("window.__YXQ_HERO__ ? {at: window.__YXQ_HERO__.removedAt(), reason: window.__YXQ_HERO__.reason()} : null")
+        if not removed or removed["at"] is None or removed["at"] > 4300:
+            raise SmokeFailure(f"loadHome 挂起时 hero 移除过晚：{removed}")
+        if removed["reason"] not in ("load-timeout", "hard-timeout"):
+            raise SmokeFailure(f"loadHome 挂起时 hero 移除原因异常：{removed}")
+        page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=5000)
+        page.screenshot(path=str(out_dir / "hero-load-home-hang-390.png"))
+        if errors:
+            raise SmokeFailure(f"loadHome 挂起用例 pageerror {errors[:2]}")
+        return []
+    except Exception as exc:  # noqa: BLE001
+        return [f"loadHome 挂起硬上限: {exc}"]
+    finally:
+        if context is not None:
+            try:
+                if held.get("route"):
+                    held["route"].abort()
+            except Exception:  # noqa: BLE001 - best effort cleanup
+                pass
+            context.close()
+
+
 def run_dark(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
     context = None
     try:
@@ -460,6 +548,7 @@ def main() -> int:
                 failures.extend(run_viewport(browser, base_url, cookie, width, height, out_dir, throttle_net=True))
             failures.extend(run_interactions(browser, base_url, cookie, out_dir))
             failures.extend(run_fallbacks(browser, base_url, cookie, out_dir))
+            failures.extend(run_load_home_hang(browser, base_url, cookie, out_dir))
             failures.extend(run_dark(browser, base_url, cookie, out_dir))
             browser.close()
     except Exception as exc:  # noqa: BLE001
