@@ -33,8 +33,11 @@ vet:
 test:
 	$(GO) test -p 1 -count=1 ./...
 
+# internal/db 的单元测试（含 notification hub 并发回归 TestNotificationHubFanout*）
+# 不需要数据库，可整包 -race（约 8s，TestIntegration* 无 TEST_DATABASE_URL 会 skip）；
+# internal/httpserver 多数测试需要真实 Postgres，其 -race 由 CI integration job 覆盖。
 test-race:
-	@PKGS="$$( $(GO) list ./... | grep -v '/internal/db$$' | grep -v '/internal/httpserver$$' )"; \
+	@PKGS="$$( $(GO) list ./... | grep -v '/internal/httpserver$$' )"; \
 	$(GO) test -race -p 1 -count=1 $$PKGS
 
 # -run Integration 只跑 TestIntegration*；完整 db/httpserver 套件由 CI integration job 跑。

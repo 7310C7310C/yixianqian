@@ -123,7 +123,15 @@ func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user 
 	}
 	page, err := a.buildCardsPageData(ctx, pageViewer, r.URL.Query(), now, 20, deps)
 	if errors.Is(err, errGenderMissing) {
+		// 性别未填：牌堆为空，但首页仍要显示自己的卡（旧实现的行为：
+		// self 卡 1 张 + cards_total 1）。批次7 合并查询时把 self 一起丢了，
+		// reviewer N2 指出这是无意的行为变化，这里显式补回。
 		page = CardsPageData{}
+		if selfProfile, selfErr := a.db.GetSocialProfile(ctx, user.ID); selfErr == nil {
+			page.Self = &selfProfile
+		} else if !errors.Is(selfErr, db.ErrNotFound) {
+			a.logger(r).Warn("legacy home self card failed", "error", selfErr, "user_id", user.ID)
+		}
 	} else if err != nil {
 		return nil, err
 	}
@@ -166,7 +174,7 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	}
 	now := a.clock.Now()
 	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
-	value, err := a.homeInflight.Do(key, func() (any, error) {
+	value, err := a.homeInflight.Do(r.Context(), key, func() (any, error) {
 		return a.buildLegacyHomePayload(r.Context(), r, user, now)
 	})
 	payload, _ := value.(map[string]any)
@@ -203,7 +211,7 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		viewer.AccountStatus = "observer"
 	}
 	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
-	value, err := a.cardsInflight.Do(key, func() (any, error) {
+	value, err := a.cardsInflight.Do(r.Context(), key, func() (any, error) {
 		return a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit, cardPageDeps{})
 	})
 	page, _ := value.(CardsPageData)

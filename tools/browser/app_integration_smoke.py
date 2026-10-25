@@ -419,8 +419,9 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         dismiss_guides(page)
 
         # 3. 登录后未读红点（页面已存在两条测试通知）
-        # 冗余等待：即使 notify 丢失，客户端 12s 轮询也能补上。
-        badge(page).wait_for(state="visible", timeout=20000)
+        # 应用写路径即时 notify，正常应 <1s；保留 10s 余量但不依赖 12s 客户端轮询，
+        # 否则 SSE 完全失效也会绿（reviewer N6）。
+        badge(page).wait_for(state="visible", timeout=10000)
         unread = badge(page).inner_text().strip()
         if not unread.isdigit() or int(unread) < 2:
             raise SmokeFailure(f"{width}: 未读 badge={unread!r}，期望至少 2")

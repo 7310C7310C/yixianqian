@@ -295,7 +295,14 @@ func (d *DB) UnreadNotificationCount(ctx context.Context, userID int64) (int, er
 // MarkNotificationRead marks one notification read for its owner. It reports
 // false when the id does not belong to the user.
 func (d *DB) MarkNotificationRead(ctx context.Context, userID, notificationID int64) (bool, error) {
-	tag, err := d.pool.Exec(ctx,
+	// UPDATE + pg_notify 在同一事务：notify 失败就回滚，避免「数据已改但接口 500」
+	// （reviewer N5）。NOTIFY 在 commit 时才投递，失败重试不会留下重复副作用。
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("db: mark notification read: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx,
 		`UPDATE notifications SET read_at = now()
 		 WHERE id = $1 AND user_id = $2 AND read_at IS NULL`,
 		notificationID, userID)
@@ -303,13 +310,16 @@ func (d *DB) MarkNotificationRead(ctx context.Context, userID, notificationID in
 		return false, fmt.Errorf("db: mark notification read: %w", err)
 	}
 	if tag.RowsAffected() > 0 {
-		if err := d.notifyUser(ctx, userID); err != nil {
+		if err := notifyUserTx(ctx, tx, userID); err != nil {
 			return false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("db: mark notification read: %w", err)
 		}
 		return true, nil
 	}
 	var exists bool
-	err = d.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM notifications WHERE id = $1 AND user_id = $2)`,
 		notificationID, userID).Scan(&exists)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -323,16 +333,24 @@ func (d *DB) MarkNotificationRead(ctx context.Context, userID, notificationID in
 
 // MarkAllNotificationsRead marks every unread notification for the user.
 func (d *DB) MarkAllNotificationsRead(ctx context.Context, userID int64) (int64, error) {
-	tag, err := d.pool.Exec(ctx,
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("db: mark all notifications read: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx,
 		`UPDATE notifications SET read_at = now()
 		 WHERE user_id = $1 AND read_at IS NULL`, userID)
 	if err != nil {
 		return 0, fmt.Errorf("db: mark all notifications read: %w", err)
 	}
 	if tag.RowsAffected() > 0 {
-		if err := d.notifyUser(ctx, userID); err != nil {
+		if err := notifyUserTx(ctx, tx, userID); err != nil {
 			return 0, err
 		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("db: mark all notifications read: %w", err)
 	}
 	return tag.RowsAffected(), nil
 }

@@ -63,11 +63,13 @@ jobs:
           cache-dependency-path: go.sum
       - name: 下载依赖
         run: go mod download
-      # db/httpserver 需要真实 Postgres，放到 integration job；其余包可并行。
+      # internal/httpserver 多数测试需要真实 Postgres，放到 integration job。
+      # internal/db 的单元测试（含 notification hub 并发回归）不需要数据库，留在本
+      # job 用 -race 跑，才能抓到 map 并发这类竞态；TestIntegration* 无 DSN 会 skip。
       - name: 单元测试（无数据库）
         run: |
           set -euo pipefail
-          PKGS=$(go list ./... | grep -v '/internal/db$' | grep -v '/internal/httpserver$')
+          PKGS=$(go list ./... | grep -v '/internal/httpserver$')
           go test -race -count=1 $PKGS
 
   integration:

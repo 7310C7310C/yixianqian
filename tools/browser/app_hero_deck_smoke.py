@@ -288,6 +288,9 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
             raise SmokeFailure(
                 f"{tag}: 当前卡带 src 的照片超过 2 张（{stats['photos']}，节点共 {stats.get('photoNodes')}）"
             )
+        # 仍保留对 v-for 渲染膨胀的约束（reviewer N7）：节点数不应随牌堆/窗口无限增长。
+        if stats["photoNodes"] > 12:
+            raise SmokeFailure(f"{tag}: 当前卡照片节点过多（{stats['photoNodes']} > 12）")
         if stats["dom"] > 260:
             raise SmokeFailure(f"{tag}: DOM 节点 {stats['dom']} 超过 260")
         if stats["mount"] is None:

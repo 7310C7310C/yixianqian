@@ -54,6 +54,36 @@ type legacyHomePayload struct {
 	CardsTotal int              `json:"cards_total"`
 }
 
+// TestIntegrationLegacyHomeSelfCardGenderMissing covers reviewer N2: a viewer
+// without gender still gets the legacy home shape (self card + cards_total=1),
+// while the candidate deck is empty. Batch7's merged query dropped the self
+// card here, which was an unintended behaviour change.
+func TestIntegrationLegacyHomeSelfCardGenderMissing(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	viewer, viewerClient := env.createUser(t, "U-HOMENG", "无性别", "active", "user")
+	cleanupHTTPUsers(t, env, viewer.ID)
+
+	if _, err := env.pool.Exec(env.ctx,
+		`UPDATE users SET gender = '', nickname = $2 WHERE id = $1`,
+		viewer.ID, "无性别自卡"); err != nil {
+		t.Fatalf("clear gender: %v", err)
+	}
+
+	resp := viewerClient.get("/legacy/api/home")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("legacy home status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	var home legacyHomePayload
+	legacyJSONDecode(t, resp, &home)
+	if home.CardsTotal != 1 || len(home.Cards) != 1 {
+		t.Fatalf("gender-missing home cards_total=%d cards=%d, want 1/1 (self only)",
+			home.CardsTotal, len(home.Cards))
+	}
+	if !home.Cards[0].IsSelf {
+		t.Fatalf("gender-missing home first card = %+v, want self", home.Cards[0])
+	}
+}
+
 // TestIntegrationLegacyHomeSelfCard pins the v1 /api/home behaviour: the
 // viewer's own card is the first card, cards_total counts it, while
 // /legacy/api/cards keeps exposing only the candidate pool.

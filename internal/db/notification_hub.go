@@ -192,11 +192,48 @@ func (h *NotificationHub) listenOnce() error {
 	}
 }
 
-func (h *NotificationHub) fanout(userID int64) {
+// subSnapshot copies one user's subscribers while holding the read lock.
+//
+// fanout/broadcastAll must never iterate the live map after unlocking: the
+// cancel func deletes from the same map under the write lock, and concurrent
+// map iteration+write is a Go runtime fatal error (unrecoverable process exit).
+// Copying is cheap (a handful of tabs per user) and keeps delivery lock-free.
+func (h *NotificationHub) subSnapshot(userID int64) []*notificationSub {
 	h.mu.RLock()
+	defer h.mu.RUnlock()
 	subs := h.subs[userID]
-	h.mu.RUnlock()
+	if len(subs) == 0 {
+		return nil
+	}
+	out := make([]*notificationSub, 0, len(subs))
 	for sub := range subs {
+		out = append(out, sub)
+	}
+	return out
+}
+
+// allSubscribers returns a snapshot of every subscriber across users.
+func (h *NotificationHub) allSubscribers() []*notificationSub {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	total := 0
+	for _, subs := range h.subs {
+		total += len(subs)
+	}
+	if total == 0 {
+		return nil
+	}
+	out := make([]*notificationSub, 0, total)
+	for _, subs := range h.subs {
+		for sub := range subs {
+			out = append(out, sub)
+		}
+	}
+	return out
+}
+
+func (h *NotificationHub) fanout(userID int64) {
+	for _, sub := range h.subSnapshot(userID) {
 		select {
 		case sub.ch <- struct{}{}:
 		default:
@@ -205,14 +242,10 @@ func (h *NotificationHub) fanout(userID int64) {
 }
 
 func (h *NotificationHub) broadcastAll() {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for _, subs := range h.subs {
-		for sub := range subs {
-			select {
-			case sub.ch <- struct{}{}:
-			default:
-			}
+	for _, sub := range h.allSubscribers() {
+		select {
+		case sub.ch <- struct{}{}:
+		default:
 		}
 	}
 }

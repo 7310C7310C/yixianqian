@@ -202,43 +202,70 @@ grep -H 'client_max_body_size' /etc/nginx/sites-available/relay-next.conf
 
 ## 性能批次7：PostgreSQL 参数（staging）
 
-> 2026-10-25 18:04 已在 server1 应用；staging 单机 PG 16，重启窗口数秒。业务代码未部署前也可生效；回滚只影响参数。
+> 2026-10-25 **18:04:07** 已在 server1 应用并重启（postmaster 启动时间可核对）；staging 单机
+> 只有一个 cluster `16/main`，**同实例上的所有数据库（`yixianqian_staging`、`yixianqian_test`
+> 等）共享这些参数**；业务代码未部署前也已生效。生产集群不在本批范围，需另行批准。
+
+**生效值（`pg_settings`，source=`postgresql.auto.conf`）**
+
+| 参数 | 值 | 批次7 前 |
+|---|---|---|
+| `shared_buffers` | 512MB | 128MB（`/etc/postgresql` 内的值） |
+| `work_mem` | 8MB | 4MB（PG 默认） |
+| `random_page_cost` | 1.1 | 4.0（默认） |
+| `effective_io_concurrency` | 200 | 1（默认） |
+| `jit` | off | on（默认） |
+| `track_io_timing` | on | off（默认） |
+| `effective_cache_size` | **4GB（维持默认，未调）** | 4GB |
+
+`effective_cache_size` 维持 4GB 的理由：它只影响 planner 的成本估算、不影响正确性；本机实测
+`buff/cache` 约 3.5GB，4GB 略乐观但同量级；先观察 `shared_buffers`/`jit` 的实际收益，避免一次
+改太多难归因。若后续 `pg_stat_statements` 显示大表顺序扫描被低估，再降到 2–3GB（同样用
+`ALTER SYSTEM` + 重启）。
 
 ```bash
-# 备份（本次之前 postgresql.auto.conf 不存在）
+# 备份：本次只备份「未被修改的 /etc 配置」，不是 auto.conf 的改前快照
+#   /var/backups/yxq-pg-b7/postgresql.conf.20261025-180401  ==  /etc/postgresql/16/main/postgresql.conf 副本
+#   （30248B，mtime Oct 21，内容与 /etc 版本一致；批次7 之前 auto.conf 不存在）
 TS=20261025-180401
-ls /var/backups/yxq-pg-b7/postgresql.conf.$TS
+ls -l /var/backups/yxq-pg-b7/postgresql.conf.$TS
+sha256sum /var/backups/yxq-pg-b7/postgresql.conf.$TS /etc/postgresql/16/main/postgresql.conf
 
-# 应用（ALTER SYSTEM 写入 postgresql.auto.conf）
+# 应用（ALTER SYSTEM 写入数据目录下的 postgresql.auto.conf）
 sudo -u postgres psql -c "ALTER SYSTEM SET shared_buffers = '512MB'"
 sudo -u postgres psql -c "ALTER SYSTEM SET work_mem = '8MB'"
 sudo -u postgres psql -c "ALTER SYSTEM SET random_page_cost = 1.1"
 sudo -u postgres psql -c "ALTER SYSTEM SET effective_io_concurrency = 200"
 sudo -u postgres psql -c "ALTER SYSTEM SET jit = off"
 sudo -u postgres psql -c "ALTER SYSTEM SET track_io_timing = on"
-systemctl restart postgresql
+systemctl restart postgresql   # 重启窗口数秒，影响本机全部 DB 连接
 
-# 验证
-sudo -u postgres psql -tAc "select name||'='||setting||coalesce(unit,'') from pg_settings where name in ('shared_buffers','work_mem','random_page_cost','effective_io_concurrency','jit','track_io_timing')"
+# 验证（source 应为 configuration file，且值如上表）
+sudo -u postgres psql -tAc "select name||'='||setting||coalesce(unit,'')||' src='||source from pg_settings where name in ('shared_buffers','work_mem','random_page_cost','effective_io_concurrency','jit','track_io_timing','effective_cache_size')"
+sudo -u postgres psql -tAc "select date_trunc('second', now() - pg_postmaster_start_time())"
 curl -s http://127.0.0.1:8093/healthz
 ```
 
-回滚（恢复到批次7 前）：
+回滚（恢复到批次7 前，**不需要 `.bak` 文件**）：
 
 ```bash
-TS=20261025-180401
-# 批次7 前 postgresql.auto.conf 不存在；逐项 RESET 后恢复 postgresql.conf
+# 批次7 之前 postgresql.auto.conf 不存在，六项的改前值都是 PG/默认或 /etc 里的值，
+# 因此逐项 RESET + 重启即可精确回到改前状态（Reviewer 已逐项对照）。
 sudo -u postgres psql -c "ALTER SYSTEM RESET shared_buffers"
 sudo -u postgres psql -c "ALTER SYSTEM RESET work_mem"
 sudo -u postgres psql -c "ALTER SYSTEM RESET random_page_cost"
 sudo -u postgres psql -c "ALTER SYSTEM RESET effective_io_concurrency"
 sudo -u postgres psql -c "ALTER SYSTEM RESET jit"
 sudo -u postgres psql -c "ALTER SYSTEM RESET track_io_timing"
-cp -a /var/backups/yxq-pg-b7/postgresql.conf.$TS /etc/postgresql/16/main/postgresql.conf
+sudo -u postgres psql -tAc "select name||'='||setting from pg_settings where name in ('shared_buffers','work_mem','random_page_cost','effective_io_concurrency','jit','track_io_timing')"
 systemctl restart postgresql
 ```
 
-> `postgresql.auto.conf` 在数据目录 `/var/lib/postgresql/16/main/`，不在 `/etc/postgresql/16/main/`；不要手改，用 `ALTER SYSTEM RESET`。
+> **没有 `postgresql.conf.bak` 是正常的**：`/etc/postgresql/16/main/postgresql.conf` 全程未改
+> （mtime 仍为 Oct 21），参数写在数据目录的 `/var/lib/postgresql/16/main/postgresql.auto.conf`
+> （`ALTER SYSTEM` 生成，不要手改）。`/var/backups/yxq-pg-b7/postgresql.conf.$TS` 是**未修改的
+> /etc 配置副本**，用于确认 `/etc` 没被动过；回滚点是「RESET + 重启」，不是拷文件。
+> 若要额外留痕，可 `cp postgresql.auto.conf` 到 `/var/backups/yxq-pg-b7/auto.conf.<ts>`（可选）。
 
 pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、`statement_timeout=5000`；迁移走独立连接 `SET statement_timeout=0`，`cmd/seed`/`cmd/facebackfill` 用 `db.OpenMaintenance`。回滚：改回 `internal/db/db.go` 常量并重启 app（无需 DB 重启）。
 

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"fmt"
 	"sync"
 )
@@ -20,12 +21,21 @@ type inflightCall struct {
 	err  error
 }
 
-func (g *inflightGroup) Do(key string, fn func() (any, error)) (any, error) {
+// Do runs fn once per key and shares the result with concurrent callers.
+//
+// Waiters select on their own ctx as well as call.done: the leader's request can
+// be cancelled (user switches tab / drops connection), and that must not turn
+// into a failure for other requests sharing the key (reviewer N3).
+func (g *inflightGroup) Do(ctx context.Context, key string, fn func() (any, error)) (any, error) {
 	g.mu.Lock()
 	if call, ok := g.calls[key]; ok {
 		g.mu.Unlock()
-		<-call.done
-		return call.val, call.err
+		select {
+		case <-call.done:
+			return call.val, call.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 	if g.calls == nil {
 		g.calls = make(map[string]*inflightCall)
