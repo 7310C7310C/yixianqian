@@ -204,3 +204,45 @@ func TestIntegrationReadCacheWriteCoverage(t *testing.T) {
 		t.Fatalf("4xx must not bump cache: status=%d queries=%d", code, got)
 	}
 }
+
+// TestIntegrationReadCacheDisabledByLimits 覆盖「仅 ITEMS=0」「仅 BYTES=0」两条独立关闭路径：
+// 两次 home 都必须全量查询（配置不得把 0 回落成默认值）。
+func TestIntegrationReadCacheDisabledByLimits(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*config.Config)
+	}{
+		{"items0", func(c *config.Config) { c.ReadCacheItems = 0 }},
+		{"bytes0", func(c *config.Config) { c.ReadCacheBytes = 0 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tracer := &countingTracer{}
+			env := setupActivitiesHTTPEnvWithOptions(t, func(cfg *config.Config) {
+				cfg.ReadCacheEnabled = true
+				cfg.ReadCacheTTL = 10 * time.Second
+				cfg.ReadCacheItems = 1024
+				cfg.ReadCacheBytes = 32 << 20
+				tc.mutate(cfg)
+			}, db.WithQueryTracer(tracer))
+			if env.app.readCache != nil {
+				t.Fatalf("%s: cache must be nil", tc.name)
+			}
+			viewer, client := env.createUser(t, "U-LIM-"+tc.name, "限额", "active", "user")
+			cleanupHTTPUsers(t, env, viewer.ID)
+			if _, err := env.pool.Exec(env.ctx,
+				`UPDATE users SET gender='男性' WHERE id=`+strconv.FormatInt(viewer.ID, 10)); err != nil {
+				t.Fatalf("gender: %v", err)
+			}
+			for i := 0; i < 2; i++ {
+				tracer.queries.Store(0)
+				resp := client.get("/legacy/api/home")
+				_, _ = io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if got := tracer.queries.Load(); got < 10 {
+					t.Fatalf("request %d queries=%d, want full rebuild (cache disabled by %s)", i+1, got, tc.name)
+				}
+			}
+		})
+	}
+}

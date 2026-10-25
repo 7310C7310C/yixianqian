@@ -1019,8 +1019,9 @@ func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request,
 	_, _ = w.Write(body)
 }
 
-// bumpReadCacheEpoch 在成功的非 GET /legacy/api/* 写请求后调用（由中间件统一做）：
-// 全局 epoch++ 让所有用户的旧条目立即失效，避免逐用户失效遗漏。
+// bumpReadCacheEpoch 在**成功的全站写请求**后调用（中间件统一做）：非 GET/HEAD/OPTIONS 且
+// 状态 <400，排除 /static/、/healthz 与埋点（track*/client-events）；全局 epoch++ 让所有
+// 用户的 home/cards 旧条目立即失效，避免逐用户失效遗漏。
 func (a *App) bumpReadCacheEpoch() {
 	if a.readCache != nil {
 		a.readCache.BumpEpoch()

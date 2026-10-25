@@ -287,6 +287,39 @@ func TestReadCacheConfigKillSwitch(t *testing.T) {
 	if c := newReadCacheFromConfig(cfg); c != nil {
 		t.Fatal("TTL=0 must disable cache")
 	}
+	// 3b) 仅 ITEMS=0（TTL/ENABLED 正常）
+	os.Unsetenv("READ_CACHE_ENABLED")
+	t.Setenv("READ_CACHE_TTL", "10s")
+	t.Setenv("READ_CACHE_ITEMS", "0")
+	t.Setenv("READ_CACHE_BYTES", "33554432")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if c := newReadCacheFromConfig(cfg); c != nil {
+		t.Fatal("ITEMS=0 must disable cache even when TTL/ENABLED are normal")
+	}
+	// 3c) 仅 BYTES=0（TTL/ENABLED/ITEMS 正常）
+	t.Setenv("READ_CACHE_ITEMS", "1024")
+	t.Setenv("READ_CACHE_BYTES", "0")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if c := newReadCacheFromConfig(cfg); c != nil {
+		t.Fatal("BYTES=0 must disable cache even when TTL/ENABLED/ITEMS are normal")
+	}
+	// 3d) 仅 TTL=0（ITEMS/BYTES 正常）
+	t.Setenv("READ_CACHE_TTL", "0s")
+	t.Setenv("READ_CACHE_BYTES", "33554432")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if c := newReadCacheFromConfig(cfg); c != nil {
+		t.Fatal("TTL=0 must disable cache")
+	}
+
 	// 4) 未设置时默认开启，且字节上限被 clamp 到 64MiB
 	t.Setenv("READ_CACHE_TTL", "10s")
 	t.Setenv("READ_CACHE_BYTES", "1073741824") // 1GiB → clamp 64MiB

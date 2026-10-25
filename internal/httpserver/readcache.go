@@ -9,15 +9,17 @@ import (
 	"time"
 )
 
-// readCache 是 /legacy/api/home 与 /legacy/api/cards 成功响应的进程内短缓存。
+// readCache 是 /legacy/api/home 与 /legacy/api/cards **共享**的进程内短缓存（单一实例、
+// 单一预算；key 含 kind 区分接口）。
 //
 // 设计（批次9 复审后）：
-//   - 键含**全局世代号 epoch**：任何成功的非 GET `/legacy/api/*` 写请求都会 epoch++，
-//     写后所有用户的旧条目立即不可达（不需要逐用户失效，不会漏）；GET/错误不 bump；
+//   - 键含**全局世代号 epoch**：任何成功的非 GET/HEAD/OPTIONS 请求（排除 /static/、/healthz、
+//     埋点 track*/client-events）都会 epoch++，写后所有用户的旧条目立即不可达；GET/4xx/5xx 不 bump；
 //   - 双重上限：总字节（READ_CACHE_BYTES，默认 32MiB）+ 单条上限（256KiB，超过不缓存）
 //   - 条数（READ_CACHE_ITEMS，默认 1024）；按**字节 LRU** 淘汰，最坏内存 ≤ 总字节上限；
 //   - 过期条目在 Get 时删除，且 Put 时按时间片顺带清理（sweep）；
-//   - 三项配置任一为 0 → 完全关闭（kill switch，不回落默认值）；
+//   - READ_CACHE_ENABLED=false 或 TTL/ITEMS/BYTES 任一为 0 → 完全关闭（kill switch，
+//     不回落默认值；零值 Config 同样关闭）；READ_CACHE_BYTES 上限 clamp 64MiB；
 //   - 仅单实例语义：多实例需 pub/sub 传播 epoch（文档记录，不在本批）。
 type readCache struct {
 	ttl       time.Duration
