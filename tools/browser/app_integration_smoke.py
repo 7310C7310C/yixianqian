@@ -38,6 +38,7 @@ PSQL_CMD 只用于插入/清理标题以「集成测试通知」开头的测试�
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -604,8 +605,9 @@ def run_bootstrap_fallback(browser, base_url: str, cookie: str, out_dir: Path) -
         context.close()
 
 
-def run_render_missing(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
-    """runtime-only Vue：app.render.js 取不到时必须显示可见错误页，而不是白屏。"""
+def _boot_failure_case(browser, base_url: str, cookie: str, out_dir: Path,
+                       abort_pattern: str, label: str, shot: str) -> list[str]:
+    """中断一个关键脚本，断言显示 .boot-fail 且没有 pageerror（不是白屏、不是崩栈）。"""
     context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
     context.add_cookies([{
         "name": "yxq_session",
@@ -614,8 +616,10 @@ def run_render_missing(browser, base_url: str, cookie: str, out_dir: Path) -> li
         "httpOnly": True,
         "sameSite": "Lax",
     }])
-    context.route("**/static/legacy/app.render.js*", lambda route: route.abort())
+    context.route(abort_pattern, lambda route: route.abort())
     page = context.new_page()
+    pageerrors: list[str] = []
+    page.on("pageerror", lambda exc: pageerrors.append(str(exc)))
     try:
         page.goto(base_url.rstrip("/") + "/", wait_until="domcontentloaded")
         page.locator(".boot-fail").wait_for(state="visible", timeout=10000)
@@ -623,10 +627,87 @@ def run_render_missing(browser, base_url: str, cookie: str, out_dir: Path) -> li
             raise SmokeFailure("错误页标题缺失")
         if not page.locator(".boot-fail-detail").inner_text().strip():
             raise SmokeFailure("错误页没有可诊断详情")
-        page.screenshot(path=str(out_dir / "app-render-missing-390.png"))
+        if pageerrors:
+            raise SmokeFailure(f"出现 pageerror: {pageerrors[:2]}")
+        page.screenshot(path=str(out_dir / shot))
         return []
     except Exception as exc:  # noqa: BLE001 - report every failure
-        return [f"390px 渲染器缺失兜底: {exc}"]
+        return [f"390px {label}: {exc}"]
+    finally:
+        context.close()
+
+
+def run_render_missing(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """runtime-only Vue 的两种缺失：渲染产物没了、运行库没了，都必须可见报错且不崩栈。"""
+    failures = _boot_failure_case(
+        browser, base_url, cookie, out_dir,
+        "**/static/legacy/app.render.js*", "渲染器缺失兜底", "app-render-missing-390.png",
+    )
+    failures.extend(_boot_failure_case(
+        browser, base_url, cookie, out_dir,
+        "**/static/legacy/lib/vue.global.prod.js*", "Vue 运行库缺失兜底", "app-vue-missing-390.png",
+    ))
+    failures.extend(_boot_failure_case(
+        browser, base_url, cookie, out_dir,
+        "**/static/legacy/lib/vant.min.js*", "Vant 组件库缺失兜底", "app-vant-missing-390.png",
+    ))
+    return failures
+
+
+def run_mutual_wechat_prefill(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """互喜页微信号预填/填写回归：数据源必须是 /legacy/api/likes/me（no-store）。
+
+    批次4 起壳内 bootstrap 不再携带 my_wechat/their_wechat（PII 落盘口径），
+    所以这里把 likes 接口替换成固定 payload，验证「进入互喜页仍能显示并填写微信号」。
+    """
+    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
+    context.add_cookies([{
+        "name": "yxq_session",
+        "value": cookie,
+        "url": base_url,
+        "httpOnly": True,
+        "sameSite": "Lax",
+    }])
+    payload = {
+        "liked_me": [],
+        "mutual": [{
+            "initiator_openid": "U-PREFILL-1",
+            "nickname": "预填检查",
+            "my_wechat": "wx-prefill-check",
+            "their_wechat": "",
+            "wechat_required": True,
+            "wechat_status": "need_wechat",
+            "waiting_other": False,
+            "message": "",
+        }],
+    }
+    context.route(
+        "**/legacy/api/likes/me",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json", body=json.dumps(payload)
+        ),
+    )
+    page = context.new_page()
+    errors = attach_error_capture(page)
+    try:
+        page.goto(base_url.rstrip("/") + "/", wait_until="domcontentloaded")
+        page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
+        tap_tab(page, "消息")
+        row = page.locator(".msg-card").filter(has_text="相互喜欢").first
+        row.wait_for(state="visible", timeout=15000)
+        row.click()
+        field = page.locator("input[placeholder='请输入微信号']")
+        field.wait_for(state="visible", timeout=15000)
+        prefilled = field.input_value()
+        if prefilled != "wx-prefill-check":
+            raise SmokeFailure(f"微信号预填错误 {prefilled!r}（应来自 /legacy/api/likes/me）")
+        field.fill("wx-typed-check")
+        if field.input_value() != "wx-typed-check":
+            raise SmokeFailure("互喜页微信号无法填写")
+        page.screenshot(path=str(out_dir / "mutual-wechat-prefill-390.png"))
+        return []
+    except Exception as exc:  # noqa: BLE001 - report every failure
+        return [f"390px 互喜微信号预填: {exc}"]
     finally:
         context.close()
 
@@ -657,6 +738,7 @@ def main() -> int:
                 ))
             failures.extend(run_bootstrap_fallback(browser, base_url, cookie, out_dir))
             failures.extend(run_render_missing(browser, base_url, cookie, out_dir))
+            failures.extend(run_mutual_wechat_prefill(browser, base_url, cookie, out_dir))
             failures.extend(run_polling_fallback(browser, base_url, cookie, user_legacy_id, out_dir))
             browser.close()
     finally:

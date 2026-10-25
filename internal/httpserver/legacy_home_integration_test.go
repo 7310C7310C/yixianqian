@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -253,5 +254,105 @@ func TestIntegrationShellBootstrapOmitsSensitiveFields(t *testing.T) {
 	api := readBody(t, apiResp)
 	if !strings.Contains(api, `"wechat":"wx-secret-8888"`) || !strings.Contains(api, `"phone"`) {
 		t.Fatalf("api home payload lost contact fields: %s", api[:min(len(api), 200)])
+	}
+}
+
+// bootstrapJSON decodes the inlined home payload from the shell body.
+func bootstrapJSON(t *testing.T, body string) map[string]any {
+	t.Helper()
+	const marker = "window.__YXQ_BOOTSTRAP__="
+	index := strings.Index(body, marker)
+	if index < 0 {
+		t.Fatal("shell has no bootstrap marker")
+	}
+	var payload map[string]any
+	decoder := json.NewDecoder(strings.NewReader(body[index+len(marker):]))
+	if err := decoder.Decode(&payload); err != nil {
+		t.Fatalf("decode bootstrap: %v", err)
+	}
+	return payload
+}
+
+// assertNoSensitiveBootstrap walks the payload and fails on any contact/ID key
+// or value. Key matching must stay pattern-based: the exact-list version missed
+// likes.mutual[].their_wechat/my_wechat (Reviewer A8).
+func assertNoSensitiveBootstrap(t *testing.T, value any, path string, bannedValues []string) {
+	t.Helper()
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if sensitiveBootstrapKey(key) {
+				t.Fatalf("bootstrap leaks sensitive key %s%s", path, key)
+			}
+			assertNoSensitiveBootstrap(t, child, path+key+".", bannedValues)
+		}
+	case []any:
+		for i, child := range typed {
+			assertNoSensitiveBootstrap(t, child, fmt.Sprintf("%s[%d].", path, i), bannedValues)
+		}
+	case string:
+		for _, banned := range bannedValues {
+			if banned != "" && strings.Contains(typed, banned) {
+				t.Fatalf("bootstrap leaks value %q at %s", banned, path)
+			}
+		}
+	}
+}
+
+func TestIntegrationMutualReadyShellOmitsWechat(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	male, maleClient := env.createUser(t, "U-MUT-SH-M", "壳微信男", "active", "user")
+	female, _ := env.createUser(t, "U-MUT-SH-F", "壳微信女", "active", "user")
+	cleanupHTTPUsers(t, env, male.ID, female.ID)
+	if _, err := env.pool.Exec(env.ctx,
+		`UPDATE users SET gender = $2, wechat = 'wx-ready-male', contact_consent = true WHERE id = $1`,
+		male.ID, db.GenderMale); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.pool.Exec(env.ctx,
+		`UPDATE users SET gender = $2, wechat = 'wx-ready-female', contact_consent = true WHERE id = $1`,
+		female.ID, db.GenderFemale); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.database.CreateLike(env.ctx, db.CreateLikeParams{
+		InitiatorID: male.ID, TargetID: female.ID, LikeType: db.LikeTypeReal,
+		Message: "壳内联回归：这条附言只用于集成测试。", Now: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.database.CreateLike(env.ctx, db.CreateLikeParams{
+		InitiatorID: female.ID, TargetID: male.ID, LikeType: db.LikeTypeAnon,
+		Message: "壳内联回归：这条附言只用于集成测试。", Now: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 双方已就绪：likes API 必须照旧返回两个微信号（my_wechat/their_wechat）。
+	likesResp := maleClient.get("/legacy/api/likes/me")
+	if got := likesResp.Header.Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Fatalf("likes cache-control=%q", got)
+	}
+	likes := readBody(t, likesResp)
+	for _, want := range []string{`"my_wechat":"wx-ready-male"`, `"their_wechat":"wx-ready-female"`} {
+		if !strings.Contains(likes, want) {
+			t.Fatalf("likes/me lost %s: %s", want, likes[:min(len(likes), 400)])
+		}
+	}
+
+	// 壳（private, no-cache、可 304 复用）里不得出现任何联系方式。
+	shell := readBody(t, maleClient.get("/app"))
+	assertNoSensitiveBootstrap(t, bootstrapJSON(t, shell), "", []string{
+		"wx-ready-male", "wx-ready-female",
+	})
+	if index := strings.Index(strings.ToLower(shell), "wx-ready-"); index >= 0 {
+		start := index - 160
+		if start < 0 {
+			start = 0
+		}
+		end := index + 160
+		if end > len(shell) {
+			end = len(shell)
+		}
+		t.Fatalf("shell body leaked a wechat value: %q", shell[start:end])
 	}
 }

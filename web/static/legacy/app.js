@@ -26,7 +26,16 @@
     new MutationObserver(disableImgDrag).observe(document.documentElement,{childList:true,subtree:true});
   }catch(e){}
 })();
-const { createApp, ref, computed, onMounted, watch, nextTick, onUnmounted } = Vue;
+// 自身脚本地址：用于在 Vue 就绪后再按需加载 Vant（Vant 是依赖 Vue 的 UMD，
+// Vue 缺失时提前执行只会在 vendor 里抛 pageerror，盖住我们的可见错误页）。
+var yxqAssetVersion = '';
+var yxqLibBase = '/static/legacy/lib/';
+try {
+  var yxqSrc = (document.currentScript && document.currentScript.src) || '';
+  var yxqMatch = yxqSrc.match(/[?&]v=([^&]+)/);
+  if (yxqMatch) yxqAssetVersion = yxqMatch[1];
+  if (yxqSrc) yxqLibBase = yxqSrc.replace(/[^/]*$/, '') + 'lib/';
+} catch (e) {}
 // runtime-only Vue（3.4.27 无编译器构建）不能再把 template 当兜底：渲染器或运行库缺失时
 // 必须给出可诊断的可见错误，而不是静默白屏。这里只依赖 DOM，不依赖 Vue。
 function yxqBootFailure(detail){
@@ -49,10 +58,25 @@ function yxqBootFailure(detail){
   }catch(e){}
   try{ console.error('[yxq] boot failed:', detail); }catch(e){}
 }
-if (typeof Vue === 'undefined') {
-  yxqBootFailure('运行库未加载（vue.global.prod.js）');
-  throw new Error('yxq: Vue runtime missing');
+// Vant 只在 Vue 就绪后加载；失败走同一套可见错误页，不抛异常。
+function yxqLoadVant(onReady){
+  if (typeof vant !== 'undefined') { onReady(); return; }
+  var script = document.createElement('script');
+  script.src = yxqLibBase + 'vant.min.js' + (yxqAssetVersion ? '?v=' + yxqAssetVersion : '');
+  script.onload = function(){
+    if (typeof vant === 'undefined') { yxqBootFailure('UI 组件库未初始化（vant.min.js）'); return; }
+    onReady();
+  };
+  script.onerror = function(){ yxqBootFailure('UI 组件库加载失败（vant.min.js）'); };
+  document.head.appendChild(script);
 }
+// 守衛必須在解構 `const { ref } = Vue` 之前：否则 Vue 缺失时是 ReferenceError，
+// 错误页根本来不及渲染（Reviewer C3）。这里不 throw——未捕获异常会变成 pageerror，
+// 渲染完错误页就停下，初始化整体放进 else 块。
+if (typeof Vue === 'undefined' || !Vue) {
+  yxqBootFailure('运行库未加载（vue.global.prod.js）');
+} else {
+const { createApp, ref, computed, onMounted, watch, nextTick, onUnmounted } = Vue;
 // 管理台共用「慢载入」loading：超过 6s 在转圈下方追加提示（页面以为卡死而重载是本次要缓解的问题）。
 // 组件卸载自动清定时器；写操作遮罩等不需要的地方不用它。
 const GaLoading = {
@@ -6257,12 +6281,15 @@ const yxqApp = createApp({
 if (typeof window.__YXQ_RENDER__ !== 'function') {
   yxqBootFailure('渲染器未加载（app.render.js 缺失或损坏）');
 } else {
-  try {
-    yxqApp.use(vant).mount('#app');
-  } catch (err) {
-    yxqBootFailure(err && err.message ? err.message : String(err));
-    throw err;
-  }
+  yxqLoadVant(function(){
+    try {
+      yxqApp.use(vant).mount('#app');
+    } catch (err) {
+      // 不 rethrow：错误页已经把原因显示出来，抛出去只会多一条 pageerror。
+      yxqBootFailure(err && err.message ? err.message : String(err));
+    }
+  });
+}
 }
 
 

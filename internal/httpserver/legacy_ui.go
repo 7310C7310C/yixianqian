@@ -131,23 +131,25 @@ func bootstrapPreloadURL(payload map[string]any) string {
 	return photo
 }
 
-// sensitiveBootstrapKeys never enter the shell. The shell is private, no-cache
-// (browser-storable and reusable via 304), while these fields are only exposed
-// by the no-store APIs (/legacy/api/home, /legacy/api/profile).
-var sensitiveBootstrapKeys = map[string]struct{}{
-	"phone":          {},
-	"wechat":         {},
-	"wechat_id":      {},
-	"id_card":        {},
-	"id_card_no":     {},
-	"id_card_number": {},
-	"id_card_front":  {},
-	"id_card_back":   {},
-}
-
+// sensitiveBootstrapKey matches by pattern rather than by an exact list: the
+// home payload grows new contact/ID fields over time, and an exact allow/deny
+// list already missed likes.mutual[].their_wechat and my_wechat. Anything whose
+// key contains "wechat" or "phone" (covers their_wechat, my_wechat,
+// wechat_id, wechat_payment, phone_verified, …) or starts with "id_card"
+// (id_card_last4, id_card_no, id_card_front, IdCardHash, …) never enters the shell.
+//
+// The shell is private, no-cache (browser-storable and reusable via 304); the
+// no-store APIs (/legacy/api/home, /legacy/api/likes/me, /legacy/api/profile)
+// remain the single source for these fields.
 func sensitiveBootstrapKey(key string) bool {
-	_, found := sensitiveBootstrapKeys[strings.ToLower(strings.TrimSpace(key))]
-	return found
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	if normalized == "" {
+		return false
+	}
+	if strings.HasPrefix(normalized, "id_card") || strings.HasPrefix(normalized, "idcard") {
+		return true
+	}
+	return strings.Contains(normalized, "wechat") || strings.Contains(normalized, "phone")
 }
 
 // sanitizeBootstrap strips sensitive keys at any depth of the home payload and

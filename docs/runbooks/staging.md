@@ -342,13 +342,19 @@ curl -s -o /dev/null -w 'media 304=%{http_code}\n' -H "Cookie: yxq_session=$C" -
 
 - **首屏 bootstrap**：`serveLegacyApp` 复用 `/legacy/api/home` 的同一聚合函数（`buildLegacyHomePayload`，handler 只是 HTTP 包装）生成 `window.__YXQ_BOOTSTRAP__`，800ms 超时；失败/超时只跳过注入，壳照常渲染，前端回退 `fetch('/legacy/api/home')`。匿名请求仍 303 到登录页，不注入任何个人数据。首卡缩图在 `<head>` 通过 `<link rel="preload" as="image" fetchpriority="high">` 提前发起（同源、带 cookie）。
 - 安全：`json.Marshal` 默认转义 HTML，再把 `</` 替换成 `<\/`，昵称含 `</script>` 也不会逃出脚本块；集成测试覆盖 XSS 转义、匿名、ETag/304。
+- **PII 边界**：`sanitizeBootstrap` 按键名模式剔除（含 `wechat`/`phone` 子串、`id_card`/`idcard` 前缀），互喜的 `my_wechat`/`their_wechat` 也在其中；这些字段只经 `no-store` 的 `/legacy/api/home`、`/legacy/api/likes/me`、`/legacy/api/profile` 下发。互喜页预填与展示都取 likes API，壳里丢了也不影响页面。新增首页字段时，若属于联系方式/证件，命名包含上述模式即自动被剔除；否则要同步 `sensitiveBootstrapKey` 与测试。
 - **静态预压缩**：`make static-gzip`（`go run ./tools/static_gzip`）为 `web/static/**` 的 `.js/.css/.html/.svg` 生成 gzip -9 兄弟文件并随 `go:embed` 发布；Go 静态 handler 按 `Accept-Encoding` 返回 `.gz`（`Content-Encoding: gzip`、`Vary: Accept-Encoding`、`ETag` 带 `-gzip/-identity`、`If-None-Match` 304），无变体时回退 `FileServer`；直接请求 `*.gz` 返回 404。`make ci` 跑 `static-gzip-check`，`TestStaticGzipFilesMatchSources` 校验每个 `.gz` 解压后与源文件逐字节一致。
 - 兼容：nginx `map $http_accept_encoding $yxq_static_enc` 把 `gzip;q=0` 判为 identity（拒绝规则排在 `~*gzip` 前），`proxy_cache_key` 追加该变量；否则 q=0 客户端会把 identity 字节写进 gzip 缓存条目。
 - **runtime-only Vue**：`lib/vue.global.prod.js` 换成同版本 3.4.27 `vue.runtime.global.prod.js`（147,796→90,713B）；
   全仓已无运行时模板（根模板走 `app.render.js`，`GaLoading` 改为 `render()`）。
   **不再有 template 兜底**：`Vue` 未加载或 `window.__YXQ_RENDER__` 不是函数时，`app.js` 渲染可见错误页
   （`.boot-fail`，含详情与「重新加载」）并 `console.error('[yxq] boot failed')`，不再是白屏。
-  彻底回退 = `git revert` 批次4（同时换回带编译器的 Vue）。
+  `app.render.js` 自身也带 `typeof Vue` 守衛（运行库缺失时直接 return，不抛 pageerror）；
+  **Vant 改由 `app.js` 在 Vue 就绪后按需注入**（`<link rel=preload>` 仍在壳里，抓取时机不变）——
+  Vant 是依赖 Vue 的 UMD，Vue 缺失时提前执行只会在 vendor 里抛 pageerror 并盖住错误页。
+  三种缺失（`app.render.js` / `vue.global.prod.js` / `vant.min.js`）都只显示错误页、无 pageerror，
+  由 `app_integration` smoke 的 `run_render_missing` 三个用例覆盖。
+  彻底回退 = `git revert` 批次4（同时换回带编译器的 Vue 与静态 Vant 标签）。
 - **静态预压缩门禁**：`-check` 只校验「`.gz` 存在且解压后与源文件逐字节一致」，因此与生成它的 Go 版本无关
   （flate 输出跨版本不同；Go 1.24.7 与 1.27.3 的字节不同但内容相同）；`-strict-bytes` 仅用于本机刚重生后的严格比对。
   `ci.yml` lint-build 已执行 `go run ./tools/static_gzip -check`，新增源文件忘生成 `.gz` 会红。

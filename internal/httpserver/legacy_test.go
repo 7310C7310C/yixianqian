@@ -35,7 +35,7 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 		`window.__YXQ_AUTHENTICATED__=false;`,
 		`window.__YXQ_VERSION__='__YXQ_VERSION_VALUE__';`,
 		`src="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__"`,
-		`src="lib/vant.min.js?v=__ASSET_URL_VERSION__"`,
+		`<link rel="preload" as="script" href="lib/vant.min.js?v=__ASSET_URL_VERSION__">`,
 		`src="app.js?v=__ASSET_URL_VERSION__"`,
 		`history.pushState(state, '', navURL());`,
 		`nativeAdmin`,
@@ -51,7 +51,17 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 			t.Fatalf("legacy shell/app missing %q", want)
 		}
 	}
-	for _, want := range []string{`const BASE_PATH = '/legacy';`, `const APP_VERSION = window.__YXQ_VERSION__`} {
+	// Vant 由 app.js 在 Vue 就绪后注入：壳里不能再有静态 vant 脚本标签，
+	// 否则 Vue 缺失时 vendor 先抛 pageerror，盖住 app.js 的可见错误页。
+	if strings.Contains(html, `src="lib/vant.min.js`) {
+		t.Fatal("legacy shell must not load vant with a static script tag")
+	}
+	for _, want := range []string{
+		`const BASE_PATH = '/legacy';`,
+		`const APP_VERSION = window.__YXQ_VERSION__`,
+		`+ 'vant.min.js' + (yxqAssetVersion ? '?v=' + yxqAssetVersion : '')`,
+		`if (typeof Vue === 'undefined' || !Vue) {`,
+	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("app.js missing %q", want)
 		}
