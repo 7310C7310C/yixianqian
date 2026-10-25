@@ -239,6 +239,14 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - static-gzip 门禁改为「解压后与源逐字节一致」（与 Go 版本无关），并接入 `ci.yml` lint-build；`-strict-bytes` 仅本机用。
 - 回滚：`git revert` + 重新构建部署（静态在二进制内）；nginx 配置回滚见批次1 §6。详见 `.team/perf/batch4-report.md`。
 
+### 性能批次5（2026-10-25，实现待审）
+
+- 壳内首卡 hero：`#boot-skeleton` 不再在挂载时立即删除，而是静态渲染与 `.cards-page/.swipe-card/.card-photo-wrap` **同一套几何**的首卡缩图（含品牌/底栏文本先出 FCP）；Vue 首卡图 decode+paint 后淡出，交互/切 tab/回退/深链/restore 立即移除；无卡/无图/加载失败退化为 shimmer 骨架，暗色/375/390/768/1280 适配。`assetVersion` 10→11。
+- 首屏任务拆分：Vant 加载/执行前让位两帧，Vant 与 `mount` 分开；`onMounted` 后的数据加载/卡片页渲染再让出一帧（`yxqAfterFirstPaint`），避免把 hero 首图绘制压到 2–3s 长任务之后；新增 `yxq-mount`/`yxq-boot` 性能标记。
+- 牌堆单卡窗口：复核 HEAD `c0506e3` 已是**只渲染 currentCard**（20 张 bootstrap 数据、DOM 160/161 节点、`.swipe-card=1`），不存在「20 张卡 DOM」；新增 `TestDeckRendersOnlyCurrentCard` 与 `app_hero_deck_smoke.py` 防止回归，不新增 ±1 预渲染 DOM（会反向增加节点）。
+- 本地节流（390×844，1.6Mbps/150ms/CPU×4，N=3 中位）：冷 FCP 2.46s / LCP **4.85s**、暖 FCP 0.93s / LCP **2.03s**、最长任务 1.91s/0.79s、mount 0.55s/0.09s；1280×900：冷 2.66/4.69s、暖 1.13/2.06s、最长 1.88/0.76s、mount 0.54/0.05s；CLS 0，字节/请求 684KB/15（冷）、29.5KB/16（热）。暖 LCP 达标；冷最长任务仍受 Vant UMD 执行（~1s）限制，需 P1 子集构建。
+- 回归：`make ci`（Go 1.24.7）+ 5 个既有 Playwright smoke + 新 hero/deck smoke（390/1280/375/768、暗色、交互、无卡/首图失败降级）全 PASS。详见 `.team/perf/batch5-report.md`。
+
 ### 人脸与数据
 
 - 人脸检测：本地 YuNet 优先、Haar 回退；上传后检测、注册后补检测、`has_face` 门禁；观察员账号豁免 `has_face`（身份证不豁免）。

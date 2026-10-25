@@ -128,6 +128,10 @@ def dismiss_guides(page) -> None:
 
 def wait_app(page) -> None:
     page.wait_for_selector(".van-tabbar", timeout=20000)
+    try:
+        page.locator("#boot-skeleton").wait_for(state="detached", timeout=15000)
+    except PlaywrightTimeoutError:
+        pass
     page.wait_for_timeout(900)
     dismiss_guides(page)
 

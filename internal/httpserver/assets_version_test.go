@@ -96,6 +96,84 @@ func TestRootRenderIsPrecompiled(t *testing.T) {
 	}
 }
 
+func TestLegacyShellRendersStaticHero(t *testing.T) {
+	html := readEmbedded(t, "static/legacy/index.html")
+	for _, want := range []string{
+		`id="boot-skeleton"`,
+		`class="cards-page"`,
+		`class="swipe-card"`,
+		`class="card-photo-wrap"`,
+		`class="card-photo-item boot-photo"`,
+		`__YXQ_HERO__`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("shell is missing hero marker %q", want)
+		}
+	}
+	css := readEmbedded(t, "static/legacy/app.css")
+	for _, want := range []string{
+		"#boot-skeleton",
+		".boot-hero-ready",
+		"#boot-skeleton.boot-hero-out",
+		"#boot-skeleton .boot-tab-text",
+		"prefers-reduced-motion",
+	} {
+		if !strings.Contains(css, want) {
+			t.Fatalf("app.css is missing hero rule %q", want)
+		}
+	}
+	js := readEmbedded(t, "static/legacy/app.js")
+	if strings.Contains(js, "boot.remove()") {
+		t.Fatal("app.js still removes the shell hero on mount")
+	}
+	for _, want := range []string{
+		"__YXQ_APP_MOUNTED__",
+		"settleBootHero",
+		"yxqAfterFirstPaint",
+		"yxq-mount-start",
+		"yxq-boot-end",
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("app.js is missing hero lifecycle marker %q", want)
+		}
+	}
+}
+
+// 牌堆只渲染当前卡片：数据窗口可以保留多张，但 DOM 不能一次挂 20 张。
+func TestDeckRendersOnlyCurrentCard(t *testing.T) {
+	html := readEmbedded(t, "static/legacy/index.html")
+	if regexp.MustCompile(`v-for="[^"]*\bin cards\b`).MatchString(html) {
+		t.Fatal("shell renders a v-for over the whole cards array")
+	}
+	if !strings.Contains(html, `v-if="currentCard" class="swipe-card"`) {
+		t.Fatal("shell does not gate the swipe card on currentCard")
+	}
+	js := readEmbedded(t, "static/legacy/app.js")
+	for _, want := range []string{
+		"const currentCard = computed",
+		"cards.value[cardIndex.value + 1]",
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("app.js is missing single-card window marker %q", want)
+		}
+	}
+}
+
+func TestBootstrapPreloadUsesThumbURL(t *testing.T) {
+	payload := map[string]any{
+		"cards": []map[string]any{{
+			"photo":  "/cards/photo/abc?size=thumb",
+			"photos": []any{"/cards/photo/abc"},
+		}},
+	}
+	if got := bootstrapPreloadURL(payload); got != "/cards/photo/abc?size=thumb" {
+		t.Fatalf("bootstrap preload = %q, want first card thumb", got)
+	}
+	if got := bootstrapPreloadURL(map[string]any{"cards": []map[string]any{}}); got != "" {
+		t.Fatalf("empty cards preload = %q, want empty", got)
+	}
+}
+
 func TestDeckLoadsOnlyAdjacentPhotos(t *testing.T) {
 	html := readEmbedded(t, "static/legacy/index.html")
 	if !strings.Contains(html, "v-if=\"photoSrc(i)\"") {

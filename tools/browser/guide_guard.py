@@ -65,6 +65,15 @@ def visible_blockers(scope) -> list[str]:
     return found
 
 
+def wait_boot_hero_gone(scope, timeout_ms: int = 15000) -> bool:
+    """等待壳内首卡 hero 移除（批次5）。不存在时立即返回 True。"""
+    try:
+        scope.wait_for_selector("#boot-skeleton", state="detached", timeout=timeout_ms)
+        return True
+    except PlaywrightError:
+        return False
+
+
 def wait_guides_hidden(scope, timeout_ms: int = 6000) -> bool:
     """等待 `.swipe-guide-mask` 消失；超时返回 False（元素不存在也算消失）。"""
     try:
@@ -80,6 +89,7 @@ def dismiss_guides(scope, timeout_ms: int = 6000) -> bool:
     依次处理：滑动引导按钮、「知道了」（更新说明/活动引导）、残留在最底层的
     裸 `.van-overlay`（只有没有业务浮层时才点，避免误关确认框）。
     """
+    wait_boot_hero_gone(scope)
     deadline = time.monotonic() + timeout_ms / 1000
     while True:
         if time.monotonic() >= deadline:

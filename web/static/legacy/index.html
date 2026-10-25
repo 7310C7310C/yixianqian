@@ -22,8 +22,66 @@
 
 </head>
 <body>
-<div id="boot-skeleton" aria-hidden="true"><div class="boot-brand">一线牵</div><div class="boot-card"><div class="boot-shimmer"></div></div></div>
-<style>#boot-skeleton{position:relative;min-height:60vh;background:#f7f8fa;display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 16px;}#boot-skeleton .boot-brand{font-size:22px;font-weight:600;color:#ff6b81;}#boot-skeleton .boot-card{position:relative;width:100%;max-width:420px;height:48vh;border-radius:18px;overflow:hidden;background:linear-gradient(90deg,#f1f2f4 25%,#e6e8eb 37%,#f1f2f4 63%);background-size:400% 100%;animation:bootShimmer 1.2s ease infinite;}#boot-skeleton .boot-shimmer{height:100%;}#boot-skeleton .boot-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}@keyframes bootShimmer{0%{background-position:100% 0}100%{background-position:0 0}}</style>
+<div id="boot-skeleton" aria-hidden="true">
+  <div class="cards-page">
+    <div class="swipe-card">
+      <div class="card-photo-wrap">
+        <div class="boot-shimmer boot-hero-shimmer"></div>
+        <img class="card-photo-item boot-photo" alt="" decoding="async" fetchpriority="high">
+      </div>
+      <div class="boot-hero-body">
+        <div class="boot-shimmer boot-line boot-line--md"></div>
+        <div class="boot-shimmer boot-line boot-line--sm"></div>
+      </div>
+    </div>
+  </div>
+  <div class="boot-tabbar" aria-hidden="true">
+    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">牵线</span></div>
+    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">消息</span></div>
+    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">活动</span></div>
+    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">我的</span></div>
+  </div>
+</div>
+<style>#boot-skeleton{position:fixed;inset:0;z-index:2000;background:#f7f8fa;pointer-events:none}.van-theme-dark #boot-skeleton{background:#111}</style>
+<script>
+// 壳内首卡 hero：沿用牵线页 .cards-page/.swipe-card/.card-photo-wrap 的同一套几何，
+// Vue 的首卡图真正绘制后再淡出，避免新 LCP 候选被挂载长任务重置。
+// 挂载前不响应交互，避免用户点一下就把唯一的首屏内容移除成 v-cloak 空白。
+(function(){
+  var root = document.getElementById('boot-skeleton');
+  if (!root) return;
+  var img = root.querySelector('.boot-photo');
+  var state = {dismissed:false, loaded:false};
+  function setPhoto(src){
+    if (!img || !src || state.dismissed) return;
+    img.onload = function(){ state.loaded = true; root.classList.add('boot-hero-ready'); };
+    img.onerror = function(){ root.classList.add('boot-hero-failed'); try{ img.removeAttribute('src'); }catch(e){} };
+    img.src = src;
+  }
+  function dismiss(reason){
+    if (state.dismissed) return;
+    state.dismissed = true;
+    state.reason = reason || '';
+    document.removeEventListener('pointerdown', onInteract, true);
+    document.removeEventListener('touchstart', onInteract, true);
+    document.removeEventListener('keydown', onInteract, true);
+    document.removeEventListener('wheel', onInteract, true);
+    root.classList.add('boot-hero-out');
+    setTimeout(function(){ if (root.parentNode) root.parentNode.removeChild(root); }, 180);
+  }
+  function onInteract(){ if (window.__YXQ_APP_MOUNTED__) dismiss('interact'); }
+  document.addEventListener('pointerdown', onInteract, true);
+  document.addEventListener('touchstart', onInteract, true);
+  document.addEventListener('keydown', onInteract, true);
+  document.addEventListener('wheel', onInteract, true);
+  window.__YXQ_HERO__ = {
+    setPhoto: setPhoto,
+    dismiss: dismiss,
+    loaded: function(){ return state.loaded; },
+    dismissed: function(){ return state.dismissed; }
+  };
+})();
+</script>
 <div id="app" v-cloak>
 <!-- 新版本提示：只提示不自动刷新，用户点击才更新（避免操作中闪整页进度条） -->
 <div v-if="updateReady && !nativeAdmin" class="update-bar" role="status" aria-live="polite">
@@ -2601,13 +2659,8 @@
       if (!d || !d.cards || !d.cards.length) return;
       var c = d.cards[0];
       var src = c.photo || (c.photos_thumb && c.photos_thumb[0]) || (c.photos && c.photos[0]);
-      if (!src) return;
-      var sk = document.getElementById('boot-skeleton');
-      if (!sk || sk.querySelector('.boot-photo')) return;
-      var img = new Image();
-      img.className = 'boot-photo'; img.alt = ''; img.src = src;
-      var box = sk.querySelector('.boot-card');
-      if (box) box.appendChild(img);
+      if (!src || !window.__YXQ_HERO__) return;
+      window.__YXQ_HERO__.setPhoto(src);
     }
     var boot = window.__YXQ_BOOTSTRAP__;
     if (boot) {

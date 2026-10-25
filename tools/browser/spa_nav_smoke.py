@@ -59,6 +59,10 @@ def require(name: str) -> str:
 def dismiss_guides(page) -> None:
     """关掉首次进入的滑动引导/活动/更新说明等一次性弹层。"""
     page.wait_for_timeout(600)
+    try:
+        page.locator("#boot-skeleton").wait_for(state="detached", timeout=15000)
+    except PlaywrightTimeoutError:
+        pass
     for _ in range(6):
         acted = False
         guide = page.locator(".swipe-guide-mask .sg-btn")

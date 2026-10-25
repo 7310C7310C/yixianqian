@@ -235,3 +235,12 @@ sources: []
 - 决策：边缘 `Accept-Encoding` 两态规整。`map $yxq_static_enc` 只把「裸 gzip token」或「q 值含非零数字」判为 gzip（`x-gzip`、`q=0`、非法 q 落 identity），回源再经 `map $yxq_static_enc $yxq_upstream_ae` 发送 `gzip` 或空值。这样 Go 与边缘永远做同一决定，不会出现「identity 缓存键里存 gzip 字节」这种会伤客户端的错配。
 - 边界：不改媒体授权/隐私语义；不把 bootstrap 写入共享缓存（`private` + `Vary: Cookie`，边缘 `/` 无 `proxy_cache`）；`/legacy/api/home` 与 `/legacy/api/profile` 的字段与 `no-store` 不变。
 - 证据：`TestSanitizeBootstrapStripsSensitiveKeys`、`TestIntegrationShellBootstrapOmitsSensitiveFields`（壳无 phone/wechat/值，API 仍是 no-store 且含联系方式）、`TestAcceptsGzip`（x-gzip/q=abc/冲突 q）、`tools/static_gzip -check` 在 Go 1.24.7 与 1.27.3 均 OK、`app_integration` smoke 新增 `run_bootstrap_fallback`（故障注入走骨架路径）。
+
+## 29. 性能批次5：壳内首卡 hero 保持与首屏任务拆分（2026-10-25）
+
+- 背景：批次4 后 LCP 元素变为 Vue 挂载后新建的 `IMG.card-photo-item`，热启 LCP 仍受 2–3s 的挂载长任务限制；静态骨架里的首图在挂载时被删除，新元素无法继承更早的绘制时间。
+- 决策：`/app` 壳静态渲染首卡 hero，几何**复用**牵线页的 `.cards-page`/`.swipe-card`/`.card-photo-wrap` 类（而不是复制尺寸常量），首卡缩图 URL 来自同一 bootstrap；Vue 首卡图 decode+paint 后 hero 淡出，避免新 LCP 候选被长任务重置。hero 只在已登录壳注入，交互/切 tab/浏览器回退/深链/restore/换卡/门禁/启动失败时立即移除；无卡、无图、首图加载失败退化为 shimmer 骨架，不留白屏或破图。
+- 决策：首屏长任务拆分为「Vant 执行」与「mount + 卡片页首次渲染」两段：Vant 注入前让出两帧（`requestAnimationFrame` 双帧 + 1s 兜底），Vant onload 后 `setTimeout(0)` 再 mount；`onMounted` 后的 `bootAuthenticated`/`doLogin` 通过 `yxqAfterFirstPaint` 在首帧后启动，保证 hero 有绘制机会。新增 `yxq-mount`（mount+首屏骨架）与 `yxq-boot`（mount→卡片页 DOM patch）两个 Performance mark，供 perf_boot.py 采证。
+- 决策：牌堆**不新增** ±1 预渲染 DOM。复核批次4 部署版本：bootstrap 保留 20 张卡数据，但模板只对 `currentCard` 渲染 `.swipe-card`，实测 DOM 160/161 节点、`.swipe-card=1`；不存在「挂载渲染 20 张卡 DOM」。新增 Go 单测与 Playwright 断言锁定「数据窗口可多张、DOM 只 1 张」，避免后续误加窗口导致节点数上升。
+- 边界：不改认证/CSRF/RBAC/审计/媒体授权语义；hero 不含敏感字段（只复用已脱敏 bootstrap 的首卡缩图）；不改牌堆滑动、回退、restore、图片预取行为；`assetVersion` 10→11。
+- 证据：`TestLegacyShellRendersStaticHero`、`TestDeckRendersOnlyCurrentCard`、`TestBootstrapPreloadUsesThumbURL`；`make ci`（Go 1.24.7）；5 个既有 smoke + `app_hero_deck_smoke.py`（390/1280/375/768、暗色、CLS、无卡/首图失败）；`tools/browser/perf_boot.py` 冷热 N=3 数据见 `.team/perf/batch5-report.md`。

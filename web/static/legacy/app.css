@@ -198,6 +198,23 @@
   .login-logo { font-size: 50px; margin-bottom: 20px; }
   .login-title { font-size: 24px; color: #323233; margin-bottom: 10px; }
   .login-desc { color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 30px; }
+  /* 壳内首卡 hero：几何完全复用 .cards-page/.swipe-card/.card-photo-wrap，
+     #boot-skeleton 只负责覆盖与淡出，Vue 首卡图绘制后才移除（index.html 的 __YXQ_HERO__）。 */
+  #boot-skeleton { position: fixed; inset: 0; z-index: 2000; background: #f7f8fa; pointer-events: none; }
+  #boot-skeleton .boot-hero-shimmer { position: absolute; inset: 0; border-radius: 0; z-index: 1; }
+  #boot-skeleton .boot-photo { position: absolute; inset: 0; z-index: 2; opacity: 0; transition: opacity 0.12s linear; }
+  #boot-skeleton.boot-hero-ready .boot-photo { opacity: 1; }
+  #boot-skeleton.boot-hero-ready .boot-hero-shimmer { opacity: 0; }
+  #boot-skeleton.boot-hero-failed .boot-photo { display: none; }
+  #boot-skeleton .boot-hero-body { flex: 1; min-height: 0; padding: 18px 16px; }
+  #boot-skeleton .boot-hero-body .boot-line { height: 14px; }
+  #boot-skeleton .boot-tab-text { font-size: 12px; line-height: 1; color: #969799; }
+  #boot-skeleton.boot-hero-out { opacity: 0; transition: opacity 0.16s linear; }
+  .van-theme-dark #boot-skeleton { background: #111; }
+  .van-theme-dark #boot-skeleton .boot-hero-body { background: #222226; }
+  @media (prefers-reduced-motion: reduce) {
+    #boot-skeleton .boot-photo, #boot-skeleton.boot-hero-out { transition: none; }
+  }
   /* 已登录启动骨架：刷新/回首页时先出同版 App 轮廓，避免闪「正在登录」 */
   .app-boot-skeleton { min-height: 100vh; background: #f7f8fa; padding-bottom: calc(60px + env(safe-area-inset-bottom)); box-sizing: border-box; }
   .boot-brand { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 12px; display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; color: #323233; }

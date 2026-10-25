@@ -132,6 +132,10 @@ def dismiss_guides(page) -> None:
     6 次处理接续弹出的引导，避免后续点击被 overlay 拦住。
     """
     page.wait_for_timeout(800)
+    try:
+        page.locator("#boot-skeleton").wait_for(state="detached", timeout=15000)
+    except PlaywrightTimeoutError:
+        pass
     for _ in range(6):
         acted = False
         guide = page.locator(".swipe-guide-mask .sg-btn")

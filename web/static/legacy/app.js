@@ -39,6 +39,7 @@ try {
 // runtime-only Vue（3.4.27 无编译器构建）不能再把 template 当兜底：渲染器或运行库缺失时
 // 必须给出可诊断的可见错误，而不是静默白屏。这里只依赖 DOM，不依赖 Vue。
 function yxqBootFailure(detail){
+  try{ if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss('boot-fail'); }catch(e){}
   try{
     var root = document.getElementById('app');
     if (root){
@@ -69,6 +70,15 @@ function yxqLoadVant(onReady){
   };
   script.onerror = function(){ yxqBootFailure('UI 组件库加载失败（vant.min.js）'); };
   document.head.appendChild(script);
+}
+// 首帧让位：挂载本身只渲染启动骨架，数据加载与卡片页首次渲染如果紧跟在同一任务里，
+// 会把壳内 hero 的首图绘制推迟到长任务结束。rAF 后 setTimeout 让浏览器先提交一帧，
+// 再开始拉/渲染数据；隐藏标签页 rAF 不触发时用 300ms 兜底。
+function yxqAfterFirstPaint(fn){
+  var done = false;
+  function run(){ if (done) return; done = true; try { fn(); } catch (e) { try { console.error(e); } catch (_) {} } }
+  requestAnimationFrame(function(){ setTimeout(run, 0); });
+  setTimeout(run, 300);
 }
 // 守衛必須在解構 `const { ref } = Vue` 之前：否则 Vue 缺失时是 ReferenceError，
 // 错误页根本来不及渲染（Reviewer C3）。这里不 throw——未捕获异常会变成 pageerror，
@@ -2040,6 +2050,14 @@ const yxqApp = createApp({
         if (user.value.can_admin) openAdminConsole();
       }
     }
+    // 首屏首个长任务收尾标记：mount 开始 → 卡片页 DOM 已 patch。
+    function markBootRendered(){
+      try{
+        if(!performance.mark) return;
+        performance.mark('yxq-boot-end');
+        performance.measure('yxq-boot', 'yxq-mount-start', 'yxq-boot-end');
+      }catch(e){}
+    }
     // 已有服务端会话时直接拉首页数据：先展示 App 骨架，不经过登录页/iframe。
     async function bootAuthenticated() {
       bootError.value = '';
@@ -2056,6 +2074,7 @@ const yxqApp = createApp({
           return;
         }
         bootLoading.value = false;
+        nextTick(markBootRendered);
         restoreDeck();   // 刷新后回到原卡片（与 doLogin 成功路径一致）
         afterHomeReady(bootEntryHash);
       } catch (e) {
@@ -4935,9 +4954,54 @@ const yxqApp = createApp({
       });
     });
 
+    // ===== 壳内首卡 hero：等 Vue 首卡图真正绘制后再移除 =====
+    // hero 的 DOM/几何由 index.html 静态渲染（与 .swipe-card 同一套 CSS），
+    // 这里只决定何时淡出：首卡图 decode+paint 后；无卡/无图/切页/换卡/门禁/失败立即移除。
+    let bootHeroAnchor = null;
+    let bootHeroSettled = false;
+    function dismissBootHero(reason) {
+      try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss(reason); } catch (_) {}
+    }
+    function settleBootHero() {
+      if (bootHeroSettled) return;
+      bootHeroSettled = true;
+      if (!window.__YXQ_HERO__ || window.__YXQ_HERO__.dismissed()) return;
+      if (page.value !== 'cards' || !currentCard.value) { dismissBootHero('not-deck'); return; }
+      bootHeroAnchor = {
+        start: cardsStart.value,
+        index: cardIndex.value,
+        oid: currentCard.value.openid || '',
+      };
+      if (!currentPhotoList.value[0]) { dismissBootHero('no-photo'); return; }
+      const deadline = Date.now() + 4000;
+      const step = () => {
+        if (window.__YXQ_HERO__.dismissed()) return;
+        if (page.value !== 'cards' || !currentCard.value ||
+            (currentCard.value.openid || '') !== bootHeroAnchor.oid) {
+          dismissBootHero('card-changed');
+          return;
+        }
+        const img = document.querySelector('.swipe-card .card-photo-item');
+        if (img && img.complete && img.naturalWidth) {
+          // 双 rAF：确保真实卡片图已经绘制完成，再让 hero 淡出。
+          requestAnimationFrame(() => requestAnimationFrame(() => dismissBootHero('painted')));
+          return;
+        }
+        if (Date.now() > deadline) { dismissBootHero('timeout'); return; }
+        setTimeout(step, 60);
+      };
+      step();
+    }
+    watch(bootLoading, (v) => { if (!v) nextTick(settleBootHero); });
+    watch(page, (v) => { if (v !== 'cards') dismissBootHero('tab'); });
+    watch([cardIndex, cardsStart], ([idx, start]) => {
+      if (!bootHeroAnchor) return;
+      if (idx !== bootHeroAnchor.index || start !== bootHeroAnchor.start) dismissBootHero('card-changed');
+    });
+    watch([bootError, gateMessage], ([err, gate]) => { if (err || gate) dismissBootHero('gate'); });
+
     onMounted(() => {
-      const boot = document.getElementById('boot-skeleton');
-      if (boot) boot.remove();
+      window.__YXQ_APP_MOUNTED__ = true;
       // 入口深链：必须在下方 replaceState 清掉 hash 前留存（机器人「报名活动」按钮 → #/activities 直达活动页）
       const entryHash = window.location.hash;
       bootEntryHash = entryHash;
@@ -4948,10 +5012,12 @@ const yxqApp = createApp({
       try{ history.replaceState({page: page.value}, '', navURL()); }catch(e){}
       window.addEventListener('popstate', handlePopState);
       if (SERVER_AUTHENTICATED) {
-        bootAuthenticated();
+        yxqAfterFirstPaint(bootAuthenticated);
         return;
       }
-      doLogin().then(() => { afterHomeReady(entryHash); });
+      yxqAfterFirstPaint(function(){
+        doLogin().then(() => { afterHomeReady(entryHash); });
+      });
     });
 
     onUnmounted(stopNotificationSync);
@@ -6281,14 +6347,43 @@ const yxqApp = createApp({
 if (typeof window.__YXQ_RENDER__ !== 'function') {
   yxqBootFailure('渲染器未加载（app.render.js 缺失或损坏）');
 } else {
-  yxqLoadVant(function(){
+  // 先让壳内 hero（首卡静态图）绘制出来，再加载/执行 Vant 与挂载：
+  // Vant 的 UMD 执行在 CPU 慢机上约 1s+，若与 mount 连在同一任务里，会把首图绘制
+  // 推迟到长任务结束（批次4 的热启 LCP 就是这样被推到 4.6s）。双 rAF + setTimeout
+  // 兜底保证页面至少提交一帧（图片命中缓存时即完成首图绘制），同时把 vendor 执行
+  // 与 mount 拆成不同任务，缩短最长任务。
+  var yxqMountStarted = false;
+  var yxqVendorStarted = false;
+  function yxqMountApp(){
+    if (yxqMountStarted) return;
+    yxqMountStarted = true;
     try {
+      if (window.performance && performance.mark) performance.mark('yxq-mount-start');
       yxqApp.use(vant).mount('#app');
+      if (window.performance && performance.mark) {
+        performance.mark('yxq-mount-end');
+        performance.measure('yxq-mount', 'yxq-mount-start', 'yxq-mount-end');
+      }
     } catch (err) {
       // 不 rethrow：错误页已经把原因显示出来，抛出去只会多一条 pageerror。
       yxqBootFailure(err && err.message ? err.message : String(err));
     }
-  });
+  }
+  function yxqStartVendor(){
+    if (yxqVendorStarted) return;
+    yxqVendorStarted = true;
+    yxqLoadVant(function(){
+      if (document.visibilityState === 'hidden') { yxqMountApp(); return; }
+      requestAnimationFrame(function(){ requestAnimationFrame(yxqMountApp); });
+      setTimeout(yxqMountApp, 400);   // rAF 被节流/后台标签页兜底；yxqMountApp 幂等
+    });
+  }
+  function yxqStart(){
+    if (document.visibilityState === 'hidden') { yxqStartVendor(); return; }
+    requestAnimationFrame(function(){ requestAnimationFrame(yxqStartVendor); });
+    setTimeout(yxqStartVendor, 1000);
+  }
+  yxqStart();
 }
 }
 
