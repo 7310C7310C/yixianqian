@@ -93,13 +93,11 @@ func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user 
 		return nil, err
 	}
 	viewer := bundle.Viewer
-	quota, quotaErr := a.db.LikeQuotaFor(ctx, user.ID, now)
-	if quotaErr != nil {
-		a.logger(r).Warn("legacy home quota failed", "error", quotaErr, "user_id", user.ID)
-	}
-	praise, praiseErr := a.db.PraiseStateFor(ctx, user.ID, now)
-	if praiseErr != nil {
-		a.logger(r).Warn("legacy home praise failed", "error", praiseErr, "user_id", user.ID)
+	// 额度与点赞额度是同一次只读快照，合并成一条 SQL；失败时保持批次1 的
+	// 「不把错误额度下发」语义：留空 deps，由 buildCardsPageData 重试。
+	quota, praise, countersErr := a.db.LoadInteractionCounters(ctx, user.ID, now)
+	if countersErr != nil {
+		a.logger(r).Warn("legacy home counters failed", "error", countersErr, "user_id", user.ID)
 	}
 	viewRole := a.legacyViewRole(r)
 	if !viewer.IDCardValid {
@@ -118,11 +116,9 @@ func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user 
 		pageViewer.AccountKind = "observer"
 		pageViewer.AccountStatus = "observer"
 	}
-	deps := cardPageDeps{}
-	if quotaErr == nil {
+	deps := cardPageDeps{includeSelf: true}
+	if countersErr == nil {
 		deps.quota = &quota
-	}
-	if praiseErr == nil {
 		deps.praise = &praise
 	}
 	page, err := a.buildCardsPageData(ctx, pageViewer, r.URL.Query(), now, 20, deps)
@@ -132,16 +128,16 @@ func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user 
 		return nil, err
 	}
 	views := page.Cards
-	if selfProfile, selfErr := a.db.GetSocialProfile(ctx, user.ID); selfErr == nil {
-		selfView := buildCardView(selfProfile, false, false, 0, now)
+	if page.Self != nil {
+		selfView := buildCardView(*page.Self, false, false, 0, now)
 		selfView.IsSelf = true
 		views = append([]CardView{selfView}, views...)
 		if page.Limit > 0 && len(views) > page.Limit {
 			views = views[:page.Limit]
 		}
 		page.Total++
-	} else if !errors.Is(selfErr, db.ErrNotFound) {
-		a.logger(r).Warn("legacy home self card failed", "error", selfErr, "user_id", user.ID)
+	} else if countersErr == nil {
+		a.logger(r).Warn("legacy home self card missing", "user_id", user.ID)
 	}
 	cards := a.legacyCards(ctx, views)
 	likes, err := a.legacyLikes(ctx, user.ID, now)
@@ -168,7 +164,12 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	payload, err := a.buildLegacyHomePayload(r.Context(), r, user, a.clock.Now())
+	now := a.clock.Now()
+	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
+	value, err := a.homeInflight.Do(key, func() (any, error) {
+		return a.buildLegacyHomePayload(r.Context(), r, user, now)
+	})
+	payload, _ := value.(map[string]any)
 	switch {
 	case errors.Is(err, errLegacyHomeAccountUnavailable):
 		legacyError(w, http.StatusForbidden, "账号目前无法使用，请联络管理员")
@@ -201,7 +202,11 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		viewer.AccountKind = "observer"
 		viewer.AccountStatus = "observer"
 	}
-	page, err := a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit, cardPageDeps{})
+	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
+	value, err := a.cardsInflight.Do(key, func() (any, error) {
+		return a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit, cardPageDeps{})
+	})
+	page, _ := value.(CardsPageData)
 	if errors.Is(err, errGenderMissing) {
 		legacyError(w, http.StatusBadRequest, "你的性别资料尚未完善，请先到「我的资料」填写")
 		return
@@ -527,20 +532,16 @@ func (a *App) legacyLikes(ctx context.Context, userID int64, now time.Time) (map
 }
 
 func (a *App) legacyActivities(ctx context.Context, userID int64) ([]map[string]any, error) {
-	activities, err := a.db.ListActivities(ctx)
+	// 活动列表与我的报名用一条 LEFT JOIN 查询返回，语义与原两次查询一致。
+	items, err := a.db.ListActivitiesForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	mine, err := a.db.ListMyActivities(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	mineMap := activityMapFromSignups(mine)
-	out := make([]map[string]any, 0, len(activities))
-	for _, activity := range activities {
-		view := buildActivityView(activity)
-		if my, ok := mineMap[activity.ID]; ok {
-			applySignupToView(&view, my.SignupStatus, my.Attendance)
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		view := buildActivityView(item.Activity)
+		if item.SignupStatus != "" {
+			applySignupToView(&view, item.SignupStatus, item.Attendance)
 		}
 		out = append(out, legacyActivityMap(view))
 	}

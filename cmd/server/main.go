@@ -88,6 +88,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	defer app.Close()
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

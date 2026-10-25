@@ -39,6 +39,11 @@ func setupProfileHTTPEnv(t *testing.T) *profileHTTPEnv {
 
 func setupActivitiesHTTPEnv(t *testing.T, mutate func(*config.Config)) *profileHTTPEnv {
 	t.Helper()
+	return setupActivitiesHTTPEnvWithOptions(t, mutate)
+}
+
+func setupActivitiesHTTPEnvWithOptions(t *testing.T, mutate func(*config.Config), opts ...db.OpenOption) *profileHTTPEnv {
+	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
@@ -46,7 +51,7 @@ func setupActivitiesHTTPEnv(t *testing.T, mutate func(*config.Config)) *profileH
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	t.Cleanup(cancel)
 
-	database, err := db.Open(ctx, dsn)
+	database, err := db.Open(ctx, dsn, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,6 +75,7 @@ func setupActivitiesHTTPEnv(t *testing.T, mutate func(*config.Config)) *profileH
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(app.Close)
 	// 默认不启动 Python 子进程；需要验证人脸链路的测试自行替换 faceProbe。
 	app.faceProbe = face.ProbeFunc(func(context.Context, string) (face.Result, error) {
 		return face.Result{}, errors.New("face probe disabled in test env")
@@ -250,6 +256,7 @@ func newMessagesHTTPEnv(t *testing.T) (*db.DB, *pgxpool.Pool, *httptest.Server, 
 	if err != nil {
 		t.Fatalf("new app: %v", err)
 	}
+	t.Cleanup(app.Close)
 	server := httptest.NewServer(app.Handler())
 	t.Cleanup(server.Close)
 	return database, pool, server, ctx
@@ -368,6 +375,7 @@ func openPointsHTTPEnv(t *testing.T) *pointsHTTPEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(app.Close)
 	server := httptest.NewServer(app.Handler())
 	t.Cleanup(server.Close)
 	return &pointsHTTPEnv{ctx: ctx, database: database, conn: conn, cfg: cfg, server: server}

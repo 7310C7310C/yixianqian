@@ -258,6 +258,7 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(app.Close)
 	server := httptest.NewServer(app.Handler())
 	defer server.Close()
 

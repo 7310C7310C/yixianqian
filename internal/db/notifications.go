@@ -37,11 +37,17 @@ type NotificationInput struct {
 	DedupeKey string
 }
 
-// CreateNotification appends an in-app notification.
+// CreateNotification appends an in-app notification and wakes the owner's SSE
+// stream in the same statement, so a committed row can never miss its notify.
 func (d *DB) CreateNotification(ctx context.Context, userID int64, kind, title, body string) error {
 	_, err := d.pool.Exec(ctx,
-		`INSERT INTO notifications (user_id, kind, title, body) VALUES ($1, $2, $3, $4)`,
-		userID, kind, title, body)
+		`WITH inserted AS (
+		   INSERT INTO notifications (user_id, kind, title, body)
+		   VALUES ($1, $2, $3, $4)
+		   RETURNING user_id
+		 )
+		 SELECT pg_notify($5, user_id::text) FROM inserted`,
+		userID, kind, title, body, NotificationChannel)
 	if err != nil {
 		return fmt.Errorf("db: create notification: %w", err)
 	}
@@ -97,6 +103,11 @@ func (d *DB) CreateNotificationOnce(ctx context.Context, in NotificationInput) (
 		in.UserID, in.Kind, in.Title, in.Body, in.Link, string(raw))
 	if err != nil {
 		return false, fmt.Errorf("db: create notification: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		if err := notifyUserTx(ctx, tx, in.UserID); err != nil {
+			return false, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("db: commit notification: %w", err)
@@ -216,6 +227,14 @@ func (d *DB) CreateNotificationsOnce(ctx context.Context, inputs []NotificationI
 			return 0, fmt.Errorf("db: create notifications batch: %w", err)
 		}
 		created = int(tag.RowsAffected())
+		if created > 0 {
+			if _, err := tx.Exec(ctx,
+				`SELECT pg_notify($1, uid::text)
+				   FROM (SELECT DISTINCT unnest($2::bigint[]) AS uid) AS notified`,
+				NotificationChannel, userIDs); err != nil {
+				return 0, fmt.Errorf("db: notify notifications batch: %w", err)
+			}
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("db: commit notifications batch: %w", err)
@@ -284,6 +303,9 @@ func (d *DB) MarkNotificationRead(ctx context.Context, userID, notificationID in
 		return false, fmt.Errorf("db: mark notification read: %w", err)
 	}
 	if tag.RowsAffected() > 0 {
+		if err := d.notifyUser(ctx, userID); err != nil {
+			return false, err
+		}
 		return true, nil
 	}
 	var exists bool
@@ -306,6 +328,11 @@ func (d *DB) MarkAllNotificationsRead(ctx context.Context, userID int64) (int64,
 		 WHERE user_id = $1 AND read_at IS NULL`, userID)
 	if err != nil {
 		return 0, fmt.Errorf("db: mark all notifications read: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		if err := d.notifyUser(ctx, userID); err != nil {
+			return 0, err
+		}
 	}
 	return tag.RowsAffected(), nil
 }

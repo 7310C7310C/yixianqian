@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"errors"
 	"net/http"
 	"path"
 	"strings"
@@ -26,17 +25,10 @@ func (a *App) idCardGate(w http.ResponseWriter, r *http.Request, user db.User) b
 	if !idCardGateApplies(requestPath) || idCardGateAllowed(requestPath) {
 		return false
 	}
-	viewer, err := a.db.GetSocialViewer(r.Context(), user.ID)
-	if errors.Is(err, db.ErrNotFound) {
-		return false
-	}
-	if err != nil {
-		a.logger(r).Error("id card gate lookup failed", "error", err, "user_id", user.ID)
-		return false
-	}
+	// session 查询已带 id_card_valid，门禁不再重复查一次 users。
 	// Observers are exempt from has_face, never from the ID card rule
 	// (PM 2026-10-22). Do not add an observer bypass here.
-	if viewer.IDCardValid {
+	if user.IDCardValid {
 		return false
 	}
 	w.Header().Set("X-Error-Code", "id_card_required")

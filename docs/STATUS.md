@@ -255,6 +255,16 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 本地节流（390×844，1.6Mbps/150ms/CPU×4，N=3 中位，Reviewer FAIL 修复后）：冷 FCP 1.27s / LCP **2.74s**、热 1.21/2.73s；字节 457,282B（本地 HTML 未 gzip；按 staging gzip 口径约 314KB/13 请求）；冷最长任务 1.55s（目标 1.2 未达，剩余为 app.js 挂载/首卡渲染），热 1.66s。
 - 修复（GaLoading 全局注册）后：6 个既有 smoke + `batch6_bundle_smoke`（含 ga-loading 探针）全 PASS；A/B 扩到 user_detail/activity_detail/group_detail/admin iframe/filter popup/profile_edit，全部像素一致；`TestGeneratedBundleHashes` + `make spa-check` 接入 CI，手改生成物即红；`make ci`（Go 1.24.7）与集成 0 FAIL。详见 `.team/perf/batch6-report.md` §6。
 
+### 性能批次7（2026-10-25，本地实现待审，未 push/未部署）
+
+- 通知 SSE 去轮询：`/legacy/api/notifications/stream` 改为 PostgreSQL `LISTEN/NOTIFY`（`yxq_notify`，payload 为 user_id），写入通知/标记已读时在同一事务 `pg_notify`；单实例 LISTEN 协程 fan-out + 断线指数退避重连 + 重连 resync；30s 兜底 ticker（监听未就绪 15s）、15s 心跳；无事件/无订阅者不做业务查询。语义（`unread` 事件字段、未读数、最新通知、EventSource 自动重连）不变。
+- 会话 touch 5m→15m：只改 SQL 内条件与中间件常量，会话有效期/登出即时性不变；`last_seen_at` 误差上限 15m。
+- home/cards 查询合并：`LoadCardDeckState`（likes 双向 + praises + 本周推荐 1 条）、`LoadInteractionCounters`（额度 + 点赞状态 1 条）、`GetSocialProfilesWithMessageCounts`（分页档案 + 留言数 1 条）、`ListActivitiesForUser`（活动 + 我的报名 1 条）；home self 卡并入分页档案查询；`/legacy/api/cards` 无上游计数器时用 `LoadCardPageState` 一条 SQL；session 带 `id_card_valid`，消除门禁重复查 viewer。同用户同 query 的并发 home/cards 用 singleflight 合并（不缓存，不改新鲜度）。
+- pgx pool：MaxConns 20 / MinConns 2 / `statement_timeout=5000`；迁移用独立 `pgx.Connect` 并 `SET statement_timeout=0`，`cmd/seed`、`cmd/facebackfill` 改用 `OpenMaintenance`（无 5s 上限）。
+- migration `0009_perf_indexes_b7.sql`：`praises_active_initiator_idx`、`praises_active_target_week_idx`、`messages_target_active_idx`、`signups_user_activity_idx`、`notifications_user_created_id_idx`；staging 临时库 20 万级数据 EXPLAIN 实测（见 `docs/MIGRATION.md`）。
+- staging PostgreSQL 参数已于 2026-10-25 18:04（server1）应用：shared_buffers 512MB、work_mem 8MB、random_page_cost 1.1、effective_io_concurrency 200、jit off、track_io_timing on；重启用时数秒，`/healthz` 立即恢复。备份/回滚见 `docs/runbooks/staging.md`「性能批次7」。
+- 同机基线（旧代码 `7cd0f45`，app 直连 8093，N=30）：home p50/p95 52.8/76.0ms → 46.4/63.4ms、cards 41.2/62.4 → 35.1/54.0ms。新代码 fresh clone A/B（N=100，GOMAXPROCS=2，同一 DB/同一 cookie）：home p50 63.9→**44.9ms**、p95 101.1→**65.2ms**；cards 53.3→**29.4ms**、p95 85.4→**44.5ms**；p95 目标（60/40）仍差 5.2/4.5ms，p50 已达标（host 噪声大，p95 第二次跑升到 79/60）。管理台基线：`/admin?embed=1` 12.7/19.7ms、`/admin/users` 47.9/69.3ms、`/api/admin/users` 28.5/39.4ms、`/legacy/api/admin/group/activities` 20.6/43.5ms（新代码、warm）；均已是 `no-store` 且列表分页，暂不建议 304/缓存。详见 `.team/perf/batch7-be-report.md`。
+
 ### 人脸与数据
 
 - 人脸检测：本地 YuNet 优先、Haar 回退；上传后检测、注册后补检测、`has_face` 门禁；观察员账号豁免 `has_face`（身份证不豁免）。

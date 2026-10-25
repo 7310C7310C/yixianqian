@@ -60,7 +60,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	database, err := db.Open(ctx, cfg.DatabaseURL)
+	database, err := db.OpenMaintenance(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}

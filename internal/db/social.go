@@ -572,12 +572,17 @@ func insertNotificationTx(ctx context.Context, tx pgx.Tx, userID int64,
 		return fmt.Errorf("db: marshal notification payload: %w", err)
 	}
 	_, err = tx.Exec(ctx,
-		`INSERT INTO notifications (user_id, kind, title, body, link, payload)
-		 SELECT $1, $2, $3, $4, $5, $6::jsonb
-		 WHERE NOT EXISTS (
-		   SELECT 1 FROM notifications
-		   WHERE user_id = $1 AND payload->>'event_key' = $7
-		 )`, userID, kind, title, body, link, string(raw), eventKey)
+		`WITH inserted AS (
+		   INSERT INTO notifications (user_id, kind, title, body, link, payload)
+		   SELECT $1, $2, $3, $4, $5, $6::jsonb
+		   WHERE NOT EXISTS (
+		     SELECT 1 FROM notifications
+		     WHERE user_id = $1 AND payload->>'event_key' = $7
+		   )
+		   RETURNING user_id
+		 )
+		 SELECT pg_notify($8, user_id::text) FROM inserted`,
+		userID, kind, title, body, link, string(raw), eventKey, NotificationChannel)
 	if err != nil {
 		return fmt.Errorf("db: create notification: %w", err)
 	}

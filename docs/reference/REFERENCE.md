@@ -274,6 +274,7 @@ sources: []
 | 0006 | `0006_weekly_recommendations_list.sql` | 每周推荐位名单：把 v1「一人一行」的占位表改成真正的名单表。 |
 | 0007 | `0007_id_card_hash.sql` | Deterministic HMAC of the identity number, used only to enforce |
 | 0008 | `0008_perf_indexes.sql` | 性能批次1：卡片页/通知热路径索引。只增不改、不改数据。 |
+| 0009 | `0009_perf_indexes_b7.sql` | 性能批次7：按 EXPLAIN 证据补通知/赞美/留言/报名热路径索引。 |
 
 ## 6. make targets
 
