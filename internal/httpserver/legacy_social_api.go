@@ -284,11 +284,6 @@ func writeLegacyLikeError(a *App, w http.ResponseWriter, r *http.Request, err er
 }
 
 func (a *App) handleLegacyLike(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		if user, ok := currentUser(r); ok {
-			a.invalidateReadCaches(user.ID)
-		}
-	}()
 	user, ok := a.legacyActor(w, r)
 	if !ok {
 		return

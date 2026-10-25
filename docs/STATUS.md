@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-25
+last_verified: 2026-10-26
 sources:
   - cmd/**
   - migrations/**
@@ -335,7 +335,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 ### 性能批次9（2026-10-26，实现待审，未 push/未部署）
 
 - 当前 staging：`/healthz=staging-cf457f0`、`deployed.sha=cf457f0`、migration max=9/9（无新迁移）；批次7、8 均已部署。
-- `/legacy/api/home`、`/legacy/api/cards` 增加 10s 进程内成功响应缓存（`READ_CACHE_TTL`/`READ_CACHE_ITEMS`），
-  键含用户/kind/viewRole/query；写路径主动失效；错误/未授权不缓存；响应头语义不变。
+- `/legacy/api/home`、`/legacy/api/cards` 增加 10s 进程内成功响应缓存（`READ_CACHE_TTL/ITEMS/BYTES`，默认 10s/1024 条/32MiB，任一为 0 关闭），
+  键含用户/kind/viewRole/query + 全局 epoch；成功的非 GET `/legacy/api/*` 写请求后 epoch++ 全员失效；错误/未授权不缓存；no-store 不变。
 - 缩略图缓存目录不可写时降级关闭（不再拒绝启动）；运行目录 `/opt/yixianqian-next/cache/thumbs`。
 - 边缘：**不做 `/legacy/api/` 缓存**（key 含明文 session 会落盘，违反 token 只存 hash）；静态 gzip 变体沿用已部署配置并复核（gzip HIT 47,033B/0.87ms、q=0 落 identity）。

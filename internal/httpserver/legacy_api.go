@@ -997,8 +997,8 @@ func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request, cache *read
 		writeJSON(w, http.StatusOK, payload)
 		return
 	}
-	key := readCacheKey(user.ID, kind, a.legacyViewRole(r), r.URL.RawQuery)
-	if body, hit := cache.Get(key); hit {
+	parts := readCacheParts(user.ID, kind, a.legacyViewRole(r), r.URL.RawQuery)
+	if body, hit := cache.Get(parts); hit {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(body)
@@ -1010,20 +1010,20 @@ func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request, cache *read
 		return
 	}
 	body = append(body, '\n') // 与 json.Encoder 输出保持一致
-	cache.Put(key, body)
+	cache.Put(parts, body)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(body)
 }
 
-// invalidateReadCaches 在写路径调用：点赞/取消/资料变更/照片/报名等会改变
-// home/cards 的可见内容，必须清掉该用户的缓存（TTL 之外再加一层正确性）。
-func (a *App) invalidateReadCaches(userID int64) {
+// bumpReadCacheEpoch 在成功的非 GET /legacy/api/* 写请求后调用（由中间件统一做）：
+// 全局 epoch++ 让所有用户的旧条目立即失效，避免逐用户失效遗漏。
+func (a *App) bumpReadCacheEpoch() {
 	if a.homeCache != nil {
-		a.homeCache.InvalidateUser(userID)
+		a.homeCache.BumpEpoch()
 	}
 	if a.cardsCache != nil {
-		a.cardsCache.InvalidateUser(userID)
+		a.cardsCache.BumpEpoch()
 	}
 }
 
@@ -1036,7 +1036,7 @@ func (a *App) readCacheHit(r *http.Request, cache *readCache, kind string) ([]by
 	if !ok {
 		return nil, false
 	}
-	return cache.Get(readCacheKey(user.ID, kind, a.legacyViewRole(r), r.URL.RawQuery))
+	return cache.Get(readCacheParts(user.ID, kind, a.legacyViewRole(r), r.URL.RawQuery))
 }
 
 // writeCachedJSON 用与 writeJSON 相同的头回写缓存字节。

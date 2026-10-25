@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-25
+last_verified: 2026-10-26
 sources:
   - deploy/**
   - .env.example
@@ -309,7 +309,7 @@ pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、
 
 - Go 侧 `/legacy/api/home`、`/legacy/api/cards` 10s 进程内缓存（`READ_CACHE_TTL`/`READ_CACHE_ITEMS`，默认 10s/4096）：
   键 = 用户 + kind + viewRole + RawQuery；写路径（点赞/取消/资料/照片/报名）主动失效；错误/未授权不缓存；
-  响应头仍是 `no-store`（`Vary: Cookie` 由中间件加）。
+  响应头仍是 `no-store`；`/legacy/api/*` 实际只带 `Vary: Accept-Encoding`（gzip），不含 `Vary: Cookie`。
 - **不做边缘 API 缓存**：曾评估在 server2 对 `/legacy/api/` 做 proxy_cache，但 key 若含 `$cookie_yxq_session`
   会把**明文 session token 落盘**（违反「session token 只存 hash」），key 不含会话又会跨用户串数据；
   方案已删除、未 apply。API 提速依赖应用内 10s 读缓存 + 上游 keepalive（目标 p95 ≤220ms）。

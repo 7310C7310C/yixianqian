@@ -345,3 +345,24 @@ func acceptsGzip(header string) bool {
 	}
 	return accepted
 }
+
+// withReadCacheEpoch 在任何**成功的非 GET** `/legacy/api/*` 请求后递增读缓存世代号。
+// 这样所有用户的 home/cards 缓存立即失效（不必逐用户追踪），GET/错误/4xx/5xx 不 bump。
+func (a *App) withReadCacheEpoch(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead ||
+			!strings.HasPrefix(r.URL.Path, "/legacy/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		sw := &statusWriter{ResponseWriter: w}
+		next.ServeHTTP(sw, r)
+		status := sw.status
+		if status == 0 {
+			status = http.StatusOK
+		}
+		if status >= 200 && status < 400 {
+			a.bumpReadCacheEpoch()
+		}
+	})
+}

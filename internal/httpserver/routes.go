@@ -31,6 +31,7 @@ func (a *App) Handler() http.Handler {
 	}
 
 	var h http.Handler = mux
+	h = a.withReadCacheEpoch(h)
 	h = a.withSession(h)
 	h = a.withRecover(h)
 	h = a.withLogging(h)

@@ -67,6 +67,7 @@ type Config struct {
 	// （批次9）。TTL<=0 关闭；Items 为 LRU 容量上限。
 	ReadCacheTTL   time.Duration
 	ReadCacheItems int
+	ReadCacheBytes int64
 	MediaMaxPixels int64
 	MediaMaxDim    int
 	MaxHashes      int
@@ -218,13 +219,21 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	if cfg.ReadCacheTTL < 0 || cfg.ReadCacheTTL > 60*time.Second {
 		errs = append(errs, errors.New("config: READ_CACHE_TTL must be between 0 and 60s"))
 	}
-	if v, err := parseInt64(getenv("READ_CACHE_ITEMS"), 4096); err != nil {
+	if v, err := parseInt64(getenv("READ_CACHE_ITEMS"), 1024); err != nil {
 		errs = append(errs, fmt.Errorf("config: READ_CACHE_ITEMS: %w", err))
 	} else {
 		cfg.ReadCacheItems = int(v)
 	}
 	if cfg.ReadCacheItems < 0 || cfg.ReadCacheItems > 100000 {
 		errs = append(errs, errors.New("config: READ_CACHE_ITEMS must be between 0 and 100000"))
+	}
+	if v, err := parseInt64(getenv("READ_CACHE_BYTES"), 32<<20); err != nil {
+		errs = append(errs, fmt.Errorf("config: READ_CACHE_BYTES: %w", err))
+	} else {
+		cfg.ReadCacheBytes = v
+	}
+	if cfg.ReadCacheBytes < 0 || cfg.ReadCacheBytes > 512<<20 {
+		errs = append(errs, errors.New("config: READ_CACHE_BYTES must be between 0 and 512MiB"))
 	}
 	if v, err := parseInt64(getenv("MAX_CONCURRENT_HASHES"), defaultMaxHashes); err != nil {
 		errs = append(errs, fmt.Errorf("config: MAX_CONCURRENT_HASHES: %w", err))
