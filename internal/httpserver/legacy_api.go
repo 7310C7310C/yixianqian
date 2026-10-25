@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -172,6 +173,10 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if body, hit := a.readCacheHit(r, a.homeCache, "home"); hit {
+		writeCachedJSON(w, body)
+		return
+	}
 	now := a.clock.Now()
 	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
 	value, err := a.homeInflight.Do(r.Context(), key, func() (any, error) {
@@ -184,7 +189,7 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		legacyServerError(a, w, r, err, "legacy home failed")
 	default:
-		writeJSON(w, http.StatusOK, payload)
+		a.writeReadCache(w, r, a.homeCache, "home", payload)
 	}
 }
 
@@ -210,6 +215,10 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		viewer.AccountKind = "observer"
 		viewer.AccountStatus = "observer"
 	}
+	if body, hit := a.readCacheHit(r, a.cardsCache, "cards"); hit {
+		writeCachedJSON(w, body)
+		return
+	}
 	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
 	value, err := a.cardsInflight.Do(r.Context(), key, func() (any, error) {
 		return a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit, cardPageDeps{})
@@ -223,7 +232,7 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy cards failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	a.writeReadCache(w, r, a.cardsCache, "cards", map[string]any{
 		"cards":       a.legacyCards(r.Context(), page.Cards),
 		"total":       page.Total,
 		"cards_total": page.Total,
@@ -972,4 +981,67 @@ func legacyActivityFee(raw string) int {
 		return int(f)
 	}
 	return 0
+}
+
+// writeReadCache 写 home/cards 的成功响应：先按 10s TTL 命中缓存直接回字节，
+// 未命中则序列化、缓存并写出。错误/未授权路径不经过这里，因此不会被缓存。
+// 响应头与 writeJSON 完全一致（no-store、Vary: Cookie 由中间件加），语义不变。
+func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request, cache *readCache,
+	kind string, payload any) {
+	if cache == nil {
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
+	user, ok := currentUser(r)
+	if !ok {
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
+	key := readCacheKey(user.ID, kind, a.legacyViewRole(r), r.URL.RawQuery)
+	if body, hit := cache.Get(key); hit {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(body)
+		return
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
+	body = append(body, '\n') // 与 json.Encoder 输出保持一致
+	cache.Put(key, body)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(body)
+}
+
+// invalidateReadCaches 在写路径调用：点赞/取消/资料变更/照片/报名等会改变
+// home/cards 的可见内容，必须清掉该用户的缓存（TTL 之外再加一层正确性）。
+func (a *App) invalidateReadCaches(userID int64) {
+	if a.homeCache != nil {
+		a.homeCache.InvalidateUser(userID)
+	}
+	if a.cardsCache != nil {
+		a.cardsCache.InvalidateUser(userID)
+	}
+}
+
+// readCacheHit 在构建前查缓存（键含用户/viewRole/query）。
+func (a *App) readCacheHit(r *http.Request, cache *readCache, kind string) ([]byte, bool) {
+	if cache == nil {
+		return nil, false
+	}
+	user, ok := currentUser(r)
+	if !ok {
+		return nil, false
+	}
+	return cache.Get(readCacheKey(user.ID, kind, a.legacyViewRole(r), r.URL.RawQuery))
+}
+
+// writeCachedJSON 用与 writeJSON 相同的头回写缓存字节。
+func writeCachedJSON(w http.ResponseWriter, body []byte) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(body)
 }

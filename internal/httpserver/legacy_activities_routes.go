@@ -231,6 +231,11 @@ func (a *App) notifySignupLikes(r *http.Request, signup db.Signup) {
 }
 
 func (a *App) handleLegacyActivitySignup(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if user, ok := currentUser(r); ok {
+			a.invalidateReadCaches(user.ID)
+		}
+	}()
 	user, ok := a.legacyActivityEditor(w, r)
 	if !ok {
 		return
@@ -255,6 +260,11 @@ func (a *App) handleLegacyActivitySignup(w http.ResponseWriter, r *http.Request)
 }
 
 func (a *App) handleLegacyActivityCancel(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if user, ok := currentUser(r); ok {
+			a.invalidateReadCaches(user.ID)
+		}
+	}()
 	user, ok := a.legacyActivityEditor(w, r)
 	if !ok {
 		return

@@ -60,10 +60,12 @@ type App struct {
 	// 纯 handler 单测里保持 nil，流退回 15 秒兜底轮询。
 	notifier *db.NotificationHub
 
-	// homeInflight/cardsInflight 合并同一用户同一查询的并发重复构建，
-	// 不缓存结果，不改变新鲜度。
+	// homeInflight/cardsInflight 合并同一用户同一查询的并发重复构建。
 	homeInflight  inflightGroup
 	cardsInflight inflightGroup
+	// homeCache/cardsCache 是批次9 的 10s 成功响应缓存（用户+query+viewRole）。
+	homeCache  *readCache
+	cardsCache *readCache
 }
 
 // New loads templates and constructs the application.
@@ -99,7 +101,10 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	}
 	thumbCache, cacheErr := media.NewThumbCache(cfg.MediaCacheDir, cfg.MediaCacheBytes)
 	if cacheErr != nil {
-		return nil, cacheErr
+		// 批次9：缓存目录不可写/不存在时降级关闭，不得拒绝启动（批次8 曾因此
+		// 部署失败）。缓存是纯优化，失败只影响命中率。
+		logger.Warn("thumb cache disabled", "dir", cfg.MediaCacheDir, "error", cacheErr)
+		thumbCache = nil
 	}
 	if thumbCache != nil {
 		entries, bytes := thumbCache.Stats()
@@ -107,11 +112,22 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 			"entries", entries, "bytes", bytes)
 	}
 
+	cacheTTL := cfg.ReadCacheTTL
+	cacheItems := cfg.ReadCacheItems
+	if cacheTTL <= 0 {
+		cacheTTL = 10 * time.Second
+	}
+	if cacheItems <= 0 {
+		cacheItems = 4096
+	}
+
 	return &App{
 		cfg:                         cfg,
 		db:                          database,
 		store:                       store,
 		thumbCache:                  thumbCache,
+		homeCache:                   newReadCache(cacheTTL, cacheItems),
+		cardsCache:                  newReadCache(cacheTTL, cacheItems),
 		tpl:                         tpl,
 		log:                         logger,
 		csrf:                        auth.NewCSRF(cfg.CSRFKey(), 2*time.Hour),

@@ -99,6 +99,11 @@ func (a *App) legacyPhotoActor(w http.ResponseWriter, r *http.Request) (db.User,
 }
 
 func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if user, ok := currentUser(r); ok {
+			a.invalidateReadCaches(user.ID)
+		}
+	}()
 	user, profile, ok := a.legacyProfileActor(w, r)
 	if !ok {
 		return
@@ -321,6 +326,11 @@ func (a *App) verifyProfilePhoneChange(w http.ResponseWriter, r *http.Request, u
 }
 
 func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if user, ok := currentUser(r); ok {
+			a.invalidateReadCaches(user.ID)
+		}
+	}()
 	user, profile, ok := a.legacyEditableProfile(w, r)
 	if !ok {
 		return
@@ -438,6 +448,11 @@ type legacyPhotoIndexRequest struct {
 }
 
 func (a *App) handleLegacyProfilePhotoDelete(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if user, ok := currentUser(r); ok {
+			a.invalidateReadCaches(user.ID)
+		}
+	}()
 	user, profile, ok := a.legacyPhotoActor(w, r)
 	if !ok {
 		return

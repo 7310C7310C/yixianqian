@@ -259,6 +259,8 @@ sources: []
 | `R2_REGION` | 是 | 是 |
 | `R2_SECRET_ACCESS_KEY` | 是 | 是 |
 | `R2_SECURE` | 是 | 是（注释默认值） |
+| `READ_CACHE_ITEMS` | 是 | 是 |
+| `READ_CACHE_TTL` | 是 | 是 |
 | `SESSION_COOKIE_NAME` | 是 | 是 |
 | `SESSION_COOKIE_SECURE` | 是 | 是 |
 | `SESSION_SECRET` | 是 | 是 |

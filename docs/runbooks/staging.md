@@ -269,6 +269,10 @@ systemctl restart postgresql
 
 ## 性能批次8：缩略图磁盘缓存（staging）
 
+> **目录不可写时降级关闭**（批次9）：`MEDIA_CACHE_DIR` 不存在/不可写只 WARN 并关闭缓存，**不会拒绝启动**；
+> 批次8 首轮部署曾因 `/var/cache` 只读导致 autodeploy 回滚，running path 必须在 ReadWritePaths 内。
+
+
 只缓存 `?size=thumb` 的 JPEG（原图不进缓存）；授权在缓存读取之前完成（handler 先查
 会话/关系，再调 `serveMediaObject`）。缓存 key = `mediaID + sha256(thumb object key|size)`：
 替换照片会换 object key → 旧条目自然失效；删除照片走 `removeObject` → `purgeThumbs`
@@ -277,22 +281,22 @@ systemctl restart postgresql
 | 项 | 值 |
 |---|---|
 | 环境变量 | `MEDIA_CACHE_DIR`（空=关闭）、`MEDIA_CACHE_BYTES`（默认 256MiB，16MiB–4GiB） |
-| 目录 | `/var/cache/yxq/thumbs`，属主 `yxq:yxq`、权限 `700` |
+| 目录 | `/opt/yixianqian-next/cache/thumbs`（unit `ProtectSystem=strict` + `ReadWritePaths=/opt/yixianqian-next`，`/var/cache` 对服务只读），属主 `yxq:yxq`、权限 `700` |
 | 淘汰 | 按总字节 LRU，单条 > 上限不缓存 |
 | 预热 | `sudo -u yxq /opt/yixianqian-next/bin/thumbwarm -workers 8`（只读 R2/DB，写缓存）；`-dry-run` 只统计 |
 | 观察 | 启动日志 `thumb cache ready dir=… entries=… bytes=…`；命中/未命中在进程内计数 |
 
 ```bash
-# 建目录（部署 runbook 前置）
-install -d -o yxq -g yxq -m 700 /var/cache/yxq/thumbs
+# 建目录（部署 runbook 前置；必须在 ReadWritePaths 内）
+install -d -o yxq -g yxq -m 700 /opt/yixianqian-next/cache/thumbs
 # 预热（可后台；并发 ≤8）
 sudo -u yxq /opt/yixianqian-next/bin/thumbwarm -workers 8
-du -sh /var/cache/yxq/thumbs
+du -sh /opt/yixianqian-next/cache/thumbs
 
 # 回滚：关闭缓存（环境变量置空）+ 重启即可；磁盘目录可保留或删除
 sudo -u postgres psql -c "select 1" >/dev/null   # 占位，无 DB 变更
 # 关闭：编辑 config/staging.env 去掉 MEDIA_CACHE_DIR → systemctl restart yixianqian-next-test
-rm -rf /var/cache/yxq/thumbs                      # 彻底清理（不影响 DB/R2）
+rm -rf /opt/yixianqian-next/cache/thumbs                      # 彻底清理（不影响 DB/R2）
 ```
 
 > 实测（2026-10-25，server1，9 张自有缩略图）：无缓存 p50 255ms；冷 miss 236ms；
@@ -300,6 +304,17 @@ rm -rf /var/cache/yxq/thumbs                      # 彻底清理（不影响 DB/
 > media_id），预热 37 张共 1.23MB、耗时 ~6s。
 
 pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、`statement_timeout=5000`；迁移走独立连接 `SET statement_timeout=0`，`cmd/seed`/`cmd/facebackfill` 用 `db.OpenMaintenance`。回滚：改回 `internal/db/db.go` 常量并重启 app（无需 DB 重启）。
+
+## 性能批次9：边缘 gzip 变体缓存与短读缓存
+
+- Go 侧 `/legacy/api/home`、`/legacy/api/cards` 10s 进程内缓存（`READ_CACHE_TTL`/`READ_CACHE_ITEMS`，默认 10s/4096）：
+  键 = 用户 + kind + viewRole + RawQuery；写路径（点赞/取消/资料/照片/报名）主动失效；错误/未授权不缓存；
+  响应头仍是 `no-store`（`Vary: Cookie` 由中间件加）。
+- 边缘（server2）对 `/legacy/api/` 增加 gzip/identity 变体缓存（`yxqapi` zone，TTL 10s，key 含
+  `$yxq_static_enc` 与 `$cookie_yxq_session`），回源统一 `Accept-Encoding: $yxq_upstream_ae`；命中时
+  `X-Cache-Status: HIT` 且不再逐请求压缩。**配置已入库但尚未 apply**；apply 步骤：
+  `cp deploy/nginx/... → /etc/nginx/... && nginx -t && systemctl reload nginx`（server2，PM/Reviewer 批准后）。
+  缓存目录 `/var/cache/nginx/yxqapi`（700，max 256m，inactive 5m）——含个人数据，TTL ≤10s。
 
 ## 性能批次1：边缘/传输（nginx）
 

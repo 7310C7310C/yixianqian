@@ -63,11 +63,15 @@ type Config struct {
 	// MediaCacheDir 为空表示不做缩略图磁盘缓存；MediaCacheBytes 是缓存上限（字节）。
 	MediaCacheDir   string
 	MediaCacheBytes int64
-	MediaMaxPixels  int64
-	MediaMaxDim     int
-	MaxHashes       int
-	MaxMedia        int
-	ActivationTTL   time.Duration
+	// ReadCacheTTL/Items 控制 /legacy/api/home、/cards 的进程内成功响应缓存
+	// （批次9）。TTL<=0 关闭；Items 为 LRU 容量上限。
+	ReadCacheTTL   time.Duration
+	ReadCacheItems int
+	MediaMaxPixels int64
+	MediaMaxDim    int
+	MaxHashes      int
+	MaxMedia       int
+	ActivationTTL  time.Duration
 
 	// FaceProbeCmd 是本地人脸检测命令（空格分隔，图片路径追加在末尾）。
 	// FaceProbeTimeout 是单张照片检测超时；失败只记录并放行上传。
@@ -205,6 +209,22 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	}
 	if cfg.MediaCacheBytes < 16<<20 || cfg.MediaCacheBytes > 4<<30 {
 		errs = append(errs, errors.New("config: MEDIA_CACHE_BYTES must be between 16 MiB and 4 GiB"))
+	}
+	if v, err := parseDuration(getenv("READ_CACHE_TTL"), 10*time.Second); err != nil {
+		errs = append(errs, fmt.Errorf("config: READ_CACHE_TTL: %w", err))
+	} else {
+		cfg.ReadCacheTTL = v
+	}
+	if cfg.ReadCacheTTL < 0 || cfg.ReadCacheTTL > 60*time.Second {
+		errs = append(errs, errors.New("config: READ_CACHE_TTL must be between 0 and 60s"))
+	}
+	if v, err := parseInt64(getenv("READ_CACHE_ITEMS"), 4096); err != nil {
+		errs = append(errs, fmt.Errorf("config: READ_CACHE_ITEMS: %w", err))
+	} else {
+		cfg.ReadCacheItems = int(v)
+	}
+	if cfg.ReadCacheItems < 0 || cfg.ReadCacheItems > 100000 {
+		errs = append(errs, errors.New("config: READ_CACHE_ITEMS must be between 0 and 100000"))
 	}
 	if v, err := parseInt64(getenv("MAX_CONCURRENT_HASHES"), defaultMaxHashes); err != nil {
 		errs = append(errs, fmt.Errorf("config: MAX_CONCURRENT_HASHES: %w", err))

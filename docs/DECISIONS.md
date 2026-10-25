@@ -278,3 +278,21 @@ sources: []
 - 证据：`TestThumbCache*`（含 LRU/purge/重载/并发）、`TestServeThumbUsesDiskCache`、`TestServeThumbCacheInvalidatesOnReplacedObject`、
   `TestServeOriginalNeverUsesThumbCache`、`tools/test_css_split.py`、`make spa-check`、`batch8_critical_css.py`（阻断 app.css 首屏仍正确）。
 
+## 32. 性能批次9：10s 读缓存、边缘 gzip 变体与验收口径（2026-10-26）
+
+- 背景：Auditor 复核发现 edge home p95 262/271ms、origin home/cards p95 62.5/45.1ms、冷 LCP 2.60–4.14s 不稳定；
+  同时口径漂移（home 查询 15 vs 目标 ≤8）。
+- 决策（读缓存）：`/legacy/api/home`、`/legacy/api/cards` 的成功响应在进程内缓存 **10s**（有界 LRU 4096，默认），
+  key=用户+kind+viewRole+RawQuery；**写路径主动失效**（点赞/取消/资料/照片/报名），因此正常交互不会看到陈旧数据，
+  只有绕过应用的写（外部脚本直改库）最多 10s 陈旧。错误/未授权/重定向不缓存；`Cache-Control: no-store`、
+  `Vary: Cookie` 语义不变（缓存只在服务端，不下发共享缓存头）。
+- 决策（边缘）：server2 对 `/legacy/api/` 缓存 gzip/identity 变体（key 含 `$yxq_static_enc` 与 `$cookie_yxq_session`，
+  TTL 10s，`X-Cache-Status` 可观测），回源统一 `Accept-Encoding` 两态；命中不再压缩。API 响应含个人数据 →
+  缓存目录 700、max 256m、inactive 5m，TTL ≤10s；配置入库但 **apply 需 PM/Reviewer 批准**。
+- 决策（查询口径，**待 PM 确认，不静默改验收**）：home 现为聚合接口（profile+viewer+额度+赞+cards+self+likes+activities），
+  15–16 条 SQL 是聚合口径；cards 8 条。建议验收目标改为 **home ≤16（聚合）、cards ≤8**；在 PM 书面确认前，
+  本文件只记录「现状与建议」，不修改 `docs/product-spec.md` 的既有勾选/目标。
+- 边界：不改 RBAC/审计/媒体授权；不缓存个人敏感响应到磁盘（边缘缓存 TTL≤10s，属短期内存/磁盘缓存，需监控清理）。
+- 证据：`TestReadCache*`、`TestIntegrationLegacyHomeCardsReadCache`（命中 0 build 查询/写路径失效/跨用户隔离）、
+  `bench_rounds.py` 三轮区间。
+

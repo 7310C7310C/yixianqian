@@ -255,7 +255,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 本地节流（390×844，1.6Mbps/150ms/CPU×4，N=3 中位，Reviewer FAIL 修复后）：冷 FCP 1.27s / LCP **2.74s**、热 1.21/2.73s；字节 457,282B（本地 HTML 未 gzip；按 staging gzip 口径约 314KB/13 请求）；冷最长任务 1.55s（目标 1.2 未达，剩余为 app.js 挂载/首卡渲染），热 1.66s。
 - 修复（GaLoading 全局注册）后：6 个既有 smoke + `batch6_bundle_smoke`（含 ga-loading 探针）全 PASS；A/B 扩到 user_detail/activity_detail/group_detail/admin iframe/filter popup/profile_edit，全部像素一致；`TestGeneratedBundleHashes` + `make spa-check` 接入 CI，手改生成物即红；`make ci`（Go 1.24.7）与集成 0 FAIL。详见 `.team/perf/batch6-report.md` §6。
 
-### 性能批次7（2026-10-25，本地实现待审，未 push/未部署）
+### 性能批次7（2026-10-25，已部署；见下方批次8/9）
 
 - 通知 SSE 去轮询：`/legacy/api/notifications/stream` 改为 PostgreSQL `LISTEN/NOTIFY`（`yxq_notify`，payload 为 user_id），写入通知/标记已读时在同一事务 `pg_notify`；单实例 LISTEN 协程 fan-out（订阅者快照后再投递，避免与退订 delete 竞态）+ 断线指数退避重连 + 重连 resync；30s 兜底 ticker（监听未就绪 15s）、15s 心跳；无事件/无订阅者不做业务查询。语义（`unread` 事件字段、未读数、最新通知、EventSource 自动重连）不变。
 - 通知时效性边界：**只有应用写入路径**（通知/已读）会即时 `pg_notify`；绕过应用直接写库（psql、外部脚本、数据修复）最坏要等兜底 ticker，实测 **25.7s** 才到客户端（设计 15–30s）。兜底间隔在连接建立时一次性确定（未连接 15s / 已连接 30s），hub 之后重连不会改已建连接；`app_integration_smoke` 直插场景会额外补一次 `pg_notify`。
@@ -266,7 +266,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - staging PostgreSQL 参数已于 2026-10-25 **18:04:07**（server1）应用并重启：shared_buffers 512MB、work_mem 8MB、random_page_cost 1.1、effective_io_concurrency 200、jit off、track_io_timing on；`effective_cache_size` **维持默认 4GB**（planner 估算用，不涉正确性）。`/etc/postgresql` 未改，值在 `postgresql.auto.conf`（`ALTER SYSTEM`）；同实例所有 DB 共享，回滚 = `ALTER SYSTEM RESET` + 重启（无 `.bak` 属正常）。该变更在独立 Review 前已 apply，属**待审项**，见 `docs/runbooks/staging.md`「性能批次7」。
 - 同机基线（旧代码 `7cd0f45`，app 直连 8093，N=30）：home p50/p95 52.8/76.0ms → 46.4/63.4ms、cards 41.2/62.4 → 35.1/54.0ms。新代码 fresh clone A/B（N=100，GOMAXPROCS=2，同一 DB/同一 cookie）：home p50 63.9→**44.9ms**、p95 101.1→**65.2ms**；cards 53.3→**29.4ms**、p95 85.4→**44.5ms**；p95 目标（60/40）仍差 5.2/4.5ms，p50 已达标（host 噪声大，p95 第二次跑升到 79/60）。管理台基线：`/admin?embed=1` 12.7/19.7ms、`/admin/users` 47.9/69.3ms、`/api/admin/users` 28.5/39.4ms、`/legacy/api/admin/group/activities` 20.6/43.5ms（新代码、warm）；均已是 `no-store` 且列表分页，暂不建议 304/缓存。详见 `.team/perf/batch7-be-report.md`。
 
-### 性能批次8（2026-10-25，本地实现待审，未 push/未部署）
+### 性能批次8（2026-10-25，**已部署 staging-cf457f0**）
 
 - 缩略图磁盘缓存：只缓存 `?size=thumb`，key=mediaID+thumb object key+size（替换自然失效，删除按前缀清理），
   有界 LRU（`MEDIA_CACHE_BYTES`，默认 256MiB）、授权先于缓存；`cmd/thumbwarm` 预热（并发≤8）。
@@ -331,3 +331,11 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 人脸、`/admin` 入口、迁移计数等易漂移事实，以最近一次实测为准；历史文档与旧 runbook 不得当现状。
 - 任何人可在证据齐全时更新“已实现/缺口”事实条目与 `last_verified`；不得改 PM 决策、
   `docs/PROJECT_CHARTER.md`、`docs/product-spec.md` 勾选或 `docs/DECISIONS.md` 已定决策。
+
+### 性能批次9（2026-10-26，实现待审，未 push/未部署）
+
+- 当前 staging：`/healthz=staging-cf457f0`、`deployed.sha=cf457f0`、migration max=9/9（无新迁移）；批次7、8 均已部署。
+- `/legacy/api/home`、`/legacy/api/cards` 增加 10s 进程内成功响应缓存（`READ_CACHE_TTL`/`READ_CACHE_ITEMS`），
+  键含用户/kind/viewRole/query；写路径主动失效；错误/未授权不缓存；响应头语义不变。
+- 缩略图缓存目录不可写时降级关闭（不再拒绝启动）；运行目录 `/opt/yixianqian-next/cache/thumbs`。
+- 边缘 gzip 变体缓存（server2 `/legacy/api/`，TTL 10s，key 含编码+会话）已入库，**待批准 apply**。
