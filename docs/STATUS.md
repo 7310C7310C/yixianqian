@@ -249,11 +249,11 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ### 性能批次6（2026-10-25，本地实现待审，未 push/未部署）
 
-- Vant 子集：`tools/spa_vendor`（dev-time esbuild + `vant@4.8.7`）生成 `lib/vant.min.js` 17 组件（button/icon/empty/loading/field/tag/radio/radio-group/popup/dialog/tab/tabs/cell/cell-group/tabbar/tabbar-item/switch）+ Toast/Dialog 命令式 API；CSS 同步子集，并移除外部 alicdn woff 回退（CSP 只允许 self/data）。JS 77.8→23.9KB gzip、CSS 52.7→37.1KB gzip。
-- render 拆 chunk：`tools/spa_precompile` 从 26 个 page 模板生成 `app.render.js`（root+cards，768→182KB raw / 25.5KB gzip）与 `pages/{likes,home,profile,detail,group}.render.js`；`<page-host>` 用根组件 proxy 调用页面 render，模板 ref（photoInput/gsReorderBtnEl 等）经 setupState 代理写回根 ref；chunk 首次进入时加载，失败显示 `.boot-fail`。`pages/pages.manifest.json` 记录 page→chunk/模板 sha/size；`TestPageChunksMatchTemplates` 与 `TestVantSubsetCoversTemplate` 为 CI 门禁（改模板/组件未重建即红）。
-- 首屏：`app.css` 由服务端内联为 critical CSS（`<!--YXQ_CRITICAL_CSS-->`），Vant CSS `media=print onload` 非阻塞；下一张卡预取改为 `load` 后 3s + `requestIdleCallback`；`assetVersion` 11→12。
-- 本地节流（390×844，1.6Mbps/150ms/CPU×4，N=3 中位）：冷 FCP 1.23s / LCP **2.72s**、热 1.39/2.70s；字节 489KB（本地 HTML 未 gzip；按 staging gzip 估算约 307KB/14 请求）；冷最长任务 1.62–1.88s（目标 1.2 未达，剩余为 app.js 挂载/首卡渲染），热 1.17s。
-- 回归：6 个既有 smoke + 新 `batch6_bundle_smoke`（正常/缺失 Vant/页面 chunk 404）全 PASS；A/B 截图 390/768/1280 + 暗色共 13 对全部像素级一致（1px 阈值内）；`make ci` 见 `.team/perf/batch6-report.md`。
+- Vant 子集：`tools/spa_vendor`（dev-time esbuild + `vant@4.8.7`）生成 `lib/vant.min.js` 17 组件（button/icon/empty/loading/field/tag/radio/radio-group/popup/dialog/tab/tabs/cell/cell-group/tabbar/tabbar-item/switch）+ Toast/Dialog 命令式 API；CSS 同步子集，并移除外部 alicdn woff 回退（CSP 只允许 self/data）。JS 77.8→23.9KB gzip（實際提交 23,882B）、CSS 52.7→37.1KB gzip（實際 37,664B）。
+- render 拆 chunk：`tools/spa_precompile` 从 26 个 page 模板生成 `app.render.js`（root+cards，768→182KB raw / 24,898B gzip）与 `pages/{likes,home,profile,detail,group}.render.js`；`<page-host>` 用根组件 proxy 调用页面 render，模板 ref（photoInput/gsReorderBtnEl 等）经 setupState 代理写回根 ref；chunk 首次进入时加载，失败显示 `.boot-fail`。`pages/pages.manifest.json` 记录 page→chunk/模板 sha/size；`TestPageChunksMatchTemplates` 与 `TestVantSubsetCoversTemplate` 为 CI 门禁（改模板/组件未重建即红）。
+- 首屏：`app.css` 由服务端内联为 critical CSS（`<!--YXQ_CRITICAL_CSS-->`），Vant CSS `media=print onload` 非阻塞；下一张卡预取改为 `load` 后 5s + `requestIdleCallback`；`assetVersion` 11→12。
+- 本地节流（390×844，1.6Mbps/150ms/CPU×4，N=3 中位，Reviewer FAIL 修复后）：冷 FCP 1.27s / LCP **2.74s**、热 1.21/2.73s；字节 457,282B（本地 HTML 未 gzip；按 staging gzip 口径约 314KB/13 请求）；冷最长任务 1.55s（目标 1.2 未达，剩余为 app.js 挂载/首卡渲染），热 1.66s。
+- 修复（GaLoading 全局注册）后：6 个既有 smoke + `batch6_bundle_smoke`（含 ga-loading 探针）全 PASS；A/B 扩到 user_detail/activity_detail/group_detail/admin iframe/filter popup/profile_edit，全部像素一致；`TestGeneratedBundleHashes` + `make spa-check` 接入 CI，手改生成物即红；`make ci`（Go 1.24.7）与集成 0 FAIL。详见 `.team/perf/batch6-report.md` §6。
 
 ### 人脸与数据
 

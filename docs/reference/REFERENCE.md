@@ -281,17 +281,18 @@ sources: []
 |---|---|
 | `all` | `ci` |
 | `build` | — |
-| `ci` | `fmt-check static-gzip-check docs-check vet test test-migration build` |
+| `ci` | `fmt-check static-gzip-check spa-check docs-check vet test test-migration build` |
 | `docs-check` | — |
 | `docs-check-stale` | — |
 | `docs-gen` | — |
 | `fmt` | — |
 | `fmt-check` | — |
 | `generate` | — |
-| `prepush` | `fmt-check static-gzip-check docs-check vet build` |
+| `prepush` | `fmt-check static-gzip-check spa-check docs-check vet build` |
 | `run` | — |
 | `seed` | — |
 | `spa-check` | — |
+| `spa-check-node` | — |
 | `static-gzip` | — |
 | `static-gzip-check` | — |
 | `test` | — |

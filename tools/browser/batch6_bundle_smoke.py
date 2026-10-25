@@ -30,10 +30,6 @@ if not BASE or not COOKIE:
     sys.exit("BASE_URL 与 SESSION_COOKIE 必填")
 
 
-def ignore_console(text: str) -> bool:
-    return "at.alicdn.com" in text
-
-
 def new_ctx(browser, init: str | None = None):
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
     ctx.add_cookies([{"name": "yxq_session", "value": COOKIE, "url": BASE,
@@ -45,7 +41,7 @@ def new_ctx(browser, init: str | None = None):
 
 def attach(page):
     errors = []
-    page.on("console", lambda m: errors.append(m.text[:200]) if m.type == "error" and not ignore_console(m.text) else None)
+    page.on("console", lambda m: errors.append(m.text[:200]) if m.type == "error" else None)
     page.on("pageerror", lambda e: errors.append("pageerror: " + str(e)[:200]))
     return errors
 
@@ -131,6 +127,39 @@ def main() -> int:
             failures.append(f"chunk failure: {exc}")
         finally:
             ctx.close()
+
+        # 4. ga-loading must be globally registered: force loading states in
+        # pages that live in lazy chunks (reviewer probe §2.1).
+        ctx = new_ctx(browser)
+        page = ctx.new_page()
+        errors = attach(page)
+        try:
+            page.goto(BASE + "/", wait_until="load", timeout=60000)
+            page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
+            dismiss_guide(page)
+            page.evaluate("""
+                (() => {
+                  const app = document.getElementById('app').__vue_app__;
+                  const inst = app && (app._instance || (app._container && app._container._vnode && app._container._vnode.component));
+                  const proxy = inst && inst.proxy;
+                  if (!proxy) throw new Error('no root proxy');
+                  proxy.page = 'reported_messages';
+                  proxy.loadingReported = true;
+                })()
+            """)
+            page.wait_for_timeout(800)
+            tagCount = page.locator("ga-loading").count()
+            loading = page.locator(".van-loading").count()
+            text = page.locator("body").inner_text()
+            if tagCount != 0 or loading < 1 or "加载中" not in text:
+                failures.append(f"ga-loading unresolved: tag={tagCount} van={loading} text={text!r}")
+            page.screenshot(path=str(OUT / "bundle-ga-loading-390.png"))
+            if errors:
+                failures.append(f"ga-loading probe console/page errors: {errors[:3]}")
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"ga-loading probe: {exc}")
+        finally:
+            ctx.close()
         browser.close()
 
     if failures:
@@ -138,7 +167,7 @@ def main() -> int:
         for f in failures:
             print(" -", f)
         return 1
-    print("PASS batch6 bundle smoke (normal/lazy tabs, missing Vant, chunk failure)")
+    print("PASS batch6 bundle smoke (normal/lazy tabs, missing Vant, chunk failure, ga-loading)")
     print("screenshots:", OUT)
     return 0
 

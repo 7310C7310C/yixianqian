@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,11 +19,15 @@ type pagesManifest struct {
 		File          string `json:"file"`
 		TemplateSHA   string `json:"templateSha256"`
 		TemplateBytes int    `json:"templateSize"`
+		Bytes         int    `json:"bytes"`
+		SHA           string `json:"sha256"`
 	} `json:"root"`
 	Initial []string `json:"initial"`
 	Groups  map[string]struct {
 		File  string   `json:"file"`
 		Pages []string `json:"pages"`
+		Bytes int      `json:"bytes"`
+		SHA   string   `json:"sha256"`
 	} `json:"groups"`
 	Pages map[string]struct {
 		Group         string `json:"group"`
@@ -128,6 +133,9 @@ func TestVantSubsetCoversTemplate(t *testing.T) {
 	}
 	appJS := readEmbedded(t, "static/legacy/app.js")
 	scan(appJS)
+	if !strings.Contains(appJS, "yxqApp.component('ga-loading', GaLoading)") {
+		t.Fatal("GaLoading must be registered globally for lazy page chunks")
+	}
 
 	have := map[string]bool{}
 	for _, name := range m.Components {
@@ -166,6 +174,69 @@ func TestVantSubsetCoversTemplate(t *testing.T) {
 	for _, file := range []string{"static/legacy/lib/vant.min.js", "static/legacy/lib/vant.min.css"} {
 		if len(mustRead(t, file)) == 0 {
 			t.Fatalf("%s is empty", file)
+		}
+	}
+}
+
+// Generated JS files are committed and must match the manifest byte-for-byte:
+// hand-editing pages/*.render.js or lib/vant.subset.min.* must fail make ci.
+// Pure Go (no Node) so CI/deploy stay Node-free.
+func TestGeneratedBundleHashes(t *testing.T) {
+	pagesRaw, err := fs.ReadFile(webassets.FS, "static/legacy/pages/pages.manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pages pagesManifest
+	if err := json.Unmarshal(pagesRaw, &pages); err != nil {
+		t.Fatal(err)
+	}
+	checkFile := func(name string, wantBytes int, wantSHA string) {
+		t.Helper()
+		raw, err := fs.ReadFile(webassets.FS, name)
+		if err != nil {
+			t.Fatalf("%s missing: %v", name, err)
+		}
+		sum := sha256.Sum256(raw)
+		if got := hex.EncodeToString(sum[:]); got != wantSHA || len(raw) != wantBytes {
+			t.Fatalf("%s drifted: bytes=%d sha=%s, manifest bytes=%d sha=%s", name, len(raw), got, wantBytes, wantSHA)
+		}
+	}
+	checkFile("static/legacy/"+pages.Root.File, pages.Root.Bytes, pages.Root.SHA)
+	for group, info := range pages.Groups {
+		checkFile("static/legacy/"+info.File, info.Bytes, info.SHA)
+		if len(info.Pages) == 0 {
+			t.Fatalf("group %s has no pages", group)
+		}
+	}
+
+	vantRaw, err := fs.ReadFile(webassets.FS, "static/legacy/lib/vant.subset.manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vant struct {
+		JS struct {
+			File  string
+			Bytes int
+			SHA   string `json:"sha256"`
+		} `json:"js"`
+		CSS struct {
+			File  string
+			Bytes int
+			SHA   string `json:"sha256"`
+		} `json:"css"`
+	}
+	if err := json.Unmarshal(vantRaw, &vant); err != nil {
+		t.Fatal(err)
+	}
+	checkFile("static/legacy/lib/"+vant.JS.File, vant.JS.Bytes, vant.JS.SHA)
+	checkFile("static/legacy/lib/"+vant.CSS.File, vant.CSS.Bytes, vant.CSS.SHA)
+	// The served filenames must be the generated subset, not a stale/manual copy.
+	for _, pair := range [][2]string{
+		{"static/legacy/lib/vant.min.js", "static/legacy/lib/" + vant.JS.File},
+		{"static/legacy/lib/vant.min.css", "static/legacy/lib/" + vant.CSS.File},
+	} {
+		if !bytes.Equal(mustRead(t, pair[0]), mustRead(t, pair[1])) {
+			t.Fatalf("%s differs from generated %s", pair[0], pair[1])
 		}
 	}
 }

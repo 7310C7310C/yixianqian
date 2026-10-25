@@ -161,7 +161,12 @@ function yxqLoadPageChunk(page, done){
     }
     callbacks.forEach(function(cb){ try { cb(); } catch (e) {} });
   };
-  script.onerror = function(){ yxqBootFailure('页面资源加载失败：' + page); };
+  script.onerror = function(){
+    yxqPageLoading[group] = null;
+    // 只有用户仍停在目标页时才升级为致命错误；已切走则下次进入重试。
+    var current = yxqRootProxy && yxqRootProxy.page;
+    if (current === page) yxqBootFailure('页面资源加载失败：' + page);
+  };
   document.head.appendChild(script);
 }
 
@@ -188,13 +193,6 @@ const PageHost = {
       ownKeys() { return Reflect.ownKeys(root); },
       getOwnPropertyDescriptor() { return { enumerable: true, configurable: true }; }
     });
-  },
-  watch: {
-    page(next) {
-      if (!window.__YXQ_PAGES__ || typeof window.__YXQ_PAGES__[next] !== 'function') {
-        yxqLoadPageChunk(next, () => { this.__tick; this.$forceUpdate(); });
-      }
-    }
   },
   render() {
     void this.__tick;
@@ -6524,6 +6522,7 @@ if (typeof window.__YXQ_RENDER__ !== 'function') {
     try {
       if (window.performance && performance.mark) performance.mark('yxq-mount-start');
       yxqApp.component('page-host', PageHost);
+      yxqApp.component('ga-loading', GaLoading);
       yxqApp.use(vant).mount('#app');
       if (window.performance && performance.mark) {
         performance.mark('yxq-mount-end');

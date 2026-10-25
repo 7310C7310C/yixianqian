@@ -11,6 +11,12 @@ sources: []
 > 本文件取代旧 ADR 目录（0001–0007，以及 0008 草案；2026-10-23 合并后已删除）。
 > 决策影响代码、部署或验收时，同步更新 `docs/STATUS.md`、本文件与相关文档。
 
+## 2026-10-25 SPA 构建期打包（性能批次6）
+
+- 决策：允许**开发期**使用 Rollup/esbuild 生成 Vant 子集与按 tab/页面拆分的 render chunk，生成物提交仓库；部署/CI 不依赖 Node（同预编译模式）。
+- 约束：组件/样式覆盖清单与缺失降级（可见 `.boot-fail`）；生成物带 manifest/sha256 门禁；可回退到 UMD/revert；`assetVersion` 随静态变更递增。
+- 影响：`tools/spa_vendor`（Vant 4.8.7 子集）与 `tools/spa_precompile`（root+6 chunk、pages/*.html）为 dev-time 工具；`make spa-check` 用 Go 校验 manifest，Node 检查用 `make spa-check-node`。
+
 ## 1. 模块化单体（2026-10-21）
 
 - 背景：团队规模与流量未知，微服务、信息队列或 Redis 会增加部署与一致性成本。

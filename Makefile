@@ -11,7 +11,7 @@ LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSI
 
 .PHONY: all tidy generate fmt fmt-check vet test test-race test-integration test-migration \
         test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale prepush ci \
-        static-gzip static-gzip-check
+        static-gzip static-gzip-check spa-check spa-check-node
 
 all: ci
 
@@ -68,9 +68,12 @@ static-gzip:
 static-gzip-check:
 	$(GO) run ./tools/static_gzip -check
 
-# 开发期生成物（Vant 子集 / page chunk）检查；CI 用 Go 测试校验同一 manifest，
-# 部署不依赖 Node。
+# 开发期生成物（Vant 子集 / page chunk）门禁：纯 Go 校验 manifest sha/bytes，
+# 部署不依赖 Node；Node 重建后用 spa-check-node 复核。
 spa-check:
+	$(GO) test ./internal/httpserver -run 'TestGeneratedBundleHashes|TestPageChunksMatchTemplates|TestVantSubsetCoversTemplate' -count=1
+
+spa-check-node:
 	cd tools/spa_precompile && npm run check
 	cd tools/spa_vendor && npm run check
 
@@ -92,6 +95,6 @@ token:
 	$(GO) run ./cmd/token -legacy-user-id=$(USER_ID)
 
 # 快速本地门禁：push 前必跑；全量仍用 make ci（多 test/test-migration）
-prepush: fmt-check static-gzip-check docs-check vet build
+prepush: fmt-check static-gzip-check spa-check docs-check vet build
 
-ci: fmt-check static-gzip-check docs-check vet test test-migration build
+ci: fmt-check static-gzip-check spa-check docs-check vet test test-migration build
