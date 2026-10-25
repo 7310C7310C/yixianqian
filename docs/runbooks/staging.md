@@ -305,16 +305,20 @@ rm -rf /opt/yixianqian-next/cache/thumbs                      # 彻底清理（�
 
 pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、`statement_timeout=5000`；迁移走独立连接 `SET statement_timeout=0`，`cmd/seed`/`cmd/facebackfill` 用 `db.OpenMaintenance`。回滚：改回 `internal/db/db.go` 常量并重启 app（无需 DB 重启）。
 
-## 性能批次9：边缘 gzip 变体缓存与短读缓存
+## 性能批次9：读缓存与边缘静态 gzip 变体（staging）
 
 - Go 侧 `/legacy/api/home`、`/legacy/api/cards` 10s 进程内缓存（`READ_CACHE_TTL`/`READ_CACHE_ITEMS`，默认 10s/4096）：
   键 = 用户 + kind + viewRole + RawQuery；写路径（点赞/取消/资料/照片/报名）主动失效；错误/未授权不缓存；
   响应头仍是 `no-store`（`Vary: Cookie` 由中间件加）。
-- 边缘（server2）对 `/legacy/api/` 增加 gzip/identity 变体缓存（`yxqapi` zone，TTL 10s，key 含
-  `$yxq_static_enc` 与 `$cookie_yxq_session`），回源统一 `Accept-Encoding: $yxq_upstream_ae`；命中时
-  `X-Cache-Status: HIT` 且不再逐请求压缩。**配置已入库但尚未 apply**；apply 步骤：
-  `cp deploy/nginx/... → /etc/nginx/... && nginx -t && systemctl reload nginx`（server2，PM/Reviewer 批准后）。
-  缓存目录 `/var/cache/nginx/yxqapi`（700，max 256m，inactive 5m）——含个人数据，TTL ≤10s。
+- **不做边缘 API 缓存**：曾评估在 server2 对 `/legacy/api/` 做 proxy_cache，但 key 若含 `$cookie_yxq_session`
+  会把**明文 session token 落盘**（违反「session token 只存 hash」），key 不含会话又会跨用户串数据；
+  方案已删除、未 apply。API 提速依赖应用内 10s 读缓存 + 上游 keepalive（目标 p95 ≤220ms）。
+  未来若确需边缘 API 缓存，只能先用 `HMAC(server_secret, session)` 派生不可逆 key（不在本批）。
+- **边缘静态 gzip 变体缓存（已部署，批次1 起）**：`/static/` 回源统一 `Accept-Encoding: $yxq_upstream_ae`，
+  cache key 含 `$yxq_static_enc`（gzip/identity 分变体）；命中直接回已压缩字节，nginx 不再压缩。
+  2026-10-26 复核（server2）：gzip 客户端 47,033B（= `app.min.js.gz`）、`gzip -t` 单层、解码 147,145B；
+  q=0 / `gzip;q=abc` / `x-gzip` / identity 均落 identity（147,145B、无 Content-Encoding）；
+  同连接命中 TTFB **0.87ms（gzip）/1.89ms（identity）**，首连 ~96–103ms（TLS 握手）。
 
 ## 性能批次1：边缘/传输（nginx）
 
