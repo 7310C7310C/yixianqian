@@ -91,12 +91,12 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD | `d182b2c` |
-| `/healthz` version | `staging-d182b2c` |
-| migration 最大版本 | `8` |
+| 部署 HEAD | `30e4b96` |
+| `/healthz` version | `staging-30e4b96` |
+| migration 最大版本 | `9`（`0009_perf_indexes_b7`） |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
-| 自动部署 | `yxq-autodeploy.service/.timer` 已安装、**未启用**（2026-10-24 dry-run 验证通过）；脚本 `/opt/yixianqian-next/autodeploy.sh`，`deployed.sha=2d0e29b` |
+| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；脚本 `/opt/yixianqian-next/autodeploy.sh`，`deployed.sha=30e4b96` |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
 | 账号数 | 用户 `1115`：`active=1111`、`observer=4` |
 | v2 生产 | 未切换；`app.nantou.love` 仍是 v1 |
@@ -332,9 +332,9 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 任何人可在证据齐全时更新“已实现/缺口”事实条目与 `last_verified`；不得改 PM 决策、
   `docs/PROJECT_CHARTER.md`、`docs/product-spec.md` 勾选或 `docs/DECISIONS.md` 已定决策。
 
-### 性能批次9（2026-10-26，实现待审，未 push/未部署）
+### 性能批次9（2026-10-26，**已部署 staging-30e4b96**）
 
-- 当前 staging：`/healthz=staging-cf457f0`、`deployed.sha=cf457f0`、migration max=9/9（无新迁移）；批次7、8 均已部署。
+- 当前 staging：`/healthz=staging-30e4b96`、`deployed.sha=30e4b96`、migration max=9/9；批次7、8、9 均已部署（autodeploy 自动）。
 - `/legacy/api/home`、`/legacy/api/cards` 增加 10s 进程内成功响应缓存（`READ_CACHE_TTL/ITEMS/BYTES`，默认 10s/1024 条/32MiB，任一为 0 关闭），
   home+cards **共享** 32MiB/1024 条预算（单条 256KiB，字节 LRU，键长计入；config 上限 clamp 64MiB）；
   键含用户/kind/viewRole/query + 全局 epoch；**全站写（排除 /static/、/healthz、埋点 track*/client-events）成功后 epoch++** 全员失效；
