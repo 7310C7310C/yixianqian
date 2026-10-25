@@ -1,0 +1,21 @@
+{
+  "source": {
+    "path": "app.js",
+    "bytes": 338155,
+    "sha256": "20669c87a41439225c8633608aebbfe61edd7c2dd7ece224658f3ba33e7338fa"
+  },
+  "min": {
+    "path": "app.min.js",
+    "bytes": 146739,
+    "sha256": "696ed12e0c8150bccb763781dd63eeb686f8542f53a1ac957c84f2a3746a1551"
+  },
+  "tool": {
+    "name": "esbuild",
+    "version": "0.28.2",
+    "target": [
+      "safari14.1",
+      "chrome84",
+      "firefox74"
+    ]
+  }
+}

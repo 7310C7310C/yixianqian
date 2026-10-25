@@ -72,10 +72,12 @@ static-gzip-check:
 # 部署不依赖 Node；Node 重建后用 spa-check-node 复核。
 spa-check:
 	$(GO) test ./internal/httpserver -run 'TestGeneratedBundleHashes|TestPageChunksMatchTemplates|TestVantSubsetCoversTemplate' -count=1
+	python3 tools/spa_minify/check.py
 
 spa-check-node:
 	cd tools/spa_precompile && npm run check
 	cd tools/spa_vendor && npm run check
+	cd tools/spa_minify && npm run check
 
 build:
 	mkdir -p bin

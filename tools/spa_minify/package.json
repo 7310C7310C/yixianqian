@@ -1,0 +1,14 @@
+{
+  "name": "yxq-spa-minify",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Dev-time minify of the legacy SPA app.js into app.min.js (generated file committed; CI does not need Node)",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -43,6 +43,10 @@ try:
 except ImportError:  # pragma: no cover - environment guard
     sys.exit("需要 playwright：pip install playwright && python3 -m playwright install chromium")
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import local_assets  # noqa: E402
+
 VIEWPORT = (390, 844)
 TABS = {"cards": "牵线", "likes": "消息", "home": "活动", "profile": "我的"}
 TAB_HEIGHT = 50
@@ -100,6 +104,81 @@ def scroll_to(page, y: int) -> None:
     page.wait_for_timeout(120)
 
 
+# 批次6 起 likes/home/profile/detail/group 的 render 都在 lazy chunk 里：
+# 切页后先出现 .page-chunk-loading，再由 chunk 渲染出真实页面。之前用固定
+# 450ms 判断就绪，在慢网/低端机上会假红；这里改成显式等待「页面标记出现
+# 且 .page-chunk-loading 消失且尺寸非零」。标记按页选区只用于判就绪，
+# 不改变原有滚动断言。
+PAGE_MARKERS = {
+    "cards": ".cards-page",
+    "likes": ".msg-card",
+    "home": ".activity-card, .van-empty",
+    "profile": ".profile-header",
+    "my_activities": ".back-nav",
+    "my_likes": ".back-nav",
+    "my_messages": ".back-nav",
+    "received_messages": ".back-nav",
+    "reported_messages": ".back-nav",
+    "liked_me": ".back-nav",
+    "mutual": ".back-nav",
+    "user_detail": ".back-nav",
+    "activity_detail": ".back-nav",
+    "group_admin": ".back-nav",
+    "group_detail": ".back-nav",
+    "group_roster": ".back-nav",
+    "group_select": ".back-nav",
+    "group_result": ".back-nav",
+    "onetoone_result": ".back-nav",
+    "checkin": ".back-nav",
+    "points": ".back-nav",
+    "points_admin": ".back-nav",
+    "profile_detail": ".back-nav",
+    "profile_edit": ".back-nav",
+    "my_groups": ".back-nav",
+    "password": ".back-nav",
+}
+READY_TIMEOUT_MS = 8000
+
+
+def wait_page_ready(page, key: str, timeout: int = READY_TIMEOUT_MS) -> None:
+    """等目标页真正渲染出来（lazy chunk 已加载、loading 占位已消失）。
+
+    判据按「当前挂载页的根元素」范围查标记：Transition 是 out-in，
+    只查根元素可避免把上一个页面（同样含 .page/.back-nav）当成新页就绪。
+    """
+    marker = PAGE_MARKERS.get(key)
+    if not marker:
+        raise SmokeFailure(f"未登记页面就绪标记：{key}")
+    try:
+        page.wait_for_function(
+            """(sel) => {
+                if (document.querySelector('.page-chunk-loading')) return false;
+                const root = document.querySelector('.tab-main > *');
+                if (!root) return false;
+                if (!root.matches(sel) && !root.querySelector(sel)) return false;
+                const r = root.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+            }""",
+            arg=marker,
+            timeout=timeout,
+        )
+    except PlaywrightTimeoutError:
+        diag = page.evaluate(
+            """() => {
+                const root = document.querySelector('.tab-main > *');
+                return {
+                    loading: !!document.querySelector('.page-chunk-loading'),
+                    loadingText: (document.querySelector('.page-chunk-loading') || {}).innerText || '',
+                    rootClass: root ? String(root.className) : '',
+                    rootHtml: root ? root.outerHTML.slice(0, 120) : '',
+                    boot: !!document.querySelector('.boot-fail'),
+                    scrollY: Math.round(window.scrollY)
+                };
+            }"""
+        )
+        raise SmokeFailure(f"页面 {key} 在 {timeout}ms 内未就绪（lazy chunk 未渲染）：{diag}") from None
+
+
 def click_tab(page, key: str, settle_ms: int = 0) -> None:
     """点底部 tab。用 DOM click 绕开一次性引导层，避免 pointer 拦截。"""
     page.evaluate(
@@ -113,7 +192,9 @@ def click_tab(page, key: str, settle_ms: int = 0) -> None:
         }""",
         TABS[key],
     )
-    page.wait_for_timeout(450 + settle_ms)
+    wait_page_ready(page, key)
+    if settle_ms:
+        page.wait_for_timeout(settle_ms)
 
 
 def dismiss_guides(page) -> None:
@@ -133,7 +214,8 @@ def wait_app(page) -> None:
         page.locator("#boot-skeleton").wait_for(state="detached", timeout=15000)
     except PlaywrightTimeoutError:
         pass
-    page.wait_for_timeout(900)
+    wait_page_ready(page, "cards")
+    page.wait_for_timeout(300)   # 首卡图片/引导层的短暂收尾，不用于判就绪
     dismiss_guides(page)
 
 
@@ -224,7 +306,7 @@ def run(page, out_dir: Path) -> list[str]:
     list_scroll = min(600, home_state["maxScroll"])
     scroll_to(page, list_scroll)
     page.evaluate("document.querySelector('.activity-card').click()")
-    page.wait_for_timeout(1300)
+    wait_page_ready(page, "activity_detail")
     detail = state(page)
     assert_near(detail["scrollY"], 0, "活动详情继承了列表的滚动位置")
     if detail["backNav"] is None:
@@ -237,7 +319,7 @@ def run(page, out_dir: Path) -> list[str]:
         assert_near(sticky["backNav"]["top"], 0, "活动详情滚动后返回栏没有吸顶")
         assert_near(sticky["scrollY"], 120, "活动详情滚不动", tol=8)
     page.evaluate("document.querySelector('.back-nav').click()")
-    page.wait_for_timeout(1100)
+    wait_page_ready(page, "home")
     returned = state(page)
     assert_restored(returned, list_scroll, "从活动详情返回后列表位置丢失")
 
@@ -250,14 +332,14 @@ def run(page, out_dir: Path) -> list[str]:
     if not click_cell(page, "我的活动"):
         notes.append("个人页没有「我的活动」入口，跳过子页滚动检查")
     else:
-        page.wait_for_timeout(1200)
+        wait_page_ready(page, "my_activities")
         sub = state(page)
         assert_near(sub["scrollY"], 0, "「我的活动」子页继承了个人页滚动位置")
         if sub["maxScroll"] > 120:
             scroll_to(page, 120)
         page.screenshot(path=str(out_dir / f"tab-scroll-{width}-5-my-activities.png"))
         page.evaluate("document.querySelector('.back-nav').click()")
-        page.wait_for_timeout(1100)
+        wait_page_ready(page, "profile")
         restored = state(page)
         assert_restored(restored, profile_scroll, "从「我的活动」返回后个人页位置丢失")
 
@@ -381,17 +463,14 @@ def main() -> int:
             # 这一步不会被走到，缺 cookie 会让 /legacy/api/client-events 等写入 403。
             page.goto(base_url.rstrip("/") + "/", wait_until="domcontentloaded")
             page.wait_for_timeout(1500)
-            html = Path(index_html).read_text(encoding="utf-8").replace(
-                "window.__YXQ_AUTHENTICATED__=false;", "window.__YXQ_AUTHENTICATED__=true;")
-
-            def serve_index(route, request):
-                url = request.url.split("?")[0].rstrip("/")
-                if request.resource_type == "document" and url == base_url.rstrip("/"):
-                    route.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
-                else:
-                    route.continue_()
-
-            context.route("**/*", serve_index)
+            # MAIN_SCRIPT 可指定本机主脚本（例如尚未部署的 app.min.js）；
+            # 不指定时用同目录未压缩的 app.js。
+            main_script = os.environ.get("MAIN_SCRIPT", "").strip()
+            script = Path(main_script) if main_script else Path(index_html).with_name("app.js")
+            if not script.exists():
+                sys.exit(f"MAIN_SCRIPT 不存在：{script}")
+            arm = local_assets.Arm.from_files("local", Path(index_html), script)
+            local_assets.install(context, base_url, arm)
         try:
             notes = run(page, out_dir)
             if errors:

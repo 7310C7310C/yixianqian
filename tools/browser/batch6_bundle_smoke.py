@@ -30,12 +30,27 @@ if not BASE or not COOKIE:
     sys.exit("BASE_URL 与 SESSION_COOKIE 必填")
 
 
+# 未部署的本机壳/主脚本（批次7 A2 起用于验证 app.min.js）：两臂接口仍走 staging。
+# 不设这些变量时行为与以前完全一致（用已部署资源）。
+SYS_PATH = Path(__file__).resolve().parent
+INDEX_HTML = os.environ.get("INDEX_HTML", "").strip()
+MAIN_SCRIPT = os.environ.get("MAIN_SCRIPT", "").strip()
+
+
 def new_ctx(browser, init: str | None = None):
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
     ctx.add_cookies([{"name": "yxq_session", "value": COOKIE, "url": BASE,
                       "httpOnly": True, "sameSite": "Lax"}])
     if init:
         ctx.add_init_script(init)
+    if INDEX_HTML:
+        sys.path.insert(0, str(SYS_PATH))
+        import local_assets
+        script = Path(MAIN_SCRIPT) if MAIN_SCRIPT else Path(INDEX_HTML).with_name("app.js")
+        local_assets.install(ctx, BASE, local_assets.Arm.from_files("local", Path(INDEX_HTML), script))
+        # 本机壳顶替文档后，服务端下发的 csrf cookie 不会经过浏览器；先用 context 的
+        # request 走一次真实文档请求把 cookie 种上，否则写入类接口（client-events）会 403。
+        ctx.request.get(BASE + "/", timeout=30000)
     return ctx
 
 
