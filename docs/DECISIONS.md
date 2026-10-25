@@ -283,13 +283,14 @@ sources: []
 - 背景：Auditor 复核发现 edge home p95 262/271ms、origin home/cards p95 62.5/45.1ms、冷 LCP 2.60–4.14s 不稳定；
   同时口径漂移（home 查询 15 vs 目标 ≤8）。
 - 决策（读缓存）：`/legacy/api/home`、`/legacy/api/cards` 的成功响应在进程内缓存 **10s**，键=用户+kind+viewRole+RawQuery
-  **+全局世代号 epoch**；任何**成功的非 GET `/legacy/api/*`** 请求后 `epoch++`（中间件统一做），所有用户缓存立即失效，
-  不需要逐用户追踪、不会漏（点赞/取消/资料/照片/报名/审核/管理员写全覆盖）；GET/4xx/5xx 不 bump。
-  内存双重上限：总字节 `READ_CACHE_BYTES`（默认 32MiB，按字节 LRU）+ 单条 256KiB（超过不缓存）+ 条数 1024；
-  任一项为 0 = 完全关闭（kill switch）。多实例部署需 pub/sub 传播 epoch（未实现，单实例语义）。
-  错误/未授权/重定向不缓存；`Cache-Control: no-store`、
-  响应头不变：`Cache-Control: no-store`；`/legacy/api/*` 实际只带 `Vary: Accept-Encoding`（gzip），
-  **不设 `Vary: Cookie`**（那是页面壳的规则）；缓存只在服务端，不影响客户端/共享缓存语义。
+  **+全局世代号 epoch**；**任何成功的非 GET/HEAD/OPTIONS 请求**后 `epoch++`（中间件统一），覆盖
+  `/legacy/api/*`、`/api/*`、`/admin/*`、`/media/*`（含管理员调整积分/照片上传），因此点赞、资料、照片、报名、
+  审核、管理员写都会立即 flush 全站读缓存；**排除** `/static/`、`/healthz` 与埋点（`/legacy/api/track*`、
+  `/legacy/api/client-events`），避免高频埋点刷穿缓存；GET 与 4xx/5xx 不 bump。
+  内存双重上限：总字节 `READ_CACHE_BYTES`（默认 32MiB，**键长也计入**、按字节 LRU）+ 单条 256KiB + 条数 1024；
+  `READ_CACHE_ENABLED=false` 或 TTL/ITEMS/BYTES 任一为 0 → 完全关闭（零值 Config 同样关闭，不回落默认）。
+  构建期间 epoch 变化则丢弃回填（CAS，避免旧数据进新代）。多实例部署需 pub/sub 传播 epoch（未实现，单实例语义）。
+  错误/未授权/重定向不缓存；响应头 `Cache-Control: no-store`；`/legacy/api/*` 只带 `Vary: Accept-Encoding`。
 - 决策（边缘，**不做 API 缓存**）：原方案在 server2 对 `/legacy/api/` 做 proxy_cache，key 需含会话才能不串用户，
   但 `$cookie_yxq_session` 会把**明文 session token 写进 server2 磁盘**（违反「session token 只存 hash」）；
   不含会话则会跨用户命中。该方案**已删除、未 apply**；API 提速改由应用内 10s 读缓存 + 上游 keepalive 承担

@@ -177,6 +177,7 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 		writeCachedJSON(w, body)
 		return
 	}
+	homeEpoch := a.cacheEpoch(a.homeCache)
 	now := a.clock.Now()
 	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
 	value, err := a.homeInflight.Do(r.Context(), key, func() (any, error) {
@@ -189,7 +190,7 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		legacyServerError(a, w, r, err, "legacy home failed")
 	default:
-		a.writeReadCache(w, r, a.homeCache, "home", payload)
+		a.writeReadCache(w, r, a.homeCache, "home", payload, homeEpoch)
 	}
 }
 
@@ -219,6 +220,7 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		writeCachedJSON(w, body)
 		return
 	}
+	cardsEpoch := a.cacheEpoch(a.cardsCache)
 	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
 	value, err := a.cardsInflight.Do(r.Context(), key, func() (any, error) {
 		return a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit, cardPageDeps{})
@@ -239,7 +241,7 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		"offset":      page.Offset,
 		"limit":       page.Limit,
 		"version":     page.Version,
-	})
+	}, cardsEpoch)
 }
 
 func (a *App) handleLegacyProfile(w http.ResponseWriter, r *http.Request) {
@@ -987,7 +989,7 @@ func legacyActivityFee(raw string) int {
 // 未命中则序列化、缓存并写出。错误/未授权路径不经过这里，因此不会被缓存。
 // 响应头与 writeJSON 完全一致（no-store、Vary: Cookie 由中间件加），语义不变。
 func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request, cache *readCache,
-	kind string, payload any) {
+	kind string, payload any, epoch int64) {
 	if cache == nil {
 		writeJSON(w, http.StatusOK, payload)
 		return
@@ -1010,7 +1012,7 @@ func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request, cache *read
 		return
 	}
 	body = append(body, '\n') // 与 json.Encoder 输出保持一致
-	cache.Put(parts, body)
+	cache.PutIfEpoch(parts, body, epoch)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(body)
@@ -1025,6 +1027,14 @@ func (a *App) bumpReadCacheEpoch() {
 	if a.cardsCache != nil {
 		a.cardsCache.BumpEpoch()
 	}
+}
+
+// cacheEpoch 返回当前世代号（构建前记录，回填时做 CAS）。
+func (a *App) cacheEpoch(cache *readCache) int64 {
+	if cache == nil {
+		return -1
+	}
+	return cache.Epoch()
 }
 
 // readCacheHit 在构建前查缓存（键含用户/viewRole/query）。

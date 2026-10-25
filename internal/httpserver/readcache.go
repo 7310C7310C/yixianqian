@@ -35,6 +35,8 @@ type readCacheEntry struct {
 	key     string
 	body    []byte
 	expires time.Time
+	// cost = 键长 + body 长（键也占用内存预算）
+	cost int64
 }
 
 const (
@@ -42,9 +44,9 @@ const (
 	readCacheSweepInterval   = 30 * time.Second
 )
 
-func newReadCache(ttl time.Duration, maxItems int, maxBytes, maxEntry int64) *readCache {
-	if ttl <= 0 || maxItems <= 0 || maxBytes <= 0 {
-		return nil // kill switch：任何一项为 0 都完全关闭
+func newReadCache(enabled bool, ttl time.Duration, maxItems int, maxBytes, maxEntry int64) *readCache {
+	if !enabled || ttl <= 0 || maxItems <= 0 || maxBytes <= 0 {
+		return nil // kill switch：ENABLED=false 或任一上限为 0 都完全关闭（零值 Config 同样关闭）
 	}
 	if maxEntry <= 0 || maxEntry > maxBytes {
 		maxEntry = readCacheMaxEntryDefault
@@ -117,27 +119,47 @@ func (c *readCache) Get(parts string) ([]byte, bool) {
 	return entry.body, true
 }
 
-// Put 写入/刷新一条成功响应；超过单条上限不缓存，超总字节按字节 LRU 淘汰。
+// Put 写入/刷新一条成功响应；键长+body 都计入字节预算，超单条上限不缓存。
 func (c *readCache) Put(parts string, body []byte) {
+	c.put(parts, body, -1)
+}
+
+// PutIfEpoch 是 CAS 写入：若构建期间 epoch 已变化（有并发写），丢弃这次回填，
+// 避免把「写前」的旧数据写进新一代缓存。
+func (c *readCache) PutIfEpoch(parts string, body []byte, epoch int64) bool {
+	return c.put(parts, body, epoch)
+}
+
+func (c *readCache) put(parts string, body []byte, expectEpoch int64) bool {
 	if c == nil || len(body) == 0 || int64(len(body)) > c.maxEntry {
-		return
+		return false
 	}
 	key := c.key(parts)
-	size := int64(len(body))
+	if expectEpoch >= 0 && c.epoch.Load() != expectEpoch {
+		return false
+	}
+	cost := int64(len(key) + len(body))
+	if cost > c.maxBytes {
+		return false
+	}
 	now := time.Now()
 	expires := now.Add(c.ttl)
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if expectEpoch >= 0 && c.epoch.Load() != expectEpoch {
+		return false
+	}
 	if el, ok := c.entries[key]; ok {
 		entry := el.Value.(*readCacheEntry)
-		c.bytes += size - int64(len(entry.body))
+		c.bytes += cost - entry.cost
 		entry.body = body
+		entry.cost = cost
 		entry.expires = expires
 		c.order.MoveToFront(el)
 	} else {
-		el := c.order.PushFront(&readCacheEntry{key: key, body: body, expires: expires})
+		el := c.order.PushFront(&readCacheEntry{key: key, body: body, expires: expires, cost: cost})
 		c.entries[key] = el
-		c.bytes += size
+		c.bytes += cost
 	}
 	for c.order.Len() > c.maxItems || c.bytes > c.maxBytes {
 		tail := c.order.Back()
@@ -147,6 +169,7 @@ func (c *readCache) Put(parts string, body []byte) {
 		c.removeLocked(tail)
 	}
 	c.sweepLocked(now)
+	return true
 }
 
 // sweepLocked 每 30s 最多清一次过期条目，避免长期只有 Put 的场景堆积。
@@ -170,7 +193,7 @@ func (c *readCache) removeLocked(el *list.Element) {
 	entry := el.Value.(*readCacheEntry)
 	delete(c.entries, entry.key)
 	c.order.Remove(el)
-	c.bytes -= int64(len(entry.body))
+	c.bytes -= entry.cost
 }
 
 // Len/Bytes 供测试与诊断。

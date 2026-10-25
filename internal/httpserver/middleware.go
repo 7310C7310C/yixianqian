@@ -346,12 +346,13 @@ func acceptsGzip(header string) bool {
 	return accepted
 }
 
-// withReadCacheEpoch 在任何**成功的非 GET** `/legacy/api/*` 请求后递增读缓存世代号。
-// 这样所有用户的 home/cards 缓存立即失效（不必逐用户追踪），GET/错误/4xx/5xx 不 bump。
+// withReadCacheEpoch 在任何**成功的写请求**后递增读缓存世代号（epoch++）：
+// 覆盖 /legacy/api/*、/api/*、/admin/*、/media/* 等所有非 GET/HEAD/OPTIONS；
+// 排除 /static/、/healthz 与埋点（/legacy/api/track*、/legacy/api/client-events），
+// 避免高频埋点把缓存刷穿。4xx/5xx 不 bump。多实例需 pub/sub 传播（见 DECISIONS）。
 func (a *App) withReadCacheEpoch(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet || r.Method == http.MethodHead ||
-			!strings.HasPrefix(r.URL.Path, "/legacy/api/") {
+		if !readCacheEpochWrite(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -361,8 +362,28 @@ func (a *App) withReadCacheEpoch(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
-		if status >= 200 && status < 400 {
+		if status < 400 {
 			a.bumpReadCacheEpoch()
 		}
 	})
+}
+
+// readCacheEpochWrite 判断该请求是否应当触发 epoch++（写方法、非静态/健康/埋点）。
+func readCacheEpochWrite(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	}
+	path := r.URL.Path
+	switch {
+	case strings.HasPrefix(path, "/static/"):
+		return false
+	case path == "/healthz" || path == "/readyz":
+		return false
+	case strings.HasPrefix(path, "/legacy/api/track"):
+		return false
+	case path == "/legacy/api/client-events":
+		return false
+	}
+	return true
 }

@@ -65,14 +65,15 @@ type Config struct {
 	MediaCacheBytes int64
 	// ReadCacheTTL/Items 控制 /legacy/api/home、/cards 的进程内成功响应缓存
 	// （批次9）。TTL<=0 关闭；Items 为 LRU 容量上限。
-	ReadCacheTTL   time.Duration
-	ReadCacheItems int
-	ReadCacheBytes int64
-	MediaMaxPixels int64
-	MediaMaxDim    int
-	MaxHashes      int
-	MaxMedia       int
-	ActivationTTL  time.Duration
+	ReadCacheEnabled bool
+	ReadCacheTTL     time.Duration
+	ReadCacheItems   int
+	ReadCacheBytes   int64
+	MediaMaxPixels   int64
+	MediaMaxDim      int
+	MaxHashes        int
+	MaxMedia         int
+	ActivationTTL    time.Duration
 
 	// FaceProbeCmd 是本地人脸检测命令（空格分隔，图片路径追加在末尾）。
 	// FaceProbeTimeout 是单张照片检测超时；失败只记录并放行上传。
@@ -210,6 +211,11 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	}
 	if cfg.MediaCacheBytes < 16<<20 || cfg.MediaCacheBytes > 4<<30 {
 		errs = append(errs, errors.New("config: MEDIA_CACHE_BYTES must be between 16 MiB and 4 GiB"))
+	}
+	if v, err := parseBool(getenv("READ_CACHE_ENABLED"), true); err != nil {
+		errs = append(errs, fmt.Errorf("config: READ_CACHE_ENABLED: %w", err))
+	} else {
+		cfg.ReadCacheEnabled = v
 	}
 	if v, err := parseDuration(getenv("READ_CACHE_TTL"), 10*time.Second); err != nil {
 		errs = append(errs, fmt.Errorf("config: READ_CACHE_TTL: %w", err))

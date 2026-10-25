@@ -112,20 +112,13 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 			"entries", entries, "bytes", bytes)
 	}
 
-	// 三项全为 0 视为「未配置」（零值 Config，测试/build 直接构造）→ 用默认值；
-	// 任一为 0 但其余非零 = 显式 kill switch（READ_CACHE_* = 0）→ 保持 0 关闭。
-	cacheTTL, cacheItems, cacheBytes := cfg.ReadCacheTTL, cfg.ReadCacheItems, cfg.ReadCacheBytes
-	if cacheTTL == 0 && cacheItems == 0 && cacheBytes == 0 {
-		cacheTTL, cacheItems, cacheBytes = 10*time.Second, 1024, 32<<20
-	}
-
 	return &App{
 		cfg:                         cfg,
 		db:                          database,
 		store:                       store,
 		thumbCache:                  thumbCache,
-		homeCache:                   newReadCache(cacheTTL, cacheItems, cacheBytes, 0),
-		cardsCache:                  newReadCache(cacheTTL, cacheItems, cacheBytes, 0),
+		homeCache:                   newReadCache(cfg.ReadCacheEnabled, cfg.ReadCacheTTL, cfg.ReadCacheItems, cfg.ReadCacheBytes, 0),
+		cardsCache:                  newReadCache(cfg.ReadCacheEnabled, cfg.ReadCacheTTL, cfg.ReadCacheItems, cfg.ReadCacheBytes, 0),
 		tpl:                         tpl,
 		log:                         logger,
 		csrf:                        auth.NewCSRF(cfg.CSRFKey(), 2*time.Hour),

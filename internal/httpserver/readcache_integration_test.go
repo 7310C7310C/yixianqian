@@ -4,7 +4,9 @@ import (
 	"io"
 	"strconv"
 	"testing"
+	"time"
 
+	"github.com/7310C7310C/yixianqian/internal/config"
 	"github.com/7310C7310C/yixianqian/internal/db"
 )
 
@@ -13,7 +15,12 @@ import (
 // 跨用户不串。删掉中间件的 epoch bump 会让「写后 15 条」断言失败。
 func TestIntegrationLegacyHomeCardsReadCache(t *testing.T) {
 	tracer := &countingTracer{}
-	env := setupActivitiesHTTPEnvWithOptions(t, nil, db.WithQueryTracer(tracer))
+	env := setupActivitiesHTTPEnvWithOptions(t, func(cfg *config.Config) {
+		cfg.ReadCacheEnabled = true
+		cfg.ReadCacheTTL = 10 * time.Second
+		cfg.ReadCacheItems = 1024
+		cfg.ReadCacheBytes = 32 << 20
+	}, db.WithQueryTracer(tracer))
 
 	viewer, viewerClient := env.createUser(t, "U-CACHE1", "缓存甲", "active", "user")
 	target, targetClient := env.createUser(t, "U-CACHE2", "缓存乙", "active", "user")

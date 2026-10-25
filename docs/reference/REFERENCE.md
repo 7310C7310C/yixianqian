@@ -260,6 +260,7 @@ sources: []
 | `R2_SECRET_ACCESS_KEY` | 是 | 是 |
 | `R2_SECURE` | 是 | 是（注释默认值） |
 | `READ_CACHE_BYTES` | 是 | 是 |
+| `READ_CACHE_ENABLED` | 是 | 是 |
 | `READ_CACHE_ITEMS` | 是 | 是 |
 | `READ_CACHE_TTL` | 是 | 是 |
 | `SESSION_COOKIE_NAME` | 是 | 是 |

@@ -1,6 +1,9 @@
 package httpserver
 
 import (
+	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -10,7 +13,7 @@ func testParts(user int64, kind, query string) string {
 }
 
 func TestReadCacheUserIsolation(t *testing.T) {
-	c := newReadCache(time.Minute, 8, 1<<20, 0)
+	c := newReadCache(true, time.Minute, 8, 1<<20, 0)
 	c.Put(testParts(1, "home", ""), []byte(`{"ok":1}`))
 	if _, ok := c.Get(testParts(2, "home", "")); ok {
 		t.Fatal("other user must not hit")
@@ -30,7 +33,7 @@ func TestReadCacheUserIsolation(t *testing.T) {
 }
 
 func TestReadCacheTTLExpiry(t *testing.T) {
-	c := newReadCache(20*time.Millisecond, 8, 1<<20, 0)
+	c := newReadCache(true, 20*time.Millisecond, 8, 1<<20, 0)
 	key := testParts(1, "home", "")
 	c.Put(key, []byte("x"))
 	if _, ok := c.Get(key); !ok {
@@ -46,8 +49,8 @@ func TestReadCacheTTLExpiry(t *testing.T) {
 }
 
 func TestReadCacheByteLimitEvictsLRU(t *testing.T) {
-	// 总字节 100、单条上限 60：4 条 40B 只能留 2 条，且按字节 LRU。
-	c := newReadCache(time.Minute, 100, 100, 60)
+	// 总字节 200（含键长）、单条上限 60：3 条 40B（cost≈key+40）只能留 2 条，按字节 LRU。
+	c := newReadCache(true, time.Minute, 100, 140, 60)
 	k1, k2, k3 := testParts(1, "home", ""), testParts(2, "home", ""), testParts(3, "home", "")
 	c.Put(k1, make([]byte, 40))
 	c.Put(k2, make([]byte, 40))
@@ -55,8 +58,8 @@ func TestReadCacheByteLimitEvictsLRU(t *testing.T) {
 		t.Fatal("k1 missing")
 	}
 	c.Put(k3, make([]byte, 40))
-	if c.Bytes() > 100 {
-		t.Fatalf("bytes=%d exceeds limit 100", c.Bytes())
+	if c.Bytes() > 140 {
+		t.Fatalf("bytes=%d exceeds limit 140", c.Bytes())
 	}
 	if _, ok := c.Get(k2); ok {
 		t.Fatal("k2 should be evicted (byte LRU)")
@@ -67,7 +70,7 @@ func TestReadCacheByteLimitEvictsLRU(t *testing.T) {
 }
 
 func TestReadCacheEntryLargerThanMaxEntryIsSkipped(t *testing.T) {
-	c := newReadCache(time.Minute, 8, 1<<20, 10)
+	c := newReadCache(true, time.Minute, 8, 1<<20, 10)
 	c.Put(testParts(1, "home", ""), make([]byte, 11))
 	if c.Len() != 0 || c.Bytes() != 0 {
 		t.Fatalf("oversized entry cached: len=%d bytes=%d", c.Len(), c.Bytes())
@@ -79,7 +82,7 @@ func TestReadCacheEntryLargerThanMaxEntryIsSkipped(t *testing.T) {
 }
 
 func TestReadCacheItemLimit(t *testing.T) {
-	c := newReadCache(time.Minute, 2, 1<<20, 0)
+	c := newReadCache(true, time.Minute, 2, 1<<20, 0)
 	c.Put(testParts(1, "home", ""), []byte("1"))
 	c.Put(testParts(2, "home", ""), []byte("2"))
 	c.Put(testParts(3, "home", ""), []byte("3"))
@@ -89,7 +92,7 @@ func TestReadCacheItemLimit(t *testing.T) {
 }
 
 func TestReadCacheEpochBumpInvalidatesAllUsers(t *testing.T) {
-	c := newReadCache(time.Minute, 8, 1<<20, 0)
+	c := newReadCache(true, time.Minute, 8, 1<<20, 0)
 	c.Put(testParts(1, "home", ""), []byte("a"))
 	c.Put(testParts(2, "cards", "?p=1"), []byte("b"))
 	c.BumpEpoch()
@@ -106,11 +109,11 @@ func TestReadCacheEpochBumpInvalidatesAllUsers(t *testing.T) {
 }
 
 func TestReadCacheKillSwitch(t *testing.T) {
-	// 任一项为 0 都必须彻底关闭（不得回落默认值）。
+	// 任一项为 0、或 ENABLED=false、或零值 Config 都必须彻底关闭（不得回落默认值）。
 	for name, c := range map[string]*readCache{
-		"ttl0":   newReadCache(0, 10, 1<<20, 0),
-		"items0": newReadCache(time.Minute, 0, 1<<20, 0),
-		"bytes0": newReadCache(time.Minute, 10, 0, 0),
+		"ttl0":   newReadCache(true, 0, 10, 1<<20, 0),
+		"items0": newReadCache(true, time.Minute, 0, 1<<20, 0),
+		"bytes0": newReadCache(true, time.Minute, 10, 0, 0),
 	} {
 		if c != nil {
 			t.Fatalf("%s: cache must be disabled (nil), got %#v", name, c)
@@ -136,7 +139,7 @@ func TestReadCacheNilAndEmptyBody(t *testing.T) {
 	if nilCache.Len() != 0 {
 		t.Fatal("nil cache len")
 	}
-	c := newReadCache(time.Minute, 4, 1<<20, 0)
+	c := newReadCache(true, time.Minute, 4, 1<<20, 0)
 	c.Put("k", nil)
 	if _, ok := c.Get("k"); ok {
 		t.Fatal("empty body must not be cached")
@@ -146,7 +149,7 @@ func TestReadCacheNilAndEmptyBody(t *testing.T) {
 func TestReadCacheWorstCaseMemoryBounded(t *testing.T) {
 	// 最坏情况：单条都取到 maxEntry，总字节仍是硬上限（不随条数线性膨胀）。
 	const maxBytes = 64 << 10
-	c := newReadCache(time.Minute, 4096, maxBytes, 0)
+	c := newReadCache(true, time.Minute, 4096, maxBytes, 0)
 	for i := 0; i < 200; i++ {
 		c.Put(testParts(int64(i%8), "cards", "?p="+string(rune('a'+i%26))), make([]byte, 32<<10))
 	}
@@ -159,7 +162,7 @@ func TestReadCacheWorstCaseMemoryBounded(t *testing.T) {
 }
 
 func TestReadCacheConcurrentAccess(t *testing.T) {
-	c := newReadCache(time.Minute, 64, 1<<20, 0)
+	c := newReadCache(true, time.Minute, 64, 1<<20, 0)
 	done := make(chan struct{})
 	for i := 0; i < 8; i++ {
 		go func(n int) {
@@ -179,5 +182,65 @@ func TestReadCacheConcurrentAccess(t *testing.T) {
 	}
 	if c.Bytes() > 1<<20 {
 		t.Fatalf("bytes=%d", c.Bytes())
+	}
+}
+
+func TestReadCacheKeyBytesCountAgainstBudget(t *testing.T) {
+	// 120 条超长 query：键长也占预算，总量不得超过上限。
+	const maxBytes = 32 << 10
+	c := newReadCache(true, time.Minute, 4096, maxBytes, 0)
+	long := strings.Repeat("q", 300)
+	for i := 0; i < 120; i++ {
+		c.Put(testParts(int64(i%4), "cards", "?"+long+strconv.Itoa(i)), []byte("x"))
+	}
+	if c.Bytes() > maxBytes {
+		t.Fatalf("bytes=%d exceeds cap %d (key length must count)", c.Bytes(), maxBytes)
+	}
+}
+
+func TestReadCacheStalePutAfterBump(t *testing.T) {
+	c := newReadCache(true, time.Minute, 8, 1<<20, 0)
+	key := testParts(1, "home", "")
+	epoch := c.Epoch()
+	c.BumpEpoch() // 构建期间发生了写
+	if ok := c.PutIfEpoch(key, []byte("stale"), epoch); ok {
+		t.Fatal("stale PutIfEpoch must be rejected after epoch bump")
+	}
+	if _, hit := c.Get(key); hit {
+		t.Fatal("stale value must not be readable")
+	}
+	fresh := c.Epoch()
+	if ok := c.PutIfEpoch(key, []byte("fresh"), fresh); !ok {
+		t.Fatal("fresh PutIfEpoch must succeed")
+	}
+	if got, hit := c.Get(key); !hit || string(got) != "fresh" {
+		t.Fatalf("fresh value missing: %q hit=%v", got, hit)
+	}
+}
+
+func TestReadCacheEpochWritePredicate(t *testing.T) {
+	cases := []struct {
+		method, path string
+		want         bool
+	}{
+		{"GET", "/legacy/api/home", false},
+		{"HEAD", "/api/profile", false},
+		{"OPTIONS", "/legacy/api/home", false},
+		{"POST", "/legacy/api/like", true},
+		{"POST", "/legacy/api/track", false},
+		{"POST", "/legacy/api/track/batch", false},
+		{"POST", "/legacy/api/client-events", false},
+		{"POST", "/static/legacy/app.min.js", false},
+		{"POST", "/healthz", false},
+		{"POST", "/admin/points/adjust", true},
+		{"DELETE", "/api/profile/photo", true},
+		{"PUT", "/legacy/api/profile", true},
+		{"POST", "/api/admin/matching/run", true},
+	}
+	for _, tc := range cases {
+		r := httptest.NewRequest(tc.method, tc.path, nil)
+		if got := readCacheEpochWrite(r); got != tc.want {
+			t.Fatalf("%s %s: got %v want %v", tc.method, tc.path, got, tc.want)
+		}
 	}
 }
