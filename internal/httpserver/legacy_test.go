@@ -47,7 +47,7 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 		`window.__YXQ_VERSION__='__YXQ_VERSION_VALUE__';`,
 		`src="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__"`,
 		`<link rel="preload" as="script" href="lib/vant.min.js?v=__ASSET_URL_VERSION__">`,
-		`src="app.js?v=__ASSET_URL_VERSION__"`,
+		`src="app.min.js?v=__ASSET_URL_VERSION__"`,
 		`history.pushState(state, '', navURL());`,
 		`nativeAdmin`,
 		`function gaBack()`,
