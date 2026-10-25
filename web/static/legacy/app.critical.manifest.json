@@ -6,13 +6,14 @@
   },
   "critical": {
     "path": "app.critical.css",
-    "bytes": 29209,
-    "gzip_bytes": 7433,
-    "sha256": "cbec5927ba18d1eac0c5aa14657a762a6bdfed1a5a8f3f8bcf11e872e1827949",
-    "blocks": 259
+    "bytes": 29362,
+    "gzip_bytes": 7542,
+    "sha256": "fcf69e089bc13eefed4b1f496f8cd36830c0b82e2a389c4961ad6a1239e18ce4",
+    "blocks": 260
   },
   "keep_prefixes": [
     ":root",
+    "[v-cloak]",
     "html",
     "html, body",
     "#app",

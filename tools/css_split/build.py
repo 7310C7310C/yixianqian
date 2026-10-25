@@ -32,6 +32,7 @@ MANIFEST = LEGACY / "app.critical.manifest.json"
 # 管理台等子页）由异步 app.css 补齐。
 KEEP_PREFIXES = (
     ":root",
+    "[v-cloak]",      # 关键：缺失会让挂载前的 #app 模板（含「正在登录」/登录页）可见 → 假闪屏
     "html",
     "html, body",
     "#app",
