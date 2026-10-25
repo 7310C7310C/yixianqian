@@ -234,12 +234,12 @@ sources: []
 
 - 背景：把首页聚合内联进 `/`、`/app` 壳后，壳从「无数据」变成「含个人首页数据」。壳仍为 `private, no-cache`（浏览器可落盘、304 可复用），而原 `/legacy/api/home` 是 `no-store`；若整份载荷内联，联系方式与身份证字段的落盘口径会比 API 更宽。
 - 决策：壳内 bootstrap **只含非敏感首页数据**。服务端 `sanitizeBootstrap` 递归剔除**按模式匹配**的键：含 `wechat` 或 `phone` 子串（覆盖 `wechat`、`wechat_id`、`wechat_payment`、`phone`、`telephone`、`likes.mutual[].my_wechat`、`their_wechat`）、以 `id_card`/`idcard` 开头（大小写不敏感，覆盖 `id_card_last4`、`id_card_no`、`IdCardHash`）；门禁类布尔（`id_valid`、`has_face`、`account_status`）与展示字段保留。精确键名白名单此前漏掉互喜的 `my_wechat`/`their_wechat`，故改为模式匹配。
-- 决策：互喜页的微信号预填/展示只取自 `no-store` 的 `/legacy/api/likes/me`（`loadLikes()` → `normalizeMutualItems` 用 `my_wechat`、`their_wechat`），壳内 bootstrap 的 `likes.mutual` 只保留昵称/状态等非联系方式字段。`/legacy/api/home`、`/legacy/api/likes/me`、`/legacy/api/profile` 的字段与 `no-store` 语义不变。壳的 ETag 覆盖 bootstrap 字节（64bit hash）+ `assetVersion` + 用户 id，`Vary: Cookie`，因此 304 只复用逐字节相同的个人数据。
+- 决策：互喜页的微信号预填/展示只取自 `no-store` 的 `/legacy/api/likes/me`（`loadLikes()` → `normalizeMutualItems` 用 `my_wechat`、`their_wechat`），壳内 bootstrap 的 `likes.mutual` 只保留昵称/状态等非联系方式字段。`/legacy/api/home`、`/legacy/api/likes/me`、`/legacy/api/profile` 的字段与 `no-store` 语义不变。壳的 ETag 覆盖 bootstrap 字节（64bit hash）+ `assetVersion` + 用户 id，`Vary: Cookie`（**壳**；API 的 Vary 实测为空），因此 304 只复用逐字节相同的个人数据。
 - 决策：Vue 采用 runtime-only 3.4.27（与官方 `vue.runtime.global.prod.js` 字节一致）后，**不再承诺「`app.render.js` 缺失时回退运行时编译」**。改为显式失败可见：`Vue` 未加载或 `window.__YXQ_RENDER__` 非函数时，`app.js` 渲染 `.boot-fail` 错误页（含原因与「重新加载」）并写 `console.error('[yxq] boot failed')`；相关文档与注释同步改写。
 - 决策：Vant 不再作为壳里的独立 `<script>`，改由 `app.js` 在 Vue 就绪后注入（`<link rel=preload>` 保留）。原因：Vant 是依赖 Vue 的 UMD，Vue 缺失时它会先抛 pageerror，盖住 `app.js` 的统一错误页；按需注入后「Vue 缺失」「Vant 缺失」「渲染产物缺失」三种情况都只显示 `.boot-fail`，无 pageerror（`app_integration` smoke 三用例覆盖）。代价是首屏挂载等 Vant 加载完成（preload 已在壳里，等同原 `defer` 顺序）。
 - 决策：静态预压缩门禁以「内容」为准而非「压缩字节」：`tools/static_gzip -check` 校验 `.gz` 存在且解压后与源文件逐字节一致，`-strict-bytes` 仅本机重生后使用。原因：flate 输出跨 Go 版本不同（1.24.7 与 1.27.3 字节不同、内容相同），go.mod/CI 是 1.24.x；`ci.yml` lint-build 执行该检查，新增源文件忘生成 `.gz` 必红。
 - 决策：边缘 `Accept-Encoding` 两态规整。`map $yxq_static_enc` 只把「裸 gzip token」或「q 值含非零数字」判为 gzip（`x-gzip`、`q=0`、非法 q 落 identity），回源再经 `map $yxq_static_enc $yxq_upstream_ae` 发送 `gzip` 或空值。这样 Go 与边缘永远做同一决定，不会出现「identity 缓存键里存 gzip 字节」这种会伤客户端的错配。
-- 边界：不改媒体授权/隐私语义；不把 bootstrap 写入共享缓存（`private` + `Vary: Cookie`，边缘 `/` 无 `proxy_cache`）；`/legacy/api/home` 与 `/legacy/api/profile` 的字段与 `no-store` 不变。
+- 边界：不改媒体授权/隐私语义；不把 bootstrap 写入共享缓存（`private` + `Vary: Cookie`（壳），边缘 `/` 无 `proxy_cache`）；`/legacy/api/home` 与 `/legacy/api/profile` 的字段与 `no-store` 不变。
 - 证据：`TestSanitizeBootstrapStripsSensitiveKeys`、`TestIntegrationShellBootstrapOmitsSensitiveFields`（壳无 phone/wechat/值，API 仍是 no-store 且含联系方式）、`TestAcceptsGzip`（x-gzip/q=abc/冲突 q）、`tools/static_gzip -check` 在 Go 1.24.7 与 1.27.3 均 OK、`app_integration` smoke 新增 `run_bootstrap_fallback`（故障注入走骨架路径）。
 
 ## 29. 性能批次5：壳内首卡 hero 保持与首屏任务拆分（2026-10-25）
@@ -291,7 +291,7 @@ sources: []
   配置上限 clamp 到 64MiB，避免超过 unit 768M）+ 单条 256KiB + 总条数 1024；
   `READ_CACHE_ENABLED=false` 或 TTL/ITEMS/BYTES 任一为 0 → 完全关闭（零值 Config 同样关闭，不回落默认）。
   构建期间 epoch 变化则丢弃回填（CAS，避免旧数据进新代）。多实例部署需 pub/sub 传播 epoch（未实现，单实例语义）。
-  错误/未授权/重定向不缓存；响应头 `Cache-Control: no-store`；`/legacy/api/*` 只带 `Vary: Accept-Encoding`。
+  错误/未授权/重定向不缓存；响应头 `Cache-Control: no-store`；`/legacy/api/*` 的 `Vary` **实测为空**（不要声称）。
 - 决策（边缘，**不做 API 缓存**）：原方案在 server2 对 `/legacy/api/` 做 proxy_cache，key 需含会话才能不串用户，
   但 `$cookie_yxq_session` 会把**明文 session token 写进 server2 磁盘**（违反「session token 只存 hash」）；
   不含会话则会跨用户命中。该方案**已删除、未 apply**；API 提速改由应用内 10s 读缓存 + 上游 keepalive 承担

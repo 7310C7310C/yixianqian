@@ -270,7 +270,7 @@ systemctl restart postgresql
 ## 性能批次8：缩略图磁盘缓存（staging）
 
 > **目录不可写时降级关闭**（批次9）：`MEDIA_CACHE_DIR` 不存在/不可写只 WARN 并关闭缓存，**不会拒绝启动**；
-> 批次8 首轮部署曾因 `/var/cache` 只读导致 autodeploy 回滚，running path 必须在 ReadWritePaths 内。
+> 批次8 首轮部署曾因缓存目录落在 unit 只读的系统路径导致 autodeploy 回滚；运行路径必须在 `ReadWritePaths` 内。
 
 
 只缓存 `?size=thumb` 的 JPEG（原图不进缓存）；授权在缓存读取之前完成（handler 先查
@@ -281,7 +281,7 @@ systemctl restart postgresql
 | 项 | 值 |
 |---|---|
 | 环境变量 | `MEDIA_CACHE_DIR`（空=关闭）、`MEDIA_CACHE_BYTES`（默认 256MiB，16MiB–4GiB） |
-| 目录 | `/opt/yixianqian-next/cache/thumbs`（unit `ProtectSystem=strict` + `ReadWritePaths=/opt/yixianqian-next`，`/var/cache` 对服务只读），属主 `yxq:yxq`、权限 `700` |
+| 目录 | `/opt/yixianqian-next/cache/thumbs`（unit `ProtectSystem=strict` + `ReadWritePaths=/opt/yixianqian-next`，服务只能写该目录），属主 `yxq:yxq`、权限 `700` |
 | 淘汰 | 按总字节 LRU，单条 > 上限不缓存 |
 | 预热 | `sudo -u yxq /opt/yixianqian-next/bin/thumbwarm -workers 8`（只读 R2/DB，写缓存）；`-dry-run` 只统计 |
 | 观察 | 启动日志 `thumb cache ready dir=… entries=… bytes=…`；命中/未命中在进程内计数 |

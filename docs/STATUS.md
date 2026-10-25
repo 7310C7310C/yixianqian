@@ -231,7 +231,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ### 性能批次4（2026-10-25，实现待审）
 
-- 首屏数据内联：`/`、`/app` 壳由服务端预取与 `/legacy/api/home` **同一**聚合函数（`buildLegacyHomePayload`，handler 变薄包装）注入 `window.__YXQ_BOOTSTRAP__`（800ms 超时），SPA 启动优先消费、缺失即回退 API；首卡缩图在 `<head>` preload（`fetchpriority=high`）。匿名不注入；ETag 覆盖 `assetVersion`+用户+bootstrap 64bit hash，`Vary: Cookie`、`private, no-cache`，304 只复用逐字节相同的个人数据。
+- 首屏数据内联：`/`、`/app` 壳由服务端预取与 `/legacy/api/home` **同一**聚合函数（`buildLegacyHomePayload`，handler 变薄包装）注入 `window.__YXQ_BOOTSTRAP__`（800ms 超时），SPA 启动优先消费、缺失即回退 API；首卡缩图在 `<head>` preload（`fetchpriority=high`）。匿名不注入；ETag 覆盖 `assetVersion`+用户+bootstrap 64bit hash，`Vary: Cookie`（**壳**，非 API）、`private, no-cache`，304 只复用逐字节相同的个人数据。
 - 静态预压缩：`make static-gzip` 生成 `web/static/**` 的 `.gz`（gzip -9）随 `go:embed` 发布；Go 按 `Accept-Encoding` 回预压缩变体（`Vary`、编码分离 ETag、304），`make ci` 增加 `static-gzip-check` 与逐字节一致性测试。server2 边缘缓存 key 加入 `$yxq_static_enc`（`gzip;q=0` 判 identity），命中不再压缩，省掉 1 vCPU 的跨洋压缩成本。
 - runtime-only Vue 3.4.27（147,796→90,713B）；`GaLoading` 改 `render()`，全仓无运行时模板。
 - 渲染失败可见化：`app.render.js`/`vue.global.prod.js`/`vant.min.js` 任一缺失都渲染 `.boot-fail` 错误页且无 pageerror（Vant 改为 Vue 就绪后由 `app.js` 注入；smoke `run_render_missing` 三用例）。
