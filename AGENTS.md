@@ -159,11 +159,13 @@ make test-integration  # 需要 TEST_DATABASE_URL；只跑 TestIntegration*
 make test-migration    # 迁移与文档工具的 Python 测试
 make test-broadcast-ui # 需要 BASE_URL/SESSION_COOKIE/ACTIVITY_ID
 make static-gzip       # 重生成 web/static/** 的 .gz 预压缩变体（改静态文件后必跑）
+make spa-check         # 纯 Go 校验 SPA 生成物（Vant 子集/render chunk 的 sha/bytes/manifest）
+make spa-check-node    # 开发机 Node 重建后复核（部署/CI 不依赖 Node）
 make docs-gen          # 刷新 REFERENCE 与入口指针
 make docs-check        # 文档元数据/地图/链接/生成物检查
 make docs-check-stale  # 先 git fetch origin main；base 默认 origin/main，须可解析
-make prepush           # 快速本地门禁（push 前必跑）：fmt-check + static-gzip-check + docs-check + vet + build
-make ci                # 本地合并门禁：fmt-check + static-gzip-check + docs-check + vet + test + 工具测试 + build
+make prepush           # 快速本地门禁（push 前必跑）：fmt-check + static-gzip-check + spa-check + docs-check + vet + build
+make ci                # 本地合并门禁：fmt-check + static-gzip-check + spa-check + docs-check + vet + test + 工具测试 + build
 make run
 make seed
 go run ./cmd/token -legacy-user-id U-0006
