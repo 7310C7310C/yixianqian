@@ -267,6 +267,38 @@ systemctl restart postgresql
 > /etc 配置副本**，用于确认 `/etc` 没被动过；回滚点是「RESET + 重启」，不是拷文件。
 > 若要额外留痕，可 `cp postgresql.auto.conf` 到 `/var/backups/yxq-pg-b7/auto.conf.<ts>`（可选）。
 
+## 性能批次8：缩略图磁盘缓存（staging）
+
+只缓存 `?size=thumb` 的 JPEG（原图不进缓存）；授权在缓存读取之前完成（handler 先查
+会话/关系，再调 `serveMediaObject`）。缓存 key = `mediaID + sha256(thumb object key|size)`：
+替换照片会换 object key → 旧条目自然失效；删除照片走 `removeObject` → `purgeThumbs`
+按 mediaID 前缀清理；未授权请求 404 且不写缓存。
+
+| 项 | 值 |
+|---|---|
+| 环境变量 | `MEDIA_CACHE_DIR`（空=关闭）、`MEDIA_CACHE_BYTES`（默认 256MiB，16MiB–4GiB） |
+| 目录 | `/var/cache/yxq/thumbs`，属主 `yxq:yxq`、权限 `700` |
+| 淘汰 | 按总字节 LRU，单条 > 上限不缓存 |
+| 预热 | `sudo -u yxq /opt/yixianqian-next/bin/thumbwarm -workers 8`（只读 R2/DB，写缓存）；`-dry-run` 只统计 |
+| 观察 | 启动日志 `thumb cache ready dir=… entries=… bytes=…`；命中/未命中在进程内计数 |
+
+```bash
+# 建目录（部署 runbook 前置）
+install -d -o yxq -g yxq -m 700 /var/cache/yxq/thumbs
+# 预热（可后台；并发 ≤8）
+sudo -u yxq /opt/yixianqian-next/bin/thumbwarm -workers 8
+du -sh /var/cache/yxq/thumbs
+
+# 回滚：关闭缓存（环境变量置空）+ 重启即可；磁盘目录可保留或删除
+sudo -u postgres psql -c "select 1" >/dev/null   # 占位，无 DB 变更
+# 关闭：编辑 config/staging.env 去掉 MEDIA_CACHE_DIR → systemctl restart yixianqian-next-test
+rm -rf /var/cache/yxq/thumbs                      # 彻底清理（不影响 DB/R2）
+```
+
+> 实测（2026-10-25，server1，9 张自有缩略图）：无缓存 p50 255ms；冷 miss 236ms；
+> 命中 p50 **9.9–16ms**。`media` 表当前 37 张（`profile_photos` 1028 行引用 29 个不同
+> media_id），预热 37 张共 1.23MB、耗时 ~6s。
+
 pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、`statement_timeout=5000`；迁移走独立连接 `SET statement_timeout=0`，`cmd/seed`/`cmd/facebackfill` 用 `db.OpenMaintenance`。回滚：改回 `internal/db/db.go` 常量并重启 app（无需 DB 重启）。
 
 ## 性能批次1：边缘/传输（nginx）

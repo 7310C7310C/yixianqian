@@ -53,7 +53,7 @@ sources:
 
 ## 结构
 
-- `cmd/`：`server`、`seed`、`token`、`facebackfill` 四个入口。
+- `cmd/`：`server`、`seed`、`token`、`facebackfill`、`thumbwarm`（缩略图缓存预热）五个入口。
 - `internal/config`：唯一环境变量入口；不得在别处直接读 `os.Getenv`。
 - `internal/db`：pgxpool、SQL、事务、迁移、领域仓储。
 - `internal/auth`：Argon2id、session/activation token 哈希、CSRF、进程内限流。

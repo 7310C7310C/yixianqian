@@ -266,6 +266,19 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - staging PostgreSQL 参数已于 2026-10-25 **18:04:07**（server1）应用并重启：shared_buffers 512MB、work_mem 8MB、random_page_cost 1.1、effective_io_concurrency 200、jit off、track_io_timing on；`effective_cache_size` **维持默认 4GB**（planner 估算用，不涉正确性）。`/etc/postgresql` 未改，值在 `postgresql.auto.conf`（`ALTER SYSTEM`）；同实例所有 DB 共享，回滚 = `ALTER SYSTEM RESET` + 重启（无 `.bak` 属正常）。该变更在独立 Review 前已 apply，属**待审项**，见 `docs/runbooks/staging.md`「性能批次7」。
 - 同机基线（旧代码 `7cd0f45`，app 直连 8093，N=30）：home p50/p95 52.8/76.0ms → 46.4/63.4ms、cards 41.2/62.4 → 35.1/54.0ms。新代码 fresh clone A/B（N=100，GOMAXPROCS=2，同一 DB/同一 cookie）：home p50 63.9→**44.9ms**、p95 101.1→**65.2ms**；cards 53.3→**29.4ms**、p95 85.4→**44.5ms**；p95 目标（60/40）仍差 5.2/4.5ms，p50 已达标（host 噪声大，p95 第二次跑升到 79/60）。管理台基线：`/admin?embed=1` 12.7/19.7ms、`/admin/users` 47.9/69.3ms、`/api/admin/users` 28.5/39.4ms、`/legacy/api/admin/group/activities` 20.6/43.5ms（新代码、warm）；均已是 `no-store` 且列表分页，暂不建议 304/缓存。详见 `.team/perf/batch7-be-report.md`。
 
+### 性能批次8（2026-10-25，本地实现待审，未 push/未部署）
+
+- 缩略图磁盘缓存：只缓存 `?size=thumb`，key=mediaID+thumb object key+size（替换自然失效，删除按前缀清理），
+  有界 LRU（`MEDIA_CACHE_BYTES`，默认 256MiB）、授权先于缓存；`cmd/thumbwarm` 预热（并发≤8）。
+  server1 实测：无缓存 p50 255ms、命中 p50 **9.9–16ms**；37 张/1.23MB 预热 6s。
+- 壳关键 CSS 拆分：`tools/css_split` 从 app.css 生成首屏 `app.critical.css`（24,329B raw / **6,256B gzip**，213 块），
+  壳内联 critical + 异步加载完整 app.css（`media=print onload` + noscript）；壳 gzip **38,153B → 25,380B（−33.5%）**，
+  raw 181,005B → 116,137B。`make spa-check` 与 `tools/test_css_split.py` 门禁。
+- 管理台边缘延迟归因：批次7 报的「edge p95 1.3s」是**测量口径**问题——从 server1 到边缘、每请求新建连接（冷 TLS/跨洋），
+  同法测 home 也是 p95 936ms；在 server2 本地测 `/admin` p50/p95 **218/251ms**、`/admin/users` **274/314ms**、
+  admin API **225/242ms**（均 ≤400ms 目标）。无需 nginx 改动。
+- 修 `app_integration_smoke`：无 `PSQL_CMD` 时对 badge/SSE 用例打 NOTE 跳过而不是假红。
+
 ### 人脸与数据
 
 - 人脸检测：本地 YuNet 优先、Haar 回退；上传后检测、注册后补检测、`has_face` 门禁；观察员账号豁免 `has_face`（身份证不豁免）。

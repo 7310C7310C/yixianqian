@@ -82,6 +82,7 @@ cmd/server/             HTTP 服务入口
 cmd/seed/               本地/测试账号与启用 URL
 cmd/token/              对既有或新用户发一次性启用 token
 cmd/facebackfill/       批量人脸回填（运维/一次性）
+cmd/thumbwarm/          缩略图磁盘缓存预热（并发≤8，只读 R2/DB）
 internal/config/        环境变量解析与启动校验（唯一入口）
 internal/db/            pgxpool、SQL、事务、迁移、领域仓储
 internal/auth/          Argon2id、session、CSRF、限流

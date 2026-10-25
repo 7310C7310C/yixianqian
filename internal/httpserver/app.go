@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/7310C7310C/yixianqian/internal/auth"
@@ -20,14 +21,19 @@ import (
 
 // App holds the process-wide dependencies shared by all handlers.
 type App struct {
-	cfg     config.Config
-	db      *db.DB
-	store   media.Store
-	tpl     *Templates
-	log     *slog.Logger
-	csrf    *auth.CSRF
-	trusted []netip.Prefix
-	clock   platform.Clock
+	cfg   config.Config
+	db    *db.DB
+	store media.Store
+	// thumbCache 只缓存 ?size=thumb 的字节；nil = 未配置缓存。
+	thumbCache *media.ThumbCache
+	// 命中/未命中计数（运维观察用，不参与逻辑）。
+	thumbCacheHits   atomic.Int64
+	thumbCacheMisses atomic.Int64
+	tpl              *Templates
+	log              *slog.Logger
+	csrf             *auth.CSRF
+	trusted          []netip.Prefix
+	clock            platform.Clock
 
 	// faceProbe 在照片上传后同步运行；失败只记日志，不阻断上传。
 	faceProbe face.Probe
@@ -91,10 +97,21 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	if database != nil {
 		notifier = db.NewNotificationHub(context.Background(), database.DSN(), logger)
 	}
+	thumbCache, cacheErr := media.NewThumbCache(cfg.MediaCacheDir, cfg.MediaCacheBytes)
+	if cacheErr != nil {
+		return nil, cacheErr
+	}
+	if thumbCache != nil {
+		entries, bytes := thumbCache.Stats()
+		logger.Info("thumb cache ready", "dir", cfg.MediaCacheDir, "limit_bytes", cfg.MediaCacheBytes,
+			"entries", entries, "bytes", bytes)
+	}
+
 	return &App{
 		cfg:                         cfg,
 		db:                          database,
 		store:                       store,
+		thumbCache:                  thumbCache,
 		tpl:                         tpl,
 		log:                         logger,
 		csrf:                        auth.NewCSRF(cfg.CSRFKey(), 2*time.Hour),

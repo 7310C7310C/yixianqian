@@ -16,13 +16,14 @@ import (
 )
 
 const (
-	defaultTrustedProxy  = "45.125.16.205"
-	defaultSessionTTL    = 720 * time.Hour
-	defaultActivationTTL = 24 * time.Hour
-	defaultMediaMaxBytes = 10 << 20
-	defaultThumbSize     = 512
-	defaultMaxHashes     = 2
-	defaultMaxMedia      = 1
+	defaultTrustedProxy    = "45.125.16.205"
+	defaultSessionTTL      = 720 * time.Hour
+	defaultActivationTTL   = 24 * time.Hour
+	defaultMediaMaxBytes   = 10 << 20
+	defaultMediaCacheBytes = 256 << 20
+	defaultThumbSize       = 512
+	defaultMaxHashes       = 2
+	defaultMaxMedia        = 1
 	// defaultMediaPixels is 12.5 MP: iPhone's 12 MP frame is 4032×3024
 	// (12,192,768 pixels), which the old 12 MP cap rejected. The 12.5 MP
 	// ceiling keeps a margin above that frame without allowing much larger
@@ -59,11 +60,14 @@ type Config struct {
 
 	MediaMaxBytes  int64
 	MediaThumbSize int
-	MediaMaxPixels int64
-	MediaMaxDim    int
-	MaxHashes      int
-	MaxMedia       int
-	ActivationTTL  time.Duration
+	// MediaCacheDir 为空表示不做缩略图磁盘缓存；MediaCacheBytes 是缓存上限（字节）。
+	MediaCacheDir   string
+	MediaCacheBytes int64
+	MediaMaxPixels  int64
+	MediaMaxDim     int
+	MaxHashes       int
+	MaxMedia        int
+	ActivationTTL   time.Duration
 
 	// FaceProbeCmd 是本地人脸检测命令（空格分隔，图片路径追加在末尾）。
 	// FaceProbeTimeout 是单张照片检测超时；失败只记录并放行上传。
@@ -191,6 +195,16 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	}
 	if cfg.MediaMaxDim < 1000 || cfg.MediaMaxDim > 12000 {
 		errs = append(errs, errors.New("config: MEDIA_MAX_DIMENSION must be between 1000 and 12000"))
+	}
+	// 缩略图磁盘缓存（只缓存 thumb，原图不落盘）：目录为空=关闭；上限默认 256MiB。
+	cfg.MediaCacheDir = strings.TrimSpace(getenv("MEDIA_CACHE_DIR"))
+	if v, err := parseInt64(getenv("MEDIA_CACHE_BYTES"), defaultMediaCacheBytes); err != nil {
+		errs = append(errs, fmt.Errorf("config: MEDIA_CACHE_BYTES: %w", err))
+	} else {
+		cfg.MediaCacheBytes = v
+	}
+	if cfg.MediaCacheBytes < 16<<20 || cfg.MediaCacheBytes > 4<<30 {
+		errs = append(errs, errors.New("config: MEDIA_CACHE_BYTES must be between 16 MiB and 4 GiB"))
 	}
 	if v, err := parseInt64(getenv("MAX_CONCURRENT_HASHES"), defaultMaxHashes); err != nil {
 		errs = append(errs, fmt.Errorf("config: MAX_CONCURRENT_HASHES: %w", err))

@@ -1,0 +1,42 @@
+{
+  "source": {
+    "path": "app.css",
+    "bytes": 89349,
+    "sha256": "dbb1534abc9eb0e3d0454afe7446d4f5b17411331e423341634c99dcc90a1c41"
+  },
+  "critical": {
+    "path": "app.critical.css",
+    "bytes": 24329,
+    "gzip_bytes": 6256,
+    "sha256": "ff7b63dc72fed979b1e9371ef9116bfd2974011e41d29024a9107d9263d5df99",
+    "blocks": 213
+  },
+  "keep_prefixes": [
+    ":root",
+    "html",
+    "body",
+    "*",
+    ".van-theme-dark",
+    ".tab-main",
+    ".page",
+    ".cards-page",
+    ".swipe-card",
+    ".card-",
+    ".boot-",
+    ".app-boot-",
+    ".login-",
+    ".theme-toggle",
+    ".update-bar",
+    ".van-tabbar",
+    ".van-nav-bar",
+    ".van-loading",
+    ".van-empty",
+    ".van-dialog",
+    ".van-popup",
+    ".van-toast",
+    ".van-cell",
+    ".van-tag",
+    ".van-button",
+    ".van-field"
+  ]
+}

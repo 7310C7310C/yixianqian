@@ -39,6 +39,27 @@ func (a *App) serveMediaObject(w http.ResponseWriter, r *http.Request, m mediaOb
 	}
 	etag := `"` + m.ID + "-" + variant + `"`
 
+	// 缩略图走有界磁盘缓存（授权已在上游完成）：命中直接回字节，未命中读 R2
+	// 后落盘。原图不缓存（体积大、流量低）。
+	if thumb && a.thumbCache != nil {
+		cacheKey := media.ThumbCacheKey(m.ID, m.ThumbKey, m.ThumbSize)
+		if data, ok := a.thumbCache.Get(cacheKey); ok {
+			a.thumbCacheHits.Add(1)
+			writeMediaBytes(w, r, etag, contentType, int64(len(data)), data)
+			return
+		}
+		a.thumbCacheMisses.Add(1)
+		data, err := a.readStoreObject(w, r, m, key, size)
+		if err != nil {
+			return
+		}
+		if err := a.thumbCache.Put(cacheKey, data); err != nil {
+			a.logger(r).Warn("thumb cache write failed", "error", err, "media_id", m.ID)
+		}
+		writeMediaBytes(w, r, etag, contentType, int64(len(data)), data)
+		return
+	}
+
 	obj, err := a.store.Get(r.Context(), key)
 	if errors.Is(err, media.ErrObjectNotFound) {
 		mediaFailure(w, r, http.StatusNotFound, "")
@@ -131,4 +152,57 @@ func mediaETagMatches(header, etag string) bool {
 		}
 	}
 	return false
+}
+
+// readStoreObject 读取整个对象到内存并处理 404/500，供缩略图缓存路径使用。
+// 返回 nil 表示已经写过错误响应。
+func (a *App) readStoreObject(w http.ResponseWriter, r *http.Request, m mediaObject, key string, size int64) ([]byte, error) {
+	obj, err := a.store.Get(r.Context(), key)
+	if errors.Is(err, media.ErrObjectNotFound) {
+		mediaFailure(w, r, http.StatusNotFound, "")
+		return nil, err
+	}
+	if err != nil {
+		a.logger(r).Error("open media object failed", "error", err, "media_id", m.ID)
+		mediaFailure(w, r, http.StatusInternalServerError, "internal server error")
+		return nil, err
+	}
+	defer obj.Close()
+	data, err := io.ReadAll(io.LimitReader(obj, size+1))
+	if err != nil {
+		if media.IsObjectNotFound(err) {
+			mediaFailure(w, r, http.StatusNotFound, "")
+			return nil, err
+		}
+		a.logger(r).Error("open media object failed", "error", err, "media_id", m.ID)
+		mediaFailure(w, r, http.StatusInternalServerError, "internal server error")
+		return nil, err
+	}
+	if size > 0 && int64(len(data)) > size {
+		data = data[:size]
+	}
+	return data, nil
+}
+
+// writeMediaBytes 用与流式路径完全相同的头语义回写内存字节。
+func writeMediaBytes(w http.ResponseWriter, r *http.Request, etag, contentType string, size int64, data []byte) {
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+	if mediaETagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Content-Disposition", "inline")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+// purgeThumbs 在媒体删除后清理其缩略图缓存（缓存 key 含 object key，替换照片
+// 会自然失效；删除需要显式清理）。
+func (a *App) purgeThumbs(mediaID string) {
+	if a.thumbCache != nil && mediaID != "" {
+		a.thumbCache.RemoveMedia(mediaID)
+	}
 }

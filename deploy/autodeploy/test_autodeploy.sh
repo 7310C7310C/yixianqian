@@ -276,8 +276,8 @@ assert_eq 0 "$rc" "S8 部署成功退出码 0"
 assert_eq "$C8" "$(cat "$SB/root/deployed.sha")" "S8 deployed.sha 已更新"
 assert_contains "部署成功" "$SB/log" "S8 日志记录成功"
 assert_eq 1 "$(grep -c 'systemctl restart' "$SB/systemctl.log")" "S8 只重启一次"
-[[ -x $SB/root/bin/seed && -x $SB/root/bin/token && -x $SB/root/bin/facebackfill ]] \
-  && ok "S8 seed/token/facebackfill 已安装" || bad "S8 CLI 未安装"
+[[ -x $SB/root/bin/seed && -x $SB/root/bin/token && -x $SB/root/bin/facebackfill && -x $SB/root/bin/thumbwarm ]] \
+  && ok "S8 seed/token/facebackfill/thumbwarm 已安装" || bad "S8 CLI 未安装"
 assert_contains "fake-binary" "$SB/root/bin/server" "S8 server 已替换（占位内容）"
 
 # 9) 单实例：持锁时第二次调用直接跳过

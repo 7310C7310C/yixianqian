@@ -55,6 +55,9 @@ except ImportError:  # pragma: no cover - environment guard
 
 VIEWPORTS = ((390, 844), (1280, 900))
 TITLE_PREFIX = "集成测试通知"
+# 没有 psql 通道时（例如只从本地跑 staging，无法直连库）跳过需要注入通知的用例，
+# 明确打出 NOTE 而不是假红；这些用例由集成测试 / sse_probe.py / 本地实例覆盖。
+PSQL_ENABLED = bool(os.environ.get("PSQL_CMD", "").strip())
 
 
 class SmokeFailure(AssertionError):
@@ -421,16 +424,19 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         # 3. 登录后未读红点（页面已存在两条测试通知）
         # 应用写路径即时 notify，正常应 <1s；保留 10s 余量但不依赖 12s 客户端轮询，
         # 否则 SSE 完全失效也会绿（reviewer N6）。
-        badge(page).wait_for(state="visible", timeout=10000)
-        unread = badge(page).inner_text().strip()
-        if not unread.isdigit() or int(unread) < 2:
-            raise SmokeFailure(f"{width}: 未读 badge={unread!r}，期望至少 2")
-        page.screenshot(path=str(out_dir / f"badge-{tag}.png"))
+        if PSQL_ENABLED:
+            badge(page).wait_for(state="visible", timeout=10000)
+            unread = badge(page).inner_text().strip()
+            if not unread.isdigit() or int(unread) < 2:
+                raise SmokeFailure(f"{width}: 未读 badge={unread!r}，期望至少 2")
+            page.screenshot(path=str(out_dir / f"badge-{tag}.png"))
 
-        # 4. 进入消息 tab：通知可见、红点清零
-        tap_tab(page, "消息")
-        page.get_by_text(titles[0]).first.wait_for(state="visible", timeout=10000)
-        badge(page).wait_for(state="hidden", timeout=10000)
+            # 4. 进入消息 tab：通知可见、红点清零
+            tap_tab(page, "消息")
+            page.get_by_text(titles[0]).first.wait_for(state="visible", timeout=10000)
+            badge(page).wait_for(state="hidden", timeout=10000)
+        else:
+            print(f"NOTE {width}px: 无 PSQL_CMD，跳过未读红点/通知可见用例")
 
         # 5. 修改密码：App 内子页；错误旧密码留在子页，返回落回「我的」。
         tap_tab(page, "我的")
@@ -525,16 +531,19 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         page.locator(".embed-overlay").wait_for(state="detached", timeout=10000)
 
         # 8. SSE 实时未读：不刷新页面，新增通知后 badge 出现
-        tap_tab(page, "我的")
-        live_title = f"{TITLE_PREFIX}-{tag}-LIVE-{int(time.time())}"
-        insert_notification(user_legacy_id, live_title)
-        badge(page).wait_for(state="visible", timeout=10000)
-        if not badge(page).inner_text().strip().isdigit():
-            raise SmokeFailure(f"{width}: SSE 后 badge 不是数字")
-        page.screenshot(path=str(out_dir / f"badge-sse-{tag}.png"))
-        tap_tab(page, "消息")
-        page.get_by_text(live_title).first.wait_for(state="visible", timeout=10000)
-        badge(page).wait_for(state="hidden", timeout=10000)
+        if PSQL_ENABLED:
+            tap_tab(page, "我的")
+            live_title = f"{TITLE_PREFIX}-{tag}-LIVE-{int(time.time())}"
+            insert_notification(user_legacy_id, live_title)
+            badge(page).wait_for(state="visible", timeout=10000)
+            if not badge(page).inner_text().strip().isdigit():
+                raise SmokeFailure(f"{width}: SSE 后 badge 不是数字")
+            page.screenshot(path=str(out_dir / f"badge-sse-{tag}.png"))
+            tap_tab(page, "消息")
+            page.get_by_text(live_title).first.wait_for(state="visible", timeout=10000)
+            badge(page).wait_for(state="hidden", timeout=10000)
+        else:
+            print(f"NOTE {width}px: 无 PSQL_CMD，跳过 SSE 实时未读用例")
 
         assert_no_console_errors(errors, f"{width}px")
         return failures
@@ -755,12 +764,15 @@ def main() -> int:
                 failures.extend(run_anonymous(browser, width, height, base_url, out_dir))
                 failures.extend(run_viewport(
                     browser, width, height, base_url, cookie, user_legacy_id, out_dir,
-                    live_sse=True, old_password=old_password, new_password=new_password,
+                    live_sse=PSQL_ENABLED, old_password=old_password, new_password=new_password,
                 ))
             failures.extend(run_bootstrap_fallback(browser, base_url, cookie, out_dir))
             failures.extend(run_render_missing(browser, base_url, cookie, out_dir))
             failures.extend(run_mutual_wechat_prefill(browser, base_url, cookie, out_dir))
-            failures.extend(run_polling_fallback(browser, base_url, cookie, user_legacy_id, out_dir))
+            if PSQL_ENABLED:
+                failures.extend(run_polling_fallback(browser, base_url, cookie, user_legacy_id, out_dir))
+            else:
+                print("NOTE: 无 PSQL_CMD，跳过 SSE 断开后的 12s 轮询兜底用例")
             browser.close()
     finally:
         cleanup_notifications()

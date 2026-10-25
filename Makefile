@@ -76,6 +76,7 @@ static-gzip-check:
 spa-check:
 	$(GO) test ./internal/httpserver -run 'TestGeneratedBundleHashes|TestPageChunksMatchTemplates|TestVantSubsetCoversTemplate' -count=1
 	python3 tools/spa_minify/check.py
+	python3 tools/css_split/check.py
 
 spa-check-node:
 	cd tools/spa_precompile && npm run check
@@ -88,6 +89,7 @@ build:
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/seed ./cmd/seed
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/token ./cmd/token
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/facebackfill ./cmd/facebackfill
+	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/thumbwarm ./cmd/thumbwarm
 
 run:
 	$(GO) run ./cmd/server

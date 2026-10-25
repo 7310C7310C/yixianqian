@@ -32,6 +32,9 @@ sources: []
 | `cmd/seed` | `-name` | string | `"测试用户"` | display name | `cmd/seed/main.go` |
 | `cmd/seed` | `-phone` | string | `"13800000006"` | phone number | `cmd/seed/main.go` |
 | `cmd/server` | — | — | — | — | `cmd/server/main.go` |
+| `cmd/thumbwarm` | `-dry-run` | bool | `false` | 只统计待预热数量 | `cmd/thumbwarm/main.go` |
+| `cmd/thumbwarm` | `-limit` | int | `0` | 最多预热多少张；0=全部 | `cmd/thumbwarm/main.go` |
+| `cmd/thumbwarm` | `-workers` | int | `8` | 并发拉取数（1-8） | `cmd/thumbwarm/main.go` |
 | `cmd/token` | `-legacy-user-id` | string | `""` | existing user's legacy_user_id | `cmd/token/main.go` |
 | `cmd/token` | `-name` | string | `""` | display name (required for a new phone) | `cmd/token/main.go` |
 | `cmd/token` | `-phone` | string | `""` | phone number for an existing or new user | `cmd/token/main.go` |
@@ -244,6 +247,8 @@ sources: []
 | `LOG_LEVEL` | 是 | 是 |
 | `MAX_CONCURRENT_HASHES` | 是 | 是 |
 | `MAX_CONCURRENT_MEDIA` | 是 | 是 |
+| `MEDIA_CACHE_BYTES` | 是 | 是 |
+| `MEDIA_CACHE_DIR` | 是 | 是 |
 | `MEDIA_MAX_BYTES` | 是 | 是 |
 | `MEDIA_MAX_DIMENSION` | 是 | 是 |
 | `MEDIA_MAX_PIXELS` | 是 | 是 |
@@ -312,6 +317,7 @@ sources: []
 | `cmd/facebackfill` | main | Command facebackfill 批量补齐迁移照片的本地人脸检测结果。 |
 | `cmd/seed` | main | Command seed creates the P0 test account and prints a one-time activation URL. |
 | `cmd/server` | main | — |
+| `cmd/thumbwarm` | main | Command thumbwarm 预热缩略图磁盘缓存：把 media 表里所有 thumb 从 R2 拉到 |
 | `cmd/token` | main | Command token issues a one-time activation URL for an existing user or for a |
 | `deploy` | — | — |
 | `internal/auth` | auth | — |

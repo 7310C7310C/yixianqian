@@ -216,6 +216,9 @@ func (a *App) removeObject(r *http.Request, mediaID, key string) {
 	if err := a.store.Remove(ctx, key); err != nil {
 		a.logger(r).Warn("remove media object failed", "error", err, "media_id", mediaID)
 	}
+	// 缩略图磁盘缓存按媒体 id 建前缀；对象删除后必须一并清理，否则删除的照片
+	// 仍可能从本地缓存命中（授权已拦，但会占用配额且语义不干净）。
+	a.purgeThumbs(mediaID)
 }
 
 func (a *App) failUpload(w http.ResponseWriter, r *http.Request, user db.User, err error) {

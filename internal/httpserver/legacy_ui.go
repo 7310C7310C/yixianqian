@@ -52,12 +52,13 @@ func loadLegacyIndex() ([]byte, error) {
 	return legacyIndexHTML, legacyIndexErr
 }
 
-// loadLegacyCSS returns app.css for inlining as the shell's critical CSS. The
-// file is still served separately for other pages; inlining removes one
-// render-blocking round trip on the 1.6Mbps mobile profile.
+// loadLegacyCSS returns the generated first-screen subset (app.critical.css)
+// for inlining. The full app.css is linked asynchronously in the shell, so
+// sub-pages still get every rule; inlining only the critical subset keeps the
+// render-blocking document smaller on the 1.6Mbps mobile profile.
 func loadLegacyCSS() ([]byte, error) {
 	legacyCSSOnce.Do(func() {
-		legacyCSS, legacyCSSErr = fs.ReadFile(webassets.FS, "static/legacy/app.css")
+		legacyCSS, legacyCSSErr = fs.ReadFile(webassets.FS, "static/legacy/app.critical.css")
 	})
 	return legacyCSS, legacyCSSErr
 }

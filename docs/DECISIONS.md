@@ -260,3 +260,21 @@ sources: []
 - 决策（PG 参数）：staging 单机 PG16 采用 `shared_buffers=512MB`、`work_mem=8MB`、`random_page_cost=1.1`、`effective_io_concurrency=200`、`jit=off`、`track_io_timing=on`；`effective_cache_size` 维持默认 4GB（仅影响 planner 估算，先观察其他项收益，若 `pg_stat_statements` 显示低估再降 2–3GB）。值写 `postgresql.auto.conf`，`/etc/postgresql` 不动，回滚 = `ALTER SYSTEM RESET` + 重启（`/var/backups/yxq-pg-b7/postgresql.conf.<ts>` 只是未修改的 /etc 副本，不存在 `.bak` 属正常）。影响同实例全部 DB（含 test 库）；重启窗口 2026-10-25 18:04:07，数秒。
 - 边界：不改通知内容/未读数语义、不改 RBAC/审计；SSE 事件字段不变；PG 参数调整属运维变更，生产集群需另行批准。
 - 证据：`TestNotificationHubFanoutConcurrentSubscribe`（`-race`；旧实现可复现 DATA RACE）、`TestNotificationHubFanoutDeliversToUserOnly`、`TestInflightWaiterHonoursOwnContext`、SSE 集成用例（双客户端/隔离/重连/直插 15–30s/空闲零查询）、`make test-race`、`make ci`。
+
+## 31. 性能批次8：缩略图磁盘缓存与壳 critical CSS（2026-10-25）
+
+- 背景：媒体 thumb 边缘 TTFB ~557ms（R2 取对象 + 跨洋），是首屏 LCP 的主要剩余项；壳 38.4KB gzip 仍含整份 89KB CSS。
+- 决策（缩略图缓存）：只缓存 `?size=thumb`，上限按总字节 LRU（`MEDIA_CACHE_BYTES` 默认 256MiB，目录 `MEDIA_CACHE_DIR`）；
+  key 含 mediaID + thumb object key + 字节数 → 替换照片自然失效；删除经 `removeObject` 触发按 mediaID 前缀清理；
+  **授权在缓存之前**（handler 先鉴权再读缓存），缓存层不参与鉴权也不缓存原图。预热用 `cmd/thumbwarm`（并发≤8，只读 R2/DB）。
+- 决策（壳 CSS）：首屏只内联 `app.critical.css` 子集（生成物，≤15KB gzip；当前 6.3KB），完整 `app.css` 以
+  `media=print onload` 异步加载；critical 由 `tools/css_split/build.py` 从 app.css 顶层块复制生成，`check.py` 校验
+  「每块逐字存在于 app.css」与预算，禁止手改。壳 gzip 38,153B→25,380B。
+- 决策（bootstrap 不裁剪）：壳 gzip 已达 ≤28KB 目标，本轮**不**裁剪 bootstrap JSON（34KB raw/4.3KB gzip）——
+  裁剪需要前端首屏数据契约/补拉逻辑改造，收益 ~3-4KB gzip，风险与收益不匹配；留批次8.1 评估。
+- 决策（管理台延迟口径）：批次7 的「edge p95 1.3s」来自 server1→边缘的**冷连接**测量；边缘本地（server2）实测 admin
+  p95 251–314ms（≤400ms）。后续报表必须标注测量点（server2 本地 = edge；server1 = 跨洋回源视角）。
+- 边界：不改媒体授权/隐私语义、不改 ETag/Cache-Control（thumb 仍 private, max-age=86400, immutable）；不改 nginx。
+- 证据：`TestThumbCache*`（含 LRU/purge/重载/并发）、`TestServeThumbUsesDiskCache`、`TestServeThumbCacheInvalidatesOnReplacedObject`、
+  `TestServeOriginalNeverUsesThumbCache`、`tools/test_css_split.py`、`make spa-check`、`batch8_critical_css.py`（阻断 app.css 首屏仍正确）。
+

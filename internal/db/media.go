@@ -72,3 +72,34 @@ func (d *DB) GetMediaForUser(ctx context.Context, id string, userID int64) (Medi
 	}
 	return m, nil
 }
+
+// ThumbRef 是预热缩略图缓存需要的最小字段集（不含对象 URL）。
+type ThumbRef struct {
+	MediaID   string
+	ThumbKey  string
+	ThumbSize int64
+}
+
+// ListThumbs 列出所有带缩略图的媒体（按 id 升序，limit<=0 表示全部）。
+// 只读查询，供 cmd/thumbwarm 使用。
+func (d *DB) ListThumbs(ctx context.Context, limit int) ([]ThumbRef, error) {
+	if limit <= 0 {
+		limit = 1 << 30
+	}
+	rows, err := d.pool.Query(ctx,
+		`SELECT id, thumb_key, thumb_size FROM media
+		  WHERE thumb_key <> '' ORDER BY id LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: list thumbs: %w", err)
+	}
+	defer rows.Close()
+	out := make([]ThumbRef, 0, 1024)
+	for rows.Next() {
+		var ref ThumbRef
+		if err := rows.Scan(&ref.MediaID, &ref.ThumbKey, &ref.ThumbSize); err != nil {
+			return nil, fmt.Errorf("db: scan thumb: %w", err)
+		}
+		out = append(out, ref)
+	}
+	return out, rows.Err()
+}

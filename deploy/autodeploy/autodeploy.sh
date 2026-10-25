@@ -506,7 +506,7 @@ main() {
   fi
 
   local VERSION="staging-$SHORT"
-  log "构建 $VERSION（server/seed/token/facebackfill）"
+  log "构建 $VERSION（server/seed/token/facebackfill/thumbwarm）"
   local app
   if ! (cd "$SRC" && "$GO_BIN" build -buildvcs=false -trimpath \
         -ldflags "-X github.com/7310C7310C/yixianqian/internal/platform.Version=$VERSION" \
@@ -516,7 +516,7 @@ main() {
     record_failure "build server"
     exit 1
   fi
-  for app in seed token facebackfill; do
+  for app in seed token facebackfill thumbwarm; do
     if ! (cd "$SRC" && "$GO_BIN" build -buildvcs=false -trimpath -o "$BIN/$app.next" "./cmd/$app"); then
       log "构建 $app 失败，不切换"
       rm -f "$BIN"/server.next "$BIN"/*.next
@@ -542,7 +542,7 @@ main() {
 
   log "切换二进制并重启 $SERVICE"
   mv -f "$BIN/server.next" "$BIN/server"
-  for app in seed token facebackfill; do
+  for app in seed token facebackfill thumbwarm; do
     mv -f "$BIN/$app.next" "$BIN/$app"
   done
 
