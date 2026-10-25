@@ -202,7 +202,10 @@ func writeMediaBytes(w http.ResponseWriter, r *http.Request, etag, contentType s
 // purgeThumbs 在媒体删除后清理其缩略图缓存（缓存 key 含 object key，替换照片
 // 会自然失效；删除需要显式清理）。
 func (a *App) purgeThumbs(mediaID string) {
-	if a.thumbCache != nil && mediaID != "" {
-		a.thumbCache.RemoveMedia(mediaID)
+	if a.thumbCache == nil || mediaID == "" {
+		return
 	}
+	a.thumbCache.RemoveMedia(mediaID)
+	// 活动海报的缓存 key 是 poster-<mediaID>__…（ID 前缀不同），一并清理。
+	a.thumbCache.RemoveMedia("poster-" + mediaID)
 }

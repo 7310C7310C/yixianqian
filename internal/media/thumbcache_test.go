@@ -195,3 +195,51 @@ func TestDisabledThumbCache(t *testing.T) {
 		t.Fatalf("nil cache stats: %d %d", entries, bytes)
 	}
 }
+
+func TestThumbCacheZeroByteFileIsMiss(t *testing.T) {
+	c := newTestCache(t, 1<<20)
+	key := ThumbCacheKey("m1", "m1_thumb.jpg", 10)
+	if err := c.Put(key, []byte("data")); err != nil {
+		t.Fatal(err)
+	}
+	// 模拟磁盘异常留下 0 字节文件：不能当命中。
+	if err := os.WriteFile(filepath.Join(c.Dir(), key+".bin"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := c.Get(key); ok {
+		t.Fatal("0-byte file must be a miss")
+	}
+	if _, err := os.Stat(filepath.Join(c.Dir(), key+".bin")); !os.IsNotExist(err) {
+		t.Fatal("0-byte file should be removed after miss")
+	}
+}
+
+func TestThumbCacheCleansStaleTempFilesOnOpen(t *testing.T) {
+	dir := t.TempDir()
+	stale := filepath.Join(dir, "tmp-123456")
+	if err := os.WriteFile(stale, []byte("half"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewThumbCache(dir, 1<<20)
+	if err != nil || c == nil {
+		t.Fatalf("cache: %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("stale tmp-* file must be removed on open")
+	}
+	if entries, bytes := c.Stats(); entries != 0 || bytes != 0 {
+		t.Fatalf("tmp file must not count: %d %d", entries, bytes)
+	}
+}
+
+func TestThumbCachePurgesPosterPrefix(t *testing.T) {
+	c := newTestCache(t, 1<<20)
+	poster := ThumbCacheKey("poster-m1", "p1_thumb.jpg", 10)
+	if err := c.Put(poster, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	c.RemoveMedia("poster-m1")
+	if _, ok := c.Get(poster); ok {
+		t.Fatal("poster entry must be purged")
+	}
+}

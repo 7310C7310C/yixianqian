@@ -33,6 +33,9 @@ MANIFEST = LEGACY / "app.critical.manifest.json"
 KEEP_PREFIXES = (
     ":root",
     "html",
+    "html, body",
+    "#app",
+    "#boot-skeleton",
     "body",
     "*",
     ".van-theme-dark",
@@ -40,6 +43,13 @@ KEEP_PREFIXES = (
     ".page",
     ".cards-page",
     ".swipe-card",
+    ".swipe-guide",   # 首屏滑动引导遮罩：缺 position:fixed 会把它当普通块，把首卡顶下去
+    ".sg-",
+    ".filter-btn",    # 首卡顶部的筛选按钮：绝对定位，缺失会把卡片顶下去 11px
+    ".card-top-left",
+    ".card-actions",
+    ".info-",         # 首卡资料网格：缺失会在 app.css 到达时把卡片正文撑高（CLS）
+    ".profile-section-title",  # 首卡资料小标题字号（16→15px），缺失会造成 10px 位移
     ".card-",
     ".boot-",
     ".app-boot-",

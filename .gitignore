@@ -18,3 +18,4 @@ migration-report-*.json
 # Dev-time Node toolchains (generated assets are committed)
 node_modules/
 .tmp-upload/
+/thumbwarm

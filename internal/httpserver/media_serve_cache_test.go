@@ -125,3 +125,26 @@ func TestServeOriginalNeverUsesThumbCache(t *testing.T) {
 		t.Fatalf("originals leaked into thumb cache: %d", entries)
 	}
 }
+
+// TestRemoveObjectPurgesThumbCache 覆盖 reviewer M1：删除路径必须真的清缓存
+// （去掉 removeObject 里的 purgeThumbs 调用后本用例会红）。
+func TestRemoveObjectPurgesThumbCache(t *testing.T) {
+	cache, err := media.NewThumbCache(t.TempDir(), 1<<20)
+	if err != nil || cache == nil {
+		t.Fatalf("cache: %v", err)
+	}
+	store := &countingStore{data: []byte("thumb")}
+	app := testMediaApp(store)
+	app.thumbCache = cache
+	m := mediaObjectFixture("m1")
+	m.ThumbSize = 5
+	app.serveMediaObject(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/media/m1", nil), m, true)
+	if entries, _ := cache.Stats(); entries != 1 {
+		t.Fatalf("expected cached thumb, entries=%d", entries)
+	}
+
+	app.removeObject(httptest.NewRequest(http.MethodGet, "/media/m1", nil), "m1", m.ObjectKey)
+	if entries, _ := cache.Stats(); entries != 0 {
+		t.Fatalf("removeObject must purge thumb cache, entries=%d", entries)
+	}
+}

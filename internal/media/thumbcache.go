@@ -47,6 +47,10 @@ func NewThumbCache(dir string, limit int64) (*ThumbCache, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("media: thumb cache dir: %w", err)
 	}
+	// 既有目录 MkdirAll 不会改权限；这里显式收紧（缓存内容是用户缩略图）。
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("media: thumb cache chmod: %w", err)
+	}
 	c := &ThumbCache{dir: dir, limit: limit, entries: make(map[string]*thumbEntry)}
 	if err := c.load(); err != nil {
 		return nil, err
@@ -62,7 +66,15 @@ func (c *ThumbCache) load() error {
 	now := time.Now()
 	for _, de := range dirEntries {
 		name := de.Name()
-		if de.IsDir() || !strings.HasSuffix(name, thumbCacheSuffix) {
+		if de.IsDir() {
+			continue
+		}
+		if strings.HasPrefix(name, "tmp-") {
+			// 上次进程崩溃遗留的半成品（rename 之前）；不计入 LRU，永远不会被淘汰。
+			_ = os.Remove(filepath.Join(c.dir, name))
+			continue
+		}
+		if !strings.HasSuffix(name, thumbCacheSuffix) {
 			continue
 		}
 		info, statErr := de.Info()
@@ -104,6 +116,10 @@ func (c *ThumbCache) Get(key string) ([]byte, bool) {
 		return nil, false
 	}
 	data, err := os.ReadFile(c.path(key))
+	if err == nil && len(data) == 0 {
+		// 0 字节文件（截断/磁盘异常）不能当命中：删掉重取。
+		err = os.ErrInvalid
+	}
 	if err != nil {
 		c.mu.Lock()
 		if cur, ok := c.entries[key]; ok && cur == entry {
@@ -111,6 +127,8 @@ func (c *ThumbCache) Get(key string) ([]byte, bool) {
 			c.total -= cur.size
 		}
 		c.mu.Unlock()
+		// 文件损坏/截断：删掉让下次回源重建，别一直盘踞在 LRU 里。
+		_ = os.Remove(c.path(key))
 		return nil, false
 	}
 	return data, true

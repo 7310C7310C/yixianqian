@@ -133,12 +133,13 @@ func run() error {
 			}
 		}()
 	}
+send:
 	for _, ref := range thumbs {
 		select {
 		case <-ctx.Done():
-			break
-		default:
-			jobs <- ref
+			logger.Info("thumb warm interrupted", "remaining", len(thumbs))
+			break send
+		case jobs <- ref:
 		}
 	}
 	close(jobs)
