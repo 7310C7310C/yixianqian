@@ -1,0 +1,36 @@
+<div key="onetoone_result">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="page">
+    <div v-if="onetooneResultLoading" style="text-align:center; padding:40px;">
+      <van-loading size="24px">加载中...</van-loading>
+    </div>
+    <template v-else>
+    <div class="round-tabs" v-if="onetooneResult.rounds && onetooneResult.rounds.length > 1">
+      <span v-for="r in onetooneResult.rounds" :key="r" class="round-tab" :class="{active: r === onetooneResult.round}" @click="switchOnetooneRound(r)">第{{r}}轮</span>
+    </div>
+    <div class="group-result-header" v-if="onetooneResult.count">
+      <div style="color:#969799; font-size:14px;">你的必聊名单<template v-if="onetooneResult.round"> · 第{{onetooneResult.round}}轮</template></div>
+      <div class="group-number">{{ onetooneResult.count }} 人</div>
+    </div>
+    <van-empty v-else description="未找到你的必聊名单"></van-empty>
+    <div v-if="onetooneResult.partners && onetooneResult.partners.length">
+      <div class="section-title" style="text-align:center;">必聊对象（点「留言」写下评价即标记已聊）</div>
+      <div v-for="p in onetooneResult.partners" :key="p.openid" class="group-candidate">
+        <div class="signup-sheet-avatar" style="margin-right:12px;">
+          <img v-if="p.photo" :src="p.photo" alt="" @error="retryImg($event, 2, ()=>{p.photo=''})" loading="lazy" decoding="async">
+          <template v-else>{{ p.user_id || '👤' }}</template>
+        </div>
+        <div class="group-candidate-info">
+          <div class="group-candidate-name">{{ p.nickname }}</div>
+          <div class="group-candidate-meta">{{ p.user_id || '' }} · 第{{ p.rank }}位</div>
+        </div>
+        <button type="button" class="gs-detail-btn" aria-label="查看资料" @click.stop="openUserDetailFromPage(p.openid,'onetoone_result')" @touchstart.stop @touchend.stop>资料 ›</button>
+        <van-button class="oo-msg-btn" v-if="!p.chatted" type="primary" color="#ff6b81" @click="openOnetooneMsg(p)">留言</van-button>
+        <van-tag v-else type="success">已聊</van-tag>
+      </div>
+    </div>
+    </template>
+  </div>
+</div>

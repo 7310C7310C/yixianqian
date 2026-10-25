@@ -1,0 +1,33 @@
+{
+  "generator": "tools/spa_vendor/build.mjs",
+  "vant": "4.8.7",
+  "components": [
+    "van-button",
+    "van-cell",
+    "van-cell-group",
+    "van-dialog",
+    "van-empty",
+    "van-field",
+    "van-icon",
+    "van-loading",
+    "van-popup",
+    "van-radio",
+    "van-radio-group",
+    "van-switch",
+    "van-tab",
+    "van-tabbar",
+    "van-tabbar-item",
+    "van-tabs",
+    "van-tag"
+  ],
+  "js": {
+    "file": "vant.subset.min.js",
+    "bytes": 64738,
+    "sha256": "60fe21a569e0f4b87e854eb7225497723a43072f50040717cb43a653992737d9"
+  },
+  "css": {
+    "file": "vant.subset.min.css",
+    "bytes": 94219,
+    "sha256": "824a6ca96ac63d1dde397fe02d27a42afcbe5f41216e53effd58412641b4fcdb"
+  }
+}

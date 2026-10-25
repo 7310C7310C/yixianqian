@@ -40,6 +40,9 @@ var (
 	legacyIndexOnce sync.Once
 	legacyIndexHTML []byte
 	legacyIndexErr  error
+	legacyCSSOnce   sync.Once
+	legacyCSS       []byte
+	legacyCSSErr    error
 )
 
 func loadLegacyIndex() ([]byte, error) {
@@ -47,6 +50,16 @@ func loadLegacyIndex() ([]byte, error) {
 		legacyIndexHTML, legacyIndexErr = fs.ReadFile(webassets.FS, legacyIndexPath)
 	})
 	return legacyIndexHTML, legacyIndexErr
+}
+
+// loadLegacyCSS returns app.css for inlining as the shell's critical CSS. The
+// file is still served separately for other pages; inlining removes one
+// render-blocking round trip on the 1.6Mbps mobile profile.
+func loadLegacyCSS() ([]byte, error) {
+	legacyCSSOnce.Do(func() {
+		legacyCSS, legacyCSSErr = fs.ReadFile(webassets.FS, "static/legacy/app.css")
+	})
+	return legacyCSS, legacyCSSErr
 }
 
 // serveLegacyApp returns the v1 SPA shell with the home bootstrap inlined.
@@ -77,6 +90,14 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	// 静态资源版本占位（app.css/app.js/库）由服务端注入，避免壳每次部署换 URL。
 	body = bytes.ReplaceAll(body, []byte(legacyAssetVersionLiteral), []byte(assetVersion))
 	body = bytes.ReplaceAll(body, []byte("__ASSET_URL_VERSION__"), []byte(assetVersion))
+	if css, cssErr := loadLegacyCSS(); cssErr == nil {
+		var style bytes.Buffer
+		style.Grow(len(css) + 16)
+		style.WriteString("<style>")
+		style.Write(css)
+		style.WriteString("</style>")
+		body = bytes.Replace(body, []byte("<!--YXQ_CRITICAL_CSS-->"), style.Bytes(), 1)
+	}
 	// Bootstrap the home aggregate into the shell so the SPA does not have to
 	// wait for /legacy/api/home after 300KB of JS. Failures only skip the
 	// shortcut; the shell must render and the client falls back to the API.

@@ -291,6 +291,7 @@ sources: []
 | `prepush` | `fmt-check static-gzip-check docs-check vet build` |
 | `run` | — |
 | `seed` | — |
+| `spa-check` | — |
 | `static-gzip` | — |
 | `static-gzip-check` | — |
 | `test` | — |

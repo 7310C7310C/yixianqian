@@ -1,0 +1,57 @@
+<div key="checkin" class="page ga-page">
+  <div class="back-nav" @click="gaBack"><van-icon name="arrow-left"></van-icon> 返回</div>
+  <div class="ga-title">✅ 现场签到</div>
+  <div class="ga-title-name">{{ gaCheckinName || '活动' }}<span class="ga-row-id">{{ gaDetailId }}</span></div>
+
+  <div class="ga-card" style="margin-top:12px;">
+    <div v-if="gaSigninLoading" class="ga-empty"><ga-loading size="24px"></ga-loading></div>
+    <div v-else-if="gaSigninError" class="ga-empty">
+      <van-empty image="error" description="签到名册没载出来，检查一下网络"></van-empty>
+      <van-button class="ga-empty-retry" size="small" type="primary" color="#ff6b81" @click="loadSigninRoster(true)">重新载入</van-button>
+    </div>
+    <template v-else>
+      <div class="ga-roster-tabs">
+        <div class="ga-roster-tab" :class="{active: gaSigninGender==='all'}" @click="gaSigninGender='all'">全部 {{ gaSigninGenderCounts.all }}</div>
+        <div class="ga-roster-tab" :class="{active: gaSigninGender==='male'}" @click="gaSigninGender='male'">男生 {{ gaSigninGenderCounts.male }}</div>
+        <div class="ga-roster-tab" :class="{active: gaSigninGender==='female'}" @click="gaSigninGender='female'">女生 {{ gaSigninGenderCounts.female }}</div>
+      </div>
+      <div class="ga-roster-tabs" style="margin-top:-2px;">
+        <div class="ga-roster-tab ga-signin-sub" :class="{active: gaSigninStatus==='all'}" @click="gaSigninStatus='all'">全部 {{ gaSigninStatusCounts.all }}</div>
+        <div class="ga-roster-tab ga-signin-sub" :class="{active: gaSigninStatus==='pending'}" @click="gaSigninStatus='pending'">未签到 {{ gaSigninStatusCounts.pending }}</div>
+        <div class="ga-roster-tab ga-signin-sub" :class="{active: gaSigninStatus==='in'}" @click="gaSigninStatus='in'">已签到 {{ gaSigninStatusCounts.checked }}</div>
+      </div>
+      <div v-if="gaSigninList.length" class="candidate-search-box">
+        <input v-model="gaSigninQuery" placeholder="搜昵称/姓名/用户ID" class="candidate-search-input" />
+      </div>
+      <van-empty v-if="!gaSigninList.length" description="还没有人报名"></van-empty>
+      <van-empty v-else-if="!gaSigninFiltered.length" description="没有匹配的人"></van-empty>
+      <div v-else>
+        <div v-for="r in gaSigninVisible" :key="r.open_id" class="ga-row ga-signin-row">
+          <div class="ga-avatar">{{ r.gender==='男性' ? '👨' : (r.gender==='女性' ? '👩' : '👤') }}</div>
+          <div class="ga-row-main">
+            <div class="ga-row-name">{{ r.real_name || r.nickname || '（没有昵称）' }}</div>
+            <div class="ga-row-sub">{{ r.user_id || '-' }}{{ r.real_name ? ' · ' + r.nickname : '' }}</div>
+          </div>
+          <div class="ga-signin-actions">
+            <van-button size="small" class="ga-signin-btn" :class="r.checked_in ? 'ga-signin-btn-in' : 'ga-signin-btn-out'" :loading="!!gaSigninBusy[r.open_id]" :disabled="!!gaSigninBusy[r.open_id] || gaSigninBatchBusy" @click="toggleSignin(r)">{{ r.checked_in ? '已签到' : '未签到' }}</van-button>
+          </div>
+        </div>
+        <div v-if="gaSigninFiltered.length>gaSigninShown" class="ga-more">
+          <van-button size="small" plain type="primary" color="#ff6b81" @click="gaSigninShown += 30">查看更多</van-button>
+        </div>
+      </div>
+    </template>
+  </div>
+  <div class="ga-card">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+      <div class="ga-card-title" style="margin:0;">现场签到</div>
+      <van-switch :model-value="gaSigninFlagOn" :loading="gaSigninFlagBusy" :disabled="gaSigninBatchBusy" size="22px" @update:model-value="onToggleSigninFlag"></van-switch>
+    </div>
+    <div class="ga-row-sub" style="margin-top:4px;">开启后仅「已到」者可填志愿、参与分组/一对一；关闭立即恢复现状，不影响任何数据。</div>
+    <van-button size="small" plain type="primary" color="#ff6b81" style="margin-top:10px;" :loading="gaSigninLoading" @click="loadSigninRoster(true)">重新载入名册</van-button>
+  </div>
+  <div class="ga-card">
+    <van-button plain type="danger" color="#ee0a24" block style="min-height:44px;" :loading="gaSigninBatchBusy" @click="openClearAllSignins()">全部清除签到状态</van-button>
+    <div class="ga-row-sub" style="margin-top:6px;">清除后所有人回到「未签到」；若签到功能开着，未签到者将无法填志愿、参与分组 / 一对一。</div>
+  </div>
+</div>

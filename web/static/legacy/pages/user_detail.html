@@ -1,0 +1,45 @@
+<div key="user_detail">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="user-detail-card" v-if="userDetail">
+    <div class="ud-photo" @click="openPhotoViewerForUser(userDetail)">
+      <img v-if="userDetail.photos && userDetail.photos.length" :src="(userDetail.photos_thumb && userDetail.photos_thumb[0]) || userDetail.photos[0]" alt="">
+      <template v-else>{{ userDetail.gender==='男性' ? '👨' : '👩' }}</template>
+    </div>
+    <div class="ud-name">{{ userDetail.nickname }}
+      <span class="gender-icon">{{ userDetail.gender==='男性' ? '♂' : '♀' }}</span>
+    </div>
+    <div style="margin-top:14px;">
+      <div class="info-grid simple-line" v-if="userDetail.display_fields && userDetail.display_fields.simple">
+        <div class="info-grid-item simple"><span class="df-value">{{ userDetail.display_fields.simple }}</span></div>
+      </div>
+      <template v-if="userDetail.display_fields && userDetail.display_fields.sections">
+        <div class="card-section" v-for="(sec, si) in userDetail.display_fields.sections" :key="si">
+          <div class="profile-section-title"><span class="ps-icon">{{ sec.icon }}</span>{{ sec.title }}</div>
+          <div class="info-grid">
+            <div class="info-grid-item" v-for="f in sec.fields" :key="f.label"
+              :class="{full: f.label==='我是怎样的人' || f.label==='理想中的TA'}">
+              <span class="df-label">{{ f.label }}：</span>
+              <span class="df-value">{{ f.value }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+    <div style="padding:20px 12px;" v-if="!userDetailHideActions && canLikeUserDetail">
+      <!-- 需求第 8 条：给TA点过赞、还没表白，就在这儿问一句。praised 由后端按
+           「我点过赞没有」算好；这里不含任何「TA收到几个赞」的信息。 -->
+      <div class="praise-hint-inline" v-if="userDetail && userDetail.praised">你给TA点过赞——要不要表示喜欢？</div>
+      <van-button color="#ff6b81" block @click="openLikeDialogForUser(userDetail)">💕 喜欢TA</van-button>
+    </div>
+    <div style="padding:20px 12px;" v-else-if="!userDetailHideActions && canPraiseDetail">
+      <button class="praise-btn" style="margin:0 auto;" :class="{praised: !!userDetail.praised}"
+              @click="togglePraise(userDetail)" :disabled="actionLoading || praiseBusy"><van-icon name="good-job" /></button>
+      <div style="text-align:center; margin-top:8px; color:#969799; font-size:12px;">
+        {{ userDetail && userDetail.praised ? '已点赞' : '点个赞' }}
+      </div>
+    </div>
+  </div>
+  <div v-else style="text-align:center; padding:40px;"><van-loading size="24px">加载中...</van-loading></div>
+</div>

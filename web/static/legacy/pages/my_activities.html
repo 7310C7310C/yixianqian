@@ -1,0 +1,46 @@
+<div key="my_activities">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="page">
+    <div v-if="loadingMyActivities && !myActivitiesList.length" style="text-align:center; padding:40px;">
+      <van-loading size="24px">加载中...</van-loading>
+    </div>
+    <van-empty v-else-if="!myActivitiesList.length" description="你还没有报名任何活动"></van-empty>
+    <div v-else>
+      <div v-for="act in myActivitiesList" :key="act.record_id" class="activity-card">
+        <div class="activity-body" @click="openActivity(act.record_id)" style="cursor:pointer;">
+          <h3>{{ act.name }}</h3>
+          <div class="activity-meta">
+            <van-tag type="primary" color="var(--yxq-brand-ink)">{{ act.status }}</van-tag>
+            <van-tag v-if="act.group_status" plain type="primary">{{ act.group_status }}</van-tag>
+            <van-tag v-if="act.onetoone_status" plain type="primary">{{ act.onetoone_status }}</van-tag>
+          </div>
+          <div style="font-size:13px; color:#48484a;">{{ activityListTime(act) }}</div>
+          <div style="font-size:13px; color:#969799;">📍 {{ act.location || '待定' }}</div>
+        </div>
+        <!-- 志愿/结果入口与「活动」页卡片一致（模式开关控制；随时可改、签到未到置灰+提示） -->
+        <div class="activity-body" style="padding-top:0;">
+          <!-- 现场签到：已报名且活动开启时紧贴志愿按钮上方；已到=绿色实底不可点 -->
+          <div v-if="act.signin_enabled && act.my_signup" style="margin-bottom:8px;">
+            <van-button v-if="isAttendancePresent(act.my_attendance)" type="primary" size="small" block
+              class="btn-44 signin-done-btn" disabled
+              style="background:#0a8548;color:#fff;height:44px;border-radius:10px;opacity:1;border:none;">已签到</van-button>
+            <van-button v-else type="primary" color="#ff6b81" size="small" block class="btn-44" style="height:44px;"
+              @click.stop="openSelfSignin(act)">📋 现场签到</van-button>
+          </div>
+          <div v-if="act.my_signup && (act.group_flag==='是' || act.onetoone_flag==='是')" style="display:flex; flex-direction:column; gap:8px;">
+            <van-button type="primary" color="#ff6b81" size="small" block class="btn-44"
+              :disabled="act.signin_enabled && !isAttendancePresent(act.my_attendance)"
+              @click="goGroupSelect(act.record_id)">✏️ 志愿选择</van-button>
+            <van-button v-if="act.group_flag==='是' && act.group_status==='已完成'" type="primary" color="#ff6b81" size="small" block class="btn-44"
+              @click="goGroupResult(act.record_id)">🎉 查看分组结果</van-button>
+            <van-button v-if="act.onetoone_flag==='是' && act.onetoone_status==='已完成'" type="primary" color="#ff6b81" size="small" block class="btn-44"
+              @click="goOnetooneResult(act.record_id)">💬 查看我的必聊</van-button>
+            <div v-if="act.signin_enabled && !isAttendancePresent(act.my_attendance)" style="font-size:12px; color:#ee0a24; text-align:center;">本活动需现场签到后才能填志愿，请联系管理员</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

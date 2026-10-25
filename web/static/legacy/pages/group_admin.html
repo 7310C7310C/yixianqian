@@ -1,0 +1,39 @@
+<div key="group_admin" class="page ga-page">
+  <div class="back-nav" @click="gaBack"><van-icon name="arrow-left"></van-icon> 返回</div>
+  <div class="ga-title">👥 活动管理</div>
+
+  <div v-if="gaLoading" class="ga-empty"><ga-loading size="24px"></ga-loading></div>
+  <template v-else>
+    <div class="ga-stats">
+      <div class="ga-stat"><div class="ga-stat-num">{{ gaStats.todo }}</div><div class="ga-stat-label">待执行</div></div>
+      <div class="ga-stat"><div class="ga-stat-num ok">{{ gaStats.done }}</div><div class="ga-stat-label">已完成</div></div>
+    </div>
+
+    <div class="ga-card">
+      <div class="candidate-search-box" style="margin-bottom:0;">
+        <input v-model="gaQ" placeholder="搜活动名称或 A-0002" class="candidate-search-input" />
+      </div>
+    </div>
+
+    <div v-if="gaError" class="ga-empty">
+      <van-empty image="error" description="活动没载出来，检查一下网络"></van-empty>
+      <van-button class="ga-empty-retry" size="small" type="primary" color="#ff6b81" @click="loadGroupAdminList()">重新载入</van-button>
+    </div>
+    <van-empty v-else-if="!gaList.length" description="还没有要管理的活动"></van-empty>
+    <van-empty v-else-if="!gaFilteredList.length" :description="gaQ ? ('没有符合「'+gaQ+'」的活动') : '没有找到匹配的活动'"></van-empty>
+    <div v-else>
+      <div v-for="a in gaFilteredList" :key="a.record_id" class="ga-card ga-act-row" @click="openGroupDetail(a)">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:5px;">
+          <div :class="'ga-chip ' + gaModeChipClass(a)"><span class="ga-chip-dot"></span>{{ gaModeChip(a) }}</div>
+          <div :class="'ga-chip ' + gaStatusChipClass(a)"><span class="ga-chip-dot"></span>{{ gaStatusChipText(a) }}</div>
+          <div :class="'ga-chip ' + gaActivityStatusChipClass(a.activity_status)"><span class="ga-chip-dot"></span>{{ a.activity_status || '未设置' }}</div>
+        </div>
+        <div class="ga-row-name">{{ a.name || '(未命名活动)' }}<span class="ga-row-id">{{ a.activity_id }}</span></div>
+        <div class="ga-row-sub">{{ gaRowSub(a) }}</div>
+        <div class="ga-actions" style="margin-top:0; padding-top:10px;" @click.stop>
+          <van-button size="small" plain type="primary" color="#ff6b81" style="min-height:44px; padding:0 18px;" @click.stop="openCheckinPage(a)">📋 现场签到</van-button>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>

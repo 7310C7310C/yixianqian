@@ -146,7 +146,7 @@ func TestLegacyShellRendersStaticHero(t *testing.T) {
 
 // 牌堆只渲染当前卡片：数据窗口可以保留多张，但 DOM 不能一次挂 20 张。
 func TestDeckRendersOnlyCurrentCard(t *testing.T) {
-	html := readEmbedded(t, "static/legacy/index.html")
+	html := readEmbedded(t, "static/legacy/pages/cards.html")
 	if regexp.MustCompile(`v-for="[^"]*\bin cards\b`).MatchString(html) {
 		t.Fatal("shell renders a v-for over the whole cards array")
 	}
@@ -180,7 +180,7 @@ func TestBootstrapPreloadUsesThumbURL(t *testing.T) {
 }
 
 func TestDeckLoadsOnlyAdjacentPhotos(t *testing.T) {
-	html := readEmbedded(t, "static/legacy/index.html")
+	html := readEmbedded(t, "static/legacy/pages/cards.html")
 	if !strings.Contains(html, "v-if=\"photoSrc(i)\"") {
 		t.Fatal("deck does not gate image loading through photoSrc")
 	}

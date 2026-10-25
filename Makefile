@@ -68,6 +68,12 @@ static-gzip:
 static-gzip-check:
 	$(GO) run ./tools/static_gzip -check
 
+# 开发期生成物（Vant 子集 / page chunk）检查；CI 用 Go 测试校验同一 manifest，
+# 部署不依赖 Node。
+spa-check:
+	cd tools/spa_precompile && npm run check
+	cd tools/spa_vendor && npm run check
+
 build:
 	mkdir -p bin
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/server ./cmd/server

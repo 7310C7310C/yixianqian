@@ -1,0 +1,98 @@
+<div key="group_select">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="page gs-page">
+    <div v-if="gsPrefillNotice" class="gs-notice">
+      <div style="flex:1;">
+        <div>已载入你上次提交的志愿，修改后记得点提交</div>
+        <div v-if="gsUnlistedCount">有 {{ gsUnlistedCount }} 位已选对象不在当前名单，提交前请确认</div>
+      </div>
+      <van-icon name="cross" @click="dismissGsNotice"></van-icon>
+    </div>
+    <div v-if="!loadingCandidates && candidates.length" class="candidate-search-box gs-search-sticky">
+      <input v-model="candidateQuery" placeholder="搜索 昵称/用户ID/圣名" class="candidate-search-input">
+    </div>
+    <div v-if="loadingCandidates" style="text-align:center; padding:30px;">
+      <van-loading size="24px">正在加载可选名单…</van-loading>
+      <div v-if="gsSlowLoading" style="font-size:13px; color:#6b7280; margin-top:8px;">网络较慢，正在努力加载…</div>
+      <van-button v-if="gsVerySlowLoading" type="primary" color="#ff6b81" size="small" style="margin-top:12px;" @click="reloadGroupCandidates">重新加载</van-button>
+    </div>
+    <div v-else-if="gsSigninBlocked" style="text-align:center; padding:60px 20px;">
+      <div style="font-size:44px; margin-bottom:12px;">🔒</div>
+      <div style="font-size:16px; color:#323233; margin-bottom:20px;">需要现场签到后才能填志愿</div>
+      <van-button type="primary" color="#ff6b81" size="small" @click="handleBack">返回</van-button>
+    </div>
+    <div v-else-if="candidatesError" style="text-align:center; padding:60px 20px;">
+      <div style="font-size:44px; margin-bottom:12px;">😵</div>
+      <div style="font-size:16px; color:#323233; margin-bottom:20px;">名单没有加载出来</div>
+      <van-button type="primary" color="#ff6b81" size="small" @click="reloadGroupCandidates">重新加载</van-button>
+    </div>
+    <div v-else-if="!candidates.length" style="text-align:center; padding:60px 20px;">
+      <div style="font-size:44px; margin-bottom:12px;">🌸</div>
+      <div style="font-size:16px; color:#323233;">暂时还没有可选的 TA</div>
+      <div style="font-size:13px; color:#969799; margin-top:8px;">对方报名（或现场签到）后就会出现在这里</div>
+    </div>
+    <template v-else>
+      <div class="section-title">可选{{ myGender==='男性' ? '女生' : '男生' }}（点击添加到志愿）</div>
+      <div v-if="!visibleCandidates.length" style="text-align:center; padding:40px 20px;">
+        <div style="font-size:15px; color:#969799;">没有找到匹配的人</div>
+        <van-button plain type="primary" color="#ff6b81" size="small" style="margin-top:12px;" @click="candidateQuery=''">清空搜索</van-button>
+      </div>
+      <div v-else v-for="c in visibleCandidates" :key="c.openid"
+        class="group-candidate"
+        :class="{selected: isSelected(c.openid)}"
+        @touchstart="gsRowTouchStart"
+        @touchend="gsRowTouchEnd($event, c)"
+        @click="gsRowClick($event, c)">
+        <div class="signup-sheet-avatar" style="margin-right:12px;">
+          <img v-if="c.photo" :src="c.photo" alt="" @error="retryImg($event, 2, ()=>{c.photo=''})" loading="lazy" decoding="async">
+          <template v-else>{{ c.user_id || '👤' }}</template>
+        </div>
+        <div class="group-candidate-info">
+          <div class="group-candidate-name">{{ c.real_name || c.nickname }}</div>
+          <div class="group-candidate-meta">{{ c.user_id||'' }} · {{ c.baptismal_name||'' }} · {{ c.birthday||'' }} · {{ c.education||'' }} · {{ c.native_place||'' }} · {{ c.city||'' }}</div>
+        </div>
+        <button type="button" class="gs-detail-btn" aria-label="查看资料" @click.stop="openUserDetailFromGs(c.openid)" @touchstart.stop @touchend.stop>资料 ›</button>
+        <span v-if="isSelected(c.openid)" class="choice-badge choice-badge-check">✓{{ selectedChoices.findIndex(x=>x.openid===c.openid)+1 }}</span>
+        <van-icon v-else name="plus" color="#dcdee0" size="22"></van-icon>
+      </div>
+    </template>
+  </div>
+  <!-- 底部固定操作栏：计数行 + 「调整次序 / 提交志愿」双按钮 -->
+  <div class="gs-fixed-bottom">
+    <div class="gs-bottom-bar">
+      <div class="gs-count-text">{{ gsCountText }}</div>
+      <div class="gs-bottom-actions">
+        <van-button ref="gsReorderBtnEl" class="gs-action-btn" plain type="primary" color="#ff6b81" :disabled="!selectedChoices.length" @click="showGsTray=true"><van-icon name="arrow-up"></van-icon> 调整次序</van-button>
+        <van-button class="gs-action-btn" type="primary" color="#ff6b81" :disabled="!gsCanSubmit" :loading="actionLoading" @click="submitChoices()">提交志愿</van-button>
+      </div>
+    </div>
+  </div>
+  <!-- 调整次序托盘 -->
+  <van-popup v-model:show="showGsTray" position="bottom" round class="gs-tray" :style="{maxHeight:'85vh'}">
+    <div class="gs-tray-body">
+      <div class="gs-tray-head">
+        <div class="gs-tray-title">已选志愿（{{ selectedChoices.length }}/7）</div>
+        <div class="gs-tray-desc">从上到下 = 志愿顺序</div>
+      </div>
+      <transition-group name="gs-row" tag="div" class="gs-tray-list">
+        <div v-for="(c, i) in selectedChoices" :key="c.openid" class="gs-tray-row">
+          <span class="choice-badge">{{ i+1 }}</span>
+          <div class="signup-sheet-avatar gs-tray-avatar">
+            <img v-if="c.photo" :src="c.photo" alt="" @error="retryImg($event, 2, ()=>{c.photo=''})" loading="lazy" decoding="async">
+            <template v-else>{{ c.user_id || '👤' }}</template>
+          </div>
+          <span class="gs-tray-name">{{ gsDisplayName(c) }}</span>
+          <span class="gs-tray-btn" :class="{disabled: i===0}" @click="moveChoice(i, -1)">↑</span>
+          <span class="gs-tray-btn" :class="{disabled: i===selectedChoices.length-1}" @click="moveChoice(i, 1)">↓</span>
+          <span class="gs-tray-x" @click="removeChoiceToast(i)">×</span>
+        </div>
+      </transition-group>
+      <div class="gs-tray-actions">
+        <van-button block plain type="primary" color="#ff6b81" @click="showGsTray=false">继续挑选</van-button>
+        <van-button block type="primary" color="#ff6b81" :disabled="!gsCanSubmit" :loading="actionLoading" @click="submitChoices()">提交志愿</van-button>
+      </div>
+    </div>
+  </van-popup>
+</div>

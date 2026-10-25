@@ -1,0 +1,22 @@
+<div key="liked_me">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="page">
+    <div v-if="loadingLikes" style="text-align:center; padding:40px;"><van-loading size="24px">加载中...</van-loading></div>
+    <van-empty v-else-if="!likesData.liked_me.length" description="还没有人喜欢你" image-size="60"></van-empty>
+    <template v-else>
+      <div v-for="(l, i) in likesData.liked_me" :key="i" class="msg-card">
+        <div class="msg-avatar">{{ l.real ? '💌' : '👤' }}</div>
+        <div class="msg-body">
+          <div class="msg-name">{{ l.nickname }}</div>
+          <div class="msg-sub" v-if="l.real">实名喜欢了你，快去牵线页看看能不能遇到～</div>
+          <div class="msg-sub" v-else>匿名用户喜欢了你，去牵线页看看能不能遇到～</div>
+        </div>
+      </div>
+      <div class="msg-actions" style="margin-top:4px;">
+        <van-button class="tap-44" type="primary" color="#ff6b81" size="small" block @click="gotoCards('liked_me')">去牵线看看</van-button>
+      </div>
+    </template>
+  </div>
+</div>

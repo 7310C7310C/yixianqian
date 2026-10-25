@@ -1,0 +1,75 @@
+<div key="profile_edit">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="profile-detail">
+    <div class="edit-tip" v-if="!isObserver">除姓名、圣名、生日、家乡外，其它资料均可修改；手机号是登录账号，修改需验证当前密码</div>
+    <div class="edit-tip" v-else>观察员资料只读，仅可补填身份证号；补填后即可解除访问限制</div>
+    <div class="edit-card" style="margin-bottom:12px;" v-if="!isObserver">
+      <div class="edit-photo-grid">
+        <div v-for="(p, i) in (profilePhotosThumb.length ? profilePhotosThumb : profilePhotos)" :key="p" class="edit-photo-item">
+          <img :src="p" alt="">
+          <div class="edit-photo-del" role="button" tabindex="0" :aria-label="'删除第' + (i + 1) + '张照片'" @click.stop="deletePhoto(i)" @keydown.enter.stop="deletePhoto(i)"><span class="edit-photo-del-icon">×</span></div>
+          <div v-if="i===0" class="edit-photo-cover">封面</div>
+          <div v-else class="edit-photo-setcover" @click.stop="setCover(i)">设为封面</div>
+        </div>
+      </div>
+      <div v-if="profilePhotos.length < 9" class="edit-photo-add-btn" @click="pickPhoto">
+        <van-icon name="plus"></van-icon>
+        <span v-if="!uploadingPhoto">添加照片</span>
+        <span v-else-if="uploadStage==='compress'">压缩中 {{ uploadProgress }}%</span>
+        <span v-else-if="uploadStage==='upload'">上传中 {{ uploadProgress }}%</span>
+        <span v-else>处理中…</span>
+      </div>
+      <div v-else class="edit-photo-limit">最多上传 9 张</div>
+      <div v-if="faceChecking" style="color:#969799; font-size:12px; padding:0 16px 10px; line-height:1.6;">照片检测中…</div>
+      <div v-else-if="profileData.has_face === false" style="color:#ee0a24; font-size:12px; padding:0 16px 10px; line-height:1.6;">你的照片未通过审核：请上传本人清晰照片（宠物、卡通图片无法通过），否则无法使用</div>
+      <input ref="photoInput" type="file" accept="image/*" style="display:none;" @change="onPhotoChange" />
+      <div class="edit-photo-tip">第一张是头像，也是牵线首页的封面；点击「设为封面」可换第一张</div>
+    </div>
+    <div class="edit-card">
+      <div v-for="f in editableFields" :key="f.field" :class="['edit-row', {'edit-long-row': f.long}]" style="flex-wrap:wrap;">
+        <div class="edit-label">{{ f.label }}</div>
+        <van-field v-if="f.type==='text' && f.long" v-model="f.value" type="textarea" rows="1" autosize :placeholder="'请输入' + f.label" :border="false" style="flex:1; padding:10px 0;"></van-field>
+        <van-field v-else-if="f.type==='text' || f.type==='phone'" v-model="f.value" :placeholder="'请输入' + f.label" :border="false" style="flex:1;"></van-field>
+        <van-field v-else-if="f.type==='number'" v-model="f.value" type="number" :placeholder="'请输入' + f.label" :border="false" style="flex:1;"></van-field>
+        <div v-else-if="f.type==='select'" class="edit-picker" @click="openPicker(f)">
+          <span :class="f.value ? '' : 'placeholder'">{{ f.value || '请选择' }}</span>
+          <van-icon name="arrow" />
+        </div>
+        <div v-else-if="f.type==='multi'" class="edit-picker" @click="openMultiPicker(f)">
+          <span :class="(f.value && f.value.length) ? '' : 'placeholder'">{{ (f.value && f.value.length) ? f.value.join('、') : '请选择（可多选）' }}</span>
+          <van-icon name="arrow" />
+        </div>
+        <div v-if="f.field==='身份证号' && f.hint" style="flex-basis:100%; color:#ee0a24; font-size:12px; padding:0 16px 10px; line-height:1.6;">{{ f.hint }}</div>
+      </div>
+    </div>
+    <div style="padding: 20px 16px;">
+      <van-button type="primary" block round :loading="savingProfile" @click="saveProfile">保存</van-button>
+    </div>
+  </div>
+
+  <!-- 单选弹窗 -->
+  <van-popup v-model:show="showSelectPopup" position="bottom" round>
+    <div class="picker-header">
+      <span @click="showSelectPopup=false">取消</span>
+      <span style="font-weight:600;">{{ pickerField ? pickerField.label : '' }}</span>
+      <span style="color:#ff6b81;" @click="clearPickerField">清除</span>
+    </div>
+    <div class="picker-options">
+      <div v-for="opt in (pickerField ? (pickerField.options || []) : [])" :key="opt" class="picker-option" :class="{active: pickerField && pickerField.value===opt}" @click="pickSelect(opt)">{{ opt }}</div>
+    </div>
+  </van-popup>
+
+  <!-- 多选弹窗 -->
+  <van-popup v-model:show="showMultiPopup" position="bottom" round>
+    <div class="picker-header">
+      <span @click="showMultiPopup=false">取消</span>
+      <span style="font-weight:600;">{{ pickerField ? pickerField.label : '' }}</span>
+      <span style="color:#ff6b81;" @click="showMultiPopup=false">确定</span>
+    </div>
+    <div class="multi-options">
+      <div v-for="opt in (pickerField ? (pickerField.options || []) : [])" :key="opt" class="multi-option" :class="{active: pickerField && pickerField.value && pickerField.value.includes(opt)}" @click="toggleMulti(opt)">{{ opt }}</div>
+    </div>
+  </van-popup>
+</div>

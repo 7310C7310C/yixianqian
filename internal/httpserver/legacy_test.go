@@ -30,6 +30,17 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 	}
 	js := string(jsRaw)
 	all := html + "\n" + js
+	pageFiles, err := fs.Glob(webassets.FS, "static/legacy/pages/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range pageFiles {
+		page, err := fs.ReadFile(webassets.FS, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		all += "\n" + string(page)
+	}
 	for _, want := range []string{
 		`<base href="/static/legacy/">`,
 		`window.__YXQ_AUTHENTICATED__=false;`,
@@ -74,10 +85,10 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 	}
 
 	// 管理后台是独立 section（账号之后、帮助之前），不再放在账号 cell group 内。
-	accountIdx := strings.Index(html, "<!-- 账号 -->")
-	adminIdx := strings.Index(html, `<div class="section-title">管理</div>`)
-	adminCellIdx := strings.Index(html, `title="🛠️ 管理后台"`)
-	helpIdx := strings.Index(html, "<!-- 帮助 -->")
+	accountIdx := strings.Index(all, "<!-- 账号 -->")
+	adminIdx := strings.Index(all, `<div class="section-title">管理</div>`)
+	adminCellIdx := strings.Index(all, `title="🛠️ 管理后台"`)
+	helpIdx := strings.Index(all, "<!-- 帮助 -->")
 	if accountIdx < 0 || adminIdx < 0 || adminCellIdx < 0 || helpIdx < 0 {
 		t.Fatalf("admin section markers missing: account=%d admin=%d cell=%d help=%d",
 			accountIdx, adminIdx, adminCellIdx, helpIdx)

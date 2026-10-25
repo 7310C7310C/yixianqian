@@ -247,6 +247,14 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 本地节流（390×844，1.6Mbps/150ms/CPU×4，N=3 中位）：冷 FCP 2.67s / LCP **4.66s**、暖 FCP 0.76s / LCP **1.71s**、最长任务 1.98s/0.79s、mount 0.44s/0.05s；1280×900：冷 2.45/4.70s、暖 0.68/1.51s、最长 1.85/0.75s、mount 0.49s/0.08s；CLS 0，字节/请求 685.7KB/15（冷）、29.5KB/16（热）。暖 LCP 达标；冷最长任务仍受 Vant UMD 执行（~1s）限制，需 P1 子集构建。
 - 回归：`make ci`（Go 1.24.7）+ 5 个既有 Playwright smoke + 新 hero/deck smoke（390/1280/375/768、暗色、交互、无卡/首图失败降级）全 PASS。详见 `.team/perf/batch5-report.md`。
 
+### 性能批次6（2026-10-25，本地实现待审，未 push/未部署）
+
+- Vant 子集：`tools/spa_vendor`（dev-time esbuild + `vant@4.8.7`）生成 `lib/vant.min.js` 17 组件（button/icon/empty/loading/field/tag/radio/radio-group/popup/dialog/tab/tabs/cell/cell-group/tabbar/tabbar-item/switch）+ Toast/Dialog 命令式 API；CSS 同步子集，并移除外部 alicdn woff 回退（CSP 只允许 self/data）。JS 77.8→23.9KB gzip、CSS 52.7→37.1KB gzip。
+- render 拆 chunk：`tools/spa_precompile` 从 26 个 page 模板生成 `app.render.js`（root+cards，768→182KB raw / 25.5KB gzip）与 `pages/{likes,home,profile,detail,group}.render.js`；`<page-host>` 用根组件 proxy 调用页面 render，模板 ref（photoInput/gsReorderBtnEl 等）经 setupState 代理写回根 ref；chunk 首次进入时加载，失败显示 `.boot-fail`。`pages/pages.manifest.json` 记录 page→chunk/模板 sha/size；`TestPageChunksMatchTemplates` 与 `TestVantSubsetCoversTemplate` 为 CI 门禁（改模板/组件未重建即红）。
+- 首屏：`app.css` 由服务端内联为 critical CSS（`<!--YXQ_CRITICAL_CSS-->`），Vant CSS `media=print onload` 非阻塞；下一张卡预取改为 `load` 后 3s + `requestIdleCallback`；`assetVersion` 11→12。
+- 本地节流（390×844，1.6Mbps/150ms/CPU×4，N=3 中位）：冷 FCP 1.23s / LCP **2.72s**、热 1.39/2.70s；字节 489KB（本地 HTML 未 gzip；按 staging gzip 估算约 307KB/14 请求）；冷最长任务 1.62–1.88s（目标 1.2 未达，剩余为 app.js 挂载/首卡渲染），热 1.17s。
+- 回归：6 个既有 smoke + 新 `batch6_bundle_smoke`（正常/缺失 Vant/页面 chunk 404）全 PASS；A/B 截图 390/768/1280 + 暗色共 13 对全部像素级一致（1px 阈值内）；`make ci` 见 `.team/perf/batch6-report.md`。
+
 ### 人脸与数据
 
 - 人脸检测：本地 YuNet 优先、Haar 回退；上传后检测、注册后补检测、`has_face` 门禁；观察员账号豁免 `has_face`（身份证不豁免）。

@@ -59,6 +59,21 @@ function yxqBootFailure(detail){
   }catch(e){}
   try{ console.error('[yxq] boot failed:', detail); }catch(e){}
 }
+// 批次6：Vant 子集必须覆盖模板用到的 17 个组件；缺失时给出可见错误页，
+// 不让 resolveComponent 静默渲染空白。清单与 tools/spa_vendor/manifest 同步。
+var YXQ_VANT_REQUIRED = ['van-button','van-cell','van-cell-group','van-dialog','van-empty','van-field','van-icon','van-loading','van-popup','van-radio','van-radio-group','van-switch','van-tab','van-tabbar','van-tabbar-item','van-tabs','van-tag'];
+function yxqCheckVantSubset(){
+  try {
+    var shipped = (typeof vant !== 'undefined' && vant && vant.names) || [];
+    var forced = window.__YXQ_VANT_FORCE_MISSING__;
+    var missing = YXQ_VANT_REQUIRED.filter(function(n){
+      if (forced && n === forced) return true;
+      return shipped.length && shipped.indexOf(n) < 0;
+    });
+    if (missing.length) { yxqBootFailure('UI 组件缺失：' + missing.join('、')); return false; }
+  } catch (e) {}
+  return true;
+}
 // Vant 只在 Vue 就绪后加载；失败走同一套可见错误页，不抛异常。
 function yxqLoadVant(onReady){
   if (typeof vant !== 'undefined') { onReady(); return; }
@@ -66,6 +81,7 @@ function yxqLoadVant(onReady){
   script.src = yxqLibBase + 'vant.min.js' + (yxqAssetVersion ? '?v=' + yxqAssetVersion : '');
   script.onload = function(){
     if (typeof vant === 'undefined') { yxqBootFailure('UI 组件库未初始化（vant.min.js）'); return; }
+    if (!yxqCheckVantSubset()) return;
     onReady();
   };
   script.onerror = function(){ yxqBootFailure('UI 组件库加载失败（vant.min.js）'); };
@@ -86,7 +102,7 @@ function yxqAfterFirstPaint(fn){
 if (typeof Vue === 'undefined' || !Vue) {
   yxqBootFailure('运行库未加载（vue.global.prod.js）');
 } else {
-const { createApp, ref, computed, onMounted, watch, nextTick, onUnmounted } = Vue;
+const { createApp, ref, computed, onMounted, watch, nextTick, onUnmounted, getCurrentInstance } = Vue;
 // 管理台共用「慢载入」loading：超过 6s 在转圈下方追加提示（页面以为卡死而重载是本次要缓解的问题）。
 // 组件卸载自动清定时器；写操作遮罩等不需要的地方不用它。
 const GaLoading = {
@@ -105,10 +121,97 @@ const GaLoading = {
     ]);
   }
 };
+
+// ===== 页面 chunk（批次6）=====
+// 26 个 tab/子页的 render function 拆成 6 个 chunk：cards 在 app.render.js 里，
+// 其余按页面分组懒加载；加载失败显示可见错误页（不白屏）。
+var YXQ_PAGE_GROUPS = {
+  cards: null,
+  likes: 'likes', mutual: 'likes', liked_me: 'likes', my_likes: 'likes',
+  my_messages: 'likes', received_messages: 'likes', reported_messages: 'likes',
+  home: 'home', my_activities: 'home', my_groups: 'home',
+  profile: 'profile', password: 'profile', profile_detail: 'profile',
+  profile_edit: 'profile', points: 'profile',
+  user_detail: 'detail',
+  group_admin: 'group', group_detail: 'group', group_roster: 'group',
+  checkin: 'group', group_select: 'group', group_result: 'group',
+  onetoone_result: 'group', activity_detail: 'group', points_admin: 'group'
+};
+var yxqPageLoading = {};
+var yxqRootProxy = null;
+
+function yxqLoadPageChunk(page, done){
+  if (window.__YXQ_PAGES__ && typeof window.__YXQ_PAGES__[page] === 'function') {
+    if (done) done();
+    return;
+  }
+  var group = YXQ_PAGE_GROUPS[page];
+  if (!group) { yxqBootFailure('页面未注册：' + page); return; }
+  if (yxqPageLoading[group]) { if (done) yxqPageLoading[group].push(done); return; }
+  yxqPageLoading[group] = done ? [done] : [];
+  var base = yxqLibBase.replace(/lib\/$/, 'pages/');
+  var script = document.createElement('script');
+  script.src = base + group + '.render.js' + (yxqAssetVersion ? '?v=' + yxqAssetVersion : '');
+  script.onload = function(){
+    var callbacks = yxqPageLoading[group] || [];
+    yxqPageLoading[group] = null;
+    if (!window.__YXQ_PAGES__ || typeof window.__YXQ_PAGES__[page] !== 'function') {
+      yxqBootFailure('页面资源未就绪：' + page);
+      return;
+    }
+    callbacks.forEach(function(cb){ try { cb(); } catch (e) {} });
+  };
+  script.onerror = function(){ yxqBootFailure('页面资源加载失败：' + page); };
+  document.head.appendChild(script);
+}
+
+// page-host 在根 render 内渲染当前页；页面 render 用根组件 proxy 调用，
+// 模板 ref 通过 setupState 代理写回根 ref（photoInput/gsReorderBtnEl 等）。
+const PageHost = {
+  props: { page: { type: String, required: true } },
+  setup(props) {
+    const root = yxqRootProxy;
+    const cache = [];
+    const tick = ref(0);
+    if (!window.__YXQ_PAGES__ || typeof window.__YXQ_PAGES__[props.page] !== 'function') {
+      yxqLoadPageChunk(props.page, function(){ tick.value++; });
+    }
+    return new Proxy({}, {
+      get(_, key) {
+        if (key === '__root') return root;
+        if (key === '__cache') return cache;
+        if (key === '__tick') return tick.value;
+        return root[key];
+      },
+      set(_, key, value) { root[key] = value; return true; },
+      has() { return true; },
+      ownKeys() { return Reflect.ownKeys(root); },
+      getOwnPropertyDescriptor() { return { enumerable: true, configurable: true }; }
+    });
+  },
+  watch: {
+    page(next) {
+      if (!window.__YXQ_PAGES__ || typeof window.__YXQ_PAGES__[next] !== 'function') {
+        yxqLoadPageChunk(next, () => { this.__tick; this.$forceUpdate(); });
+      }
+    }
+  },
+  render() {
+    void this.__tick;
+    const renderPage = window.__YXQ_PAGES__ && window.__YXQ_PAGES__[this.page];
+    if (typeof renderPage !== 'function') {
+      return Vue.h('div', { class: 'page-chunk-loading' },
+        [Vue.h(Vue.resolveComponent('van-loading'), { size: '24px' }, { default: () => '加载中...' })]);
+    }
+    return renderPage(this.__root, this.__cache);
+  }
+};
+
 const yxqApp = createApp({
   render: window.__YXQ_RENDER__,
   components: { 'ga-loading': GaLoading },
   setup() {
+    try { yxqRootProxy = getCurrentInstance().proxy; } catch (e) {}
     // 管理台 iframe 内的原版活动管理：/app?native_admin=1&p=group_admin。
     // 启动期先按请求隐藏 App 外壳；can_admin 校验在首页数据就绪后完成。
     let nativeAdminRequested = false, nativeAdminEntryPage = 'group_admin';
@@ -2131,7 +2234,7 @@ const yxqApp = createApp({
       };
       activities.value = data.activities || [];
       triggerPhotoLoading();
-      preloadAround();
+      schedulePreloadAround();
       maybeShowSwipeGuide();
       maybeShowSelfCardGuide();
       maybeShowActivityPromo();
@@ -2392,6 +2495,16 @@ const yxqApp = createApp({
       if (!c) return [];
       if (c.photos_thumb && c.photos_thumb.length) return c.photos_thumb;
       return cardPhotosOf(c);
+    }
+    function schedulePreloadAround() {
+      // 首屏不抢带宽：下一张卡的首图等 load 后空闲再预取；切卡仍走 preloadAround()。
+      var run = function(){ try { preloadAround(); } catch (e) {} };
+      var start = function(){
+        if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 3000 });
+        else setTimeout(run, 1500);
+      };
+      if (document.readyState === 'complete') setTimeout(start, 5000);
+      else window.addEventListener('load', function(){ setTimeout(start, 5000); }, { once: true });
     }
     function preloadAround() {
       // 只预取下一张卡片的首图；当前卡片的相邻照片由 deck 自身按需加载。
@@ -6410,6 +6523,7 @@ if (typeof window.__YXQ_RENDER__ !== 'function') {
     yxqMountStarted = true;
     try {
       if (window.performance && performance.mark) performance.mark('yxq-mount-start');
+      yxqApp.component('page-host', PageHost);
       yxqApp.use(vant).mount('#app');
       if (window.performance && performance.mark) {
         performance.mark('yxq-mount-end');

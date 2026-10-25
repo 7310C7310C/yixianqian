@@ -1,0 +1,48 @@
+<div key="points">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="page">
+    <div class="points-card">
+      <div class="points-balance-label">我的麦穗</div>
+      <div class="points-balance">{{ pointsBalance }}<span class="points-unit">穗</span></div>
+      <div class="points-sub">
+        <span>累计获得 <b>{{ pointsEarned }}</b></span>
+        <span class="points-sub-divider">|</span>
+        <span>累计消耗 <b>{{ pointsSpent }}</b></span>
+      </div>
+      <!-- 待确认必须写清楚「还不能花」：它在确认期里，用户最容易误会成到手了 -->
+      <div v-if="pointsPending > 0" class="points-pending">
+        ⏳ 待确认 <b>{{ pointsPending }}</b> 穗（{{ pointsPendingCount }} 笔）
+        <div class="points-pending-tip">好友注册后有{{ inviteConfirmDays ? ' ' + inviteConfirmDays + ' 天' : '' }}确认期，确认通过才真正到账，现在还不能用来兑换</div>
+      </div>
+      <!-- 渐变底上的次要按钮不能用 plain（Vant 的 plain 底是白色，白字会看不见），直接给白描边+半透明底 -->
+      <div class="points-actions">
+        <van-button round size="small" style="background:#fff; border:1px solid #fff; color:#ff6b81;" @click="openRedeemPanel">兑换</van-button>
+        <van-button round size="small" style="background:rgba(255,255,255,0.22); border:1px solid rgba(255,255,255,0.7); color:#fff;" @click="openPointsRules">规则说明</van-button>
+        <van-button round size="small" style="background:rgba(255,255,255,0.22); border:1px solid rgba(255,255,255,0.7); color:#fff;" @click="showInviteDialog=true">邀请好友</van-button>
+      </div>
+    </div>
+
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>麦穗明细</span>
+      <span class="theme-color" style="font-size:13px; cursor:pointer;" @click="openRedemptions">兑换记录</span>
+    </div>
+    <div v-if="loadingPoints" style="text-align:center; padding:40px;">
+      <van-loading size="24px">加载中...</van-loading>
+    </div>
+    <van-empty v-else-if="!pointsEntries.length" description="还没有麦穗记录"></van-empty>
+    <div v-else>
+      <div v-for="e in pointsEntries" :key="e.id" class="points-entry">
+        <div class="points-entry-main">
+          <div class="points-entry-kind">{{ e.kind_label }}</div>
+          <div class="points-entry-reason" v-if="e.reason">{{ e.reason }}</div>
+        </div>
+        <div class="points-entry-right">
+          <div class="points-entry-delta" :class="e.delta >= 0 ? 'plus' : 'minus'">{{ e.delta > 0 ? '+' : '' }}{{ e.delta }}</div>
+          <div class="points-entry-time">{{ e.created_at }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

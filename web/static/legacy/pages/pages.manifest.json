@@ -1,0 +1,234 @@
+{
+  "generator": "tools/spa_precompile/precompile.mjs",
+  "vue": "3.4.27",
+  "root": {
+    "file": "app.render.js",
+    "templateSha256": "cce47d67d0c07387794c0bb4f1e4e1f3b30e18a37ff5f7edab14d80c15223e93",
+    "templateSize": 51373,
+    "bytes": 182598,
+    "sha256": "358ff3f0884ec185a888ad660fbe0e03a3b310019e19bcea7d3142965298c445"
+  },
+  "initial": [
+    "cards"
+  ],
+  "groups": {
+    "likes": {
+      "file": "pages/likes.render.js",
+      "pages": [
+        "likes",
+        "mutual",
+        "liked_me",
+        "my_likes",
+        "my_messages",
+        "received_messages",
+        "reported_messages"
+      ],
+      "bytes": 41705,
+      "sha256": "4cb407b8783d2b5fc318bafd6db259894525aae40612277b47fd4cc91a29c0f5"
+    },
+    "home": {
+      "file": "pages/home.render.js",
+      "pages": [
+        "home",
+        "my_activities",
+        "my_groups"
+      ],
+      "bytes": 29287,
+      "sha256": "2a224ee071fb4c0403ae77c3ea3d8ce622699f33a777d9dc177793fa4f486d62"
+    },
+    "profile": {
+      "file": "pages/profile.render.js",
+      "pages": [
+        "profile",
+        "password",
+        "profile_detail",
+        "profile_edit",
+        "points"
+      ],
+      "bytes": 64910,
+      "sha256": "3ed5628d086ce0d7710820fed937ec0f9e3b8599316e38a8657f7c3503058a57"
+    },
+    "detail": {
+      "file": "pages/detail.render.js",
+      "pages": [
+        "user_detail"
+      ],
+      "bytes": 7709,
+      "sha256": "48d327211522e4b2f6befa36aad5fcdca8e5d85cc621d10d960858c53d37dcd2"
+    },
+    "group": {
+      "file": "pages/group.render.js",
+      "pages": [
+        "group_admin",
+        "group_detail",
+        "group_roster",
+        "checkin",
+        "group_select",
+        "group_result",
+        "onetoone_result",
+        "activity_detail",
+        "points_admin"
+      ],
+      "bytes": 214269,
+      "sha256": "410d12e1991a99949d3ca736bc0241541efdb71af99b8c26816827dd05fe3b64"
+    }
+  },
+  "pages": {
+    "cards": {
+      "group": "initial",
+      "file": "app.render.js",
+      "templateSha256": "131672bbfd2da54f9d9794ab28bb8364b542a24aebf858824ed739271a9c54f0",
+      "templateSize": 10121
+    },
+    "likes": {
+      "group": "likes",
+      "file": "pages/likes.render.js",
+      "templateSha256": "9d77842134d61901579d5dc0a52583f446925847cf39ed9c129c43590d99c09f",
+      "templateSize": 3173
+    },
+    "mutual": {
+      "group": "likes",
+      "file": "pages/likes.render.js",
+      "templateSha256": "04f4575d94c6612adb16bdd81d6e2ff0b9f118ea45c2e8be9ef3d5f1ef571662",
+      "templateSize": 1841
+    },
+    "liked_me": {
+      "group": "likes",
+      "file": "pages/likes.render.js",
+      "templateSha256": "98fd78ce26f4eff7a07c5663eb2d98f4b35e464743781427481b9c2399f02dce",
+      "templateSize": 1139
+    },
+    "my_likes": {
+      "group": "likes",
+      "file": "pages/likes.render.js",
+      "templateSha256": "5f50b07a4afe8b4d88473a68f4b683175f0f8ab23d00efdb3973c3164d98dc8e",
+      "templateSize": 1190
+    },
+    "my_messages": {
+      "group": "likes",
+      "file": "pages/likes.render.js",
+      "templateSha256": "38ae76a707e75683107ff015e9ad5dceba4599a81aa5b4d9c140626e13e9766d",
+      "templateSize": 1303
+    },
+    "received_messages": {
+      "group": "likes",
+      "file": "pages/likes.render.js",
+      "templateSha256": "0f4731bcb164a7203226e597416f87d24786850a1534ad96b173e28c7f42e1fa",
+      "templateSize": 1155
+    },
+    "reported_messages": {
+      "group": "likes",
+      "file": "pages/likes.render.js",
+      "templateSha256": "fedbb58e7d083331dbd011180498165ee9c567865b76e84e63e6c0e94c887502",
+      "templateSize": 2745
+    },
+    "home": {
+      "group": "home",
+      "file": "pages/home.render.js",
+      "templateSha256": "e3f36c2749290206a4eac258a4548f14bf101f3601dd81e1e94be318251b41d7",
+      "templateSize": 3455
+    },
+    "my_activities": {
+      "group": "home",
+      "file": "pages/home.render.js",
+      "templateSha256": "172742d455ecb796ef29f3f951c0fdc76a0a82f502aee3f9a9938eb3bae61b77",
+      "templateSize": 3306
+    },
+    "my_groups": {
+      "group": "home",
+      "file": "pages/home.render.js",
+      "templateSha256": "3b71b3f9898d7c95fa9dcc885a31173f0089dc4e67bd8f99406085e677875253",
+      "templateSize": 2171
+    },
+    "profile": {
+      "group": "profile",
+      "file": "pages/profile.render.js",
+      "templateSha256": "cf72723b7691934aa3b5240d766fc4e060d3d7b272f54b191d08e9b9bcd70778",
+      "templateSize": 5710
+    },
+    "password": {
+      "group": "profile",
+      "file": "pages/profile.render.js",
+      "templateSha256": "5914eecc2da06defea2a00134c237e0a262050baf37d5518a8c939055a2db016",
+      "templateSize": 1464
+    },
+    "profile_detail": {
+      "group": "profile",
+      "file": "pages/profile.render.js",
+      "templateSha256": "ef5cac24daf0ef3152f01238bc2b441c1ac8d048f30ffabd5b07e1f93cde715c",
+      "templateSize": 7198
+    },
+    "profile_edit": {
+      "group": "profile",
+      "file": "pages/profile.render.js",
+      "templateSha256": "5e48969bdd91c82dca0a1e2bffbac06aeb629f875542b939fb74694833320933",
+      "templateSize": 5197
+    },
+    "points": {
+      "group": "profile",
+      "file": "pages/profile.render.js",
+      "templateSha256": "1073410ee9295ff19e7c2d967d69472ed17145c188a6f6c1006244daf5be3ac9",
+      "templateSize": 2830
+    },
+    "user_detail": {
+      "group": "detail",
+      "file": "pages/detail.render.js",
+      "templateSha256": "9a6ed669993c8d57e03e755944f3ab4fa18cc8d75c077e73843b07bf35e4f1e3",
+      "templateSize": 2817
+    },
+    "group_admin": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "eb1c920fd7af02b55b0561fa7bffe66a36250d36d42394b8a29dc01a609ffa7b",
+      "templateSize": 2474
+    },
+    "group_detail": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "1454072c6a6aa1c29ef202e05088bb1d72281b9a66933430da1d35f02d5e9636",
+      "templateSize": 30475
+    },
+    "group_roster": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "39e9a2b3e515facb08a664e1b5a6eac5aac79af9da919ce5aa0ddd6d721c8f53",
+      "templateSize": 4205
+    },
+    "checkin": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "3bbdf3e9b66812d2cc224a6b7ae83568871a0138ec4ff395de44ec1ca10e7018",
+      "templateSize": 4520
+    },
+    "group_select": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "9cd878c4b4f8199177f20c8e7c61d0c27848e6d35caf553b66378f793a6a9d14",
+      "templateSize": 6453
+    },
+    "group_result": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "0eff796e90e9ed93c150fa91206a137c0ae0466efac0d60564b9c2a366000854",
+      "templateSize": 1982
+    },
+    "onetoone_result": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "921d907204586ea75ba1b88a5f5aa47936b4c4bd0bc477ef1b24450dfedebdd0",
+      "templateSize": 2214
+    },
+    "activity_detail": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "26b99466b98a078ca3a5aaf4c69072358c1d9ee6685ac3b609e03e7fb60f13f2",
+      "templateSize": 5627
+    },
+    "points_admin": {
+      "group": "group",
+      "file": "pages/group.render.js",
+      "templateSha256": "cce83e1f5a6767c48f55638141e2963c9c825559e8357ff5cb779de36c226e2e",
+      "templateSize": 8149
+    }
+  }
+}

@@ -1,0 +1,108 @@
+<div key="profile" style="padding:0;">
+  <div class="profile-header">
+    <div class="theme-toggle" @click="toggleTheme" :aria-label="isDark ? '切换日间模式' : '切换夜间模式'">
+      <svg v-if="!isDark" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4.2"/>
+        <line x1="12" y1="1.8" x2="12" y2="4.2"/>
+        <line x1="12" y1="19.8" x2="12" y2="22.2"/>
+        <line x1="1.8" y1="12" x2="4.2" y2="12"/>
+        <line x1="19.8" y1="12" x2="22.2" y2="12"/>
+        <line x1="4.8" y1="4.8" x2="6.5" y2="6.5"/>
+        <line x1="17.5" y1="17.5" x2="19.2" y2="19.2"/>
+        <line x1="4.8" y1="19.2" x2="6.5" y2="17.5"/>
+        <line x1="17.5" y1="6.5" x2="19.2" y2="4.8"/>
+      </svg>
+      <svg v-else class="theme-icon" viewBox="0 0 24 24" fill="#fff">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        <path d="M18.2 5.1l.55 1.25 1.25.55-1.25.55-.55 1.25-.55-1.25-1.25-.55 1.25-.55z"/>
+      </svg>
+    </div>
+    <div class="avatar">
+      <img v-if="user.photo" :src="user.photo" alt="" @error="retryImg($event, 2, ()=>{user.photo=''})">
+      <template v-else>{{ user.gender==='男性' ? '👨' : '👩' }}</template>
+    </div>
+    <div class="profile-name-row">
+      <span class="profile-name">{{ user.nickname }}</span>
+      <span v-if="isObserver" class="role-pill">村情六处</span>
+      <span v-else class="role-pill" :class="accountStatusLabel === '已脱单' ? 'role-pill-hidden' : ''" @click="toggleAccountStatus">{{ accountStatusLabel }}<van-icon name="arrow" style="margin-left:4px; font-size:11px; vertical-align:middle;" /></span>
+    </div>
+  </div>
+  <!-- 麦穗 -->
+  <div style="padding:0 12px;" v-if="!isObserver">
+    <div class="section-title">麦穗</div>
+    <div class="profile-card">
+      <div class="profile-card-row" style="cursor:pointer;" @click="openPoints">
+        <span class="row-label">🌾 我的麦穗</span>
+        <span class="hearts-left">{{ pointsBalance }} 穗</span>
+        <van-icon name="arrow" color="#c8c9cc" />
+      </div>
+      <div class="profile-card-divider"></div>
+      <div class="profile-card-row" style="cursor:pointer;" @click="showInviteDialog=true">
+        <span class="row-label">🎁 邀请好友得麦穗</span>
+        <van-icon name="arrow" color="#c8c9cc" />
+      </div>
+      <div class="profile-card-divider"></div>
+      <div class="profile-card-row" style="cursor:pointer;" @click="openPointsRules">
+        <span class="row-label" style="color:#969799; font-size:13px; line-height:1.5;">🛍️ 麦穗能换「实名喜欢」名额、「优先报名」名额、「心愿名额」、「红娘人工推荐」</span>
+        <van-icon name="arrow" color="#c8c9cc" />
+      </div>
+    </div>
+  </div>
+  <!-- 喜欢 -->
+  <div style="padding:0 12px;" v-if="!isObserver">
+    <div class="section-title">喜欢</div>
+    <div class="profile-card">
+      <div class="profile-card-row">
+        <span class="row-label">💕 匿名喜欢</span>
+        <span class="hearts-total">共 {{ user.anon_total || 10 }} 颗</span>
+        <span class="hearts-left">剩 {{ user.anon_left }} 颗</span>
+      </div>
+      <div class="profile-card-divider"></div>
+      <div class="profile-card-row">
+        <span class="row-label">💌 实名喜欢</span>
+        <span class="hearts-total">共 {{ user.real_total || 1 }} 次</span>
+        <span class="hearts-left">剩 {{ user.real_left }} 次</span>
+      </div>
+      <!-- 收到的赞**只有本人看得到**（需求第 4 条）：这是「我的」页，不是任何
+           公开资料页。别人点进来看你，一个数字都拿不到。 -->
+      <template v-if="praiseReady">
+        <div class="profile-card-divider"></div>
+        <div class="profile-card-row">
+          <span class="row-label">👍 收到的赞</span>
+          <span class="hearts-total">本周 {{ praiseReceivedWeek }} 个</span>
+        </div>
+      </template>
+    </div>
+  </div>
+  <!-- 活动 -->
+  <div style="padding:0 12px;" v-if="!isObserver">
+    <div class="section-title">活动</div>
+    <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
+      <van-cell title="🎟️ 我的活动" is-link @click="openMyActivities"></van-cell>
+    </van-cell-group>
+  </div>
+  <!-- 账号 -->
+  <div style="padding:0 12px;" v-if="!isObserver || availableRoles.length > 1">
+    <div class="section-title">账号</div>
+    <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
+      <van-cell v-if="!isObserver" title="👤 我的资料" is-link @click="openProfileDetail"></van-cell>
+      <van-cell title="🔑 修改密码" is-link @click="openPasswordPage"></van-cell>
+      <van-cell v-if="availableRoles.length > 1" :title="'🔄 ' + (isObserver ? '切换为普通用户' : '切换为村情六处')" is-link @click="switchRole"></van-cell>
+      <van-cell title="🚪 退出登录" is-link @click="legacyLogout"></van-cell>
+    </van-cell-group>
+  </div>
+  <!-- 管理 -->
+  <div style="padding:0 12px;" v-if="user.can_admin">
+    <div class="section-title">管理</div>
+    <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
+      <van-cell title="🛠️ 管理后台" is-link @click="openAdminConsole"></van-cell>
+    </van-cell-group>
+  </div>
+  <!-- 帮助 -->
+  <div style="padding:0 12px 24px;">
+    <div class="section-title">帮助</div>
+    <van-cell-group class="profile-cells" style="border-radius:12px; overflow:hidden;">
+      <van-cell title="📮 意见反馈" is-link @click="openSuggestionDialog"></van-cell>
+    </van-cell-group>
+  </div>
+</div>

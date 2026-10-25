@@ -1,0 +1,57 @@
+<div key="group_roster" class="page ga-page">
+  <div class="back-nav" @click="gaBack"><van-icon name="arrow-left"></van-icon> 返回</div>
+  <div class="ga-title">{{ gaDetail ? (gaDetail.name || '活动') : '' }} 报名名单</div>
+  <div class="ga-card" style="margin-top:12px;">
+    <div v-if="gaRosterLoading" class="ga-empty"><ga-loading size="24px"></ga-loading></div>
+    <div v-else-if="gaRosterError" class="ga-empty">
+      <van-empty image="error" description="名单没载出来，检查一下网络"></van-empty>
+      <van-button class="ga-empty-retry" size="small" type="primary" color="#ff6b81" @click="loadGroupRoster(true)">重新载入</van-button>
+    </div>
+    <template v-else>
+      <div class="ga-roster-tabs">
+        <div class="ga-roster-tab" :class="{active: gaRosterTab===0}" @click="gaRosterTab=0"><template v-if="gaRosterSigninOn">未填写（现场）{{ gaRosterOnSite }}</template><template v-else>未填写 {{ gaRosterTotal }}</template></div>
+        <div class="ga-roster-tab" :class="{active: gaRosterTab===1}" @click="gaRosterTab=1"><template v-if="gaRosterSigninOn">已填写（现场）{{ gaSubmittedOnSite }}</template><template v-else>已填写 {{ gaRosterSubmitted }}</template></div>
+      </div>
+      <template v-if="gaRosterTab===0">
+        <div v-if="gaRosterList.length" class="candidate-search-box">
+          <input v-model="gaRosterQuery" placeholder="搜昵称/姓名/用户ID" class="candidate-search-input" />
+        </div>
+        <van-empty v-if="!gaRosterList.length" description="大家都填好啦 🎉"></van-empty>
+        <van-empty v-else-if="!gaRosterFiltered.length" :description="gaRosterQuery.trim() ? '没有匹配的人' : '现场没有未填写的人 🎉'"></van-empty>
+        <div v-else>
+          <div v-for="r in gaRosterVisible" :key="r.open_id" class="ga-row" @click="gaOpenUser(r.open_id)">
+            <div class="ga-avatar">{{ r.gender==='男性' ? '👨' : (r.gender==='女性' ? '👩' : '👤') }}</div>
+            <div class="ga-row-main">
+              <div class="ga-row-name">{{ r.real_name || r.nickname || '（没有昵称）' }}</div>
+              <div class="ga-row-sub">{{ r.user_id || '-' }} · {{ r.gender || '-' }}<span v-if="gaRosterSigninOn" class="ga-att-tag" :class="gaAttClass(r)">{{ gaAttText(r) }}</span></div>
+            </div>
+            <van-icon name="arrow" color="#c8c9cc"></van-icon>
+          </div>
+          <div v-if="gaRosterFiltered.length>gaRosterShown" class="ga-more">
+            <van-button size="small" plain type="primary" color="#ff6b81" @click="gaRosterShown += 30">查看更多</van-button>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div v-if="gaRosterSubmittedList.length" class="candidate-search-box">
+          <input v-model="gaRosterQuery" placeholder="搜昵称/姓名/用户ID" class="candidate-search-input" />
+        </div>
+        <van-empty v-if="!gaRosterSubmittedList.length" :description="gaRosterSigninOn ? '现场还没有人填写志愿' : '还没有人填写志愿'"></van-empty>
+        <van-empty v-else-if="!gaSubmittedFiltered.length" :description="gaRosterQuery.trim() ? '没有匹配的人' : '现场还没有人填写志愿'"></van-empty>
+        <div v-else>
+          <div v-for="r in gaSubmittedVisible" :key="r.open_id" class="ga-row" @click="gaOpenUser(r.open_id)">
+            <div class="ga-avatar">{{ r.gender==='男性' ? '👨' : (r.gender==='女性' ? '👩' : '👤') }}</div>
+            <div class="ga-row-main">
+              <div class="ga-row-name">{{ r.real_name || r.nickname || '（没有昵称）' }}</div>
+              <div class="ga-row-sub">{{ r.user_id || '-' }} · {{ r.gender || '-' }}<span v-if="gaRosterSigninOn" class="ga-att-tag" :class="gaAttClass(r)">{{ gaAttText(r) }}</span></div>
+            </div>
+            <van-icon name="arrow" color="#c8c9cc"></van-icon>
+          </div>
+          <div v-if="gaSubmittedFiltered.length>gaRosterShown" class="ga-more">
+            <van-button size="small" plain type="primary" color="#ff6b81" @click="gaRosterShown += 30">查看更多</van-button>
+          </div>
+        </div>
+      </template>
+    </template>
+  </div>
+</div>

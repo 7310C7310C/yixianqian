@@ -1,0 +1,34 @@
+<div key="group_result">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="page">
+    <div v-if="groupResultLoading" style="text-align:center; padding:40px;">
+      <van-loading size="24px">加载中...</van-loading>
+    </div>
+    <template v-else>
+      <div class="round-tabs" v-if="groupResult.rounds && groupResult.rounds.length > 1">
+        <span v-for="r in groupResult.rounds" :key="r" class="round-tab" :class="{active: r === groupResult.round}" @click="switchGroupRound(r)">第{{r}}轮</span>
+      </div>
+      <div class="group-result-header" v-if="groupResult.my_group">
+        <div style="color:#969799; font-size:14px;">你的组号<template v-if="groupResult.round"> · 第{{groupResult.round}}轮分组</template></div>
+        <div class="group-number">第{{groupResult.my_group}}组</div>
+      </div>
+      <van-empty v-else description="未找到你的分组信息"></van-empty>
+      <div v-if="groupResult.members && groupResult.members.length">
+        <div class="section-title" style="text-align:center;">同组成员（{{groupResult.members.length}}人）</div>
+        <div v-for="m in groupResult.members" :key="m.openid" class="group-member">
+          <div class="group-member-avatar">
+            <img v-if="m.photo" :src="m.photo" alt="" @error="retryImg($event, 2, ()=>{m.photo=''})" loading="lazy" decoding="async">
+            <template v-else>{{m.gender==='男性'?'👨':'👩'}}</template>
+          </div>
+          <div class="group-member-info">
+            <div class="group-member-name">{{m.nickname}}</div>
+            <div class="group-member-meta">{{ m.user_id || '' }} · {{ m.gender }}</div>
+          </div>
+          <button type="button" class="gs-detail-btn" aria-label="查看资料" @click.stop="openUserDetailFromPage(m.openid,'group_result')" @touchstart.stop @touchend.stop>资料 ›</button>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>

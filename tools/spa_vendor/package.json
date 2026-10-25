@@ -1,0 +1,15 @@
+{
+  "name": "yxq-spa-vendor",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Build the Vant subset bundle used by the legacy SPA (dev-time only; generated files are committed)",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "vant": "4.8.7"
+  }
+}

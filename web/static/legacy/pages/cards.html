@@ -1,0 +1,144 @@
+<div key="cards" class="cards-page">
+  <div v-if="showSwipeGuide" class="swipe-guide-mask" @click="closeSwipeGuide">
+    <div class="sg-stage">
+      <span class="sg-chevron l">‹</span>
+      <div class="sg-mini-card"><span class="sg-finger">👆</span></div>
+      <span class="sg-chevron r">›</span>
+    </div>
+    <div class="sg-title">左右滑动卡片</div>
+    <div class="sg-desc">向左滑，遇见下一位<br>向右滑，回到上一位</div>
+    <button class="sg-btn" @click="closeSwipeGuide">我知道了</button>
+  </div>
+  <div v-if="loadingCards" style="display:flex; align-items:center; justify-content:center; height:100%;">
+    <van-loading size="24px">加载中...</van-loading>
+  </div>
+  <template v-else>
+    <div class="card-top-left">
+      <div class="card-counter">{{ cards.length ? (cardsStart + cardIndex + 1) + ' / ' + (cardsTotal || cards.length) : '0 / 0' }}</div>
+      <div class="hearts-badge" v-if="!isObserver">💕 匿名 {{ user.anon_left }} · 实名 {{ user.real_left }}</div>
+    </div>
+    <div class="filter-btn" :class="{active: hasActiveFilter}" @click="showFilter=true">⚙ 筛选</div>
+    <div v-if="showSelfCardGuide && currentCard && currentCard.is_self" class="self-guide-tip">
+      <div class="self-guide-text">第一张是你自己的卡片，左滑开始浏览 TA 们</div>
+      <button class="self-guide-btn" @click="dismissSelfCardGuide">知道了</button>
+    </div>
+    <van-empty v-if="!cards.length" :description="hasActiveFilter ? '没有符合筛选条件的人，试试调整筛选' : '暂时没有可推荐的人了～'"></van-empty>
+    <template v-else>
+    <div v-if="currentCard" class="swipe-card" :key="cardIndex"
+      :class="slideDir === 'right' ? 'slide-in-right' : (slideDir === 'left' ? 'slide-in-left' : '')">
+      <div class="card-photo-wrap" @touchstart="onPhotoTouchStart" @touchmove="onPhotoTouchMove" @touchend="onPhotoTouchEnd" @mousedown="onPhotoMouseDown" @mousemove="onPhotoMouseMove" @mouseup="onPhotoMouseUp" @mouseleave="onPhotoMouseLeave" @click="onPhotoClick">
+        <div v-if="photoLoading" class="photo-loading"></div>
+        <div v-if="currentPhotoList.length" class="card-photo-track" :style="{ transform: 'translateX(-' + photoIndex * 100 + '%)' }">
+          <template v-for="(p,i) in currentPhotoList" :key="i">
+            <img v-if="photoSrc(i)" :src="photoSrc(i)" class="card-photo-item" alt=""
+              :loading="i === photoIndex ? 'eager' : 'lazy'" decoding="async"
+              :fetchpriority="(cardIndex === 0 && i === 0) ? 'high' : 'auto'"
+              :style="photoPositions[i] ? { objectPosition: photoPositions[i] } : null"
+              @load="onPhotoLoad($event); recalcPhotoPosition($event, i)" @error="onPhotoError($event); retryImg($event, 2)">
+            <div v-else class="card-photo-item card-photo-ghost"></div>
+          </template>
+        </div>
+        <div v-else class="card-photo-placeholder">{{ currentCard.gender==='男性' ? '👨' : '👩' }}</div>
+        <div class="photo-dots" v-if="currentCard.photos && currentCard.photos.length > 1">
+          <div v-for="(p,i) in currentCard.photos" :key="i" class="photo-dot" :class="{active: i===photoIndex}"></div>
+        </div>
+        <div class="card-photo-overlay">
+          <div class="card-overlay-box">
+            <div class="card-overlay-text">
+              <div v-if="currentCard.is_self" style="margin-bottom:6px;"><span style="background:#ff6b81;color:#fff;font-size:11px;padding:3px 9px;border-radius:999px;">这是你 · 他人视角</span></div>
+              <div v-else-if="currentCard.recommended" style="margin-bottom:6px;"><span style="background:#ffb020;color:#fff;font-size:11px;padding:3px 9px;border-radius:999px;">推荐</span></div>
+              <div class="card-name">{{ currentCard.nickname }}
+                <span class="gender-icon">{{ currentCard.gender==='男性' ? '♂' : '♀' }}</span>
+              </div>
+              <div class="card-subtitle" v-if="currentCard.display_fields && currentCard.display_fields.simple">{{ currentCard.display_fields.simple }}</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      <div class="card-main" @touchstart="onCardTouchStart" @touchmove="onCardTouchMove" @touchend="onCardTouchEnd" @mousedown="onCardMouseDown" @mousemove="onCardMouseMove" @mouseup="onCardMouseUp" @mouseleave="onCardMouseLeave">
+      <div class="card-tabs">
+        <div class="card-tab" :class="{active: cardTab==='profile'}" @click="cardTab='profile'">资料</div>
+        <div class="card-tab" :class="{active: cardTab==='messages'}" @click="openMessageTab">留言<span v-if="currentMsgCount > 0" class="msg-count-badge">{{ currentMsgCount }}</span></div>
+      </div>
+      <div class="card-info">
+        <template v-if="cardTab==='profile'">
+          <template v-if="currentCard.display_fields && currentCard.display_fields.sections">
+            <div class="card-section" v-for="(sec, si) in currentCard.display_fields.sections" :key="si">
+              <div class="profile-section-title"><span class="ps-icon">{{ sec.icon }}</span>{{ sec.title }}</div>
+              <div class="info-grid">
+                <div class="info-grid-item" v-for="f in sec.fields" :key="f.label"
+                  :class="{full: f.label==='我是怎样的人' || f.label==='理想中的TA'}">
+                  <span class="df-label">{{ f.label }}：</span>
+                  <span class="df-value">{{ f.value }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+        <div v-else class="message-panel">
+          <div v-if="msgLoading" class="msg-tip">加载中…</div>
+          <div v-else-if="!threadedMessages.length" class="msg-tip">还没有留言，快来抢沙发～</div>
+          <div v-else class="msg-list">
+            <div v-for="m in threadedMessages" :key="m.id" class="msg-thread">
+              <div class="msg-item" @click="replyTo(m, m)" style="cursor:pointer;">
+                <div class="msg-head">
+                  <div class="msg-avatar-sm msg-avatar-click" @click.stop="openMessageAuthor(m)" @touchstart.stop @touchend.stop>
+                    <img v-if="m.author_avatar" :src="m.author_avatar" alt="">
+                    <span v-else class="msg-avatar-sm-fallback">{{ (m.author_nickname || '?')[0] }}</span>
+                  </div>
+                  <span class="msg-author">{{ m.author_nickname }} · {{ m.author_uid }}</span>
+                  <span style="flex:1"></span>
+                  <span v-if="m.can_delete" class="msg-del" @click.stop="deleteMessage(m)">删除</span>
+                  <span v-else-if="!m.is_mine" class="msg-report" @click.stop="openReportDialog(m)">举报</span>
+                </div>
+                <div class="msg-content">{{ m.content }}</div>
+                <div class="msg-foot">
+                  <span class="msg-time">{{ fmtTimeAgo(m.created_at) }}</span>
+                  <span class="msg-reply-btn" @click.stop="replyTo(m, m)">回复</span>
+                </div>
+              </div>
+              <div v-for="r in m.replies" :key="r.id" class="msg-item msg-reply" @click="replyTo(r, m)" style="cursor:pointer;">
+                <div class="msg-head">
+                  <div class="msg-avatar-sm msg-avatar-click" @click.stop="openMessageAuthor(r)" @touchstart.stop @touchend.stop>
+                    <img v-if="r.author_avatar" :src="r.author_avatar" alt="">
+                    <span v-else class="msg-avatar-sm-fallback">{{ (r.author_nickname || '?')[0] }}</span>
+                  </div>
+                  <span class="msg-author">{{ r.author_nickname }} · {{ r.author_uid }}</span>
+                  <span style="flex:1"></span>
+                  <span v-if="r.can_delete" class="msg-del" @click.stop="deleteMessage(r)">删除</span>
+                  <span v-else-if="!r.is_mine" class="msg-report" @click.stop="openReportDialog(r)">举报</span>
+                </div>
+                <div class="msg-content"><span v-if="r.reply_to_nickname && r.reply_to_id && r.reply_to_id !== m.id" class="msg-reply-tag">回复 <span class="msg-reply-target">@{{ r.reply_to_nickname }}<span v-if="r.reply_to_uid"> · {{ r.reply_to_uid }}</span></span>：</span>{{ r.content }}</div>
+                <div class="msg-foot">
+                  <span class="msg-time">{{ fmtTimeAgo(r.created_at) }}</span>
+                  <span class="msg-reply-btn" @click.stop="replyTo(r, m)">回复</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="msg-reply-bar" v-if="replyTarget">
+            <span>正在回复 {{ replyTarget.author_nickname }}</span>
+            <span class="msg-reply-cancel" @click="cancelReply">取消</span>
+          </div>
+          <div class="msg-input-bar" v-if="!currentCard.is_self || replyTarget">
+            <input v-model="msgText" class="msg-input" :placeholder="replyTarget ? '回复 ' + replyTarget.author_nickname + '：' : '写下你的留言…'" />
+            <button class="msg-send" :disabled="!msgText.trim() || msgSending" @click="sendMessage">{{ msgSending ? '发送中…' : '发送' }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+      </div>
+      <div class="card-actions" v-if="cardTab==='profile'">
+        <button v-if="!currentCard.is_self" class="feedback-btn" @click="openFeedbackDialog">反馈</button>
+        <!-- 点赞夹在「反馈」和「♥」中间（需求第 13 条）。已喜欢过就不再显示（第 9 条）：
+             都表白了，再摆一个更轻的按钮只会让人犹豫点哪个。 -->
+        <button v-if="canPraiseCard" class="praise-btn" :class="{praised: cardPraised}"
+                @click="togglePraise(currentCard)" :disabled="actionLoading || praiseBusy">
+          <van-icon name="good-job" />
+        </button>
+        <button v-if="!isObserver && !currentCard.is_self" class="heart-btn" :class="{liked: currentCard.liked}" @click="openLikeDialog" :disabled="actionLoading || currentCard.liked">♥</button>
+      </div>
+    </template>
+  </template>
+</div>

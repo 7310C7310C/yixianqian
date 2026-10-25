@@ -1,0 +1,82 @@
+<div key="activity_detail">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div class="page">
+    <div v-if="activityDetailLoading" style="text-align:center; padding:40px;">
+      <van-loading size="24px">加载中...</van-loading>
+    </div>
+    <template v-else>
+    <div class="activity-card" v-if="currentActivity" style="overflow:hidden;">
+      <div v-if="currentActivity.poster" class="activity-poster-wrap" @click="viewPoster">
+        <img :src="currentActivity.poster" class="activity-poster clickable" alt="">
+      </div>
+      <div class="activity-body">
+        <h3>{{ currentActivity.name }}</h3>
+        <div class="activity-meta">
+          <van-tag type="primary" color="var(--yxq-brand-ink)">{{ currentActivity.status }}</van-tag>
+          <van-tag v-if="currentActivity.group_status" plain type="primary">{{ currentActivity.group_status }}</van-tag>
+        </div>
+        <div class="activity-desc">{{ currentActivity.description || '暂无描述' }}</div>
+        <div class="detail-meta">
+          <div>🗓️ 活动时间：{{ activityRangeText(currentActivity) }}</div>
+          <div>📍 {{ currentActivity.location || '待定' }}</div>
+          <div>💰 费用：{{ currentActivity.fee > 0 ? currentActivity.fee + '元' : '免费' }}</div>
+          <div>🍚 食宿：{{ currentActivity.food || '无' }}</div>
+          <div v-if="currentActivity.condition">📋 条件：{{ currentActivity.condition }}</div>
+        </div>
+        <div class="signup-bar" v-if="showSignupInfo || !isDetailCheckedIn">
+          <div class="signup-count" v-if="showSignupInfo">已报名 <b>{{ currentActivity.current_signup }}</b>/{{ currentActivity.max_signup || '不限' }}</div>
+          <van-button v-if="!isObserver && currentActivity.status==='报名中' && !isDetailCheckedIn" type="primary" color="#ff6b81" size="small"
+            @click="currentActivity.my_signup ? cancelSignup() : onSignupClick()" :loading="actionLoading">
+            {{ currentActivity.my_signup ? '取消报名' : '立即报名' }}
+          </van-button>
+          <van-tag v-else-if="!isDetailCheckedIn" type="warning">{{ currentActivity.status }}</van-tag>
+        </div>
+        <van-button v-if="showSignupInfo" plain type="primary" color="#ff6b81" size="small" block class="btn-44" @click="openSignupSheet" style="margin-top:8px;">查看报名名单（{{ currentActivity.current_signup }}）</van-button>
+        <div v-if="currentActivity.my_signup && currentActivity.signin_enabled" class="signin-status-box">
+          <span v-if="isDetailCheckedIn">✅ 已签到</span>
+          <span v-else-if="currentActivity.my_attendance==='未到'" class="signin-status-danger">⚠️ 未到：本活动需现场签到，请联系管理员</span>
+          <span v-else>⏳ 已报名 · 待现场签到</span>
+        </div>
+      </div>
+    </div>
+    <div v-if="currentActivity && currentActivity.my_signup && (currentActivity.group_flag==='是' || currentActivity.onetoone_flag==='是') && !detailSigninBlocked" class="activity-card" @click="goGroupSelect(currentActivity.record_id)" style="cursor:pointer;">
+      <div class="activity-body" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:16px; font-weight:500;">✏️ 志愿选择</div>
+          <div style="font-size:13px; color:#969799; margin-top:4px;">选择你心仪的TA，最多7个志愿（随时可改）</div>
+        </div>
+        <van-icon name="arrow" color="#ff6b81"></van-icon>
+      </div>
+    </div>
+    <div v-else-if="currentActivity && currentActivity.my_signup && (currentActivity.group_flag==='是' || currentActivity.onetoone_flag==='是') && detailSigninBlocked" class="activity-card" style="opacity:.65;">
+      <div class="activity-body" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:16px; font-weight:500;">✏️ 志愿选择</div>
+          <div style="font-size:13px; color:#969799; margin-top:4px;">本活动需现场签到后才能填志愿，请联系管理员</div>
+        </div>
+        <van-icon name="lock" color="#c8c9cc"></van-icon>
+      </div>
+    </div>
+    <div v-if="currentActivity && currentActivity.my_signup && currentActivity.group_flag==='是' && currentActivity.group_status==='已完成'" class="activity-card" @click="goGroupResult(currentActivity.record_id)" style="cursor:pointer;">
+      <div class="activity-body" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:16px; font-weight:500;">🎉 查看分组结果</div>
+          <div style="font-size:13px; color:#969799; margin-top:4px;">看看你和谁一组</div>
+        </div>
+        <van-icon name="arrow" color="#ff6b81"></van-icon>
+      </div>
+    </div>
+    <div v-if="currentActivity && currentActivity.my_signup && currentActivity.onetoone_flag==='是' && currentActivity.onetoone_status==='已完成'" class="activity-card" @click="goOnetooneResult(currentActivity.record_id)" style="cursor:pointer;">
+      <div class="activity-body" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:16px; font-weight:500;">💬 查看我的必聊</div>
+          <div style="font-size:13px; color:#969799; margin-top:4px;">看看你的必聊对象，点「留言」即标记已聊</div>
+        </div>
+        <van-icon name="arrow" color="#ff6b81"></van-icon>
+      </div>
+    </div>
+    </template>
+  </div>
+</div>

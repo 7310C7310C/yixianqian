@@ -152,7 +152,7 @@ func TestIntegrationWeeklyRecommendationsOnCards(t *testing.T) {
 	}
 
 	// SPA 角标已接线：字段存在时卡片渲染「推荐」。
-	spa, err := os.ReadFile("../../web/static/legacy/index.html")
+	spa, err := os.ReadFile("../../web/static/legacy/pages/cards.html")
 	if err != nil {
 		t.Fatalf("read SPA: %v", err)
 	}

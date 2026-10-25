@@ -14,3 +14,7 @@ migration-report-*.json
 
 # 团队内部工作区 artifact
 .team/
+
+# Dev-time Node toolchains (generated assets are committed)
+node_modules/
+.tmp-upload/

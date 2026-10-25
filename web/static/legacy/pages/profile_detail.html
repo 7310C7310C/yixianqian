@@ -1,0 +1,86 @@
+<div key="profile_detail">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+  <div v-if="loadingProfileDetail" style="text-align:center; padding:40px;">
+    <van-loading size="24px">加载中...</van-loading>
+  </div>
+  <div v-else class="profile-detail">
+    <div class="profile-photo-section">
+      <img v-if="profileData.photo" :src="profileData.photo" alt="">
+      <div v-else class="profile-photo-placeholder">{{ profileData.gender==='男性' ? '👨' : '👩' }}</div>
+    </div>
+    <div class="ud-name" v-if="profileData.nickname">
+      {{ profileData.nickname }}
+      <span class="gender-icon">{{ profileData.gender==='男性' ? '♂' : '♀' }}</span>
+    </div>
+    <div style="height:14px;"></div>
+    <div style="padding: 0 16px;">
+      <van-button v-if="!isObserver || (profileData.editable && profileData.editable.length)" type="primary" plain block round size="small" class="btn-44" @click="openProfileEdit">{{ isObserver ? '补填身份证' : '修改资料' }}</van-button>
+    </div>
+
+    <!-- 基本信息 -->
+    <div class="profile-section-card" v-if="hasProfileBasic">
+      <div class="profile-section-title"><span class="ps-icon">👤</span> 基本信息</div>
+      <div class="info-grid">
+        <div class="info-grid-item" v-if="profileData.real_name"><span class="df-label">姓名</span><span class="df-value">{{ profileData.real_name }}</span></div>
+        <div class="info-grid-item" v-if="profileData.baptismal_name"><span class="df-label">圣名</span><span class="df-value">{{ profileData.baptismal_name }}</span></div>
+        <div class="info-grid-item" v-if="profileData.birthday"><span class="df-label">生日</span><span class="df-value">{{ profileData.birthday }}</span></div>
+        <div class="info-grid-item" v-if="profileData.height"><span class="df-label">身高</span><span class="df-value">{{ profileData.height }}cm</span></div>
+        <div class="info-grid-item" v-if="profileData.education"><span class="df-label">学历</span><span class="df-value">{{ profileData.education }}</span></div>
+        <div class="info-grid-item" v-if="profileData.city"><span class="df-label">现居/工作城市</span><span class="df-value">{{ profileData.city }}</span></div>
+        <div class="info-grid-item" v-if="profileData.native_place"><span class="df-label">家乡</span><span class="df-value">{{ profileData.native_place }}</span></div>
+        <div class="info-grid-item" v-if="profileData.church"><span class="df-label">经常去的教堂</span><span class="df-value">{{ profileData.church }}</span></div>
+        <div class="info-grid-item" v-if="profileData.group"><span class="df-label">参加的团体</span><span class="df-value">{{ profileData.group }}</span></div>
+        <div class="info-grid-item" v-if="profileData.church_location"><span class="df-label">教堂所在市-区</span><span class="df-value">{{ profileData.church_location }}</span></div>
+      </div>
+    </div>
+
+    <!-- 工作与经济 -->
+    <div class="profile-section-card" v-if="hasProfileWork">
+      <div class="profile-section-title"><span class="ps-icon">💼</span> 工作与经济</div>
+      <div class="info-grid">
+        <div class="info-grid-item" v-if="profileData.industry"><span class="df-label">从事行业</span><span class="df-value">{{ profileData.industry }}</span></div>
+        <div class="info-grid-item" v-if="profileData.position"><span class="df-label">职位</span><span class="df-value">{{ profileData.position }}</span></div>
+        <div class="info-grid-item" v-if="profileData.income"><span class="df-label">年收入</span><span class="df-value">{{ profileData.income }}</span></div>
+        <div class="info-grid-item" v-if="profileData.house"><span class="df-label">房产状况</span><span class="df-value">{{ profileData.house }}</span></div>
+        <div class="info-grid-item" v-if="profileData.driving"><span class="df-label">汽车</span><span class="df-value">{{ profileData.driving }}</span></div>
+      </div>
+    </div>
+
+    <!-- 关于我 -->
+    <div class="profile-section-card" v-if="hasProfileAbout">
+      <div class="profile-section-title"><span class="ps-icon">✨</span> 关于我</div>
+      <div class="info-grid">
+        <div class="info-grid-item full" v-if="profileData.personality"><span class="df-label">我是怎样的人</span><span class="df-value">{{ profileData.personality }}</span></div>
+        <div class="info-grid-item" v-if="profileData.self_traits"><span class="df-label">性格</span><span class="df-value">{{ profileData.self_traits }}</span></div>
+        <div class="info-grid-item" v-if="profileData.hobbies"><span class="df-label">爱好</span><span class="df-value">{{ profileData.hobbies }}</span></div>
+        <div class="info-grid-item" v-if="profileData.self_sports"><span class="df-label">运动</span><span class="df-value">{{ profileData.self_sports }}</span></div>
+        <div class="info-grid-item" v-if="profileData.mbti"><span class="df-label">MBTI</span><span class="df-value">{{ profileData.mbti }}</span></div>
+        <div class="info-grid-item" v-if="profileData.live_with_parents"><span class="df-label">婚后与父母同住</span><span class="df-value">{{ profileData.live_with_parents }}</span></div>
+        <div class="info-grid-item" v-if="profileData.family"><span class="df-label">家庭情况</span><span class="df-value">{{ profileData.family }}</span></div>
+      </div>
+    </div>
+
+    <!-- 理想中的TA -->
+    <div class="profile-section-card" v-if="hasProfilePartner">
+      <div class="profile-section-title"><span class="ps-icon">💖</span> 理想中的TA</div>
+      <div class="info-grid">
+        <div class="info-grid-item full" v-if="profileData.partner_criteria"><span class="df-label">理想的TA</span><span class="df-value">{{ profileData.partner_criteria }}</span></div>
+        <div class="info-grid-item" v-if="profileData.partner_traits"><span class="df-label">性格</span><span class="df-value">{{ profileData.partner_traits }}</span></div>
+        <div class="info-grid-item" v-if="profileData.partner_hobbies"><span class="df-label">爱好</span><span class="df-value">{{ profileData.partner_hobbies }}</span></div>
+        <div class="info-grid-item" v-if="profileData.partner_sports"><span class="df-label">运动</span><span class="df-value">{{ profileData.partner_sports }}</span></div>
+      </div>
+    </div>
+
+    <!-- 联系方式 -->
+    <div class="profile-section-card" v-if="hasProfileContact">
+      <div class="profile-section-title"><span class="ps-icon">📞</span> 联系方式</div>
+      <div class="info-grid">
+        <div class="info-grid-item" v-if="profileData.wechat"><span class="df-label">微信号</span><span class="df-value">{{ profileData.wechat }}</span></div>
+        <div class="info-grid-item" v-if="profileData.phone"><span class="df-label">手机号</span><span class="df-value">{{ profileData.phone }}</span></div>
+        <div class="info-grid-item" v-if="profileData.register_time"><span class="df-label">注册时间</span><span class="df-value">{{ profileData.register_time }}</span></div>
+      </div>
+    </div>
+  </div>
+</div>
