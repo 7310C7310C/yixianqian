@@ -65,9 +65,12 @@ html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
 .info-grid.simple-line { margin-bottom: 20px; }
 .card-actions { position: absolute; bottom: 18px; right: 18px; left: auto; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 18px; z-index: 12; }
 .card-top-left { position: absolute; top: 12px; left: 16px; display: flex; align-items: center; gap: 8px; z-index: 5; }
+.hearts-badge { background: rgba(0,0,0,0.55); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 13px; }
 .card-counter { background: rgba(0,0,0,0.55); color: #fff; padding: 4px 10px; border-radius: 20px; font-size: 12px; }
 .theme-toggle { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,0.28); display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); box-shadow: 0 2px 8px rgba(0,0,0,0.12); transition: transform 0.15s; }
 .theme-toggle:active { transform: scale(0.9); }
+.hearts-total { color: #969799; font-size: 13px; }
+.hearts-left { color: #ff6b81; font-weight: 700; font-size: 15px; }
 .profile-section-title { font-size: 15px; font-weight: 600; color: #323233; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
 .profile-section-title .ps-icon { font-size: 16px; }
 /* 登录页 */

@@ -56,6 +56,25 @@ def check(root: Path) -> list[str]:
             errors.append(f"critical 块不在 app.css 中（疑似手改）：{block[:60]!r}")
             break
 
+    manifest_path = legacy / "app.critical.manifest.json"
+    if not manifest_path.exists():
+        errors.append("app.critical.manifest.json 缺失（run: python3 tools/css_split/build.py）")
+    else:
+        import json
+
+        try:
+            mf = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            errors.append(f"app.critical.manifest.json 不是合法 JSON：{exc}")
+            mf = {}
+        crit = mf.get("critical", {})
+        if crit.get("bytes") != len(actual.encode()):
+            errors.append(f"manifest bytes 过期：{crit.get('bytes')} != {len(actual.encode())}")
+        if crit.get("gzip_bytes") != len(gzip.compress(actual.encode(), 9)):
+            errors.append("manifest gzip_bytes 过期")
+        if crit.get("sha256") != __import__("hashlib").sha256(actual.encode()).hexdigest():
+            errors.append("manifest sha256 过期（改 0…0 会红）")
+
     gz = len(gzip.compress(actual.encode(), 9))
     if gz > MAX_GZIP:
         errors.append(f"critical gzip {gz}B > {MAX_GZIP}B（首屏预算）")

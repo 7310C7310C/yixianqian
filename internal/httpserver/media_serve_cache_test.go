@@ -148,3 +148,27 @@ func TestRemoveObjectPurgesThumbCache(t *testing.T) {
 		t.Fatalf("removeObject must purge thumb cache, entries=%d", entries)
 	}
 }
+
+// TestRemoveObjectPurgesPosterThumb 覆盖 reviewer M11：活动海报缩略图缓存 key 为
+// poster-<mediaID>__…，删除海报时必须一并清理（purgeThumbs 同时清两个前缀）。
+func TestRemoveObjectPurgesPosterThumb(t *testing.T) {
+	cache, err := media.NewThumbCache(t.TempDir(), 1<<20)
+	if err != nil || cache == nil {
+		t.Fatalf("cache: %v", err)
+	}
+	store := &countingStore{data: []byte("poster")}
+	app := testMediaApp(store)
+	app.thumbCache = cache
+	m := mediaObjectFixture("m1")
+	m.ID = "poster-m1"
+	m.ThumbSize = 6
+
+	app.serveMediaObject(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/admin/activities/1/poster", nil), m, true)
+	if entries, _ := cache.Stats(); entries != 1 {
+		t.Fatalf("expected poster thumb cached, entries=%d", entries)
+	}
+	app.removeObject(httptest.NewRequest(http.MethodGet, "/admin/activities/1/poster", nil), "m1", m.ObjectKey)
+	if entries, _ := cache.Stats(); entries != 0 {
+		t.Fatalf("poster thumb must be purged on delete, entries=%d", entries)
+	}
+}

@@ -50,6 +50,7 @@ KEEP_PREFIXES = (
     ".card-actions",
     ".info-",         # 首卡资料网格：缺失会在 app.css 到达时把卡片正文撑高（CLS）
     ".profile-section-title",  # 首卡资料小标题字号（16→15px），缺失会造成 10px 位移
+    ".hearts-",       # 首卡底部爱心/计数行（reviwer M9）
     ".card-",
     ".boot-",
     ".app-boot-",

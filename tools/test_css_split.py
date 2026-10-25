@@ -43,14 +43,30 @@ class CssSplitGateTest(unittest.TestCase):
         (self.legacy / "index.html").write_text(SHELL, encoding="utf-8")
         check.build_mod.SOURCE = self.legacy / "app.css"
         check.build_mod.OUTPUT = self.legacy / "app.critical.css"
-        text, _ = check.build_mod.build()
+        text, manifest = check.build_mod.build()
         (self.legacy / "app.critical.css").write_text(text, encoding="utf-8")
+        import json
+
+        (self.legacy / "app.critical.manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
     def test_passes_on_consistent_tree(self) -> None:
         self.assertEqual(check.check(self.root), [])
+
+    def test_fails_when_manifest_is_tampered(self) -> None:
+        import json
+
+        path = self.legacy / "app.critical.manifest.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["critical"]["sha256"] = "0" * 64
+        data["critical"]["bytes"] = 0
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        errors = check.check(self.root)
+        self.assertTrue(any("manifest" in e for e in errors), errors)
 
     def test_fails_when_critical_stale(self) -> None:
         (self.legacy / "app.css").write_text(APP_CSS + ".page { margin: 0; }\n", encoding="utf-8")
@@ -76,8 +92,13 @@ class CssSplitGateTest(unittest.TestCase):
         # 生成一个超预算的 critical（不可压缩内容）
         big = ".page { content: '" + "x" * (16 * 1024) + "'; }\n"
         (self.legacy / "app.css").write_text(APP_CSS + big, encoding="utf-8")
-        text, _ = check.build_mod.build()
+        text, manifest = check.build_mod.build()
         (self.legacy / "app.critical.css").write_text(text, encoding="utf-8")
+        import json
+
+        (self.legacy / "app.critical.manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
         if len(gzip.compress(text.encode(), 9)) <= check.MAX_GZIP:
             self.skipTest("压缩后仍低于预算，跳过")
         errors = check.check(self.root)
