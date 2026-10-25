@@ -287,7 +287,8 @@ sources: []
   `/legacy/api/*`、`/api/*`、`/admin/*`、`/media/*`（含管理员调整积分/照片上传），因此点赞、资料、照片、报名、
   审核、管理员写都会立即 flush 全站读缓存；**排除** `/static/`、`/healthz` 与埋点（`/legacy/api/track*`、
   `/legacy/api/client-events`），避免高频埋点刷穿缓存；GET 与 4xx/5xx 不 bump。
-  内存双重上限：总字节 `READ_CACHE_BYTES`（默认 32MiB，**键长也计入**、按字节 LRU）+ 单条 256KiB + 条数 1024；
+  内存：home 与 cards **共享同一个缓存实例与同一份预算**——总字节 `READ_CACHE_BYTES`（默认 32MiB，**键长也计入**、按字节 LRU；
+  配置上限 clamp 到 64MiB，避免超过 unit 768M）+ 单条 256KiB + 总条数 1024；
   `READ_CACHE_ENABLED=false` 或 TTL/ITEMS/BYTES 任一为 0 → 完全关闭（零值 Config 同样关闭，不回落默认）。
   构建期间 epoch 变化则丢弃回填（CAS，避免旧数据进新代）。多实例部署需 pub/sub 传播 epoch（未实现，单实例语义）。
   错误/未授权/重定向不缓存；响应头 `Cache-Control: no-store`；`/legacy/api/*` 只带 `Vary: Accept-Encoding`。

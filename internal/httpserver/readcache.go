@@ -2,6 +2,8 @@ package httpserver
 
 import (
 	"container/list"
+
+	"github.com/7310C7310C/yixianqian/internal/config"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -62,6 +64,11 @@ func newReadCache(enabled bool, ttl time.Duration, maxItems int, maxBytes, maxEn
 		entries:  make(map[string]*list.Element),
 		order:    list.New(),
 	}
+}
+
+// newReadCacheFromConfig 从配置构造单例缓存；ENABLED=false 或任一上限为 0 → nil（关闭）。
+func newReadCacheFromConfig(cfg config.Config) *readCache {
+	return newReadCache(cfg.ReadCacheEnabled, cfg.ReadCacheTTL, cfg.ReadCacheItems, cfg.ReadCacheBytes, 0)
 }
 
 // key 由调用方给出业务部分；epoch 由缓存内部加在最前面，Bump 后旧 key 自然不可达。

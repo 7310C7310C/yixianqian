@@ -98,3 +98,29 @@ func TestIntegrationLegacyHomeCardsReadCache(t *testing.T) {
 		t.Fatal("home body unchanged after like (expected liked flags to change)")
 	}
 }
+
+// TestIntegrationReadCacheDisabled 覆盖 kill switch 的集成路径：
+// ENABLED=false 时两次 home 都必须全量查询（无缓存）。
+func TestIntegrationReadCacheDisabled(t *testing.T) {
+	tracer := &countingTracer{}
+	env := setupActivitiesHTTPEnvWithOptions(t, func(cfg *config.Config) {
+		cfg.ReadCacheEnabled = false
+		cfg.ReadCacheTTL = 10 * time.Second
+		cfg.ReadCacheItems = 1024
+		cfg.ReadCacheBytes = 32 << 20
+	}, db.WithQueryTracer(tracer))
+	viewer, client := env.createUser(t, "U-NOCACHE", "无缓存", "active", "user")
+	cleanupHTTPUsers(t, env, viewer.ID)
+	if _, err := env.pool.Exec(env.ctx, `UPDATE users SET gender='男性' WHERE id=`+strconv.FormatInt(viewer.ID, 10)); err != nil {
+		t.Fatalf("gender: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		tracer.queries.Store(0)
+		resp := client.get("/legacy/api/home")
+		_, _ = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if got := tracer.queries.Load(); got < 10 {
+			t.Fatalf("request %d: queries=%d, want full rebuild (cache disabled)", i+1, got)
+		}
+	}
+}

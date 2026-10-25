@@ -173,11 +173,11 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if body, hit := a.readCacheHit(r, a.homeCache, "home"); hit {
+	if body, hit := a.readCacheHit(r, "home"); hit {
 		writeCachedJSON(w, body)
 		return
 	}
-	homeEpoch := a.cacheEpoch(a.homeCache)
+	homeEpoch := a.cacheEpoch()
 	now := a.clock.Now()
 	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
 	value, err := a.homeInflight.Do(r.Context(), key, func() (any, error) {
@@ -190,7 +190,7 @@ func (a *App) handleLegacyHome(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		legacyServerError(a, w, r, err, "legacy home failed")
 	default:
-		a.writeReadCache(w, r, a.homeCache, "home", payload, homeEpoch)
+		a.writeReadCache(w, r, "home", payload, homeEpoch)
 	}
 }
 
@@ -216,11 +216,11 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		viewer.AccountKind = "observer"
 		viewer.AccountStatus = "observer"
 	}
-	if body, hit := a.readCacheHit(r, a.cardsCache, "cards"); hit {
+	if body, hit := a.readCacheHit(r, "cards"); hit {
 		writeCachedJSON(w, body)
 		return
 	}
-	cardsEpoch := a.cacheEpoch(a.cardsCache)
+	cardsEpoch := a.cacheEpoch()
 	key := legacyInflightKey(user.ID, a.legacyViewRole(r), r.URL.RawQuery)
 	value, err := a.cardsInflight.Do(r.Context(), key, func() (any, error) {
 		return a.buildCardsPageData(r.Context(), viewer, r.URL.Query(), a.clock.Now(), limit, cardPageDeps{})
@@ -234,7 +234,7 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy cards failed")
 		return
 	}
-	a.writeReadCache(w, r, a.cardsCache, "cards", map[string]any{
+	a.writeReadCache(w, r, "cards", map[string]any{
 		"cards":       a.legacyCards(r.Context(), page.Cards),
 		"total":       page.Total,
 		"cards_total": page.Total,
@@ -987,9 +987,10 @@ func legacyActivityFee(raw string) int {
 
 // writeReadCache 写 home/cards 的成功响应：先按 10s TTL 命中缓存直接回字节，
 // 未命中则序列化、缓存并写出。错误/未授权路径不经过这里，因此不会被缓存。
-// 响应头与 writeJSON 完全一致（no-store、Vary: Cookie 由中间件加），语义不变。
-func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request, cache *readCache,
+// 响应头与 writeJSON 完全一致（no-store；API 实测 Vary 为空，不额外添加），语义不变。
+func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request,
 	kind string, payload any, epoch int64) {
+	cache := a.readCache
 	if cache == nil {
 		writeJSON(w, http.StatusOK, payload)
 		return
@@ -1021,24 +1022,22 @@ func (a *App) writeReadCache(w http.ResponseWriter, r *http.Request, cache *read
 // bumpReadCacheEpoch 在成功的非 GET /legacy/api/* 写请求后调用（由中间件统一做）：
 // 全局 epoch++ 让所有用户的旧条目立即失效，避免逐用户失效遗漏。
 func (a *App) bumpReadCacheEpoch() {
-	if a.homeCache != nil {
-		a.homeCache.BumpEpoch()
-	}
-	if a.cardsCache != nil {
-		a.cardsCache.BumpEpoch()
+	if a.readCache != nil {
+		a.readCache.BumpEpoch()
 	}
 }
 
 // cacheEpoch 返回当前世代号（构建前记录，回填时做 CAS）。
-func (a *App) cacheEpoch(cache *readCache) int64 {
-	if cache == nil {
+func (a *App) cacheEpoch() int64 {
+	if a.readCache == nil {
 		return -1
 	}
-	return cache.Epoch()
+	return a.readCache.Epoch()
 }
 
-// readCacheHit 在构建前查缓存（键含用户/viewRole/query）。
-func (a *App) readCacheHit(r *http.Request, cache *readCache, kind string) ([]byte, bool) {
+// readCacheHit 在构建前查共享缓存（键含 kind/用户/viewRole/query）。
+func (a *App) readCacheHit(r *http.Request, kind string) ([]byte, bool) {
+	cache := a.readCache
 	if cache == nil {
 		return nil, false
 	}

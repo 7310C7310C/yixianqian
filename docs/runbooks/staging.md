@@ -308,12 +308,12 @@ pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、
 ## 性能批次9：读缓存与边缘静态 gzip 变体（staging）
 
 - Go 侧 `/legacy/api/home`、`/legacy/api/cards` 10s 进程内缓存：`READ_CACHE_ENABLED`（默认 true）、
-  `READ_CACHE_TTL`（10s）、`READ_CACHE_ITEMS`（1024）、`READ_CACHE_BYTES`（32MiB，按字节 LRU + 键长计入），
+  `READ_CACHE_TTL`（10s）、`READ_CACHE_ITEMS`（1024）、`READ_CACHE_BYTES`（默认 32MiB、硬上限 clamp 64MiB；home+cards **共享同一份**预算，按字节 LRU + 键长计入），
   单条上限 256KiB；**ENABLED=false 或任一项为 0 → 完全关闭（零值 Config 也关闭，不回落默认）**。
 - 失效：任何**成功的非 GET/HEAD/OPTIONS** 请求后全局 `epoch++`（覆盖 `/legacy/api/*`、`/api/*`、`/admin/*`、`/media/*`），
   排除 `/static/`、`/healthz`、埋点（`/legacy/api/track*`、`/legacy/api/client-events`）；4xx/5xx 不 bump；
   构建期间若 epoch 变化则丢弃回填（CAS）。多实例需 pub/sub 传播 epoch（未实现）。
-- 响应头仍是 `no-store`；`/legacy/api/*` 实际只带 `Vary: Accept-Encoding`（gzip），不含 `Vary: Cookie`。
+- 响应头仍是 `no-store`；`/legacy/api/*` 的 `Vary` **实测为空**（不要声称有 `Vary: Cookie`/`Accept-Encoding`）。
 - **不做边缘 API 缓存**：曾评估在 server2 对 `/legacy/api/` 做 proxy_cache，但 key 若含 `$cookie_yxq_session`
   会把**明文 session token 落盘**（违反「session token 只存 hash」），key 不含会话又会跨用户串数据；
   方案已删除、未 apply。API 提速依赖应用内 10s 读缓存 + 上游 keepalive（目标 p95 ≤220ms）。

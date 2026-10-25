@@ -238,8 +238,12 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	} else {
 		cfg.ReadCacheBytes = v
 	}
-	if cfg.ReadCacheBytes < 0 || cfg.ReadCacheBytes > 512<<20 {
-		errs = append(errs, errors.New("config: READ_CACHE_BYTES must be between 0 and 512MiB"))
+	// 硬上限 64MiB：home+cards 共享这一份预算，配合 unit 768M 内存限制（含副本/GC 余量）。
+	if cfg.ReadCacheBytes > 64<<20 {
+		cfg.ReadCacheBytes = 64 << 20
+	}
+	if cfg.ReadCacheBytes < 0 {
+		errs = append(errs, errors.New("config: READ_CACHE_BYTES must not be negative"))
 	}
 	if v, err := parseInt64(getenv("MAX_CONCURRENT_HASHES"), defaultMaxHashes); err != nil {
 		errs = append(errs, fmt.Errorf("config: MAX_CONCURRENT_HASHES: %w", err))

@@ -63,9 +63,9 @@ type App struct {
 	// homeInflight/cardsInflight 合并同一用户同一查询的并发重复构建。
 	homeInflight  inflightGroup
 	cardsInflight inflightGroup
-	// homeCache/cardsCache 是批次9 的 10s 成功响应缓存（用户+query+viewRole）。
-	homeCache  *readCache
-	cardsCache *readCache
+	// readCache 是批次9 的 10s 成功响应缓存（home+cards **共享**同一实例与同一份
+	// 32MiB/1024 条总预算，避免两接口各自 32MiB）。
+	readCache *readCache
 }
 
 // New loads templates and constructs the application.
@@ -117,8 +117,7 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		db:                          database,
 		store:                       store,
 		thumbCache:                  thumbCache,
-		homeCache:                   newReadCache(cfg.ReadCacheEnabled, cfg.ReadCacheTTL, cfg.ReadCacheItems, cfg.ReadCacheBytes, 0),
-		cardsCache:                  newReadCache(cfg.ReadCacheEnabled, cfg.ReadCacheTTL, cfg.ReadCacheItems, cfg.ReadCacheBytes, 0),
+		readCache:                   newReadCacheFromConfig(cfg),
 		tpl:                         tpl,
 		log:                         logger,
 		csrf:                        auth.NewCSRF(cfg.CSRFKey(), 2*time.Hour),

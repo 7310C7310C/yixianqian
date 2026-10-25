@@ -1,10 +1,14 @@
 package httpserver
 
 import (
+	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/7310C7310C/yixianqian/internal/config"
 	"time"
 )
 
@@ -242,5 +246,124 @@ func TestReadCacheEpochWritePredicate(t *testing.T) {
 		if got := readCacheEpochWrite(r); got != tc.want {
 			t.Fatalf("%s %s: got %v want %v", tc.method, tc.path, got, tc.want)
 		}
+	}
+}
+
+// TestReadCacheConfigKillSwitch 走 config.Load → newReadCacheFromConfig（New 的构造路径），
+// 覆盖 ENABLED=false / 全 0 / 单项 0，零值不得回落默认。
+func TestReadCacheConfigKillSwitch(t *testing.T) {
+	// config.Load 需要最小必填 env；这里只验证 READ_CACHE_* 的语义。
+	t.Setenv("DATABASE_URL", "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	t.Setenv("SESSION_SECRET", "0123456789abcdef0123456789abcdef")
+	t.Setenv("CSRF_SECRET", "0123456789abcdef0123456789abcdef")
+	// 1) ENABLED=false
+	t.Setenv("READ_CACHE_ENABLED", "false")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if c := newReadCacheFromConfig(cfg); c != nil {
+		t.Fatal("READ_CACHE_ENABLED=false must disable cache")
+	}
+	os.Unsetenv("READ_CACHE_ENABLED")
+	// 2) 全 0
+	t.Setenv("READ_CACHE_TTL", "0s")
+	t.Setenv("READ_CACHE_ITEMS", "0")
+	t.Setenv("READ_CACHE_BYTES", "0")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if c := newReadCacheFromConfig(cfg); c != nil {
+		t.Fatal("all-zero must disable cache")
+	}
+	// 3) 单项 0（TTL）
+	t.Setenv("READ_CACHE_ITEMS", "1024")
+	t.Setenv("READ_CACHE_BYTES", "33554432")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if c := newReadCacheFromConfig(cfg); c != nil {
+		t.Fatal("TTL=0 must disable cache")
+	}
+	// 4) 未设置时默认开启，且字节上限被 clamp 到 64MiB
+	t.Setenv("READ_CACHE_TTL", "10s")
+	t.Setenv("READ_CACHE_BYTES", "1073741824") // 1GiB → clamp 64MiB
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	c := newReadCacheFromConfig(cfg)
+	if c == nil {
+		t.Fatal("default config must enable cache")
+	}
+	if c.maxBytes != 64<<20 {
+		t.Fatalf("maxBytes=%d, want clamp 64MiB", c.maxBytes)
+	}
+}
+
+func TestReadCacheEpochWritePredicateMedia(t *testing.T) {
+	for _, tc := range []struct {
+		method, path string
+		want         bool
+	}{
+		{"POST", "/media/abc", true},
+		{"DELETE", "/media/abc", true},
+		{"POST", "/api/profile/photo", true},
+		{"POST", "/admin/users/1/approve", true},
+		{"POST", "/legacy/api/praise", true},
+	} {
+		r := httptest.NewRequest(tc.method, tc.path, nil)
+		if got := readCacheEpochWrite(r); got != tc.want {
+			t.Fatalf("%s %s: got %v want %v", tc.method, tc.path, got, tc.want)
+		}
+	}
+}
+
+// TestReadCacheEpochMiddlewareStatus 验证中间件：<400 bump，>=400 不 bump，GET 不 bump。
+func TestReadCacheEpochMiddlewareStatus(t *testing.T) {
+	app := &App{readCache: newReadCache(true, time.Minute, 8, 1<<20, 0)}
+	cases := []struct {
+		method, path string
+		status       int
+		wantBump     bool
+	}{
+		{"POST", "/legacy/api/like", 200, true},
+		{"POST", "/admin/points/adjust", 303, true},
+		{"POST", "/api/profile/photo", 201, true},
+		{"POST", "/media/x", 500, false},
+		{"POST", "/legacy/api/like", 403, false},
+		{"GET", "/legacy/api/home", 200, false},
+		{"POST", "/legacy/api/client-events", 200, false},
+	}
+	for _, tc := range cases {
+		before := app.readCache.Epoch()
+		h := app.withReadCacheEpoch(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(tc.status)
+		}))
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(tc.method, tc.path, nil))
+		bumped := app.readCache.Epoch() > before
+		if bumped != tc.wantBump {
+			t.Fatalf("%s %s %d: bump=%v want %v", tc.method, tc.path, tc.status, bumped, tc.wantBump)
+		}
+	}
+}
+
+// TestReadCacheSharedBudgetHomeAndCards 证明 home+cards 共用同一份字节预算：
+// 两接口写入合计不得超过上限（不是各自一份）。
+func TestReadCacheSharedBudgetHomeAndCards(t *testing.T) {
+	const cap = 4096
+	c := newReadCache(true, time.Minute, 1024, cap, 0)
+	body := make([]byte, 512)
+	for i := 0; i < 200; i++ {
+		kind := "home"
+		if i%2 == 0 {
+			kind = "cards"
+		}
+		c.Put(testParts(int64(i%16), kind, ""), body)
+	}
+	if c.Bytes() > cap {
+		t.Fatalf("shared bytes=%d exceeds cap %d", c.Bytes(), cap)
 	}
 }
