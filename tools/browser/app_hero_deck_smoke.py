@@ -263,7 +263,9 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
           lcpClass: window.__b5.lcpClass,
           longtasks: window.__b5.longtasks.length,
           cards: document.querySelectorAll('.swipe-card').length,
-          photos: document.querySelectorAll('.card-photo-item').length,
+          photos: [...document.querySelectorAll('.card-photo-item')]
+                    .filter((el) => el.getAttribute('src')).length,
+          photoNodes: document.querySelectorAll('.card-photo-item').length,
           dom: document.querySelectorAll('*').length,
           mount: (performance.getEntriesByName('yxq-mount')[0] || {}).duration || null,
           boot: (performance.getEntriesByName('yxq-boot')[0] || {}).duration || null,
@@ -279,8 +281,13 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
             )
         if stats["cards"] != 1:
             raise SmokeFailure(f"{tag}: 牌堆应只挂当前 1 张，实际 {stats['cards']}")
+        # 卡片模板按 v-for 渲染全部照片节点（滑动切换用），但只有当前与下一张应当带 src
+        # （批次4/5 的解码预算）。旧断言数的是节点总数，卡有 >2 张照片时必然假红
+        # （批次7 集成排查：staging 账号首卡 9 张照片，节点 9 / 带 src 2）。
         if stats["photos"] > 2:
-            raise SmokeFailure(f"{tag}: 当前卡照片 DOM 超过 2 张（{stats['photos']}）")
+            raise SmokeFailure(
+                f"{tag}: 当前卡带 src 的照片超过 2 张（{stats['photos']}，节点共 {stats.get('photoNodes')}）"
+            )
         if stats["dom"] > 260:
             raise SmokeFailure(f"{tag}: DOM 节点 {stats['dom']} 超过 260")
         if stats["mount"] is None:

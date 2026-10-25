@@ -108,10 +108,18 @@ def psql(sql: str) -> str:
 
 
 def insert_notification(user_legacy_id: str, title: str) -> None:
+    """插入测试通知并显式 pg_notify。
+
+    批次7 后端把 SSE 从「每 4s 查询」改成 `pg_notify('yxq_notify', user_id)` 唤醒
+    + 15/30s 兜底 ticker；psql 直接 INSERT 不会再被 4s 轮询捡到，必须自己发一次
+    notify，否则这条「页面不刷新就出红点」的断言会等不到（实测 >10s 才靠 ticker）。
+    """
     body = "页面无需刷新应看到红点"
     psql(
         "INSERT INTO notifications (user_id, kind, title, body) "
         f"SELECT id, 'system', '{title}', '{body}' FROM users "
+        f"WHERE legacy_user_id = '{user_legacy_id}';"
+        "SELECT pg_notify('yxq_notify', id::text) FROM users "
         f"WHERE legacy_user_id = '{user_legacy_id}';"
     )
 
@@ -228,11 +236,18 @@ def assert_no_console_errors(errors: list[dict[str, str]], context: str) -> None
 
 
 def assert_no_login_flash(page, context: str) -> None:
+    """刷新后不得出现**可见**的登录页。
+
+    注意：`#app` 里是壳模板，Vue 挂载前 `v-cloak` 会把整棵树隐藏，但 DOM 里
+    仍然有 `<div v-if="loggingIn" class="login-page">`。用 count() 判会把它当成
+    「出现登录页」——批次7 集成排查确认这是假红（挂载后 159ms 内消失，且
+    `window.__YXQ_AUTHENTICATED__ === true`）。所以只看可见性。
+    """
     body = page.locator("body").inner_text()
     if "正在登录" in body:
         raise SmokeFailure(f"{context}: 页面出现「正在登录」")
-    if page.locator(".login-page").count():
-        raise SmokeFailure(f"{context}: 出现 SPA 登录页 .login-page")
+    if page.locator(".login-page:visible").count():
+        raise SmokeFailure(f"{context}: 出现可见的 SPA 登录页 .login-page")
 
 
 def wait_frame_path(page, base_url: str, path_prefix: str, timeout: int = 15000) -> None:
@@ -404,7 +419,8 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         dismiss_guides(page)
 
         # 3. 登录后未读红点（页面已存在两条测试通知）
-        badge(page).wait_for(state="visible", timeout=10000)
+        # 冗余等待：即使 notify 丢失，客户端 12s 轮询也能补上。
+        badge(page).wait_for(state="visible", timeout=20000)
         unread = badge(page).inner_text().strip()
         if not unread.isdigit() or int(unread) < 2:
             raise SmokeFailure(f"{width}: 未读 badge={unread!r}，期望至少 2")

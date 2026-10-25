@@ -697,29 +697,18 @@ const yxqApp = createApp({
     const loadedPhotoSet = new Set();
     // 人脸对准：默认居中时人脸完整可见则不动；不完整才上下平移最小量（顶对齐/底对齐），不做居中
     const photoPositions = ref([]);
-    function recalcPhotoPosition(e, i, attempt) {
-      attempt = attempt || 0;
+    // 人脸裁切纯计算：给定 faces 项与容器/原图尺寸，返回 objectPosition 值。
+    // recalcPhotoPosition（真实卡）与壳内 hero 共用同一公式，避免两处各写一遍而漂移。
+    function computeFaceCrop(f, cw, ch, iw, ih) {
+      if (!f || !f.c || !cw || !ch || !iw || !ih) return '';
       try {
-        const f = (currentCard.value.faces || [])[i];
-        const img = e.target;
-        if (!f || !f.c || !img || !img.naturalWidth) return;
-        const wrap = img.closest('.card-photo-wrap');
-        if (!wrap) return;
-        const cw = wrap.clientWidth, ch = wrap.clientHeight;
-        const iw = img.naturalWidth, ih = img.naturalHeight;
-        if (!cw || !ch) {
-          // 真机缓存图 @load 可能早于首帧布局，容器尺寸未就绪 → 稍后重试
-          if (attempt < 8) setTimeout(() => recalcPhotoPosition(e, i, attempt + 1), 120);
-          return;
-        }
-        if (!iw || !ih) return;
         const scale = Math.max(cw / iw, ch / ih);
         const dh = ih * scale;
         // 黑边：上下无用区比例，等效到「内容区坐标系」内计算，显示时把黑边排除出可视区
         const tb = (f.tb && f.tb.length === 2) ? f.tb : [0, 0];
         const ct = tb[0], cb = tb[1];
         const cr = 1 - ct - cb;             // 内容区占原图高比例
-        if (cr < 0.55) return;              // 有效内容过少（异常），放弃
+        if (cr < 0.55) return '';           // 有效内容过少（异常），放弃
         const eh = dh * cr;                 // 内容区显示高度
         const cy_e = (f.c[1] - ct) / cr;    // 脸中心在内容区坐标
         const fh = (f.box && f.box[1]) ? f.box[1] : 0;
@@ -742,9 +731,30 @@ const yxqApp = createApp({
         let off = off_e - ct * dh;          // 换算回原图偏移
         off = Math.max(ch - dh, Math.min(0, off));
         const offDef = (ch - dh) / 2;
-        if (Math.abs(off - offDef) < 1) return; // 几乎没动，保持默认
+        if (Math.abs(off - offDef) < 1) return ''; // 几乎没动，保持默认
+        return '50% ' + Math.round(off) + 'px';
+      } catch (_) {
+        return '';
+      }
+    }
+    function recalcPhotoPosition(e, i, attempt) {
+      attempt = attempt || 0;
+      try {
+        const f = (currentCard.value.faces || [])[i];
+        const img = e.target;
+        if (!f || !f.c || !img || !img.naturalWidth) return;
+        const wrap = img.closest('.card-photo-wrap');
+        if (!wrap) return;
+        const cw = wrap.clientWidth, ch = wrap.clientHeight;
+        if (!cw || !ch) {
+          // 真机缓存图 @load 可能早于首帧布局，容器尺寸未就绪 → 稍后重试
+          if (attempt < 8) setTimeout(() => recalcPhotoPosition(e, i, attempt + 1), 120);
+          return;
+        }
+        const pos = computeFaceCrop(f, cw, ch, img.naturalWidth, img.naturalHeight);
+        if (!pos) return;
         const arr = photoPositions.value.slice();
-        arr[i] = '50% ' + Math.round(off) + 'px';
+        arr[i] = pos;
         photoPositions.value = arr;
       } catch (_) {}
     }
@@ -5134,9 +5144,20 @@ const yxqApp = createApp({
         }
         const img = document.querySelector('.swipe-card .card-photo-item');
         if (img && img.complete && img.naturalWidth) {
-          // 把真实卡的 object-position（人脸裁切）复制给 hero，避免淡出瞬间垂直跳。
+          // hero 的裁切要跟真实卡一致，避免淡出瞬间垂直跳。
+          // 不能只复制真实卡的 computed style：真实卡的位置由 @load 时的 recalcPhotoPosition
+          // 写入，首图可能先于 faces/布局就绪，命中「几乎没动」分支或稍后才重算——
+          // hero 若那一刻复制就会停在默认 50% 0（实测 staging 冷启 +2.4s 才出现人脸裁切，
+          // hero 已在 3.1s 被移除）。这里用同一个 computeFaceCrop 直接按 faces[0] 算，
+          // 真实卡稍后也算出同一个值；两者公式一致，淡出前后不会跳。
           try {
-            const pos = getComputedStyle(img).objectPosition;
+            const heroImg = document.querySelector('#boot-skeleton .boot-photo');
+            const heroWrap = heroImg && heroImg.closest('.card-photo-wrap');
+            const faces = currentCard.value.faces || [];
+            const pos = heroImg && heroWrap
+              ? computeFaceCrop(faces[0], heroWrap.clientWidth, heroWrap.clientHeight,
+                                heroImg.naturalWidth, heroImg.naturalHeight)
+              : '';
             if (pos && window.__YXQ_HERO__.setObjectPosition) window.__YXQ_HERO__.setObjectPosition(pos);
           } catch (_) {}
           // 等首屏长任务结束 + 至少一帧绘制；见 dismissHeroAfterPaint 注释。
@@ -5158,6 +5179,20 @@ const yxqApp = createApp({
       if (idx !== bootHeroAnchor.index || start !== bootHeroAnchor.start) dismissBootHero('card-changed');
     });
     watch([bootError, gateMessage], ([err, gate]) => { if (err || gate) dismissBootHero('gate'); });
+    // 首卡人脸裁切（photoPositions[0]）可能在首图 @load 之后才算出（容器尺寸/faces 数据
+    // 未就绪会重试），而 settleBootHero 只在 img.complete 时复制一次——那样 hero 会停在
+    // 默认 50% 0，淡出瞬间真实卡却已上移，出现垂直跳变（批次7 集成排查发现）。
+    // 这里在裁切值变化时持续同步给还活着的 hero（dismissed 后 setObjectPosition 自动 no-op）。
+    watch(photoPositions, (arr) => {
+      if (page.value !== 'cards') return;
+      const pos = arr && arr[0];
+      if (!pos) return;
+      try {
+        if (window.__YXQ_HERO__ && window.__YXQ_HERO__.setObjectPosition) {
+          window.__YXQ_HERO__.setObjectPosition(pos);
+        }
+      } catch (_) {}
+    }, { deep: true });
 
     onMounted(() => {
       window.__YXQ_APP_MOUNTED__ = true;
