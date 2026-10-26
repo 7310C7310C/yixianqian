@@ -344,11 +344,16 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ### 性能批次10 部署快照（2026-10-26）
 
+- **已部署 staging**：代码 HEAD `9bc7888`，`/healthz=staging-9bc7888`；migration max=10/10，四索引存在；
+  env 未变更（sha256 `e533a86b…`）；`server.prev=staging-e561949`。
 - 首次部署 `staging-3cf68c5` 后发现 `assetVersion` 仍为 12，边缘 immutable 缓存继续返回旧
-  `app.render.js`/`pages/*.render.js`（含「加载中」文案）；修正为 **13**（含 admin CSS @import），
-  提交 `2b61315` 后重新部署，`?v=13` 强制新缓存键；静态资源命中新 cache key 后 tab 文案/裁切才生效。迁移 0010 四索引、`server.prev=staging-30e4b96`。
+  `app.render.js`/`pages/*.render.js`；修正为 **13**（含 admin CSS @import）后重新部署，`?v=13` 强制新缓存键。
+- 追加修复：消息 tab likes chunk 从「LCP 后」改为「挂载后优先预取」，staging 首次点消息 **1183ms**（其余 919–1140ms），
+  `加载中` 0、CLS 0；LCP edge N=10 冷 1802ms（P95 2064）/热 772ms（P95 1244），bytes 315,567/19。
+- 部署后 7 smoke + tab + 授权矩阵 16/16 PASS；staging 真实共享 media：B/C 共享、viewer 只 like C → B public 空、
+  私有照片按 C 关系 200、候选卡图 200；卡图 naturalWidth>0。
 
-### 性能批次10（2026-10-26，本地实现，未 push / 未部署）
+### 性能批次10（2026-10-26，已部署 staging-9bc7888）
 
 - **1B 渐进启动**：壳移除三个主脚本的静态 `defer` 与全部 script/style preload；新增 loader 在首卡 hero `load+decode` 并提交一帧后，按 `vue → app.render → app.min` 顺序注入执行（硬上限 2.5s；无 hero 600ms 后启动）。主脚本不 preload 是实测取舍：1.6Mbps 下 preload 与首图抢带宽，冷 LCP 反而高约 350ms；loader 在 hero 绘制后立即开始下载，`app_start` 与带 preload 版本基本一致。hero 在首帧按 bootstrap faces 套用与 app.js `computeFaceCrop` 相同公式，挂载后无裁切跳动；启动前点击只记 pending、不重放；`loadHome` 4s 兜底与管理台 iframe 不变；Vue/Vant/app.min 缺失均有可见错误页。
 - **2A 照片授权**：`/cards/photo/{id}` 与 `/profile/photo/{id}` 共用默认拒绝策略，授权按画廊主人 `profile_photos.user_id`（共享 media 的 `media.user_id` 仅取对象）：本人、任一管理员角色、**任一方向的有效喜欢（含互喜）**、未取消的同活动报名（覆盖同组/同轮）、**任一方向消息的对手方**放行；牌堆候选由 cards/home 下发时按目标用户登记 per-viewer 15 分钟 grant（单 viewer ≤2000 目标、全局 ≤2000 viewer，单一有序集合 15m TTL + viewer LRU fail-closed）；匿名 401、无权/不存在 404、禁用账号 403。公开资料页仅按 viewer 与目标本人的关系（本人/grant/CanViewGallery(target)）返回照片 URL，不复用 media 级关系，否则空数组。`/admin` 受权媒体串流不变。
