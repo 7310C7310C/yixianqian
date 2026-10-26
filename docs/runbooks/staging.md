@@ -98,6 +98,12 @@ gofmt/vet → 构建 4 个 binary（`version=staging-<short>`）→ 备份 `serv
   测试可设 `YXQ_REQUIRE_REVIEW=0`。安装：备份旧版 → `install -m 755` → `bash -n` → `--dry-run`。
 - **静态资源版本门禁**：CI lint-build 用 push before / PR base 覆盖多提交范围运行
   `tools/check_asset_version.py`；`web/static/**` 有变更但 `assetVersion` 未 bump 即红。
+- **性能护栏门禁**：CI lint-build 跑 `make perf-budget`（首载 gzip 预算 + 19 项 nginx
+  keepalive/静态缓存/gzip/TLS/SSE/HSTS 断言）；`prepush` 跑 `make perf-guard-test`，
+  `make ci` 由 `test-migration` 的 discover 统一跑 24 个自测（不重复调用 target）。
+  改 `deploy/nginx/**` 后先在目标机 `nginx -t` 并备份，再按本 runbook apply；**不得给
+  `/legacy/api` 加边缘 proxy_cache**，也不得让 `proxy_cache_key` 含 `$cookie_`。热路径
+  改动须按 `AGENTS.md`「性能护栏」附 `make perf-bench` / `make perf-lcp` 前后数字。
 - 失败退避：同一提交失败后 15 分钟内不重试（`/opt/yixianqian-next/autodeploy.failed`），
   `--force` 可立即重试。
 - 日志：`/var/log/yxq-autodeploy.log`（logrotate 每日或 10MB 轮转；脚本内置 20MB 自截断兜底）。

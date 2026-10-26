@@ -54,6 +54,10 @@ func (a *App) handleUploadForm(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/?uploaded=1", http.StatusSeeOther)
 }
 
+// handleUploadAPI handles JSON media uploads.
+//
+// 性能护栏（AGENTS.md「性能护栏」）：媒体上传/串流是热路径；缩略图磁盘缓存、
+// ETag/304 与授权先于缓存都是首屏与重复查看的约束。改动必须附 make perf-bench 前后数字。
 func (a *App) handleUploadAPI(w http.ResponseWriter, r *http.Request) {
 	user, ok := a.requireUserAPI(w, r)
 	if !ok {

@@ -281,6 +281,17 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   admin API **225/242ms**（均 ≤400ms 目标）。无需 nginx 改动。
 - 修 `app_integration_smoke`：无 `PSQL_CMD` 时对 badge/SSE 用例打 NOTE 跳过而不是假红。
 
+### 性能护栏（2026-10-26，Reviewer PASS，待 push/部署）
+
+- `AGENTS.md` 新增「性能护栏」：首载 gzip 预算表、禁止移除清单（边缘 keepalive/静态缓存/gzip 变体/TLS ticket、
+  SSE buffering 例外、壳拆分/hero 先绘制/Vant 子集、媒体缓存/ETag、10s 读缓存+epoch、关键索引）、热路径变更流程与交接检查表。
+- 新增 `tools/perf/`：`check_budget.py` + `budgets.json`（8 项首载 gzip 预算，当前基线 +10%；壳基线用 batch10 staging-0f14252 `/app` 实测 27,978B 校准）、
+  `check_nginx_guard.py`（19 项 keepalive/cache/gzip/TLS/SSE/HSTS/无 API 缓存断言）、`bench.py`、`lcp.py`、`protocol.md`。
+- `make perf-budget`（静态预算 + nginx 断言）与 `make perf-guard-test`（24 个自测）接入 `prepush`，并由 `make ci` 的 Python 测试发现；
+  CI `lint-build` 直接跑 `make perf-budget`；部署仍不依赖 Node。
+- 本批只动 docs/tools/Makefile/CI/Go 注释与 nginx 注释：无运行时行为变更、无 `web/static/**` 生成物变更，
+  `assetVersion` 保持 15；Reviewer 已 PASS（`6b1fb23..f38d874`），待 push/autodeploy。证据见 `.team/perf/guardrails-report.md`。
+
 ### 人脸与数据
 
 - 人脸检测：本地 YuNet 优先、Haar 回退；上传后检测、注册后补检测、`has_face` 门禁；观察员账号豁免 `has_face`（身份证不豁免）。

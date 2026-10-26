@@ -293,14 +293,18 @@ sources: []
 | `all` | `ci` |
 | `asset-version-check` | — |
 | `build` | — |
-| `ci` | `fmt-check static-gzip-check spa-check docs-check asset-version-check vet test test-migration build` |
+| `ci` | `fmt-check static-gzip-check spa-check docs-check asset-version-check perf-budget vet test test-migration build` |
 | `docs-check` | — |
 | `docs-check-stale` | — |
 | `docs-gen` | — |
 | `fmt` | — |
 | `fmt-check` | — |
 | `generate` | — |
-| `prepush` | `fmt-check static-gzip-check spa-check docs-check asset-version-check vet build` |
+| `perf-bench` | — |
+| `perf-budget` | — |
+| `perf-guard-test` | — |
+| `perf-lcp` | — |
+| `prepush` | `fmt-check static-gzip-check spa-check docs-check asset-version-check perf-budget perf-guard-test vet build` |
 | `run` | — |
 | `seed` | — |
 | `spa-check` | — |
@@ -342,7 +346,7 @@ sources: []
 
 | 文档 | sources |
 |---|---|
-| `AGENTS.md` | `Makefile`, `.github/workflows/**` |
+| `AGENTS.md` | `Makefile`, `.github/workflows/**`, `tools/perf/**`, `deploy/nginx/**`, `internal/httpserver/middleware.go`, `internal/httpserver/handlers_media.go`, `internal/httpserver/media_serve.go`, `internal/httpserver/legacy_ui.go`, `internal/httpserver/readcache.go`, `internal/httpserver/app.go`, `tools/test_perf_guardrails.py` |
 | `README.md` | `go.mod` |
 | `docs/DECISIONS.md` | — |
 | `docs/MIGRATION.md` | `migrations/**`, `tools/migrate_testapp.py` |

@@ -21,6 +21,9 @@ import (
 //   - READ_CACHE_ENABLED=false 或 TTL/ITEMS/BYTES 任一为 0 → 完全关闭（kill switch，
 //     不回落默认值；零值 Config 同样关闭）；READ_CACHE_BYTES 上限 clamp 64MiB；
 //   - 仅单实例语义：多实例需 pub/sub 传播 epoch（文档记录，不在本批）。
+//
+// 性能护栏（AGENTS.md「性能护栏」）：10s TTL + 全局 epoch 是 home/cards 延迟的
+// 核心约束；不得把键改成跨用户、绕过 bump 或缓存错误响应。
 type readCache struct {
 	ttl       time.Duration
 	maxItems  int

@@ -6,12 +6,22 @@ BASE_URL ?=
 SESSION_COOKIE ?=
 ACTIVITY_ID ?= 1
 DOCS_BASE ?= origin/main
+PERF_PYTHON ?= python3
+PERF_SOURCE ?= edge
+PERF_N ?= 10
+PERF_WARMUP ?= 3
+PERF_COOKIE_ENV ?= YXQ_SESSION_COOKIE
+PERF_COOKIE_FILE ?=
+PERF_BENCH_OUT ?= /tmp/yxq-perf/bench.json
+PERF_LCP_RUNS ?= 3
+PERF_LCP_OUT ?= /tmp/yxq-perf/lcp.json
 
 LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSION)
 
 .PHONY: all tidy generate fmt fmt-check vet test test-race test-integration test-migration \
         test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale prepush ci \
-        static-gzip static-gzip-check spa-check spa-check-node
+        static-gzip static-gzip-check spa-check spa-check-node \
+        perf-budget perf-guard-test perf-bench perf-lcp
 
 all: ci
 
@@ -101,6 +111,27 @@ token:
 	@test -n "$(USER_ID)" || (echo "usage: make token USER_ID=U-0006"; exit 1)
 	$(GO) run ./cmd/token -legacy-user-id=$(USER_ID)
 
+# 性能护栏：静态 gzip 预算 + nginx 关键指令断言；不依赖 Go/Node/网络。
+perf-budget:
+	$(PERF_PYTHON) tools/perf/check_budget.py
+	$(PERF_PYTHON) tools/perf/check_nginx_guard.py
+
+# 护栏自测：合成超限/删除 nginx 指令必须变红。
+perf-guard-test:
+	$(PERF_PYTHON) -m unittest discover -s tools -p 'test_perf_guardrails.py' -v
+
+# HTTP 延迟基准（手动；edge 在 server2、origin/app 在 server1 跑）。cookie 只从 env/文件读，不打印。
+perf-bench:
+	$(PERF_PYTHON) tools/perf/bench.py --source "$(PERF_SOURCE)" --n "$(PERF_N)" --warmup "$(PERF_WARMUP)" \
+		$(if $(BASE_URL),--base "$(BASE_URL)",) \
+		$(if $(PERF_COOKIE_FILE),--cookie-file "$(PERF_COOKIE_FILE)",) \
+		$(if $(PERF_COOKIE_ENV),--cookie-env "$(PERF_COOKIE_ENV)",) \
+		--out "$(PERF_BENCH_OUT)"
+
+# 浏览器 LCP 慢机档（手动；需要 Playwright + BASE_URL/SESSION_COOKIE）。
+perf-lcp:
+	$(PERF_PYTHON) tools/perf/lcp.py --runs "$(PERF_LCP_RUNS)" --out "$(PERF_LCP_OUT)"
+
 # 快速本地门禁：push 前必跑；全量仍用 make ci（多 test/test-migration）
 asset-version-check:
 	@if [ -n "$$ASSET_VERSION_BASE" ]; then \
@@ -109,6 +140,7 @@ asset-version-check:
 		python3 tools/check_asset_version.py; \
 	fi
 
-prepush: fmt-check static-gzip-check spa-check docs-check asset-version-check vet build
+prepush: fmt-check static-gzip-check spa-check docs-check asset-version-check perf-budget perf-guard-test vet build
 
-ci: fmt-check static-gzip-check spa-check docs-check asset-version-check vet test test-migration build
+# perf-guard-test 由 test-migration 的 discover 统一执行，ci 不重复显式跑。
+ci: fmt-check static-gzip-check spa-check docs-check asset-version-check perf-budget vet test test-migration build

@@ -103,6 +103,8 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	if database != nil {
 		notifier = db.NewNotificationHub(context.Background(), database.DSN(), logger)
 	}
+	// 性能护栏（AGENTS.md「性能护栏」）：thumbCache 与 readCache 都是有界优化，
+	// 初始化失败必须降级而不是拒绝启动；改动须保留预算/epoch 语义并跑 perf-bench。
 	thumbCache, cacheErr := media.NewThumbCache(cfg.MediaCacheDir, cfg.MediaCacheBytes)
 	if cacheErr != nil {
 		// 批次9：缓存目录不可写/不存在时降级关闭，不得拒绝启动（批次8 曾因此

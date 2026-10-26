@@ -65,6 +65,9 @@ func loadLegacyCSS() ([]byte, error) {
 
 // serveLegacyApp returns the v1 SPA shell with the home bootstrap inlined.
 //
+// 性能护栏（AGENTS.md「性能护栏」）：壳必须保持“外置 app.min/app.render + 内联
+// critical CSS + hero 先绘制”的拆分；不要恢复大段内联资源或静态 defer 主脚本。
+//
 // The shell is private, no-cache: it may be stored by the browser and reused
 // after a 304, so the embedded payload is limited to non-sensitive home data
 // (contact details, ID documents stay behind the no-store profile API). The

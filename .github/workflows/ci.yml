@@ -46,6 +46,8 @@ jobs:
           python3 tools/check_asset_version.py --base "$base"
       - name: 文档一致性
         run: python3 tools/check_docs.py --strict
+      - name: 性能预算与 nginx 护栏
+        run: make perf-budget
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'

@@ -7,6 +7,15 @@ last_verified: 2026-10-26
 sources:
   - Makefile
   - .github/workflows/**
+  - tools/perf/**
+  - deploy/nginx/**
+  - internal/httpserver/middleware.go
+  - internal/httpserver/handlers_media.go
+  - internal/httpserver/media_serve.go
+  - internal/httpserver/legacy_ui.go
+  - internal/httpserver/readcache.go
+  - internal/httpserver/app.go
+  - tools/test_perf_guardrails.py
 -->
 
 > **本文件是项目规则的唯一入口。** 开工先读本文件；当前状态看 `docs/STATUS.md`；
@@ -106,7 +115,7 @@ sources:
 
 通道分级（唯一差别在第 4 步；第 5–7 步完全相同）：
 
-- **快速通道（低风险）**：纯文案/样式/排序/静态资源，且不涉及 auth、权限、数据、API、schema、支付 → 自测 + 截图/浏览器 smoke，可免独立 Reviewer 直接 push；须在 `.team/decisions.md` 记录范围、风险与批准（PM 2026-10-24 授权）。目标 ≤10 分钟（开工→上线）。
+- **快速通道（低风险）**：纯文案/样式/排序/静态资源，且不涉及 auth、权限、数据、API、schema、支付 → 自测 + 截图/浏览器 smoke，可免独立 Reviewer 直接 push；须在 `.team/decisions.md` 记录范围、风险与批准（PM 2026-10-24 授权）。目标 ≤10 分钟（开工→上线）。**快速通道不适用于热路径与静态生成物**：命中 `web/static/legacy/**`、`deploy/nginx/**`、`internal/httpserver/{middleware,handlers_media,media_serve,legacy_ui,readcache,app}.go`、DB 热查询或 `migrations/**` 热索引时，仍须按 `AGENTS.md`「性能护栏」跑 `make perf-budget` 与 `make perf-bench` 前后对比并附数字；快速通道只豁免独立 Reviewer，不豁免这些门禁与证据。
 - **常规通道**：行为、逻辑、接口、模板结构变更 → 独立 Reviewer PASS 后 push。
 - **高风险**：安全/支付/数据/权限/凭据 → Reviewer + Auditor/security gate，PASS 后 push。
 
@@ -208,3 +217,102 @@ CI 以当前 HEAD 的 push run 为准；红灯先看 `gh run view <id> --log-fai
   管理台只经站内 iframe `/admin?embed=1` 使用，smoke 断言顶层 303（`Location: /?admin=1`）与 iframe SSR。
 - ID 门禁 P0 与已知缺口以 `docs/STATUS.md` 为准。
 - v1 旧部署 skill 不适用；详细步骤见 `docs/runbooks/staging.md`。
+
+## 性能护栏（2026-10-26）
+
+这些性能来自一组“看起来可删、删了就退化”的配置与构建约束。改热路径前先读本节；
+`make perf-budget`（静态预算 + nginx 断言）已接入 `prepush`、`make ci` 与 CI `lint-build`；
+`make perf-guard-test`（自测）在 `prepush` 运行，并由 `make ci` 的 Python 测试发现统一覆盖。
+**生产未授权；护栏只防回归，不改变运行时行为。**
+
+### 静态首载预算（gzip，当前基线 + 10%）
+
+| 指标 | 基线 B | 预算 B | 说明 |
+|---|---:|---:|---|
+| SPA 壳（含 critical CSS + bootstrap 余量） | 27,978 | 30,776 | 静态壳 24,669B + 3,309B bootstrap 余量；按 batch10 staging-0f14252 `/app` 实测 27,978B 校准 |
+| `app.min.js` | 47,960 | 52,756 | 主业务包，禁止重新内联进壳 |
+| `app.render.js`（根 + cards） | 25,034 | 27,538 | 预编译根模板；改模板必须重建 |
+| Vant 子集 JS / CSS | 23,882 / 37,664 | 26,271 / 41,431 | 不得退回 `vant.full.min.*` |
+| critical CSS | 7,641 | 8,406 | 壳内联首屏子集 |
+| 页面 chunks 合计 | 43,521 | 47,874 | `pages/*.render.js` 懒加载；不得全部内联 |
+| 首载静态估算 | 242,310 | 266,541 | 不含 API 与用户照片；critical 只计一次 |
+
+超限即红；预算只能手工修改 `tools/perf/budgets.json` 并走 Review，**没有自动 `--update`**。
+在 commit/评审里说明原因，让 Reviewer 看 baseline/budget 的 diff（budget 不得超过 baseline×1.10）。
+数据在 `tools/perf/budgets.json`，门禁是 `tools/perf/check_budget.py`，口径见
+[`tools/perf/protocol.md`](tools/perf/protocol.md)。
+
+### 禁止移除清单（动这些必须按“热路径流程”给前后数字）
+
+- **边缘 keepalive**：server2 `upstream yxq_origin { keepalive 64; keepalive_timeout 60s; }`、
+  `proxy_http_version 1.1`、普通/SSE 请求 `Connection $yxq_conn`、`proxy_ssl_session_reuse on`；
+  server1 `upstream yxq_app { keepalive 32; }`、`proxy_set_header Connection ""`、
+  `proxy_max_temp_file_size 0`。删除会回到每请求跨洋重连（≈470–580ms 地板）。
+- **静态边缘缓存**：`/static/` 的 `proxy_cache yxqstatic`、`proxy_cache_key` 含
+  `$yxq_static_enc`（gzip/identity 分键）、`proxy_cache_lock/use_stale`、`X-Cache-Status`。
+  **不得给 `/legacy/api` 加边缘 proxy_cache**：key 含明文 session 会落盘，不含会话会串用户；
+  `proxy_cache_key` 里任何 `$cookie_` 都是安全违规。API 提速靠应用内 10s 读缓存 + keepalive。
+- **预压缩与 gzip 变体**：`web/static/**` 的 `.gz` 由 `make static-gzip` 生成并随 `go:embed`
+  发布；Go 按 `Accept-Encoding` 返回预压缩字节 + ETag；边缘 `gzip on` 且 `gzip_types`
+  必须含 `text/javascript`。改静态源文件后不重生成 `.gz` 会被 `static-gzip-check` 拒绝。
+- **TLS 恢复**：边缘 server 与 `/static` 上游的 `ssl_session_cache`、`ssl_session_tickets on`、
+  `proxy_ssl_session_reuse on`；server1 的 `yxq_app` upstream 是 `http://`，不适用
+  `proxy_ssl_session_reuse`。TLS1.3 恢复依赖 ticket，关闭等于每次新连接完整握手。
+- **SSE buffering 例外**：只有 `location = /legacy/api/notifications/stream` 允许
+  `proxy_buffering off` + `proxy_cache off` + 3600s 读超时；其余 location 不得关闭 buffering。
+- **壳拆分与 hero 先绘制**：壳只保留启动旗标/版本/单块 ≤5KB 内联脚本（当前最大 4,429B）+ critical CSS；
+  `app.css`/`app.min.js`/`app.render.js` 外置；主脚本按 `vue → app.render → app.min`
+  在首卡 hero `load+decode` 后注入（`yxq-hero-ready`/`yxq-app-start` 标记）。
+  不要把脚本改回静态 `defer`，也不要把大段 CSS/JS 内联回壳。
+- **Vant 子集与页面 chunks**：`lib/vant.subset.min.{js,css}` 由 `tools/spa_vendor` 生成；
+  `app.render.js` + `pages/*.render.js` 由 `tools/spa_precompile` 生成；manifest/sha 门禁
+  （`make spa-check`）不得绕过。不要用 `vant.full.min.*` 或把 26 个页面模板塞回根包。
+- **媒体**：缩略图有界磁盘缓存（`MEDIA_CACHE_BYTES`，默认 256MiB，授权先于缓存）；
+  原图/缩略图都带 ETag + `If-None-Match` 304 + `private, max-age`。不得移除缓存或 ETag。
+- **10s 读缓存 + epoch**：`/legacy/api/home`、`/legacy/api/cards` 共享进程内缓存
+  （TTL 10s、总 32MiB、单条 256KiB、字节 LRU）；任何成功的非 GET/HEAD/OPTIONS 请求
+  （排除 `/static/`、`/healthz`、`track*`、`client-events`）后全局 epoch++。
+  不得绕过 epoch、扩大成跨用户键或把错误响应写进缓存；多实例需先做 epoch 的 pub/sub。
+- **关键索引与查询形状**：`0008`（likes/notifications/users 卡池）、`0009`（praises/messages/
+  signups/notifications）、`0010`（照片授权四索引）只增不改；新增/改 home、cards、profile、
+  notifications、照片授权等热查询必须附 `EXPLAIN (ANALYZE, BUFFERS)`，不得静默 drop 索引。
+
+### 热路径变更流程
+
+命中以下任一路径即视为热路径：`web/static/legacy/**`、`deploy/nginx/**`、
+`internal/httpserver/{middleware,handlers_media,media_serve,legacy_ui,readcache,app}.go`、
+`internal/db/**` 的 home/cards/profile/notifications/照片授权查询、`migrations/**` 热索引。
+
+1. 改前在参考主机跑一次基线：`make perf-bench`（同 source、N≥10、warmup≥3；主机/口径见
+   [`tools/perf/protocol.md`](tools/perf/protocol.md)）；
+   浏览器/首屏改动再加 `make perf-lcp`（慢机 CPU×4/1.6Mbps/150ms，冷/热各 N≥3，建议 5）。
+2. 改后同机同参数复跑；报告附 p50/p95、N、主机、时间，不只贴“变快了”。
+3. 判定：p95 不得比基线差 >10%；超过必须解释根因或回退。边缘静态命中目标 p95 ≤50ms；
+   API/首屏目标以 `docs/STATUS.md` 与 `docs/product-spec.md` 的 PM 口径为准，不得自行放宽验收。
+4. 改了静态源文件：`make static-gzip`（再跑 `-check`）并按规则 bump `assetVersion`；
+   改了 Node 生成物：`make spa-check-node` 后提交生成物，部署/CI 仍只跑 `make spa-check`（不依赖 Node）。
+5. 改了 nginx：先在目标机 `nginx -t`，按 `docs/runbooks/staging.md` 备份/回滚；护栏单测必绿。
+6. 预算需要变化时：手工改 `budgets.json` 的 `baseline_bytes`/`budget_bytes` + 说明 + Reviewer 审 diff；
+   不得只改 `budget_bytes` 不留 `baseline_bytes`，也不提供自动更新命令。
+
+### 交接检查表
+
+- [ ] `make perf-budget`、`make perf-guard-test`、`make ci` 全绿；`git diff` 无运行时逻辑/静态生成物误改。
+- [ ] `make static-gzip-check` 绿；`make spa-check` 绿；manifest sha 未被手改。
+- [ ] nginx 护栏 19 项全 PASS；确认没有 `/legacy/api` 边缘缓存、没有 `$cookie_` 进 cache key。
+- [ ] 热路径改动附 `make perf-bench` / `make perf-lcp` 前后 JSON 与 p50/p95 对比；异常有解释或回滚。
+- [ ] 无 cookie/session/token 进入日志、报告、JSON、commit；基准 cookie 只从 env/0600 文件读取。
+- [ ] 预算/生成物变更在 `.team/perf/guardrails-report.md` 或任务报告里说明理由与回滚方式。
+
+### 构建物再生成命令
+
+```sh
+make static-gzip && make static-gzip-check   # 改 web/static 文本资源后
+make spa-check                              # CI/部署门禁（Go + Python，不需要 Node）
+make spa-check-node                         # 开发机 Node 重建后复核（部署不依赖）
+make docs-gen                               # 文档生成物
+make perf-budget && make perf-guard-test    # 护栏
+# API 路径需有效 session：cookie 只从 env/0600 文件读取，不打印、不进 JSON
+make perf-bench PERF_SOURCE=edge PERF_N=10 PERF_COOKIE_ENV=YXQ_SESSION_COOKIE
+make perf-lcp PERF_LCP_RUNS=3               # 需 BASE_URL + SESSION_COOKIE + Playwright
+```

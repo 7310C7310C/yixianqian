@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "verified_at": "2026-10-26",
+  "margin_percent": 10,
+  "baseline_ref": "origin/main@6b1fb23; shell measured at staging-0f14252 /app",
+  "notes": [
+    "所有值都是 gzip 字节；shell = 静态壳（index.html + 内联 critical CSS，gzip level 6）+ bootstrap_allowance_bytes。",
+    "bootstrap_allowance_bytes=3,309 由 2026-10-26 batch10 staging-0f14252 的 /app 实测 27,978B 校准（静态壳 24,669B）；覆盖 3 张卡的 per-user bootstrap，不含 API 与图片。",
+    "first_load_static_gzip 不含 API 与用户照片；critical CSS 已在 shell 内，只计一次。",
+    "预算只能手工修改并走 Review；budget 不得超过 baseline×1.10；没有 --update 命令。"
+  ],
+  "limits": {
+    "shell_gzip": {
+      "label": "SPA 壳（含 critical CSS）",
+      "baseline_bytes": 27978,
+      "budget_bytes": 30776
+    },
+    "app_min_gzip": {
+      "label": "app.min.js",
+      "baseline_bytes": 47960,
+      "budget_bytes": 52756
+    },
+    "initial_render_gzip": {
+      "label": "app.render.js（根 + cards）",
+      "baseline_bytes": 25034,
+      "budget_bytes": 27538
+    },
+    "vant_subset_js_gzip": {
+      "label": "Vant 子集 JS",
+      "baseline_bytes": 23882,
+      "budget_bytes": 26271
+    },
+    "vant_subset_css_gzip": {
+      "label": "Vant 子集 CSS",
+      "baseline_bytes": 37664,
+      "budget_bytes": 41431
+    },
+    "critical_css_gzip": {
+      "label": "首屏 critical CSS",
+      "baseline_bytes": 7641,
+      "budget_bytes": 8406
+    },
+    "page_chunks_gzip": {
+      "label": "页面懒加载 chunks 合计",
+      "baseline_bytes": 43521,
+      "budget_bytes": 47874
+    },
+    "first_load_static_gzip": {
+      "label": "首载静态估算（不含 API/图片）",
+      "baseline_bytes": 242310,
+      "budget_bytes": 266541
+    }
+  },
+  "bootstrap_allowance_bytes": 3309
+}

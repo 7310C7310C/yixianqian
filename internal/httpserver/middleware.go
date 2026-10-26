@@ -244,6 +244,10 @@ type staticAsset struct {
 	gz []byte
 }
 
+// staticHandler serves the precompressed .gz siblings plus an encoding-specific
+// ETag. 性能护栏（AGENTS.md「性能护栏」）：边缘 /static/ 缓存按
+// $yxq_static_enc 分 gzip/identity 键，删除预压缩或 ETag 会让跨洋首载退化；
+// 改动前必须跑 make perf-budget + make perf-bench 前后对比。
 func staticHandler() http.Handler {
 	sub, err := fs.Sub(webassets.FS, "static")
 	if err != nil {
