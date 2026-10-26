@@ -64,10 +64,10 @@ sources:
   - .env.example
 -->
 
-- 更新日期：2026-10-24
+- 更新日期：2026-10-26
 - 维护者：项目维护者
-- 下一更新点：P0 身份证补填/服务端门禁变更部署与验收、下一次 staging 部署、M6 验收；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-24 对 server1 只读复核；staging 已部署 `2d0e29b`；本次身份证/微信号变更在本地分支待 Review/部署（migration 6）。
+- 下一更新点：下一次 staging 部署、PM 验收批次10、生产 cutover 决策；不要等新阶段才开始更新。
+- 事实基准：部署/数据事实于 2026-10-26 对 server1 复核；staging 已部署 `staging-0f14252`（migration 10）；生产 `app.nantou.love` 未切换。
 
 ## 1. 阶段
 
@@ -91,12 +91,14 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD | `30e4b96` |
-| `/healthz` version | `staging-30e4b96` |
-| migration 最大版本 | `9`（`0009_perf_indexes_b7`） |
+| 部署 HEAD（代码） | `0f14252`（批次10 hotfix） |
+| `deployed.sha` | `0ae3592`（docs-only 子提交，未重启） |
+| `/healthz` version | `staging-0f14252` |
+| migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用） |
+| 批次10 | 已部署：渐进启动、照片授权、assetVersion 15、likes 立即预取；7 smoke + tab + 授权矩阵 16/16 PASS |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
-| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；脚本 `/opt/yixianqian-next/autodeploy.sh`，`deployed.sha=30e4b96` |
+| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；新版脚本逐提交校验 `Reviewed-By:` trailer（docs-only 豁免），`deployed.sha=0ae3592` |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
 | 账号数 | 用户 `1115`：`active=1111`、`observer=4` |
 | v2 生产 | 未切换；`app.nantou.love` 仍是 v1 |
