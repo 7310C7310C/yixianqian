@@ -348,38 +348,136 @@ const yxqApp = createApp({
     // 「控制台→签到」历史塌缩的一次性旗标：openCheckinPage 已把当前条目 replaceState 为 checkin，
     // watch(page) 见旗标且 nv==='checkin' 时跳过补 push（仅此一次；其它页面切换不受影响、不误食）
     let suppressPagePushOnce = false;
+
+    // —— 顶层浏览器历史：默认虚拟栈（消除 Via/WebView 顶部进度条）——
+    // Via 在 pushState/replaceState/hist.back() 时会闪顶部加载条；tab→tab 不触边所以正常。
+    // 方案：启动时只在真实历史压一个哨兵；子页/浮层/应用内返回全部走内存栈，popstate 只负责
+    // 安卓硬件返回；每次消费哨兵后按需重压，保证下一次返回仍可捕获。
+    // 回退：?history=legacy 或 localStorage.yxq_history_mode='legacy'（native_admin iframe 恒原生）。
+    function navURL(){
+      return nativeAdmin.value ? (location.pathname + location.search) : location.pathname;
+    }
+    const historyMode = (() => {
+      try {
+        const q = new URLSearchParams(location.search).get('history');
+        if (q === 'legacy' || q === 'virtual') return q;
+        const stored = localStorage.getItem('yxq_history_mode');
+        if (stored === 'legacy' || stored === 'virtual') return stored;
+      } catch(e) {}
+      return 'virtual';
+    })();
+    const realHistory = window.history;
+    const virtualHistory = { stack: [{page:'cards'}], sentinel: false };
+    function useVirtualHistory(){ return historyMode === 'virtual' && !nativeAdmin.value; }
+    function virtualTop(){ return virtualHistory.stack[virtualHistory.stack.length - 1]; }
+    function deferMicrotask(fn){
+      try { Promise.resolve().then(fn); } catch(e) { setTimeout(fn, 0); }
+    }
+    const hist = {
+      get state(){ return useVirtualHistory() ? virtualTop() : realHistory.state; },
+      replace(state, url){
+        const target = url === undefined ? navURL() : url;
+        if(!useVirtualHistory()){
+          try{ realHistory.replaceState(state, '', target); }catch(e){}
+          return;
+        }
+        virtualHistory.stack[virtualHistory.stack.length - 1] = state;
+        // 只有真正需要清理地址（启动去 hash/query、登录回写）才动原生 URL；
+        // 子页/浮层的状态更新不碰浏览器历史，避免 Via 进度条。
+        const now = location.pathname + location.search + location.hash;
+        if(target && target !== now){
+          try{ realHistory.replaceState(state, '', target); }catch(e){}
+        }
+      },
+      push(state){
+        if(!useVirtualHistory()){
+          try{ realHistory.pushState(state, '', navURL()); }catch(e){}
+          return;
+        }
+        virtualHistory.stack.push(state);
+      },
+      back(){
+        if(!useVirtualHistory()){
+          try{ realHistory.back(); }catch(e){}
+          return;
+        }
+        if(virtualHistory.stack.length > 1){
+          // 异步一拍，保持与原生 hist.back() 的时序一致（watch 先看到旧 state 再消费）
+          deferMicrotask(function(){
+            if(virtualHistory.stack.length <= 1) return;
+            virtualHistory.stack.pop();
+            handlePopState({state: virtualTop()});
+          });
+          return;
+        }
+        // 主 Tab：交给容器关闭（与旧逻辑一致）；真实哨兵的 popstate 由 handleRealPopState 处理
+        try{ realHistory.back(); }catch(e){}
+      }
+    };
+    function pushHistorySentinel(){
+      if(!useVirtualHistory() || virtualHistory.sentinel) return;
+      try{
+        // 虚拟栈自己管理滚动（tab 记忆/子页回顶/浮层锁滚动）；关闭浏览器自动恢复，
+        // 否则硬件返回消费哨兵时会被浏览器拉回 base 条目的旧滚动位置（盖掉 unlockPageScroll）。
+        if('scrollRestoration' in realHistory) realHistory.scrollRestoration = 'manual';
+        // 刷新后当前条目可能仍是上一轮哨兵（history.state 跨 reload 保留）：先改回页面状态，
+        // 否则会叠加第二层哨兵，第一次硬件返回只退到另一个哨兵、页面不动。
+        const cur = realHistory.state;
+        if(cur && cur.yxqSentinel === 1){
+          try{ realHistory.replaceState({page: page.value}, '', navURL()); }catch(e){}
+        }
+        // 哨兵只用于捕获安卓硬件返回；不带 hash/query，不产生文档导航。
+        realHistory.pushState({yxqSentinel:1}, '', navURL());
+        virtualHistory.sentinel = true;
+      }catch(e){}
+    }
+    // 真实 popstate 分派：legacy/nativeAdmin 走原逻辑；虚拟模式只消费启动哨兵。
+    function handleRealPopState(e){
+      if(!useVirtualHistory()){ handlePopState(e); return; }
+      if(e && e.state && e.state.yxqSentinel === 1){
+        virtualHistory.sentinel = true;   // 前进回到哨兵：无需处理
+        return;
+      }
+      virtualHistory.sentinel = false;
+      if(virtualHistory.stack.length > 1){
+        virtualHistory.stack.pop();
+        handlePopState({state: virtualTop()});
+        pushHistorySentinel();
+        return;
+      }
+      // 已在主 tab：不拦截，继续后退离开 SPA；若没有上一页可退，稍后把哨兵补回。
+      try{ realHistory.back(); }catch(e){}
+      setTimeout(function(){ if(useVirtualHistory() && !virtualHistory.sentinel) pushHistorySentinel(); }, 300);
+    }
     // 守卫收尾的历史条目消费队列：overlay/未保存弹窗关闭时「一层一条」串行 back()，
     // 每次 back 的 popstate 用计数抑制。同 tick 连关两层（弹窗 + 其下被拦浮层）时按队列
-    // 逐条消费，不等 history.state 的异步更新，避免 overlay 条目残留→返回重进/震荡。
+    // 逐条消费，不等 hist.state 的异步更新，避免 overlay 条目残留→返回重进/震荡。
     let pendingPopConsume = 0;
     let popConsumeBusy = false;
     let consumeIgnorePop = 0;
     function popConsumeStep(){
       if(popConsumeBusy || pendingPopConsume <= 0) return;
-      if(!history.state || !history.state.overlay){ pendingPopConsume = 0; return; }  // 已回到底层页面条目：停手，绝不越吃
+      const st = hist.state;
+      if(!st || !st.overlay){ pendingPopConsume = 0; return; }  // 已回到底层页面条目：停手，绝不越吃
       pendingPopConsume--;
       popConsumeBusy = true;
       consumeIgnorePop++;
-      try { history.back(); } catch(e){ consumeIgnorePop--; popConsumeBusy = false; }
+      try { hist.back(); } catch(e){ consumeIgnorePop--; popConsumeBusy = false; }
     }
     function requestPopConsume(){
       pendingPopConsume++;
       popConsumeStep();
     }
-    // native_admin 模式下保留 query（iframe 刷新/返回仍停留在原生管理页）；普通 App 模式不变。
-    function navURL(){
-      return nativeAdmin.value ? (location.pathname + location.search) : location.pathname;
-    }
     function pushHistory(state){
       if(isHandlingPopState) return;
       // 不带 hash：Safari/部分浏览器会把 hash 变化当锚点导航，导致 tabbar 闪动与进度条。
-      // 页面/浮层状态已存在 history.state，back/forward 仍由 popstate 消费。
-      try{ history.pushState(state, '', navURL()); }catch(e){}
+      // 页面/浮层状态已存在 hist.state，back/forward 仍由 popstate 消费。
+      hist.push(state);
     }
     function handleBack(){
       // 次序托盘/未保存弹窗打开：返回只关浮层、停留（不触发离开拦截）
       if(showGsTray.value){
-        history.back();
+        hist.back();
         return;
       }
       if(showUnsavedConfirm.value){
@@ -387,18 +485,18 @@ const yxqApp = createApp({
         return;
       }
       // 未保存离开拦截（守卫注册表）：dirty → 弹窗；提交中 → 提示并停留
-      if(guardLeave(() => { history.back(); })) return;
-      // 统一返回：有浮层先关浮层，无则 history.back() 让 popstate 处理页面
+      if(guardLeave(() => { hist.back(); })) return;
+      // 统一返回：有浮层先关浮层，无则 hist.back() 让 popstate 处理页面
       if(showPhotoViewer.value || showFilter.value || showLikeDialog.value || showFeedbackDialog.value || showReportDialog.value || showSuggestionDialog.value || showInviteDialog.value || showAdminHelp.value || showSelectPopup.value || showMultiPopup.value || signupSheetShow.value || showRedeemPanel.value || showPointsRules.value || showRedemptions.value || signinDialogShow.value || embedOpen.value){
-        history.back();
+        hist.back();
         return;
       }
       if(page.value !== 'cards' && page.value !== 'home' && page.value !== 'likes' && page.value !== 'profile'){
-        history.back();
+        hist.back();
         return;
       }
       // 主Tab下直接返回由容器处理（关闭网页）
-      history.back();
+      hist.back();
     }
     // 原版活动管理在 native_admin 下的返回：列表页回管理台总览，子页保持原层级返回。
     function gaBack(){
@@ -2115,7 +2213,7 @@ const yxqApp = createApp({
         user.value = data.user;
         user.value.anon_left = data.user.anon_left || 0;
         user.value.real_left = data.user.real_left || 0;
-        window.history.replaceState({}, '', window.location.pathname);
+        hist.replace({page: page.value}, window.location.pathname);
         await loadHome();
         restoreDeck();
         return 'ok';
@@ -2149,7 +2247,7 @@ const yxqApp = createApp({
         user.value = data.user;
         user.value.anon_left = data.user.anon_left || 0;
         user.value.real_left = data.user.real_left || 0;
-        window.history.replaceState({}, '', window.location.pathname);
+        hist.replace({page: page.value}, window.location.pathname);
         showClaim.value = false; loginError.value = false;
         await loadHome();
         restoreDeck();
@@ -2244,7 +2342,7 @@ const yxqApp = createApp({
       // replaceState 必须在 openEmbed 之前：openEmbed 会 push 一条 overlay 历史条目。
       if (adminEntryFlag) {
         adminEntryFlag = false;
-        try{ history.replaceState({page: page.value}, '', location.pathname); }catch(e){}
+        try{ hist.replace({page: page.value}, location.pathname); }catch(e){}
         if (user.value.can_admin) openAdminConsole();
       }
     }
@@ -4678,7 +4776,7 @@ const yxqApp = createApp({
           vant.showToast('正在提交，请稍候');   // P15：提交中系统返回 → 提示并停留
         } else {
           pendingGuard.value = leaveGuard;
-          pendingLeaveCb = () => { history.back(); };
+          pendingLeaveCb = () => { hist.back(); };
           showUnsavedConfirm.value = true;
         }
         return;
@@ -4782,14 +4880,14 @@ const yxqApp = createApp({
         // native_admin 首次进入：基条目就地写成 group_admin，不额外压历史；
         // 这样 iframe 返回键能退到管理台总览，而不是用户端 tab。
         nativeAdminEntryPending = false;
-        try{ history.replaceState({page: nv}, '', navURL()); }catch(e){}
+        try{ hist.replace({page: nv}, navURL()); }catch(e){}
         return;
       }
       if(suppressPagePushOnce && nv === 'checkin'){ suppressPagePushOnce = false; return; }   // 塌缩条目已在位，不补 push
       if(passwordFormDone){
         passwordFormDone = false;
         // 改密成功：当前条目就是 password，直接改写为 profile，避免多压一条可返回的旧表单。
-        try{ history.replaceState({page: nv}, '', navURL()); }catch(e){}
+        try{ hist.replace({page: nv}, navURL()); }catch(e){}
         return;
       }
       // 四个主 tab 之间切换只是视图状态：不新增历史条目、不改 URL。
@@ -4798,38 +4896,38 @@ const yxqApp = createApp({
       // 从主 tab 进入子页前，把当前条目 state 就地改写为所在 tab（不新增条目、不改 URL），
       // 这样从子页返回时 popstate 能落回正确的 tab，而不是启动时的旧 tab。
       if(TAB_ORDER.includes(ov) && !TAB_ORDER.includes(nv)){
-        try{ history.replaceState({page: ov}, '', navURL()); }catch(e){}
+        try{ hist.replace({page: ov}, navURL()); }catch(e){}
       }
       pushHistory({page: nv});
     });
     // pushState for overlays
-    watch(showPhotoViewer, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'viewer'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='viewer'){ ignoreNextPop=true; history.back(); } });
-    watch(showFilter, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'filter'}); else if(!v && !isHandlingPopState && history.state && (history.state.overlay==='filter' || history.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
-    watch(showLikeDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'likeDialog'}); else if(!v && !isHandlingPopState && history.state && (history.state.overlay==='likeDialog' || history.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
-    watch(showFeedbackDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'feedbackDialog'}); else if(!v && !isHandlingPopState && history.state && (history.state.overlay==='feedbackDialog' || history.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
-    watch(showReportDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'reportDialog'}); else if(!v && !isHandlingPopState && history.state && (history.state.overlay==='reportDialog' || history.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
-    watch(showSuggestionDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'suggestionDialog'}); else if(!v && !isHandlingPopState && history.state && (history.state.overlay==='suggestionDialog' || history.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showPhotoViewer, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'viewer'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='viewer'){ ignoreNextPop=true; hist.back(); } });
+    watch(showFilter, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'filter'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='filter' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showLikeDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'likeDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='likeDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showFeedbackDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'feedbackDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='feedbackDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showReportDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'reportDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='reportDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showSuggestionDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'suggestionDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='suggestionDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     // onetooneMsg 打开时不单独 push（返回语义沿用页面条目），仅拦截时会补挂 overlay 条目；关闭时按需消费
-    watch(showOnetooneMsg, (v)=>{ if(!v && !isHandlingPopState && history.state && (history.state.overlay==='onetooneMsg' || history.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
-    watch(showInviteDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'inviteDialog'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='inviteDialog'){ ignoreNextPop=true; history.back(); } });
-    watch(showRedeemPanel, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'redeemPanel'}); else if(!v && !isHandlingPopState && history.state && (history.state.overlay==='redeemPanel' || history.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
-    watch(showPointsRules, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'pointsRules'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='pointsRules'){ ignoreNextPop=true; history.back(); } });
-    watch(showRedemptions, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'redemptions'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='redemptions'){ ignoreNextPop=true; history.back(); } });
-    watch(showAdminHelp, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'adminHelp'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='adminHelp'){ ignoreNextPop=true; history.back(); } });
-    watch(embedOpen, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'embed'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='embed'){ ignoreNextPop=true; history.back(); } });
-    watch(signinDialogShow, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'signinDialog'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='signinDialog'){ ignoreNextPop=true; history.back(); } });
-    watch(showSelectPopup, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'selectPopup'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='selectPopup'){ ignoreNextPop=true; history.back(); } });
-    watch(showMultiPopup, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'multiPopup'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='multiPopup'){ ignoreNextPop=true; history.back(); } });
-    watch(signupSheetShow, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'signupSheet'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='signupSheet' && !(page.value==='user_detail' && userDetailFromSheet.value)){ ignoreNextPop=true; history.back(); } });
-    watch(showGsTray, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'gsTray'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='gsTray'){ ignoreNextPop=true; history.back(); } });
-    watch(showClaim, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'claim'}); else if(!v && !isHandlingPopState && history.state && (history.state.overlay==='claim' || history.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
-    watch(showUnsavedConfirm, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'unsavedConfirm'}); else if(!v && !isHandlingPopState && history.state && history.state.overlay==='unsavedConfirm'){ requestPopConsume(); } });
+    watch(showOnetooneMsg, (v)=>{ if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='onetooneMsg' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showInviteDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'inviteDialog'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='inviteDialog'){ ignoreNextPop=true; hist.back(); } });
+    watch(showRedeemPanel, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'redeemPanel'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='redeemPanel' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showPointsRules, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'pointsRules'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='pointsRules'){ ignoreNextPop=true; hist.back(); } });
+    watch(showRedemptions, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'redemptions'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='redemptions'){ ignoreNextPop=true; hist.back(); } });
+    watch(showAdminHelp, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'adminHelp'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='adminHelp'){ ignoreNextPop=true; hist.back(); } });
+    watch(embedOpen, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'embed'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='embed'){ ignoreNextPop=true; hist.back(); } });
+    watch(signinDialogShow, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'signinDialog'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='signinDialog'){ ignoreNextPop=true; hist.back(); } });
+    watch(showSelectPopup, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'selectPopup'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='selectPopup'){ ignoreNextPop=true; hist.back(); } });
+    watch(showMultiPopup, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'multiPopup'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='multiPopup'){ ignoreNextPop=true; hist.back(); } });
+    watch(signupSheetShow, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'signupSheet'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='signupSheet' && !(page.value==='user_detail' && userDetailFromSheet.value)){ ignoreNextPop=true; hist.back(); } });
+    watch(showGsTray, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'gsTray'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='gsTray'){ ignoreNextPop=true; hist.back(); } });
+    watch(showClaim, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'claim'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='claim' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showUnsavedConfirm, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'unsavedConfirm'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='unsavedConfirm'){ requestPopConsume(); } });
     // 活动引导弹窗：关闭动作（确认/点遮罩/返回键）统一记入本会话，保证「每个会话只弹一次」
     watch(showActivityPromo, (v)=>{
       if(v && !isHandlingPopState){ pushHistory({overlay:'activityPromo'}); }
       else if(!v){
         try { sessionStorage.setItem(ACTIVITY_PROMO_KEY, '1'); } catch(e) {}
-        if(!isHandlingPopState && history.state && history.state.overlay==='activityPromo'){ ignoreNextPop=true; history.back(); }
+        if(!isHandlingPopState && hist.state && hist.state.overlay==='activityPromo'){ ignoreNextPop=true; hist.back(); }
         maybeShowUpdateNotes(); // 活动引导让位后，更新说明仍有机会在首页弹一次
         maybeShowSelfCardGuide(); // 首卡自我提示排在最后（只对首卡是自己的用户）
       }
@@ -4839,7 +4937,7 @@ const yxqApp = createApp({
       if(v && !isHandlingPopState){ pushHistory({overlay:'updateNotes'}); }
       else if(!v){
         try { localStorage.setItem(UPDATE_NOTES_KEY, '1'); } catch(e) {}
-        if(!isHandlingPopState && history.state && history.state.overlay==='updateNotes'){ ignoreNextPop=true; history.back(); }
+        if(!isHandlingPopState && hist.state && hist.state.overlay==='updateNotes'){ ignoreNextPop=true; hist.back(); }
         maybeShowSelfCardGuide(); // 更新说明让位后，首卡自我提示仍有机会弹一次
       }
     });
@@ -5301,8 +5399,10 @@ const yxqApp = createApp({
       try { claimEntryFlag = new URLSearchParams(location.search).get('claim') === '1'; } catch(e) { claimEntryFlag = false; }
       // ?admin=1：同样要在清 query 前捕获
       try { adminEntryFlag = new URLSearchParams(location.search).get('admin') === '1'; } catch(e) { adminEntryFlag = false; }
-      try{ history.replaceState({page: page.value}, '', navURL()); }catch(e){}
-      window.addEventListener('popstate', handlePopState);
+      try{ hist.replace({page: page.value}, navURL()); }catch(e){}
+      // 顶层 SPA：真实历史只压这一个哨兵，之后子页/浮层不再碰 History API。
+      pushHistorySentinel();
+      window.addEventListener('popstate', handleRealPopState);
       if (SERVER_AUTHENTICATED) {
         yxqAfterFirstPaint(bootAuthenticated);
         return;
@@ -5732,7 +5832,7 @@ const yxqApp = createApp({
       if(page.value === 'group_detail'){
         // 控制台页头入口：把当前 group_detail 条目就地改写为 checkin（塌缩历史，不新增条目），
         // 返回时自然回退 group_admin；一次性旗标让 watch(page) 跳过本 tick 的补 push
-        try{ history.replaceState({page:'checkin'}, '', navURL()); }catch(e){}
+        try{ hist.replace({page:'checkin'}, navURL()); }catch(e){}
         suppressPagePushOnce = true;
       }
       page.value = 'checkin';

@@ -38,6 +38,9 @@ sources:
   - web/static/admin.css
   - web/static/admin.js
   - web/static/legacy/index.html
+  - web/static/legacy/app.js
+  - tools/browser/no_history_smoke.py
+  - internal/httpserver/legacy_test.go
   - web/templates/pages/admin.tmpl
   - web/templates/pages/admin_activities.tmpl
   - web/templates/pages/admin_activity_edit.tmpl
@@ -298,6 +301,23 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 回填：`cmd/facebackfill` 已部署；staging migration 5、`profile_photos` 1028/1019/0；cron 每 10 分钟增量。
 - 迁移数据计数：users `1115`、activities `6`、signups `245`、profile_photos `1028`、points_ledger `131`（2026-10-23 复核）。
 - 管理员：U-0006 为 `super_admin`，U-0001 为 `admin`；两人均 `observer_enabled=true`。
+
+### 2026-10-26 顶层 SPA 虚拟历史栈（已实现，未部署）
+
+- 现象：PM 在 Android Via 反馈，进入子页/浮层、返回与管理台入口会闪顶部加载进度条；tab→tab 与 Chrome 桌面无。
+  代码事实：子页/浮层 `history.pushState`、返回 `history.back()`、`embedOpen` 也 pushState。
+- 实现：`web/static/legacy/app.js` 默认 virtual 历史层（`!nativeAdmin`）：启动清 hash/query + 压一个哨兵，
+  之后子页/浮层/应用内返回只改内存 `virtualStack`；安卓硬件返回由 `popstate` 消费哨兵并按需重压；
+  `scrollRestoration='manual'`；刷新时先清上一轮哨兵 state 再压新哨兵。TAB_ORDER、控制台→签到塌缩、
+  `passwordFormDone`、未保存拦截、深链、观察员视图保持原语义。回退：`?history=legacy` 或
+  `localStorage.yxq_history_mode='legacy'`；`native_admin` iframe 内部不变。
+- 证据：`tools/browser/no_history_smoke.py` 390/1280 全 PASS（0 次子页 History 调用、0 次文档导航、
+  硬件返回逐层/哨兵重压、深链/刷新/未保存/签到塌缩/native_admin/legacy/观察员）；既有 7 smoke +
+  `tab_first_load_smoke` 全 PASS；`make ci`（Go 1.24.7）、`make test-race`、`make test-integration`
+  （含 `TestIntegrationCardPhotoAuthorizationMatrix`）全 PASS。详见 `docs/DECISIONS.md` §34 与
+  `.team/perf/no-history-report.md`。
+- 状态：**未 push、未部署**；生产未授权。Via 真机进度条无法在 Chromium 断言，待 PM 复验。
+- 回滚：`git revert <本次提交>`（仅前端生成物与 assetVersion；无 schema 变更）。
 
 ## 4. P0 身份证门禁：补填 + 服务端强制（已实现，待部署/验收）
 

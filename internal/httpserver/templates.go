@@ -19,7 +19,7 @@ import (
 // this whenever web/static content referenced from templates changes; module
 // CSS @import lines carry the same value and must be bumped together.
 // Batch10: 15 invalidates edge/browser immutable caches for the shell assets.
-const assetVersion = "15"
+const assetVersion = "16"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

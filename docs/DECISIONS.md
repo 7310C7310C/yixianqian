@@ -361,3 +361,32 @@ sources: []
   冷/热均达 ≤2.5/≤1.2s。共享 media 修复让壳内首图不再 404；bootstrap cards 20→3、hero 去 opacity 过渡、
   LCP 后预取共同生效。本地传输 430,741B/20；edge gzip 预取合计约 43.5KB，按 edge 基线 289,475B
   估算约 **333KB ≤350KB**（部署后以实测为准）。
+
+## 34. 顶层 SPA 虚拟历史栈（2026-10-26；未部署）
+
+- 背景：PM 在 Android Via 反馈，进入「我的留言/现场签到/志愿选择/资料详情/资料编辑/我的」等子页、
+  返回以及打开管理后台时，Via 顶部会闪加载进度条；Chrome 桌面无。代码事实：tab→tab 不写 history，
+  子页/浮层调用 `history.pushState`，返回调用 `history.back()`，管理台入口 `embedOpen` 也 pushState，
+  与现象吻合。
+- 决策（默认 virtual）：顶层 SPA（`!nativeAdmin`）只在启动时保留真实历史：先清 hash/query 的
+  `replaceState`，再 `pushState({yxqSentinel:1})` 压一个哨兵；之后子页/浮层/应用内返回全部走内存
+  `virtualStack`，不再调用 `pushState/replaceState/back`。安卓硬件返回由 `popstate` 消费哨兵：
+  虚拟栈非空则弹一层并渲染、再按需重压哨兵；栈空则放行退出（不拦截）。`nativeAdmin` iframe 与
+  `?history=legacy` / `localStorage.yxq_history_mode='legacy'` 保持原真实历史逻辑。
+- 语义覆盖：TAB_ORDER 切换、`nativeAdminEntryPending`、`suppressPagePushOnce`（控制台→签到塌缩）、
+  `passwordFormDone`、`requestPopConsume`/`ignoreNextPop`/`pendingPopConsume`、`embedOpen`、
+  各类对话框/浮层、未保存离开拦截、深链 `#/likes`、刷新与观察员视图均沿用现有状态机；
+  只把这些状态的载体从真实 history 换成内存栈。
+- 滚动与刷新：virtual 模式设 `history.scrollRestoration='manual'`，由既有的 tab 记忆/子页回顶/
+  浮层锁滚动接管；刷新后 `history.state` 会保留上一轮哨兵，启动时先把当前条目改回页面状态再压新哨兵，
+  避免叠加两层哨兵导致第一次硬件返回只退到另一个哨兵、页面不动。
+- 兼容/回退：URL `?history=legacy`（仅本次加载）或 `localStorage.setItem('yxq_history_mode','legacy')`
+  可恢复旧逻辑；默认 virtual。`native_admin` iframe 内部仍为真实历史（不在本决策范围）。
+- 边界/风险：浏览器前进键在真实条目间的边界行为未承诺（虚拟栈不产生 forward 条目）；iframe 首载
+  仍可能被 Via 观察为加载；`history`/`popstate` 不可用的极旧 WebView 会退化为应用内返回可用、
+  硬件返回不可拦截。生产未授权；Via 真机进度条需 PM 复验。
+- 证据：`tools/browser/no_history_smoke.py`（390/1280，本地实例 + 本地生成物）全 PASS；
+  `history.pushState/replaceState/back` 仅在启动哨兵、legacy 回退与 nativeAdmin 分支出现；
+  既有 public_home / spa_nav / tab_scroll / batch6_bundle / app_hero_deck / admin_native_activity /
+  app_integration 7 smoke + tab_first_load 全 PASS；`make ci`（Go 1.24.7，asset-version 用本地
+  `origin/main` 补跑）、`make test-race`、`make test-integration`（含授权矩阵）全 PASS。

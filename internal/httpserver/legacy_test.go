@@ -49,7 +49,9 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 		`'app.min.js?v=__ASSET_URL_VERSION__'`,
 		`__YXQ_BOOT_FAIL__`,
 		`yxq-app-start`,
-		`history.pushState(state, '', navURL());`,
+		`hist.push(state)`,
+		`function pushHistorySentinel()`,
+		`realHistory.pushState({yxqSentinel:1}`,
 		`nativeAdmin`,
 		`function gaBack()`,
 		`native_admin`,
@@ -83,6 +85,11 @@ func TestLegacyIndexIsEmbedded(t *testing.T) {
 	}
 	if strings.Contains(html, `location.pathname + '#' + (state.page`) {
 		t.Fatal("legacy pushHistory still appends a hash")
+	}
+	// 顶层 SPA 默认虚拟历史栈：子页/浮层不再直接调用原生 pushState；
+	// 只允许 pushHistorySentinel 压哨兵、legacy/nativeAdmin 分支走 realHistory。
+	if strings.Contains(js, "history.pushState(state, '', navURL())") {
+		t.Fatal("legacy pushHistory still calls native history.pushState directly")
 	}
 
 	// 管理后台是独立 section（账号之后、帮助之前），不再放在账号 cell group 内。

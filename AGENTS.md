@@ -60,6 +60,16 @@ sources:
 （受权媒体串流是显式例外，直接串流）；RBAC、CSRF 与审计不变。
 不做 POC；用户功能必须完整，完成标准见 `docs/product-spec.md`。
 
+## SPA 历史与返回（2026-10-26）
+
+- 顶层 SPA 默认**虚拟历史栈**（`web/static/legacy/app.js` 的 `hist`）：子页/浮层/应用内返回不得直接调用
+  `window.history.pushState/replaceState/back`；统一用 `pushHistory`、`hist.replace`、`handleBack`。
+- 真实历史只保留启动哨兵；`popstate` 仅负责安卓硬件返回。`native_admin` iframe 与
+  `?history=legacy` / `localStorage.yxq_history_mode='legacy'` 保持旧真实历史逻辑。
+- 新增子页/浮层沿用现有 watcher/guard 状态机；读取历史状态用 `hist.state`，不要直接读 `history.state`。
+- Via/WebView 顶部进度条只能真机复验；Chromium 回归用 `tools/browser/no_history_smoke.py` 断言
+  子页 History 调用与主框架文档导航均为 0。
+
 ## 结构
 
 - `cmd/`：`server`、`seed`、`token`、`facebackfill`、`thumbwarm`（缩略图缓存预热）五个入口。
