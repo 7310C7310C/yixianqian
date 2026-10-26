@@ -367,7 +367,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   `missing Reviewed-By`；docs-only 豁免，`--force`/`YXQ_REQUIRE_REVIEW=0` 为例外；沙箱单测
   `deploy/autodeploy/test_autodeploy.sh` **66 PASS**。
 - 7 smoke 本地最终全 PASS；`make ci`/test-race/integration（fresh DB）绿。**当前 staging 仍是 `staging-9bc7888`，
-  本地 hotfix 代码 HEAD `040c043`（含 `197df08`/`898994f` 之后的门禁修复与部署闸）未 push/未部署**；本文件为其后 docs 快照。
+  本地 hotfix 代码 HEAD `eb0bfbe`（含 `f858eff`/`f3cadd2` 之后的门禁修复与部署闸）未 push/未部署**；本文件为其后 docs 快照。
 
 ### 性能批次10（2026-10-26，已部署 staging-9bc7888）
 

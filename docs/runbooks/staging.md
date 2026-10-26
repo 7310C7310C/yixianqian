@@ -23,7 +23,7 @@ sources:
 | 部署 HEAD（二进制） | `9bc7888`（批次10 及 assetVersion 13 / likes 预取修复） |
 | `/healthz` version | `staging-9bc7888` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql` 四索引已应用） |
-| 本地 hotfix | `197df08` 之后的 assetVersion 15 门禁/部署闸提交（未 push/部署） |
+| 本地 hotfix | `f858eff` 之后的 assetVersion 15 门禁/部署闸提交（未 push/部署） |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装（2026-10-22），每 10 分钟 |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
