@@ -342,34 +342,26 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 缩略图缓存目录不可写时降级关闭（不再拒绝启动）；运行目录 `/opt/yixianqian-next/cache/thumbs`。
 - 边缘：**不做 `/legacy/api/` 缓存**（key 含明文 session 会落盘，违反 token 只存 hash）；静态 gzip 变体沿用已部署配置并复核（gzip HIT 47,033B/0.87ms、q=0 落 identity）。
 
-### 性能批次10 部署快照（2026-10-26）
+### 性能批次10 部署快照（2026-10-26，staging-0f14252）
 
-- **已部署 staging**：代码 HEAD `9bc7888`，`/healthz=staging-9bc7888`；migration max=10/10，四索引存在；
-  env 未变更（sha256 `e533a86b…`）；`server.prev=staging-e561949`。
-- 首次部署 `staging-3cf68c5` 后发现 `assetVersion` 仍为 12，边缘 immutable 缓存继续返回旧
-  `app.render.js`/`pages/*.render.js`；修正为 **13**（含 admin CSS @import）后重新部署，`?v=13` 强制新缓存键。
-- 追加修复：消息 tab likes chunk 从「LCP 后」改为「挂载后优先预取」，staging 首次点消息 **1183ms**（其余 919–1140ms），
-  `加载中` 0、CLS 0；LCP edge N=10 冷 1802ms（P95 2064）/热 772ms（P95 1244），bytes 315,567/19。
-- 部署后 7 smoke + tab + 授权矩阵 16/16 PASS；staging 真实共享 media：B/C 共享、viewer 只 like C → B public 空、
-  私有照片按 C 关系 200、候选卡图 200；卡图 naturalWidth>0。
+- **已部署**：代码 HEAD `0f14252`，`/healthz=staging-0f14252`；`deployed.sha=0f14252`;
+  migration max=10/10，四索引存在；env sha256 `e533a86b…` 未变；`server.prev=staging-9bc7888`。
+- **autodeploy**：新版逐提交校验 `Reviewed-By:` trailer 后部署成功；日志明确
+  `部署闸：0f14252 范围内代码提交均含 Reviewed-By trailer`。
+- **smoke**：7/7 PASS（app_integration 需 `USER_LEGACY_ID=U-0006`）；tab 三次中位
+  消息/活动/我的/牵线 **1451/1178/1382/1275ms**，`加载中` 0、CLS 0.0001、卡图 naturalWidth>0；
+  授权矩阵 **16/16**：共享 media B/C、viewer 仅 like C → B public photos=0、私有照片 200、候选卡图 200。
+- **性能（安静 QEMU 4 vCPU，起始 load 0.32–0.39，1.6Mbps/150ms/CPU×4，N=10）**：
+  冷 FCP/LCP **1364/1872ms（P95 LCP 2648）**、最长 1043ms、315,577B/19；
+  热 **678/740ms（P95 1128）**、最长 379.5ms、5,874B/20；CLS 0。
+- **边缘/源站（server2 vantage N=25 p50/p95）**：home 205.4/238.3、cards 206.0/208.1、
+  thumb 206.1/210.4、healthz 207.9/222.2、静态 app.min 52.3/64.1（HIT）、
+  admin embed 208.0/213.2、admin/users 206.6/212.0ms；nginx 5xx 0；app 2 条 messages/reported 500
+  （smoke 切页 context canceled，既有同类）。
+- **回滚**：`bin/server.prev=staging-9bc7888`；migration 只增不回滚；生产未动。
 
-### 性能批次10 hotfix（本地，待部署）
+### 性能批次10 初始部署（staging-9bc7888）
 
-- Reviewer 复审发现 `assetVersion` 在静态变更后仍为 13、消息 tab 首点慢。本地修复：`assetVersion` **15**
-  （admin CSS @import 同步）；新增 `tools/check_asset_version.py`：逐提交检查 base..HEAD（含「A 静态不 bump +
-  B docs」）、工作区静态改动、聚合兜底，并要求 admin CSS `@import` 一致。接入 `make ci`/prepush 与 CI
-  lint-build（`fetch-depth: 0`，push before / PR base），无需 Node；自测
-  `tools/test_asset_version.py` 覆盖工作区未提交、两提交、仅 docs、bump 正向 4 形态。
-- likes chunk 改为应用挂载后立即加载（不等 LCP/idle）；安静主机（load 0.24）N=10：
-  冷 FCP/LCP **1178/1584ms（P95 LCP 2128）**、热 **674/784ms（P95 1020）**、CLS 0、442,665B/20；
-  tab 首点 消息/活动/我的/牵线 **1491/1344/1325/1518ms**，`加载中` 0、CLS 0.0001。
-- **staging 部署闸**：`deploy/autodeploy/autodeploy.sh` 要求代码提交含 `Reviewed-By:` trailer，缺失则拒绝并记录
-  `missing Reviewed-By`；docs-only 豁免，`--force`/`YXQ_REQUIRE_REVIEW=0` 为例外；沙箱单测
-  `deploy/autodeploy/test_autodeploy.sh` **66 PASS**。
-- 7 smoke 本地最终全 PASS；`make ci`/test-race/integration（fresh DB）绿。**当前 staging 仍是 `staging-9bc7888`，
-  本地 hotfix 代码 HEAD `eb0bfbe`（含 `f858eff`/`f3cadd2` 之后的门禁修复与部署闸）未 push/未部署**；本文件为其后 docs 快照。
-
-### 性能批次10（2026-10-26，已部署 staging-9bc7888）
 
 - **1B 渐进启动**：壳移除三个主脚本的静态 `defer` 与全部 script/style preload；新增 loader 在首卡 hero `load+decode` 并提交一帧后，按 `vue → app.render → app.min` 顺序注入执行（硬上限 2.5s；无 hero 600ms 后启动）。主脚本不 preload 是实测取舍：1.6Mbps 下 preload 与首图抢带宽，冷 LCP 反而高约 350ms；loader 在 hero 绘制后立即开始下载，`app_start` 与带 preload 版本基本一致。hero 在首帧按 bootstrap faces 套用与 app.js `computeFaceCrop` 相同公式，挂载后无裁切跳动；启动前点击只记 pending、不重放；`loadHome` 4s 兜底与管理台 iframe 不变；Vue/Vant/app.min 缺失均有可见错误页。
 - **2A 照片授权**：`/cards/photo/{id}` 与 `/profile/photo/{id}` 共用默认拒绝策略，授权按画廊主人 `profile_photos.user_id`（共享 media 的 `media.user_id` 仅取对象）：本人、任一管理员角色、**任一方向的有效喜欢（含互喜）**、未取消的同活动报名（覆盖同组/同轮）、**任一方向消息的对手方**放行；牌堆候选由 cards/home 下发时按目标用户登记 per-viewer 15 分钟 grant（单 viewer ≤2000 目标、全局 ≤2000 viewer，单一有序集合 15m TTL + viewer LRU fail-closed）；匿名 401、无权/不存在 404、禁用账号 403。公开资料页仅按 viewer 与目标本人的关系（本人/grant/CanViewGallery(target)）返回照片 URL，不复用 media 级关系，否则空数组。`/admin` 受权媒体串流不变。

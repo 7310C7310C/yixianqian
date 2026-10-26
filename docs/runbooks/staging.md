@@ -20,10 +20,10 @@ sources:
 | 项目 | 值 |
 |---|---|
 | 公开入口 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD（二进制） | `9bc7888`（批次10 及 assetVersion 13 / likes 预取修复） |
-| `/healthz` version | `staging-9bc7888` |
+| 部署 HEAD（二进制） | `0f14252`（批次10 hotfix：assetVersion 15、likes 立即预取、门禁/部署闸） |
+| `/healthz` version | `staging-0f14252` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql` 四索引已应用） |
-| 本地 hotfix | `f858eff` 之后的 assetVersion 15 门禁/部署闸提交（未 push/部署） |
+| 回滚点 | `bin/server.prev=staging-9bc7888` |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装（2026-10-22），每 10 分钟 |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
@@ -332,7 +332,7 @@ pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、
   q=0 / `gzip;q=abc` / `x-gzip` / identity 均落 identity（147,145B、无 Content-Encoding）；
   同连接命中 TTFB **0.87ms（gzip）/1.89ms（identity）**，首连 ~96–103ms（TLS 握手）。
 
-## 批次10：渐进启动与照片授权（已部署 staging-9bc7888；hotfix 本地待部署）
+## 批次10：渐进启动与照片授权（已部署 staging-0f14252）
 
 - 壳启动顺序：三个主脚本移除静态 `defer` 与全部 script/style preload，hero 绘制后按序注入；`/app` 首屏逻辑不变。
   部署后 smoke 必须覆盖：首卡 hero 出现、无白屏、管理台 iframe 正常、Vue 缺失时可见错误页。
