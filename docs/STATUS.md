@@ -95,7 +95,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
 | 部署 HEAD（代码） | `c62c163`（顶层 SPA 虚拟历史栈） |
-| `deployed.sha` | `c62c163`（后续 docs-only 推送会继续推进，不重启） |
+| `deployed.sha` | ≥ `c62c163`（docs-only 推送持续推进、不重启；本次 `a7d4bd6`；二进制仍 `c62c163`） |
 | `/healthz` version | `staging-c62c163` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用；本次无 migration） |
 | 虚拟历史栈（2026-10-27） | 已部署 `c62c163`：默认 virtual（`?history=legacy` / localStorage 可回退）；assetVersion 16；`no_history_smoke` 390/1280 各 19/19 PASS；启动哨兵 1 次、硬件返回每次 1 次重压；7 smoke + tab_first_load + hero + 授权矩阵 PASS；Via 真机进度条待 PM 复验 |
