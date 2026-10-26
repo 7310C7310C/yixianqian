@@ -177,7 +177,7 @@ commit_new() { # $1=type(code|docs) $2=message [$3=noreview]
   fi
   printf '%s %s\n' "$1" "$(date +%s%N)" >>"$SB/work/$file"
   git -C "$SB/work" add -A
-  if [[ $1 == code && ${3:-} != noreview ]]; then
+  if [[ ${3:-} == review || ( $1 == code && ${3:-} != noreview ) ]]; then
     git -C "$SB/work" commit -qm "$2" -m 'Reviewed-By: reviewer'
   else
     git -C "$SB/work" commit -qm "$2"
@@ -347,10 +347,34 @@ reset_run_logs
 run_ad --dry-run --force
 rc=$?
 assert_eq 0 "$rc" "S14 --force 例外退出码 0"
-assert_contains "缺少 Reviewed-By trailer；--force 例外" "$SB/log" "S14 记录 --force 例外"
+assert_contains "缺少 Reviewed-By trailer" "$SB/log" "S14 记录 --force 例外"
 assert_contains "DRY-RUN 计划" "$SB/log" "S14 仍打印部署计划"
 assert_empty_or_absent "$SB/go.log" "S14 未构建"
 assert_empty_or_absent "$SB/systemctl.log" "S14 未重启"
+
+# 15) 范围中间提交缺 trailer：tip 是已审 docs，仍必须拒绝
+C15=$(commit_new docs '已审 docs' review)
+reset_run_logs
+run_ad
+rc=$?
+assert_eq 1 "$rc" "S15 中间代码提交缺 trailer 退出码 1"
+assert_contains "拒绝部署" "$SB/log" "S15 部署闸拒绝"
+assert_contains "${C13:0:7}" "$SB/log" "S15 日志点名 C13"
+assert_eq "$C8" "$(cat "$SB/root/deployed.sha")" "S15 未更新 deployed.sha"
+assert_empty_or_absent "$SB/go.log" "S15 未构建"
+assert_empty_or_absent "$SB/systemctl.log" "S15 未重启"
+
+# 16) 旧已部署提交缺 trailer 不阻塞新提交（只检查 DEPLOYED..REMOTE）
+printf '%s\n' "$C13" >"$SB/root/deployed.sha"
+C16=$(commit_new code '已审新提交')
+reset_run_logs
+run_ad --dry-run
+rc=$?
+assert_eq 0 "$rc" "S16 旧提交缺 trailer 不误拒退出码 0"
+assert_contains "范围内代码提交均含 Reviewed-By" "$SB/log" "S16 部署闸通过"
+assert_contains "DRY-RUN 计划" "$SB/log" "S16 打印部署计划"
+assert_empty_or_absent "$SB/go.log" "S16 未构建"
+assert_empty_or_absent "$SB/systemctl.log" "S16 未重启"
 
 echo
 printf '总计：%d PASS / %d FAIL\n' "$PASS" "$FAIL"

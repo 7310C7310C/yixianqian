@@ -67,6 +67,8 @@ jobs:
         run: go build -trimpath ./...
       - name: Python 工具测试
         run: python3 -m unittest discover -s tools -p 'test_*.py'
+      - name: 部署闸沙箱单测
+        run: bash deploy/autodeploy/test_autodeploy.sh
 
   unit:
     runs-on: ubuntu-latest

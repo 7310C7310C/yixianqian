@@ -101,6 +101,7 @@ sources:
   `make ci`/prepush 与 CI lint-build 都会跑 `tools/check_asset_version.py`，未 bump 直接失败。
 - **staging 部署闸**：autodeploy 拒绝缺少 `Reviewed-By:` trailer 的代码提交（docs-only 豁免；
   `--force` 仅限回滚/热修）；Reviewer PASS 必须落成 trailer 才能自动部署。
+  CI lint-build 跑 `deploy/autodeploy/test_autodeploy.sh` 沙箱单测，防止门禁回归。
 - 不得绕过本流程；异常（冻结自动部署、回滚）须记录到 `.team/status.md`/`.team/decisions.md`。
 
 通道分级（唯一差别在第 4 步；第 5–7 步完全相同）：

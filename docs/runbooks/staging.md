@@ -91,10 +91,11 @@ gofmt/vet → 构建 4 个 binary（`version=staging-<short>`）→ 备份 `serv
 - 脚本：`/opt/yixianqian-next/autodeploy.sh`（仓库 `deploy/autodeploy/`，root:755，支持 `--dry-run`）。
 - 单实例：`flock /run/yxq-autodeploy.lock`；CI 未完成、`git fetch` 失败只等下一轮，不算失败。
 - 仅文档提交（只改 `docs/`、`*.md`、`.team/`）：只推进 `deployed.sha`，不构建、不重启。
-- **部署闸（Reviewed-By trailer）**：代码提交必须在 commit message 含
+- **部署闸（Reviewed-By trailer）**：CI lint-build 运行 `deploy/autodeploy/test_autodeploy.sh`
+  沙箱单测；脚本对 `deployed.sha..origin/main` 内每个代码提交校验 trailer。代码提交必须在 commit message 含
   `Reviewed-By: <reviewer>`（独立 Reviewer PASS 的落地凭证）；缺失时 autodeploy 拒绝部署并记录
   `missing Reviewed-By`。docs-only 提交豁免；`--force` 仅限回滚/热修，会打印警告后继续；
-  测试可设 `YXQ_REQUIRE_REVIEW=0`。
+  测试可设 `YXQ_REQUIRE_REVIEW=0`。安装：备份旧版 → `install -m 755` → `bash -n` → `--dry-run`。
 - **静态资源版本门禁**：CI lint-build 用 push before / PR base 覆盖多提交范围运行
   `tools/check_asset_version.py`；`web/static/**` 有变更但 `assetVersion` 未 bump 即红。
 - 失败退避：同一提交失败后 15 分钟内不重试（`/opt/yixianqian-next/autodeploy.failed`），

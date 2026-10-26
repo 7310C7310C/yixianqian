@@ -92,6 +92,25 @@ class AssetVersionGateTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
         self.assertIn("assetVersion 仍为", proc.stderr)
 
+    def test_per_commit_static_without_bump_when_base_differs(self) -> None:
+        # base=14，A 改静态不 bump，B 才 bump 到 15：聚合同意（base≠current），
+        # 只有逐提交检查能发现 A，防止「后一个提交补 bump」掩盖前一个提交。
+        self.write("web/static/legacy/app.js", "console.log('v2');\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "A 静态改动未 bump")
+        self.write("internal/httpserver/templates.go",
+                   'package httpserver\n\nconst assetVersion = "15"\n')
+        self.write("web/static/admin_points.css",
+                   '@import url("/static/admin.css?v=15");\n')
+        self.git("add", "-A")
+        self.git("commit", "-qm", "B 补 bump")
+        self.write("docs/STATUS.md", "# docs\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "docs")
+        proc = self.run_gate()
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("未 bump assetVersion", proc.stderr)
+
     def test_docs_only_is_green(self) -> None:
         self.write("docs/STATUS.md", "# docs\n")
         self.git("add", "-A")

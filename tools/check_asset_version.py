@@ -87,7 +87,10 @@ def commit_static_without_bump(repo: Path, base: str) -> list[str]:
         if not any(f.startswith("web/static/") for f in files):
             continue
         cur = read_version(show_file(repo, commit, TEMPLATES))
-        parent = git(repo, "rev-parse", "--verify", "--quiet", f"{commit}^")
+        try:
+            parent = git(repo, "rev-parse", "--verify", "--quiet", f"{commit}^").strip()
+        except subprocess.CalledProcessError:
+            parent = ""
         prev = read_version(show_file(repo, parent, TEMPLATES)) if parent else None
         if cur == prev:
             bad.append(commit)

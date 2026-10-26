@@ -351,6 +351,35 @@ has_reviewed_by() {
     | grep -qiE '^Reviewed-By:[[:space:]]*[^[:space:]]+'
 }
 
+# 单个提交是否含非 docs 文件变更（docs/*、*.md、.team/* 视为 docs-only）。
+commit_has_code() {
+  local sha=$1 f
+  while IFS= read -r f; do
+    [[ -n $f ]] || continue
+    case "$f" in
+      docs/*|*.md|.team/*) ;;
+      *) return 0 ;;
+    esac
+  done < <(git -C "$SRC" -c safe.directory="$SRC" diff-tree --no-commit-id --name-only -r -m "$sha" 2>/dev/null)
+  return 1
+}
+
+# 输出 DEPLOYED..REMOTE（无 DEPLOYED 时只看 tip）中缺 Reviewed-By 的代码提交。
+missing_review_commits() {
+  local deployed=$1 tip=$2 sha
+  local commits
+  if [[ -n $deployed ]]; then
+    commits=$(git -C "$SRC" -c safe.directory="$SRC" rev-list --reverse "$deployed..$tip" 2>/dev/null || true)
+  else
+    commits=$tip
+  fi
+  while IFS= read -r sha; do
+    [[ -n $sha ]] || continue
+    commit_has_code "$sha" || continue
+    has_reviewed_by "$sha" || printf '%s\n' "$sha"
+  done <<<"$commits"
+}
+
 print_plan() {
   local count=$1
   log "DRY-RUN 计划（不执行任何改动）："
@@ -455,16 +484,21 @@ main() {
   fi
 
   if ((REQUIRE_REVIEW == 1)); then
-    if has_reviewed_by "$REMOTE"; then
-      log "部署闸：$SHORT 含 Reviewed-By trailer"
-    elif ((FORCE == 1)); then
-      log "警告：$SHORT 缺少 Reviewed-By trailer；--force 例外继续（仅限回滚/热修）"
+    local missing missing_list
+    missing=$(missing_review_commits "$DEPLOYED" "$REMOTE")
+    if [[ -z $missing ]]; then
+      log "部署闸：$SHORT 范围内代码提交均含 Reviewed-By trailer"
     else
-      log "拒绝部署：$SHORT 缺少 Reviewed-By trailer（代码提交需独立 Reviewer PASS；docs-only 豁免；--force 例外）"
-      if ((DRY_RUN == 0)); then
-        record_failure "missing Reviewed-By"
+      missing_list=$(printf '%s\n' "$missing" | cut -c1-7 | tr '\n' ' ')
+      if ((FORCE == 1)); then
+        log "警告：以下提交缺少 Reviewed-By trailer：${missing_list}；--force 例外继续（仅限回滚/热修）"
+      else
+        log "拒绝部署：以下代码提交缺少 Reviewed-By trailer：${missing_list}（代码提交需独立 Reviewer PASS；docs-only 豁免；--force 例外）"
+        if ((DRY_RUN == 0)); then
+          record_failure "missing Reviewed-By"
+        fi
+        exit 1
       fi
-      exit 1
     fi
   fi
 
