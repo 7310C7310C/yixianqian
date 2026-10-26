@@ -71,6 +71,19 @@ def dismiss_guide(page):
         page.wait_for_timeout(300)
 
 
+def click_tab(page, index: int) -> None:
+    last = None
+    for _ in range(4):
+        dismiss_guide(page)
+        try:
+            page.locator(".van-tabbar-item").nth(index).click(timeout=4000)
+            return
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            page.wait_for_timeout(400)
+    raise last
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     failures = []
@@ -92,8 +105,7 @@ def main() -> int:
             if not page.evaluate("window.__YXQ_PAGES__ && typeof window.__YXQ_PAGES__.cards === 'function'"):
                 failures.append("cards chunk is not in the initial bundle")
             for index, name in ((2, "home"), (1, "likes"), (3, "profile")):
-                dismiss_guide(page)
-                page.locator(".van-tabbar-item").nth(index).click()
+                click_tab(page, index)
                 page.wait_for_timeout(1600)
                 if not page.evaluate(f"window.__YXQ_PAGES__ && typeof window.__YXQ_PAGES__.{name} === 'function'"):
                     failures.append(f"{name} page chunk did not load")
@@ -131,8 +143,7 @@ def main() -> int:
         try:
             page.goto(BASE + "/", wait_until="load", timeout=60000)
             page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
-            dismiss_guide(page)
-            page.locator(".van-tabbar-item").nth(2).click()
+            click_tab(page, 2)
             page.locator(".boot-fail").wait_for(state="visible", timeout=20000)
             detail = page.locator(".boot-fail-detail").inner_text()
             if "页面资源加载失败" not in detail:

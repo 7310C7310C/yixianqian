@@ -284,6 +284,7 @@ sources: []
 | 0007 | `0007_id_card_hash.sql` | Deterministic HMAC of the identity number, used only to enforce |
 | 0008 | `0008_perf_indexes.sql` | 性能批次1：卡片页/通知热路径索引。只增不改、不改数据。 |
 | 0009 | `0009_perf_indexes_b7.sql` | 性能批次7：按 EXPLAIN 证据补通知/赞美/留言/报名热路径索引。 |
+| 0010 | `0010_photo_authz_indexes.sql` | 批次10：跨用户照片授权（/cards/photo、/profile/photo）的索引。 |
 
 ## 6. make targets
 

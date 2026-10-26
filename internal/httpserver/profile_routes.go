@@ -836,7 +836,41 @@ func (a *App) handleProfilePhotoServe(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	photo, err := a.db.GetProfilePhotoFile(r.Context(), mediaID)
+	// /profile/photo 与 /cards/photo 共用同一套授权：本人、短时牌堆/详情 owner grant、
+	// 或持久关系（任一方向有效喜欢/同活动/消息/管理员）。旧实现只校验「双方可浏览」，
+	// 任何登录用户拿到 UUID 就能取跨用户照片，属同类越权，批次10 一并收口。
+	viewer, err := a.db.GetSocialViewer(r.Context(), user.ID)
+	if errors.Is(err, db.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		a.logger(r).Error("load profile photo viewer failed", "error", err, "user_id", user.ID)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if _, _, allowed := socialAccountState(viewer, false); !allowed {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var photo db.Media
+	base, err := a.db.GetCardPhotoBase(r.Context(), mediaID, user.ID)
+	if err == nil {
+		granted := false
+		if a.photoGrants != nil {
+			for _, ownerID := range base.GalleryUserIDs {
+				if a.photoGrants.AllowedOwner(user.ID, ownerID) {
+					granted = true
+					break
+				}
+			}
+		}
+		if granted {
+			photo = base.Media
+		} else {
+			photo, err = a.db.GetCardPhotoForViewer(r.Context(), mediaID, user.ID)
+		}
+	}
 	if errors.Is(err, db.ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -845,18 +879,6 @@ func (a *App) handleProfilePhotoServe(w http.ResponseWriter, r *http.Request) {
 		a.logger(r).Error("load profile photo failed", "error", err, "media_id", mediaID)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
-	}
-	if photo.UserID != user.ID {
-		_, status, err := a.db.GetAccountState(r.Context(), user.ID)
-		if err != nil {
-			a.logger(r).Error("load viewer account state failed", "error", err, "user_id", user.ID)
-			http.NotFound(w, r)
-			return
-		}
-		if !profileAccountCanBrowse(status) || !profileAccountCanBrowse(photo.AccountStatus) {
-			http.NotFound(w, r)
-			return
-		}
 	}
 
 	a.serveMediaObject(w, r, mediaObject{

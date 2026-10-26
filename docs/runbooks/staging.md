@@ -15,14 +15,14 @@ sources:
 > （migration 5、`unchecked=0`），常规部署见「常规部署」一节。人脸首次上线已于 2026-10-22 完成，
 > 重建/新环境步骤见 git 历史旧版 runbook；**不要回滚 pre-0005**。
 
-## 当前部署快照（2026-10-23）
+## 当前部署快照（2026-10-26）
 
 | 项目 | 值 |
 |---|---|
 | 公开入口 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD | `a2ce99a` |
-| `/healthz` version | `staging-a2ce99a` |
-| migration 最大版本 | `5` |
+| 部署 HEAD（二进制） | `30e4b96`（`deployed.sha` 已推进到 `b15433d`，docs-only 不重启） |
+| `/healthz` version | `staging-30e4b96` |
+| migration 最大版本 | `9`（批次10 待部署：`0010_photo_authz_indexes.sql` → 10） |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装（2026-10-22），每 10 分钟 |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
@@ -324,6 +324,19 @@ pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、
   q=0 / `gzip;q=abc` / `x-gzip` / identity 均落 identity（147,145B、无 Content-Encoding）；
   同连接命中 TTFB **0.87ms（gzip）/1.89ms（identity）**，首连 ~96–103ms（TLS 握手）。
 
+## 批次10：渐进启动与照片授权（待部署）
+
+- 壳启动顺序：三个主脚本移除静态 `defer` 与全部 script/style preload，hero 绘制后按序注入；`/app` 首屏逻辑不变。
+  部署后 smoke 必须覆盖：首卡 hero 出现、无白屏、管理台 iframe 正常、Vue 缺失时可见错误页。
+- 照片授权：`/cards/photo/{id}`、`/profile/photo/{id}` 默认拒绝；授权对象是画廊主人 `profile_photos.user_id`（共享 media 的 media.user_id 只用于取对象）；本人、管理员、**任一方向有效喜欢（含互喜）**、同活动报名、**任一方向消息对手方**放行；牌堆候选由 cards/home 下发时按目标用户登记 15 分钟进程内 grant。匿名 401、无权/不存在 404。
+  公开资料页 `/legacy/api/users/{id}/public` 仅按 viewer 与目标本人的关系（不复用 media 级关系）返回照片 URL；跨用户 owner 仅限 active/matched/observer
+  （pending/rejected 仅本人可见），observer 本人照片可读。
+- migration `0010_photo_authz_indexes.sql` 只加索引：`profile_photos(media_id)`、`likes(target_id,initiator_id)`、
+  `signups(activity_id,user_id)`、`messages(author_id,target_user_id)`；自动部署时 runner 在事务内执行普通
+  `CREATE INDEX`（当前表小），生产大表另走手工 `CONCURRENTLY`。
+- 回滚：binary 回退到上一版即可（新增索引对旧 binary 无害）；不要回滚 migration 0010，schema 只增不改。
+- 多实例注意：grant 是进程内内存；多实例部署前必须改为共享 grant 或 HMAC 签名 URL（见 `docs/DECISIONS.md` §33）。
+
 ## 性能批次1：边缘/传输（nginx）
 
 - 目标：server2 上游 keepalive（跨洋每请求 465ms → ~155ms + 源站）、`/static/` 边缘缓存（TTL 1h）、边缘 gzip、SSE 例外；
@@ -432,7 +445,7 @@ ssh -i ~/.ssh/yixianqian_relay root@45.125.16.205 \
 
 - 媒体：`/media/{id}`、`/cards/photo/{id}`、`/profile/photo/{id}`、活动海报、管理台受权照片统一 `ETag`（`<id>-thumb|orig`）与 `Cache-Control: private, max-age=<thumb 24h|orig 1h>, immutable`；`If-None-Match` 返回 304；**仍为授权后私有串流，未改 public、未做 Range**。
 - R2 读取去掉 `Stat()` 额外 HEAD：单次 GET，先读首块再写响应头，缺对象仍 404。
-- SPA：内联 CSS/JS 拆为 `/static/legacy/app.<assetVersion>.css|js`（实际文件名 `app.css`/`app.js` + `?v=`），壳保留启动配置与骨架；4 个库改 `defer` + `preload`；PhotoSwipe 首次打开图片时动态加载（失败降级直接开原图）；卡片首图 `eager`+`fetchpriority=high`，其余 `lazy`，列表用 `?size=thumb`。
+- SPA：内联 CSS/JS 拆为 `/static/legacy/app.<assetVersion>.css|js`（实际文件名 `app.css`/`app.js` + `?v=`），壳保留启动配置与骨架；4 个库改 `defer` + `preload`（批次10 起移除 script/style preload）；PhotoSwipe 首次打开图片时动态加载（失败降级直接开原图）；卡片首图 `eager`+`fetchpriority=high`，其余 `lazy`，列表用 `?size=thumb`。
 - 壳 `private, no-cache` + `ETag`；`/static` 带 `?v=` 的上游响应为 1y immutable（nginx 不再 `proxy_ignore_headers Cache-Control`）。
 - 回滚：静态资源已 `go:embed` 进二进制，**改磁盘文件无效**。回滚 = 回退提交（或用上一版 binary）后重新构建/部署；不要保留公开可取的旧壳文件。需要旧壳时从 git 历史取（`git show <commit>:web/static/legacy/index.html`）。
 
@@ -474,7 +487,7 @@ curl -s -o /dev/null -w 'media 304=%{http_code}\n' -H "Cookie: yxq_session=$C" -
   **不再有 template 兜底**：`Vue` 未加载或 `window.__YXQ_RENDER__` 不是函数时，`app.js` 渲染可见错误页
   （`.boot-fail`，含详情与「重新加载」）并 `console.error('[yxq] boot failed')`，不再是白屏。
   `app.render.js` 自身也带 `typeof Vue` 守衛（运行库缺失时直接 return，不抛 pageerror）；
-  **Vant 改由 `app.js` 在 Vue 就绪后按需注入**（`<link rel=preload>` 仍在壳里，抓取时机不变）——
+  **Vant 改由 `app.js` 在 Vue 就绪后按需注入**（批次6 时 `<link rel=preload>` 仍在壳里；批次10 起移除）——
   Vant 是依赖 Vue 的 UMD，Vue 缺失时提前执行只会在 vendor 里抛 pageerror 并盖住错误页。
   三种缺失（`app.render.js` / `vue.global.prod.js` / `vant.min.js`）都只显示错误页、无 pageerror，
   由 `app_integration` smoke 的 `run_render_missing` 三个用例覆盖。
@@ -649,6 +662,10 @@ runuser -u yxq -- psql -d yixianqian_staging -Atc \
 ## 安全与限制
 
 - 管理台纵向权限（2026-10-24）：临时密码、停用/恢复、审核通过/拒绝对 `super_admin`/`admin` 目标仅 `super_admin` 可执行；`approve`/`reject` 只接受 `pending`/`rejected`，active 账号必须走 `user.manage` 停用/启用。handler 与 DB 层双重校验；回归 `TEST_DATABASE_URL=... go test ./internal/db ./internal/httpserver -run 'TestIntegrationAdminRBAC|TestIntegrationAdminPrivilegeBoundaries'`。
+- 跨用户照片（批次10）：`/cards/photo/{id}`、`/profile/photo/{id}` 默认拒绝，只允许本人、管理员、**任一方向有效喜欢（含互喜）**、
+  同活动报名、**任一方向消息对手方**；牌堆候选靠 cards/home 下发时按目标用户登记的 per-viewer 15 分钟 grant。匿名 401、
+  无权/不存在 404；公开资料页只在授权时返回照片 URL。回归：
+  `TEST_DATABASE_URL=... go test ./internal/httpserver -run 'CardPhotoAuthorization|PublicProfileHides'`。
 - staging 只放测试资料，不接生产个资；R2 私有，不把 URL 给浏览器。
 - `TRUSTED_PROXY=127.0.0.1`；server2 设 `X-Real-IP`，server1 nginx 转传。
 - app 目前在 LA，staging 延迟不代表最终；上线前搬到 HK app server。

@@ -1,6 +1,6 @@
 <div key="home" class="page">
   <div v-if="loadingActivities && !activities.length" style="text-align:center; padding:40px;">
-    <van-loading size="24px">加载中...</van-loading>
+    <van-loading size="24px" />
   </div>
   <van-empty v-else-if="!activities.length" description="暂无进行中的活动"></van-empty>
   <div v-else>

@@ -236,7 +236,7 @@ sources: []
 - 决策：壳内 bootstrap **只含非敏感首页数据**。服务端 `sanitizeBootstrap` 递归剔除**按模式匹配**的键：含 `wechat` 或 `phone` 子串（覆盖 `wechat`、`wechat_id`、`wechat_payment`、`phone`、`telephone`、`likes.mutual[].my_wechat`、`their_wechat`）、以 `id_card`/`idcard` 开头（大小写不敏感，覆盖 `id_card_last4`、`id_card_no`、`IdCardHash`）；门禁类布尔（`id_valid`、`has_face`、`account_status`）与展示字段保留。精确键名白名单此前漏掉互喜的 `my_wechat`/`their_wechat`，故改为模式匹配。
 - 决策：互喜页的微信号预填/展示只取自 `no-store` 的 `/legacy/api/likes/me`（`loadLikes()` → `normalizeMutualItems` 用 `my_wechat`、`their_wechat`），壳内 bootstrap 的 `likes.mutual` 只保留昵称/状态等非联系方式字段。`/legacy/api/home`、`/legacy/api/likes/me`、`/legacy/api/profile` 的字段与 `no-store` 语义不变。壳的 ETag 覆盖 bootstrap 字节（64bit hash）+ `assetVersion` + 用户 id，`Vary: Cookie`（**壳**；API 的 Vary 实测为空），因此 304 只复用逐字节相同的个人数据。
 - 决策：Vue 采用 runtime-only 3.4.27（与官方 `vue.runtime.global.prod.js` 字节一致）后，**不再承诺「`app.render.js` 缺失时回退运行时编译」**。改为显式失败可见：`Vue` 未加载或 `window.__YXQ_RENDER__` 非函数时，`app.js` 渲染 `.boot-fail` 错误页（含原因与「重新加载」）并写 `console.error('[yxq] boot failed')`；相关文档与注释同步改写。
-- 决策：Vant 不再作为壳里的独立 `<script>`，改由 `app.js` 在 Vue 就绪后注入（`<link rel=preload>` 保留）。原因：Vant 是依赖 Vue 的 UMD，Vue 缺失时它会先抛 pageerror，盖住 `app.js` 的统一错误页；按需注入后「Vue 缺失」「Vant 缺失」「渲染产物缺失」三种情况都只显示 `.boot-fail`，无 pageerror（`app_integration` smoke 三用例覆盖）。代价是首屏挂载等 Vant 加载完成（preload 已在壳里，等同原 `defer` 顺序）。
+- 决策：Vant 不再作为壳里的独立 `<script>`，改由 `app.js` 在 Vue 就绪后注入（`<link rel=preload>` 保留；批次10 起该 script preload 已随首屏优化移除）。原因：Vant 是依赖 Vue 的 UMD，Vue 缺失时它会先抛 pageerror，盖住 `app.js` 的统一错误页；按需注入后「Vue 缺失」「Vant 缺失」「渲染产物缺失」三种情况都只显示 `.boot-fail`，无 pageerror（`app_integration` smoke 三用例覆盖）。代价是首屏挂载等 Vant 加载完成；批次10 起 Vant 也改为 hero 绘制后按需注入，不再有 script preload。
 - 决策：静态预压缩门禁以「内容」为准而非「压缩字节」：`tools/static_gzip -check` 校验 `.gz` 存在且解压后与源文件逐字节一致，`-strict-bytes` 仅本机重生后使用。原因：flate 输出跨 Go 版本不同（1.24.7 与 1.27.3 字节不同、内容相同），go.mod/CI 是 1.24.x；`ci.yml` lint-build 执行该检查，新增源文件忘生成 `.gz` 必红。
 - 决策：边缘 `Accept-Encoding` 两态规整。`map $yxq_static_enc` 只把「裸 gzip token」或「q 值含非零数字」判为 gzip（`x-gzip`、`q=0`、非法 q 落 identity），回源再经 `map $yxq_static_enc $yxq_upstream_ae` 发送 `gzip` 或空值。这样 Go 与边缘永远做同一决定，不会出现「identity 缓存键里存 gzip 字节」这种会伤客户端的错配。
 - 边界：不改媒体授权/隐私语义；不把 bootstrap 写入共享缓存（`private` + `Vary: Cookie`（壳），边缘 `/` 无 `proxy_cache`）；`/legacy/api/home` 与 `/legacy/api/profile` 的字段与 `no-store` 不变。
@@ -307,3 +307,57 @@ sources: []
 - 证据：`TestReadCache*`、`TestIntegrationLegacyHomeCardsReadCache`（命中 0 build 查询/写路径失效/跨用户隔离）、
   `bench_rounds.py` 三轮区间。
 
+
+## 33. 批次10：首屏渐进启动与跨用户照片授权（2026-10-26）
+
+- 背景：staging 慢机（QEMU vCPU、CPU×4/1.6Mbps）冷 LCP 3.74s / 热 1.91s，最长任务 2.10s/0.83s；
+  壳内真实首卡 hero 已存在，但 `vue.global.prod.js` + `app.render.js` + `app.min.js` 的解析/执行/挂载长任务
+  发生在 hero 绘制之前。同期审计发现 `/cards/photo/{uuid}` 只校验「双方可浏览」，任意登录用户可用他人
+  media UUID 取图；`/profile/photo/{uuid}` 是同类越权端点，`/legacy/api/users/{id}/public` 还会下发照片 URL。
+- 决策（1B 渐进启动）：三个主脚本不再用静态 `defer` 标签执行；**移除全部 script/style preload**（实测与首图抢带宽），由壳内 loader 在
+  **首卡 hero 图片 load+decode 并提交一帧后**按 `vue → app.render → app.min` 顺序注入/执行（硬上限 2.5s，
+  无 hero 时 600ms 后启动）。启动前点击/按键只记 `__YXQ_BOOT_PENDING_INTERACT__`，不重放、不报错；
+  `loadHome` 4s 硬兜底、hero 生命周期、管理台 iframe 语义不变。Vue/Vant 缺失仍由 app.js 渲染可见错误页；
+  app.min.js 缺失由壳内联 `__YXQ_BOOT_FAIL__` 渲染错误页。启动/hero 时间写入 `yxq-app-start`/`yxq-hero-ready`
+  PerformanceMark，供 `perf_boot.py` 采集。
+- 决策（2A 照片授权）：`/cards/photo` 与 `/profile/photo` 共用同一策略，**默认拒绝**；授权对象始终是画廊主人
+  `profile_photos.user_id`（迁移数据中可能与 `media.user_id` 不同，共享 media 只用于取对象）；放行条件仅为：
+  本人、任一 RBAC 管理员角色、**任一方向的有效喜欢（含互喜）**、未取消的同活动报名（同活动为并集，覆盖同组/同轮）、
+  **任一方向消息的对手方**。匿名 401、无权/不存在 404（不泄露存在性）；禁用账号仍由账号门禁返回 403。
+  跨用户 owner 仅限 `active/matched/observer`（pending/rejected 仅本人可见）；observer 本人照片可读。
+- 决策（候选池）：**不采用**「候选池 = 所有活跃异性用户」的宽口径（那仍可用 UUID 扫全站）；候选由
+  cards/home 构建时按本次真正下发的**目标用户 ID** 登记 per-viewer 短时 grant（TTL 15 分钟，单 viewer ≤2000 个目标、
+  全局 ≤2000 viewer；每 viewer 单一有序目标集合（merge/去重，15m TTL 刷新），超 2000 只淘汰最低 ID，viewer 按 lastSeen LRU fail-closed）；最坏 2000×2000×8B=32MiB + slice/map 头（≤64MiB）。图片请求先查 grant，命中走无关系子查询的单条索引 SQL，
+  未命中走关系 SQL。公开资料页**只按 viewer 与目标本人（画廊主人）的关系**（本人/grant/`CanViewGallery(target)`）返回照片 URL，不得复用 media 级关系/其他画廊 grant，否则共享 media 会越权；不通过返回空数组。
+- 决策（不采用签名 URL）：本批用进程内 grant 而非 HMAC 签名 URL，避免壳 bootstrap 的签名/过期时间
+  造成 ETag 抖动；代价是**多实例部署需改共享 grant 或签名 URL**，进程重启后首次图片请求可能回落到关系
+  SQL/404（浏览器已缓存的私有图片不受影响），作为已知限制记录。
+- 性能：migration `0010_photo_authz_indexes.sql` 只加索引（`profile_photos(media_id)`、`likes(target_id,initiator_id)`、
+  `signups(activity_id,user_id)`、`messages(author_id,target_user_id)`）；staging 克隆 EXPLAIN 实测单图授权
+  14.3ms → **1.9ms**（无 `profile_photos_media_idx` 时全表扫 1028 行）。cards 批量照片在既有查询中一次取回，
+  grant 循环 O(n) 无 SQL，15 图不产生 N+1。
+- 边界：不改管理台受权媒体串流 `/admin/...`、RBAC/CSRF/审计语义；不改照片 `Cache-Control`/ETag；
+  migration 只增不改；staging 部署前仍需独立 Reviewer + security-gate/Auditor；生产未授权。
+- 证据：`TestIntegrationCardPhotoAuthorizationMatrix`（本人/陌生人/候选/喜欢/互喜/同活动同组/消息/管理员/
+  观察员/禁用/匿名/猜测 ID）、`TestIntegrationPublicProfileHidesUnauthorizedPhotos`、`PhotoGrantStore*`、
+  `TestIntegrationLegacyProfileFlow`（陌生人 404 → 候选 200）、
+  `TestIntegrationGrantOwnerDeckPagination`（60 候选×9 图翻页 540/540 张 200）、
+  `TestIntegrationPhotoGrantCrossViewerAndRevocation`（跨 viewer/喜欢/消息/报名撤销/owner 禁用）、
+  `TestIntegrationObserverSelfAndDisabledViewerGates`、`make ci`/`make test-race`/`make test-integration`。
+
+### 33.1 批次10 追加：首次 tab 无「加载中」文字（PM 2026-10-26）
+
+- 需求：进入 `/` 后首次点击 4 个 tab 不得出现「加载中...」文字；chunk 未就绪时不得文字中断。
+- 实现：应用挂载且 LCP 条目出现后由 `requestIdleCallback`（timeout 100ms，另 2.5s 绝对兜底）按
+  `likes → home → profile → user_detail → group_admin` 顺序预取页 chunk，复用 `yxqLoadPageChunk`
+  的 in-flight 去重与缓存；预取不参与首屏图/主脚本下载。tabbar `before-change` 守卫在目标 chunk
+  未就绪时**保留当前页**并等待加载完成（4s 超时）；加载失败走 `.boot-fail`，后台预取失败只跳过。
+  `page-host` 兜底改为无文字同构骨架（深链/异常路径），`cards.html`/`home.html` 的数据加载态改为
+  仅转圈、无文字。切换动画与 tabbar 状态不变。壳 bootstrap cards 由 20 降为 3；hero 图去掉 0.12s opacity 过渡，首帧即按 decode 后立绘。
+- 证据：新增 `tools/browser/tab_first_load_smoke.py`（CPU×4/1.6Mbps）：首次依次点消息/活动/我的/牵线、
+  快速连点、回退、深链 `#/likes`、管理台 iframe 全 PASS；`加载中` 文本命中 **0**、CLS noInput **0.0000**；
+  预取完成后点击前 `yxqPageChunkReady` 对 likes/home/profile/detail/group 均为 true。
+- 性能复测（同慢机本地实例，N=10）：冷 FCP/LCP **614/1144ms**（P95 1396）、热 **448/482ms**（P95 592），CLS 0；
+  冷/热均达 ≤2.5/≤1.2s。共享 media 修复让壳内首图不再 404；bootstrap cards 20→3、hero 去 opacity 过渡、
+  LCP 后预取共同生效。本地传输 430,741B/20；edge gzip 预取合计约 43.5KB，按 edge 基线 289,475B
+  估算约 **333KB ≤350KB**（部署后以实测为准）。

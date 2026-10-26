@@ -202,14 +202,14 @@
      #boot-skeleton 只负责覆盖与淡出，Vue 首卡图绘制后才移除（index.html 的 __YXQ_HERO__）。 */
   #boot-skeleton { position: fixed; inset: 0; z-index: 2000; background: #f7f8fa; pointer-events: none; }
   #boot-skeleton .boot-hero-shimmer { position: absolute; inset: 0; border-radius: 0; z-index: 1; }
-  #boot-skeleton .boot-photo { position: absolute; inset: 0; z-index: 2; object-position: 50% 0; opacity: 0; transition: opacity 0.12s linear; }
+  #boot-skeleton .boot-photo { position: absolute; inset: 0; z-index: 2; object-position: 50% 0; opacity: 1; }
   #boot-skeleton.boot-hero-ready .boot-photo { opacity: 1; }
   #boot-skeleton.boot-hero-ready .boot-hero-shimmer { opacity: 0; }
   #boot-skeleton.boot-hero-failed .boot-photo { display: none; }
   #boot-skeleton .boot-hero-body { flex: 1; min-height: 0; padding: 18px 16px; }
   #boot-skeleton .boot-hero-body .boot-line { height: 14px; }
   #boot-skeleton .boot-tab-text { font-size: 12px; line-height: 1; color: #969799; }
-  #boot-skeleton.boot-hero-out { opacity: 0; transition: opacity 0.16s linear; }
+  #boot-skeleton.boot-hero-out { opacity: 0; }
   .van-theme-dark #boot-skeleton { background: #111; }
   .van-theme-dark #boot-skeleton .boot-hero-body { background: #222226; }
   @media (prefers-reduced-motion: reduce) {

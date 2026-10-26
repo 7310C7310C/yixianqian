@@ -182,9 +182,25 @@ def parse_counter(page) -> tuple[int, int]:
 
 
 def wait_counter(page, want: str, timeout: int = 15000) -> None:
+    try:
+        page.wait_for_function(
+            "(want) => { const el = document.querySelector('.card-counter'); return !!el && el.textContent.trim() === want; }",
+            arg=want, timeout=timeout,
+        )
+    except PlaywrightTimeoutError:
+        raise SmokeFailure(f"计数器等待 {want!r} 超时，当前 {counter_text(page)!r}") from None
+
+
+def wait_counter_left(page, want_left: int, timeout: int = 15000) -> None:
+    """Wait for numerator only; bootstrap vs /api/cards total may differ by one."""
     page.wait_for_function(
-        "(want) => { const el = document.querySelector('.card-counter'); return !!el && el.textContent.trim() === want; }",
-        arg=want, timeout=timeout,
+        r"""(left) => {
+          const el = document.querySelector('.card-counter');
+          if (!el) return false;
+          const m = el.textContent.trim().match(/^([0-9]+)\s*\/\s*([0-9]+)$/);
+          return !!m && Number(m[1]) === left && Number(m[2]) > 0;
+        }""",
+        arg=want_left, timeout=timeout,
     )
 
 
@@ -327,7 +343,7 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
         total = int(total_text.split("/")[-1].strip())
         if total < 3:
             raise SmokeFailure(f"测试账号牌堆不足 3 张（{total_text}）")
-        wait_counter(page, f"1 / {total}")
+        wait_counter_left(page, 1)
 
         # 1) 切 tab：hero 已消失，不因回切而重现。
         page.locator(".van-tabbar-item").filter(has_text="消息").click()
@@ -341,12 +357,12 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
 
         # 2) 滑动：1→2→1；始终只有一张卡。
         drag_card(page, -90)
-        wait_counter(page, f"2 / {total}")
+        wait_counter_left(page, 2)
         if page.locator(".swipe-card").count() != 1:
             raise SmokeFailure("滑动后牌堆 DOM 不是 1 张")
         page.screenshot(path=str(out_dir / "deck-2-390.png"))
         drag_card(page, 90)
-        wait_counter(page, f"1 / {total}")
+        wait_counter_left(page, 1)
 
         # 3) 浏览器回退：我的 → 我的麦穗（pushState）→ back → 我的；hero 不重现。
         page.locator(".van-tabbar-item").filter(has_text="我的").click()

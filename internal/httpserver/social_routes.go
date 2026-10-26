@@ -166,7 +166,26 @@ func (a *App) handleCardPhoto(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	m, err := a.db.GetCardPhotoForViewer(r.Context(), id, user.ID)
+	// 默认拒绝：只有本进程刚下发给该 viewer 的牌堆/详情照片（短时 grant）或
+	// 本人/管理员/点赞/同活动/消息对手方等持久关系才放行；不存在与无权都回 404。
+	var m db.Media
+	base, err := a.db.GetCardPhotoBase(r.Context(), id, user.ID)
+	if err == nil {
+		granted := false
+		if a.photoGrants != nil {
+			for _, ownerID := range base.GalleryUserIDs {
+				if a.photoGrants.AllowedOwner(user.ID, ownerID) {
+					granted = true
+					break
+				}
+			}
+		}
+		if granted {
+			m = base.Media
+		} else {
+			m, err = a.db.GetCardPhotoForViewer(r.Context(), id, user.ID)
+		}
+	}
 	if errors.Is(err, db.ErrNotFound) {
 		http.NotFound(w, r)
 		return

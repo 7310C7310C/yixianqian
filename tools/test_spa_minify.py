@@ -28,13 +28,24 @@ SHELL_OK = """<!doctype html>
 <html><head>
 <link rel="preload" as="script" href="app.min.js?v=__ASSET_URL_VERSION__">
 </head><body>
-<script src="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__" defer></script>
-<script src="app.min.js?v=__ASSET_URL_VERSION__" defer></script>
+<script>
+var ASSETS = [
+  'lib/vue.global.prod.js?v=__ASSET_URL_VERSION__',
+  'app.render.js?v=__ASSET_URL_VERSION__',
+  'app.min.js?v=__ASSET_URL_VERSION__'
+];
+</script>
 </body></html>
 """
 
-SHELL_FALLBACK = SHELL_OK.replace('src="app.min.js?v=', 'src="app.js?v=').replace(
-    'href="app.min.js?v=', 'href="app.js?v='
+SHELL_FALLBACK = SHELL_OK.replace("'app.min.js?v=", "'app.js?v=")
+SHELL_PRELOAD_ONLY = """<!doctype html>
+<html><head>
+<link rel="preload" as="script" href="app.min.js?v=__ASSET_URL_VERSION__">
+</head><body></body></html>
+"""
+SHELL_STATIC_APP_JS = SHELL_OK + (
+    '<script src="app.js?v=__ASSET_URL_VERSION__" defer></script>\n'
 )
 
 
@@ -87,7 +98,16 @@ class SpaMinifyGateTest(unittest.TestCase):
         (self.legacy / "index.html").write_text(SHELL_FALLBACK, encoding="utf-8")
         errors = check.check(self.root)
         self.assertTrue(any("app.min.js" in e for e in errors), errors)
+
+    def test_gate_fails_when_shell_loads_source_script(self) -> None:
+        (self.legacy / "index.html").write_text(SHELL_STATIC_APP_JS, encoding="utf-8")
+        errors = check.check(self.root)
         self.assertTrue(any("app.js" in e for e in errors), errors)
+
+    def test_gate_fails_on_preload_only_shell(self) -> None:
+        (self.legacy / "index.html").write_text(SHELL_PRELOAD_ONLY, encoding="utf-8")
+        errors = check.check(self.root)
+        self.assertTrue(any("ASSETS" in e or "app.min.js" in e for e in errors), errors)
 
     def test_gate_fails_when_source_deleted(self) -> None:
         (self.legacy / "app.js").unlink()

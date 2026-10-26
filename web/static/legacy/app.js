@@ -140,7 +140,7 @@ var YXQ_PAGE_GROUPS = {
 var yxqPageLoading = {};
 var yxqRootProxy = null;
 
-function yxqLoadPageChunk(page, done){
+function yxqLoadPageChunk(page, done, onError){
   if (window.__YXQ_PAGES__ && typeof window.__YXQ_PAGES__[page] === 'function') {
     if (done) done();
     return;
@@ -163,11 +163,85 @@ function yxqLoadPageChunk(page, done){
   };
   script.onerror = function(){
     yxqPageLoading[group] = null;
+    // 前台导航（tab 点击守卫/当前页）必须升级为可见错误；后台预取失败只跳过。
+    if (onError) { try { onError(page); } catch (e) {} return; }
     // 只有用户仍停在目标页时才升级为致命错误；已切走则下次进入重试。
     var current = yxqRootProxy && yxqRootProxy.page;
     if (current === page) yxqBootFailure('页面资源加载失败：' + page);
   };
   document.head.appendChild(script);
+}
+
+// 批次10 追加：tab 页 chunk 的「就绪」判断、点击守卫与 idle 预取。
+// 预取在应用挂载后的 requestIdleCallback（timeout 200ms + 1.2s 绝对兜底）启动，
+// 此时 hero 已绘制，不抢首屏图/首屏脚本。
+function yxqPageChunkReady(page){
+  if (!page) return true;
+  if (!YXQ_PAGE_GROUPS[page]) return true; // cards 的 render 在 app.render.js
+  return !!(window.__YXQ_PAGES__ && typeof window.__YXQ_PAGES__[page] === 'function');
+}
+function yxqEnsurePageChunk(page){
+  if (yxqPageChunkReady(page)) return Promise.resolve(true);
+  return new Promise(function(resolve){
+    var settled = false;
+    var timer = setTimeout(function(){ if (settled) return; settled = true; resolve(false); }, 4000);
+    yxqLoadPageChunk(page, function(){
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(yxqPageChunkReady(page));
+    }, function(){
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      yxqBootFailure('页面资源加载失败：' + page);
+      resolve(false);
+    });
+  });
+}
+function yxqPrefetchPageChunks(){
+  var pages = ['likes', 'home', 'profile', 'user_detail', 'group_admin'];
+  var index = 0, started = false;
+  function next(){
+    if (index >= pages.length) return;
+    var page = pages[index++];
+    if (yxqPageChunkReady(page)) { next(); return; }
+    // 与导航共用 yxqLoadPageChunk 的 in-flight 去重与缓存；80ms 间隔避免瞬时并发。
+    yxqLoadPageChunk(page, function(){ setTimeout(next, 80); }, function(){ setTimeout(next, 80); });
+  }
+  function start(){
+    if (started) return;
+    started = true;
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(function(){ next(); }, { timeout: 2500 });
+    } else {
+      setTimeout(next, 1200);
+    }
+  }
+  // 等 LCP 条目出现后再预取：hero/最终卡图的绘制已完成，预取不会抢 LCP；
+  // likes 仍排第一，保证首次点「消息」时 chunk 尽快就绪。2.5s 绝对兜底。
+  var prefetchStarted = false;
+  function startAfterLCP(){
+    if (prefetchStarted) return;
+    prefetchStarted = true;
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(start, { timeout: 100 });
+    } else {
+      setTimeout(start, 0);
+    }
+  }
+  try {
+    new PerformanceObserver(function(list){
+      var entries = list.getEntries();
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].startTime > 0) { startAfterLCP(); return; }
+      }
+    }).observe({ type: 'largest-contentful-paint', buffered: true });
+  } catch (e) {
+    setTimeout(startAfterLCP, 600);
+  }
+  setTimeout(startAfterLCP, 2500);
+
 }
 
 // page-host 在根 render 内渲染当前页；页面 render 用根组件 proxy 调用，
@@ -198,8 +272,15 @@ const PageHost = {
     void this.__tick;
     const renderPage = window.__YXQ_PAGES__ && window.__YXQ_PAGES__[this.page];
     if (typeof renderPage !== 'function') {
-      return Vue.h('div', { class: 'page-chunk-loading' },
-        [Vue.h(Vue.resolveComponent('van-loading'), { size: '24px' }, { default: () => '加载中...' })]);
+      // 无文字骨架：点击/深链时 chunk 未就绪也不出现「加载中...」；tabbar 点击则由
+      // guardTabChange 保留当前页直到 chunk 就绪，正常路径不会看到这个骨架。
+      return Vue.h('div', { class: 'page-chunk-skeleton', 'aria-busy': 'true',
+        style: { minHeight: '70vh', padding: '16px', boxSizing: 'border-box' } }, [
+        Vue.h('div', { class: 'boot-shimmer', style: { width: '46%', height: '18px', borderRadius: '9px', margin: '12px 0 20px' } }),
+        Vue.h('div', { class: 'boot-shimmer', style: { width: '100%', height: '112px', borderRadius: '12px', marginBottom: '12px' } }),
+        Vue.h('div', { class: 'boot-shimmer', style: { width: '100%', height: '112px', borderRadius: '12px', marginBottom: '12px' } }),
+        Vue.h('div', { class: 'boot-shimmer', style: { width: '100%', height: '112px', borderRadius: '12px', marginBottom: '12px' } })
+      ]);
     }
     return renderPage(this.__root, this.__cache);
   }
@@ -4139,6 +4220,11 @@ const yxqApp = createApp({
       }
       // 未保存离开拦截（守卫注册表）：先弹弹窗，不切页；提交执行中 → 提示并停留
       if(guardLeave(() => { page.value = name; })) return false;
+      // 批次10 追加：首次点击 tab 时若 chunk 未就绪，保留当前页直到加载完成，
+      // 避免出现「加载中...」文字或空白骨架；预取通常已让这里直接通过。
+      if (TAB_ORDER.includes(name) && !yxqPageChunkReady(name)) {
+        return yxqEnsurePageChunk(name);
+      }
       return true;
     }
     function goIdInvalidNow(){
@@ -5199,6 +5285,9 @@ const yxqApp = createApp({
       window.__YXQ_LOAD_HOME_STARTED__ = false;
       window.__YXQ_LOAD_HOME_DONE__ = false;
       armBootHeroHardLimit();
+      // 首屏 hero 绘制 + 应用挂载后，idle 预取 tab/子页 chunk；
+      // 管理台 iframe 不预取，避免占用原生管理页带宽。
+      if (!nativeAdmin.value) yxqPrefetchPageChunks();
       // 入口深链：必须在下方 replaceState 清掉 hash 前留存（机器人「报名活动」按钮 → #/activities 直达活动页）
       const entryHash = window.location.hash;
       bootEntryHash = entryHash;

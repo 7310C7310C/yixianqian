@@ -581,8 +581,33 @@ func (a *App) handleLegacyPublicProfile(w http.ResponseWriter, r *http.Request) 
 		viewerProfile.Gender != target.Gender
 
 	card := buildCardView(social, liked, praised, 0, a.clock.Now())
-	photos := legacyProfilePhotoURLs(target.Photos)
-	photosThumb := legacyProfilePhotoThumbURLs(target.Photos)
+	// 公开资料页的文字字段维持原可见性，但照片 URL 只有在本人、刚下发过该用户
+	// 牌堆的短时 grant、或存在持久关系（点赞/同活动/消息）时才返回；否则返回空
+	// 数组，避免该端点成为 /cards/photo/{uuid} 的 UUID 发现面。
+	photosAllowed := target.ID == viewer.ID
+	if !photosAllowed {
+		photosAllowed = a.photoGrants != nil && a.photoGrants.AllowedOwner(viewer.ID, target.ID)
+	}
+	if !photosAllowed {
+		// 公开页必须按「viewer 与 target 本人」的关系判断；不能复用
+		// GetCardPhotoForViewer 的 media 级授权（共享 media 可能属于另一个
+		// 画廊，viewer 只与那个画廊有 like/活动关系）。
+		allowed, galleryErr := a.db.CanViewGallery(r.Context(), target.ID, viewer.ID)
+		if galleryErr != nil {
+			a.logger(r).Warn("legacy public profile gallery check failed", "error", galleryErr, "user_id", viewer.ID)
+		} else {
+			photosAllowed = allowed
+		}
+	}
+	photos := []string{}
+	photosThumb := []string{}
+	if photosAllowed && len(target.Photos) > 0 {
+		photos = legacyProfilePhotoURLs(target.Photos)
+		photosThumb = legacyProfilePhotoThumbURLs(target.Photos)
+		if a.photoGrants != nil {
+			a.photoGrants.Grant(viewer.ID, []int64{target.ID})
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"openid":         socialCardOpenID(social),
 		"user_id":        legacyProfileID(target, db.User{}),

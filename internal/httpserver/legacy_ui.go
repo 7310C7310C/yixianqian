@@ -106,7 +106,7 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	preload := ""
 	if a.db != nil {
 		bootCtx, cancel := context.WithTimeout(r.Context(), 800*time.Millisecond)
-		payload, bootErr := a.buildLegacyHomePayload(bootCtx, r, user, a.clock.Now())
+		payload, bootErr := a.buildLegacyHomePayloadLimit(bootCtx, r, user, a.clock.Now(), 3)
 		cancel()
 		if bootErr != nil {
 			a.logger(r).Warn("legacy shell bootstrap skipped", "error", bootErr, "user_id", user.ID)

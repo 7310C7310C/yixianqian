@@ -78,8 +78,17 @@ def collect(page) -> dict:
           const nav = performance.getEntriesByType('navigation')[0];
           const mount = performance.getEntriesByName('yxq-mount')[0];
           const boot = performance.getEntriesByName('yxq-boot')[0];
+          const appStart = performance.getEntriesByName('yxq-app-start')[0];
+          const heroReady = performance.getEntriesByName('yxq-hero-ready')[0];
           let transfer = 0, encoded = 0;
           for (const r of res) { transfer += r.transferSize || 0; encoded += r.encodedBodySize || 0; }
+          const scripts = res.filter(r => (r.name || '').indexOf('.js') >= 0 || (r.name || '').indexOf('/app') >= 0)
+            .map(r => ({url: r.name.split('/').pop().split('?')[0], start: Math.round(r.startTime),
+                        end: Math.round(r.responseEnd), transfer: r.transferSize || 0, initiator: r.initiatorType || ''}));
+          const photos = res.filter(r => (r.name || '').indexOf('/cards/photo/') >= 0)
+            .map(r => ({url: r.name.split('?')[0].split('/').pop(), start: Math.round(r.startTime),
+                        ttfb: Math.round(r.responseStart), end: Math.round(r.responseEnd),
+                        transfer: r.transferSize || 0, initiator: r.initiatorType || ''}));
           if (nav) { transfer += nav.transferSize || 0; encoded += nav.encodedBodySize || 0; }
           const lt = p.longtasks.slice().sort((a, b) => b.dur - a.dur);
           return {
@@ -93,8 +102,13 @@ def collect(page) -> dict:
             shifts: p.shifts.slice(0, 5).map(e => ({start: Math.round(e.start), value: e.value})),
             bytes: transfer, encoded: encoded,
             requests: res.length + 1,
+            photos: photos,
+            scripts: scripts,
             mount_ms: mount ? Math.round(mount.duration) : null,
             boot_ms: boot ? Math.round(boot.duration) : null,
+            app_start_ms: window.__YXQ_APP_START_AT__ || (appStart ? Math.round(appStart.startTime) : null),
+            app_start_reason: window.__YXQ_APP_START_REASON__ || '',
+            hero_ready_ms: window.__YXQ_HERO_READY_AT__ || (heroReady ? Math.round(heroReady.startTime) : null),
             dom: document.querySelectorAll('*').length,
             cards: document.querySelectorAll('.swipe-card').length,
             hero_present: !!document.getElementById('boot-skeleton'),
@@ -172,13 +186,15 @@ def main() -> int:
                     suffix = f"?cold={i}-{int(time.time() * 1000)}"
                     runs.append(run_once(context, page, base_url, suffix, reload=(mode == "warm")))
                 context.close()
-                keys = ("fcp", "lcp", "longest_task", "longtask_total", "bytes", "requests", "mount_ms", "boot_ms")
+                keys = ("fcp", "lcp", "longest_task", "longtask_total", "bytes", "requests",
+                        "mount_ms", "boot_ms", "app_start_ms", "hero_ready_ms")
                 med = {}
                 for key in keys:
                     vals = [r[key] for r in runs if r.get(key) is not None]
                     med[key] = median(vals)
                 med["lcp_el"] = runs[-1].get("lcp_el", "")
                 med["lcp_class"] = runs[-1].get("lcp_class", "")
+                med["app_start_reason"] = runs[-1].get("app_start_reason", "")
                 med["cls"] = max((r.get("cls") or 0) for r in runs)
                 med["dom"] = max((r.get("dom") or 0) for r in runs)
                 med["cards"] = max((r.get("cards") or 0) for r in runs)
@@ -194,7 +210,9 @@ def main() -> int:
             m = data["median"]
             print(
                 f"  {mode}: FCP {m['fcp']}ms LCP {m['lcp']}ms longest {m['longest_task']}ms "
-                f"mount {m['mount_ms']}ms boot {m['boot_ms']}ms bytes {m['bytes']} req {m['requests']} "
+                f"mount {m['mount_ms']}ms boot {m['boot_ms']}ms "
+                f"app_start {m['app_start_ms']}ms hero_ready {m['hero_ready_ms']}ms ({m.get('app_start_reason', '')}) "
+                f"bytes {m['bytes']} req {m['requests']} "
                 f"CLS {m['cls']} DOM {m['dom']} cards {m['cards']} | {m['lcp_el']}"
             )
     print(f"JSON: {args.out}")

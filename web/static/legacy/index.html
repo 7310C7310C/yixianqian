@@ -12,17 +12,12 @@
 <link rel="icon" href="favicon.svg?v=__ASSET_URL_VERSION__" type="image/svg+xml">
 <link rel="icon" href="favicon.png?v=__ASSET_URL_VERSION__" type="image/png">
 <link rel="apple-touch-icon" href="favicon.png?v=__ASSET_URL_VERSION__">
-<link rel="preload" as="style" href="lib/vant.min.css?v=__ASSET_URL_VERSION__">
 <link rel="stylesheet" href="lib/vant.min.css?v=__ASSET_URL_VERSION__" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="lib/vant.min.css?v=__ASSET_URL_VERSION__"></noscript>
 <!--YXQ_CRITICAL_CSS-->
 <link rel="stylesheet" href="app.css?v=__ASSET_URL_VERSION__" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="app.css?v=__ASSET_URL_VERSION__"></noscript>
 <!--YXQ_BOOTSTRAP_PRELOAD-->
-<link rel="preload" as="script" href="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__">
-<link rel="preload" as="script" href="lib/vant.min.js?v=__ASSET_URL_VERSION__">
-<link rel="preload" as="script" href="app.render.js?v=__ASSET_URL_VERSION__">
-<link rel="preload" as="script" href="app.min.js?v=__ASSET_URL_VERSION__">
 
 </head>
 <body>
@@ -56,9 +51,58 @@
   if (!root) return;
   var img = root.querySelector('.boot-photo');
   var state = {dismissed:false, loaded:false};
-  function setPhoto(src){
+  // 与 app.js computeFaceCrop 同一公式：hero 在首帧就按人脸裁切，挂载后 Vue 卡片
+  // 不会出现「hero 居中 → 真实卡偏移」的视觉跳动。
+  function computeFaceCrop(f, cw, ch, iw, ih){
+    if (!f || !f.c || !cw || !ch || !iw || !ih) return '';
+    try {
+      var scale = Math.max(cw / iw, ch / ih);
+      var dh = ih * scale;
+      var tb = (f.tb && f.tb.length === 2) ? f.tb : [0, 0];
+      var ct = tb[0], cb = tb[1], cr = 1 - ct - cb;
+      if (cr < 0.55) return '';
+      var eh = dh * cr;
+      var cy_e = (f.c[1] - ct) / cr;
+      var fh = (f.box && f.box[1]) ? f.box[1] : 0;
+      var fh_e = fh / cr;
+      var off_e;
+      if (eh <= ch + 1) {
+        off_e = (ch - eh) / 2;
+      } else {
+        var top_e = (cy_e - fh_e / 2) * eh;
+        var bottom_e = (cy_e + fh_e / 2) * eh;
+        var headTop_e = top_e - fh_e * 0.35 * eh;
+        var offDef_e = (ch - eh) / 2;
+        if (offDef_e + headTop_e >= 0 && offDef_e + bottom_e <= ch) off_e = offDef_e;
+        else if (offDef_e + headTop_e < 0) off_e = -headTop_e;
+        else if (offDef_e + bottom_e > ch) off_e = ch - bottom_e;
+        else off_e = offDef_e;
+        off_e = Math.max(ch - eh, Math.min(0, off_e));
+      }
+      var off = off_e - ct * dh;
+      off = Math.max(ch - dh, Math.min(0, off));
+      var offDef = (ch - dh) / 2;
+      if (Math.abs(off - offDef) < 1) return '';
+      return '50% ' + Math.round(off) + 'px';
+    } catch (e) { return ''; }
+  }
+  function applyCrop(faces){
+    try {
+      var f = faces && faces[0];
+      var wrap = img && img.closest('.card-photo-wrap');
+      if (!f || !wrap || !img.naturalWidth) return;
+      var pos = computeFaceCrop(f, wrap.clientWidth, wrap.clientHeight,
+        img.naturalWidth, img.naturalHeight);
+      if (pos) img.style.objectPosition = pos;
+    } catch (e) {}
+  }
+  function setPhoto(src, faces){
     if (!img || !src || state.dismissed) return;
-    img.onload = function(){ state.loaded = true; root.classList.add('boot-hero-ready'); };
+    img.onload = function(){
+      state.loaded = true;
+      root.classList.add('boot-hero-ready');
+      applyCrop(faces);
+    };
     img.onerror = function(){ root.classList.add('boot-hero-failed'); try{ img.removeAttribute('src'); }catch(e){} };
     img.src = src;
   }
@@ -881,7 +925,6 @@
 </Transition>
 </template>
 </div>
-<script src="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__" defer></script>
 <script>window.__YXQ_BOOTSTRAP__=null;</script>
 <script>
 // 首屏卡片图早于 Vue 启动：优先消费服务端 bootstrap；缺失时回退原 API。
@@ -892,7 +935,7 @@
       var c = d.cards[0];
       var src = c.photo || (c.photos_thumb && c.photos_thumb[0]) || (c.photos && c.photos[0]);
       if (!src || !window.__YXQ_HERO__) return;
-      window.__YXQ_HERO__.setPhoto(src);
+      window.__YXQ_HERO__.setPhoto(src, c.faces);
     }
     var boot = window.__YXQ_BOOTSTRAP__;
     if (boot) {
@@ -908,7 +951,130 @@
   } catch (e) {}
 })();
 </script>
-<script src="app.render.js?v=__ASSET_URL_VERSION__" defer></script>
-<script src="app.min.js?v=__ASSET_URL_VERSION__" defer></script>
+<script>
+// 主脚本缺失时的最小可见错误页：不依赖 Vue/app.js，hero 先让位。
+window.__YXQ_BOOT_FAIL__ = function(detail){
+  try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss('boot-fail'); } catch (e) {}
+  try {
+    var root = document.getElementById('app');
+    if (!root) return;
+    root.removeAttribute('v-cloak');
+    root.setAttribute('data-boot-error', '1');
+    root.innerHTML = '<div class="boot-fail"><div class="boot-fail-title">页面加载失败</div>'
+      + '<div class="boot-fail-detail"></div>'
+      + '<button class="boot-fail-retry" type="button">重新加载</button></div>';
+    var detailEl = root.querySelector('.boot-fail-detail');
+    if (detailEl) detailEl.textContent = detail || '';
+    var retry = root.querySelector('.boot-fail-retry');
+    if (retry) retry.onclick = function(){ location.reload(); };
+  } catch (e) {}
+  try { console.error('[yxq] boot failed:', detail); } catch (e) {}
+};
+</script>
+<script>
+// 批次10（1B）渐进启动：三个主脚本只预下载，等壳内首卡 hero 真正绘制后再按序执行。
+// 根因：慢机 CPU×4 时 app.min.js 解析/执行 + Vue 挂载是 1.6–2.1s 长任务；若它在 hero
+// 绘制前跑，LCP 会被推到任务结束（批次9 基线冷 3.74s / 热 1.91s）。这里先让 hero 提交
+// 一帧，再启动 Vue。启动前的点击/返回不绑定业务逻辑、不重放事件，只记录 pending 标记。
+(function(){
+  var ASSETS = [
+    'lib/vue.global.prod.js?v=__ASSET_URL_VERSION__',
+    'app.render.js?v=__ASSET_URL_VERSION__',
+    'app.min.js?v=__ASSET_URL_VERSION__'
+  ];
+  var HERO_MAX_WAIT_MS = 2500;
+  var HERO_SRC_POLL_MS = 600;
+  var started = false;
+
+  function now(){ try { return Math.round(performance.now()); } catch (e) { return 0; } }
+  function markStart(reason){
+    if (started) return;
+    started = true;
+    window.__YXQ_APP_START_AT__ = now();
+    window.__YXQ_APP_START_REASON__ = reason || '';
+    try { if (window.performance && performance.mark) performance.mark('yxq-app-start'); } catch (e) {}
+  }
+  function afterPaint(fn){
+    if (window.requestAnimationFrame) {
+      window.requestAnimationFrame(function(){ setTimeout(fn, 0); });
+    } else {
+      setTimeout(fn, 0);
+    }
+  }
+  function injectAt(i){
+    if (i >= ASSETS.length) return;
+    var s = document.createElement('script');
+    s.src = ASSETS[i];
+    s.async = false;
+    s.onload = function(){ injectAt(i + 1); };
+    s.onerror = function(){
+      if (i === ASSETS.length - 1) {
+        if (window.__YXQ_BOOT_FAIL__) window.__YXQ_BOOT_FAIL__('主程序加载失败（app.min.js）');
+        return;
+      }
+      // Vue/渲染器失败也要继续注入后续脚本：app.min.js 会渲染可诊断错误页。
+      injectAt(i + 1);
+    };
+    document.head.appendChild(s);
+  }
+  function start(reason){
+    if (started) return;
+    markStart(reason);
+    injectAt(0);
+  }
+  window.__YXQ_START_APP__ = function(){ start('manual'); };
+
+  function waitForHeroPhoto(img, done){
+    var finished = false;
+    function finish(reason){
+      if (finished) return;
+      finished = true;
+      window.__YXQ_HERO_READY_AT__ = now();
+      try { if (window.performance && performance.mark) performance.mark('yxq-hero-ready'); } catch (e) {}
+      done(reason);
+    }
+    var cap = setTimeout(function(){ finish('hero-timeout'); }, HERO_MAX_WAIT_MS);
+    function decoded(){
+      clearTimeout(cap);
+      if (img.decode) {
+        img.decode().then(function(){ finish('hero-painted'); }, function(){ finish('hero-decode-failed'); });
+      } else {
+        finish('hero-loaded');
+      }
+    }
+    if (img.complete && img.naturalWidth) { decoded(); return; }
+    img.addEventListener('load', decoded, { once: true });
+    img.addEventListener('error', function(){ clearTimeout(cap); finish('hero-error'); }, { once: true });
+  }
+  function begin(){
+    var root = document.getElementById('boot-skeleton');
+    var img = root && root.querySelector('.boot-photo');
+    var waited = 0;
+    function poll(){
+      if (img && img.getAttribute('src')) {
+        waitForHeroPhoto(img, function(reason){ afterPaint(function(){ start(reason); }); });
+        return;
+      }
+      waited += 50;
+      if (waited >= HERO_SRC_POLL_MS) {
+        afterPaint(function(){ start('no-hero-photo'); });
+        return;
+      }
+      setTimeout(poll, 50);
+    }
+    poll();
+  }
+  function recordPendingInteract(){
+    if (!window.__YXQ_APP_MOUNTED__) window.__YXQ_BOOT_PENDING_INTERACT__ = true;
+  }
+  document.addEventListener('pointerdown', recordPendingInteract, true);
+  document.addEventListener('keydown', recordPendingInteract, true);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', begin, { once: true });
+  } else {
+    begin();
+  }
+})();
+</script>
 </body>
 </html>

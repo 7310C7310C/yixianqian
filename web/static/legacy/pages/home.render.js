@@ -7,7 +7,7 @@ if (typeof Vue === 'undefined') {
 }
 
 (function () {
-const { createTextVNode: _createTextVNode, resolveComponent: _resolveComponent, withCtx: _withCtx, createVNode: _createVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, renderList: _renderList, Fragment: _Fragment, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, withModifiers: _withModifiers } = Vue;
+const { resolveComponent: _resolveComponent, createVNode: _createVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, renderList: _renderList, Fragment: _Fragment, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, withCtx: _withCtx, withModifiers: _withModifiers } = Vue;
 const _hoisted_1 = {
   key: "home",
   class: "page"
@@ -55,12 +55,7 @@ function render(_ctx, _cache) {
   return (_openBlock(), _createElementBlock("div", _hoisted_1, [
     (_ctx.loadingActivities && !_ctx.activities.length)
       ? (_openBlock(), _createElementBlock("div", _hoisted_2, [
-          _createVNode(_component_van_loading, { size: "24px" }, {
-            default: _withCtx(() => [
-              _createTextVNode("加载中...")
-            ]),
-            _: 1 /* STABLE */
-          })
+          _createVNode(_component_van_loading, { size: "24px" })
         ]))
       : (!_ctx.activities.length)
         ? (_openBlock(), _createBlock(_component_van_empty, {

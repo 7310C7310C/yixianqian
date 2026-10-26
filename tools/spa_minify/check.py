@@ -7,9 +7,10 @@
    app.js 没重建 min；
 2. manifest 的 min（app.min.js）sha256 + bytes 必须等于当前提交的生成物——
    防止手改生成物；
-3. 壳 web/static/legacy/index.html 必须以 app.min.js 作为主脚本（preload 与
-   script 都要），且不得再把 app.js 当脚本加载；同时 app.js 源文件必须仍在
-   （回退与调试用）。
+3. 壳 web/static/legacy/index.html 必须在按序注入的 ASSETS 数组里包含 app.min.js，
+   且不得再把 app.js 当脚本加载；同时 app.js 源文件必须仍在（回退与调试用）。
+   批次10 起主脚本不再 preload（预下载会与首屏 hero 图抢带宽，实测 LCP 更差），
+   因此 preload 不是门禁项。
 
 精确的「重新 minify 后逐字节一致」由 Node 侧 `npm run check`（make spa-check-node，
 开发机）保证；CI 只校验已提交产物与源的一致性。
@@ -30,8 +31,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
-SHELL_SCRIPT = re.compile(r'<script[^>]+src="app\.min\.js\?v=__ASSET_URL_VERSION__"')
-SHELL_PRELOAD = re.compile(r'<link[^>]+rel="preload"[^>]+as="script"[^>]+href="app\.min\.js')
+# 批次10 起主脚本不再用静态 defer 标签执行：壳里必须有一个按序注入的
+# ASSETS 数组，且其中包含带版本的 app.min.js。
+SHELL_SCRIPT = re.compile(
+    r'<script[^>]+src="app\.min\.js\?v=__ASSET_URL_VERSION__"'
+    r'|ASSETS\s*=\s*\[[^\]]*app\.min\.js\?v=__ASSET_URL_VERSION__',
+    re.S,
+)
+SHELL_ASSETS = re.compile(r'ASSETS\s*=\s*\[(.*?)\]', re.S)
 SHELL_SOURCE_SCRIPT = re.compile(r'<script[^>]+src="app\.js\?')
 
 
@@ -82,9 +89,19 @@ def check(root: Path) -> list[str]:
         return errors
     html = shell_path.read_text(encoding="utf-8")
     if not SHELL_SCRIPT.search(html):
-        errors.append('壳必须用 <script src="app.min.js?v=__ASSET_URL_VERSION__">')
-    if not SHELL_PRELOAD.search(html):
-        errors.append("壳必须 preload app.min.js")
+        errors.append('壳必须按序注入 app.min.js?v=__ASSET_URL_VERSION__（ASSETS 数组）')
+    else:
+        assets = SHELL_ASSETS.search(html)
+        if not assets:
+            errors.append("壳缺少 ASSETS 注入数组")
+        else:
+            order = [
+                name
+                for name in ("vue.global.prod.js", "app.render.js", "app.min.js")
+                if name in assets.group(1)
+            ]
+            if order != ["vue.global.prod.js", "app.render.js", "app.min.js"]:
+                errors.append(f"ASSETS 注入顺序必须为 vue → render → app.min，实际 {order}")
     if SHELL_SOURCE_SCRIPT.search(html):
         errors.append("壳不得再直接加载 app.js（app.js 只作为源文件/回退保留）")
     return errors

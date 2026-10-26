@@ -66,6 +66,10 @@ type App struct {
 	// readCache 是批次9 的 10s 成功响应缓存（home+cards **共享**同一实例与同一份
 	// 32MiB/1024 条总预算，避免两接口各自 32MiB）。
 	readCache *readCache
+
+	// photoGrants 记住「哪些 /cards/photo 媒体曾下发给哪个 viewer」，让牌堆里
+	// 尚未建立点赞/活动关系的候选照片可被本人短时读取；默认拒绝，见 photo_grants.go。
+	photoGrants *photoGrantStore
 }
 
 // New loads templates and constructs the application.
@@ -112,7 +116,7 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 			"entries", entries, "bytes", bytes)
 	}
 
-	return &App{
+	app := &App{
 		cfg:                         cfg,
 		db:                          database,
 		store:                       store,
@@ -134,7 +138,10 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		faceSem:                     make(chan struct{}, maxConcurrentFaceProbes),
 		registrationFaceProbeBudget: maxRegistrationFaceProbeBudget,
 		notifier:                    notifier,
-	}, nil
+	}
+	app.photoGrants = newPhotoGrantStore(defaultPhotoGrantTTL, defaultPhotoGrantMaxViewers,
+		defaultPhotoGrantMaxTargets, app.clock.Now)
+	return app, nil
 }
 
 // Close releases background resources owned by the app. Callers that build an

@@ -34,9 +34,11 @@ func TestLegacyShellHasNoLargeInlineAssets(t *testing.T) {
 			t.Fatalf("inline <style> block is %d bytes; move it to app.css", len(m[1]))
 		}
 	}
+	// 批次10：hero 首帧裁切与渐进启动的顺序控制必须在内联脚本里（外置会多一个
+	// 解析前阻塞请求，且拿不到首帧时序）；单块上限放宽到 5KB，仍远小于 app.js。
 	scriptRe := regexp.MustCompile(`(?s)<script(?:\s[^>]*)?>(.*?)</script>`)
 	for _, m := range scriptRe.FindAllStringSubmatch(html, -1) {
-		if len(m[1]) > 4096 {
+		if len(m[1]) > 5120 {
 			t.Fatalf("inline <script> block is %d bytes; move it to app.js", len(m[1]))
 		}
 	}
@@ -122,6 +124,28 @@ func TestLegacyShellRendersStaticHero(t *testing.T) {
 	} {
 		if !strings.Contains(css, want) {
 			t.Fatalf("app.css is missing hero rule %q", want)
+		}
+	}
+	// 批次10（1B）：主脚本不得以静态 defer 标签在 hero 绘制前执行；壳必须用
+	// 预下载 + hero 绘制后按序注入，并保留启动前交互/错误兜底标记。
+	for _, forbidden := range []string{
+		`<script src="lib/vue.global.prod.js`,
+		`<script src="app.render.js`,
+		`<script src="app.min.js`,
+	} {
+		if strings.Contains(html, forbidden) {
+			t.Fatalf("shell still executes %q before the hero paints", forbidden)
+		}
+	}
+	for _, want := range []string{
+		`window.__YXQ_APP_START_AT__`,
+		`window.__YXQ_APP_START_REASON__`,
+		`yxq-hero-ready`,
+		`window.__YXQ_BOOT_PENDING_INTERACT__`,
+		`window.__YXQ_BOOT_FAIL__`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("shell is missing progressive-boot marker %q", want)
 		}
 	}
 	js := readEmbedded(t, "static/legacy/app.js")
@@ -371,6 +395,29 @@ func TestAcceptsGzip(t *testing.T) {
 	} {
 		if got := acceptsGzip(header); got != want {
 			t.Fatalf("acceptsGzip(%q)=%v want %v", header, got, want)
+		}
+	}
+}
+
+// 批次10 追加：tab 首次点击不得出现「加载中...」文字；chunk 预取在 load 后的
+// requestIdleCallback 里进行，点击时未就绪则保留当前页等待（无文字骨架兜底）。
+func TestTabChunksPrefetchAndNoLoadingText(t *testing.T) {
+	js := readEmbedded(t, "static/legacy/app.js")
+	for _, want := range []string{
+		"yxqPrefetchPageChunks",
+		"requestIdleCallback",
+		"yxqPageChunkReady",
+		"yxqEnsurePageChunk",
+		"page-chunk-skeleton",
+		"['likes', 'home', 'profile', 'user_detail', 'group_admin']",
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("app.js is missing tab prefetch marker %q", want)
+		}
+	}
+	for _, name := range []string{"static/legacy/pages/cards.html", "static/legacy/pages/home.html"} {
+		if strings.Contains(readEmbedded(t, name), "加载中...") {
+			t.Fatalf("%s still contains visible loading text", name)
 		}
 	}
 }

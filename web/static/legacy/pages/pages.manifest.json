@@ -5,8 +5,8 @@
     "file": "app.render.js",
     "templateSha256": "cce47d67d0c07387794c0bb4f1e4e1f3b30e18a37ff5f7edab14d80c15223e93",
     "templateSize": 51373,
-    "bytes": 182598,
-    "sha256": "358ff3f0884ec185a888ad660fbe0e03a3b310019e19bcea7d3142965298c445"
+    "bytes": 182449,
+    "sha256": "6747e78b617be296476c33f3847a2da2f51f18045053f600e95659b0d9bc4c90"
   },
   "initial": [
     "cards"
@@ -33,8 +33,8 @@
         "my_activities",
         "my_groups"
       ],
-      "bytes": 29287,
-      "sha256": "2a224ee071fb4c0403ae77c3ea3d8ce622699f33a777d9dc177793fa4f486d62"
+      "bytes": 29141,
+      "sha256": "12e0324ddafc75007f1ddb0dd28e7257081e347b73da67d121a531e78c7f95f9"
     },
     "profile": {
       "file": "pages/profile.render.js",
@@ -77,8 +77,8 @@
     "cards": {
       "group": "initial",
       "file": "app.render.js",
-      "templateSha256": "131672bbfd2da54f9d9794ab28bb8364b542a24aebf858824ed739271a9c54f0",
-      "templateSize": 10121
+      "templateSha256": "63ef9a5323352490b228bf5d27ca7313df61ccff27deb68a039811e25194755e",
+      "templateSize": 10111
     },
     "likes": {
       "group": "likes",
@@ -125,8 +125,8 @@
     "home": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "e3f36c2749290206a4eac258a4548f14bf101f3601dd81e1e94be318251b41d7",
-      "templateSize": 3455
+      "templateSha256": "e403f5e2059cdd276e4ca705a1ebe54d8e3b64290b6b2060cb1675131b6c8603",
+      "templateSize": 3431
     },
     "my_activities": {
       "group": "home",

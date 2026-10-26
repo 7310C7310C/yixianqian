@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-25
+last_verified: 2026-10-26
 sources:
   - migrations/**
   - tools/migrate_testapp.py
@@ -75,6 +75,10 @@ sources:
 - **照片映射**：按 `<photos-dir>/<file_token>.<ext>` 递归匹配；缺失的 token 会报告并继续，不阻断文字导入。`profile_photos` 行数 ≠ `media` 数（多行可引用同一 media；压测账号会共用），回填与对账按 `media_id` 去重。
 - **历史原图元数据**：2026-10-24 起迁移工具在上传前用 Pillow 重编码（JPEG q90 / PNG），按 EXIF/eXIf 方向 auto-orient 并去除 EXIF/GPS/XMP/文本；像素上限 12.5MP（4032×3024=12,192,768 可过）。重编码后 R2 字节与源文件不同，迁移报告以重编码后的 `byte_size` 为准。**已入库的存量 R2 原图不批量重写**，仍可能带元数据；需要清洗时另起一次性任务：先备份/清单（media_id、sha256），按用户维度灰度，失败可回滚。
 - **积分对账**：`points_ledger` 以 `SUM(delta)` 对余额；`balance_after` 不作唯一依据；`redemptions`/`invites`/`historical_participants` 分开核对。
+- **照片授权索引（批次10）**：`0010_photo_authz_indexes.sql` 只新增索引，不改数据：
+  `profile_photos(media_id)`（单图按 media_id 取行，缺少时全表扫）、`likes(target_id,initiator_id)`（反向喜欢）、
+  `signups(activity_id,user_id)`（同活动）、`messages(author_id,target_user_id)`（消息对手方）。
+  staging 克隆 EXPLAIN：单图授权 14.3ms → 1.9ms。回滚不删索引（旧 binary 不读也不受影响）。
 
 ## 4. 工具
 

@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -201,8 +202,17 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 		t.Fatalf("cover result = %+v", cover)
 	}
 
+	// 批次10：/profile/photo 与 /cards/photo 共用授权，陌生人 404；
+	// 建立喜欢关系后才允许跨用户读取。
+	if resp := viewerClient.get("/profile/photo/" + firstID); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("stranger photo status = %d, want 404", resp.StatusCode)
+	}
+	// 候选池：viewer 拉一次牌堆后，本次下发的照片获得短时 grant。
+	if resp := viewerClient.get("/legacy/api/cards?limit=50&nickname=" + url.QueryEscape("小美")); resp.StatusCode != http.StatusOK {
+		t.Fatalf("viewer cards status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
 	if resp := viewerClient.get("/profile/photo/" + firstID); resp.StatusCode != http.StatusOK {
-		t.Fatalf("viewer photo status = %d", resp.StatusCode)
+		t.Fatalf("candidate viewer photo status = %d", resp.StatusCode)
 	}
 	resp = profileJSONRequest(t, ownerClient, http.MethodDelete, "/legacy/api/profile/photo", csrf,
 		map[string]any{"index": 1})

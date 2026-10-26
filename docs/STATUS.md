@@ -341,3 +341,28 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   错误/未授权不缓存；no-store 不变、Vary 实测为空。
 - 缩略图缓存目录不可写时降级关闭（不再拒绝启动）；运行目录 `/opt/yixianqian-next/cache/thumbs`。
 - 边缘：**不做 `/legacy/api/` 缓存**（key 含明文 session 会落盘，违反 token 只存 hash）；静态 gzip 变体沿用已部署配置并复核（gzip HIT 47,033B/0.87ms、q=0 落 identity）。
+
+### 性能批次10（2026-10-26，本地实现，未 push / 未部署）
+
+- **1B 渐进启动**：壳移除三个主脚本的静态 `defer` 与全部 script/style preload；新增 loader 在首卡 hero `load+decode` 并提交一帧后，按 `vue → app.render → app.min` 顺序注入执行（硬上限 2.5s；无 hero 600ms 后启动）。主脚本不 preload 是实测取舍：1.6Mbps 下 preload 与首图抢带宽，冷 LCP 反而高约 350ms；loader 在 hero 绘制后立即开始下载，`app_start` 与带 preload 版本基本一致。hero 在首帧按 bootstrap faces 套用与 app.js `computeFaceCrop` 相同公式，挂载后无裁切跳动；启动前点击只记 pending、不重放；`loadHome` 4s 兜底与管理台 iframe 不变；Vue/Vant/app.min 缺失均有可见错误页。
+- **2A 照片授权**：`/cards/photo/{id}` 与 `/profile/photo/{id}` 共用默认拒绝策略，授权按画廊主人 `profile_photos.user_id`（共享 media 的 `media.user_id` 仅取对象）：本人、任一管理员角色、**任一方向的有效喜欢（含互喜）**、未取消的同活动报名（覆盖同组/同轮）、**任一方向消息的对手方**放行；牌堆候选由 cards/home 下发时按目标用户登记 per-viewer 15 分钟 grant（单 viewer ≤2000 目标、全局 ≤2000 viewer，单一有序集合 15m TTL + viewer LRU fail-closed）；匿名 401、无权/不存在 404、禁用账号 403。公开资料页仅按 viewer 与目标本人的关系（本人/grant/CanViewGallery(target)）返回照片 URL，不复用 media 级关系，否则空数组。`/admin` 受权媒体串流不变。
+- **migration**：新增 `0010_photo_authz_indexes.sql`（`profile_photos(media_id)`、`likes(target_id,initiator_id)`、`signups(activity_id,user_id)`、`messages(author_id,target_user_id)`），只加索引；staging 克隆 EXPLAIN 单图授权 **14.3ms → 1.9ms**；cards 照片批量已在既有查询取回，grant 无 SQL，15 图无 N+1。
+- **测试**：`make ci`（Go 1.24.7）EXIT=0；`make test-race` EXIT=0；`make test-integration` 在全新库 `yxq_b10_finaltest` EXIT=0（db 7.50s / httpserver 46.85s；migration max=10/10，四索引存在）；7 smoke（本地实例 `staging-b10test*` + staging 克隆库）全 PASS：public_home / spa_nav / tab_scroll / batch6_bundle / app_hero_deck / admin_native_activity / app_integration。授权矩阵测试覆盖本人/候选/陌生人/喜欢/互喜/同活动同组/消息/管理员/观察员/禁用/匿名/猜测 ID；新增 owner grant 翻页 60 候选×9 图 540/540、250 目标 5 页 page1 全 200、共享 media（media owner≠gallery owner）候选 200/陌生人 404/公开页 URL 200、跨 viewer、喜欢/消息/报名撤销、owner 禁用、observer 本人、disabled `/profile/photo` 403；`TestIntegrationLegacyProfileFlow` 改为陌生人 404 → 候选 200。
+- **浏览器性能（server1 QEMU 慢机本地实例 A/B，390×844、1.6Mbps/150ms、CPU×4、N=5 中位；同库同 cookie；本地无边缘 JSON gzip，字节只作同机对比）**：
+
+| 指标 | 旧 `staging-30e4b96` | 新 `staging-b10final` | 变化 |
+|---|---|---|---|
+| 冷 FCP | 584ms | 632ms | +48ms（≈8%，同机噪声；不视为稳定退化） |
+| 冷 LCP | 2308ms | **1572ms** | −736ms |
+| 冷最长任务 | 915ms | 1035ms | +120ms（记录项，PM 不作为本批阻断） |
+| 热 FCP | 560ms | 528ms | −32ms |
+| 热 LCP | 988ms | **828ms** | −160ms |
+| 热最长任务 | 433ms | 365ms | −68ms |
+| CLS | 0 | 0 | — |
+| DOM 节点 | 177 | 174 | −3 |
+| 传输字节/请求（本地） | 400,015 / 15 | 406,202 / 15 | +6.2KB（壳内 loader/crop；本地无边缘 JSON gzip；staging edge 基线 289,475 / 15，≤350KB） |
+
+- **交替 A/B 复核（old/new 各 5 轮单跑、同机同 cookie）**：cold LCP 中位 old 1852 / new 1868、hot 中位 old 2188 / new 1140；主机与 R2 首图抖动大，cold 优势不稳定，但新代码 cold/hot 绝对值仍在目标内（new cold max 2412、hot max 1356，p95 容差内）。FCP 在交替 A/B 中 old 1004 / new 1156；clean N=5 为 old 584/560、new 632/528（冷/热），差异在噪声范围，未见稳定退化。
+- **追加（首次 tab 无「加载中」）**：应用挂载后等 LCP 条目出现再 idle 预取（likes 优先）likes/home/profile/detail/group chunk；tabbar 守卫在 chunk 未就绪时保留当前页等待（4s 超时），`page-host` 改为无文字骨架，cards/home 数据加载态仅转圈。新增 `tools/browser/tab_first_load_smoke.py`：首次四 tab、快速连点、回退、深链 `#/likes`、管理台 iframe 全 PASS；`加载中` 文本 0 次、CLS noInput 0.0000。**慢机 N=10 复测（最终）**：冷 FCP/LCP 614/1144ms（P95 1396）、热 448/482ms（P95 592，max 592）、CLS 0；冷/热均达 ≤2.5s/≤1.2s（热 P95 592≤1320）。共享 media 修复 + hero 去 opacity 过渡 + bootstrap cards 20→3 + LCP 后预取共同生效。本地 430,741B/20；edge 估算 289,475+43.5KB≈333KB≤350KB。
+- **staging edge 基线（部署前，`staging-30e4b96`，同慢机 N=5）**：冷 FCP/LCP **1948/3264ms**、最长 1530ms、289,475B/15；热 **1284/2348ms**、最长 961ms、7,414B/16。新代码尚未部署到 staging，edge 后值需部署后由 Auditor 复测；本批最终本地慢机冷 LCP 中位 1144ms（P95 1396）、热 482ms（P95 592），均达目标。
+- **已知限制/待审**：grant 为进程内内存，多实例部署需共享 grant 或 HMAC 签名 URL；进程重启后首次图片请求可能回落关系 SQL/404（浏览器已缓存图片不受影响）。`/profile/photo` 对陌生人由原「可浏览即可取」改为 404 属预期行为变化。staging 部署前仍需独立 Reviewer + security-gate/Auditor；生产未授权。

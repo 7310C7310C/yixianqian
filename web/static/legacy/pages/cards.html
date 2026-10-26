@@ -10,7 +10,7 @@
     <button class="sg-btn" @click="closeSwipeGuide">我知道了</button>
   </div>
   <div v-if="loadingCards" style="display:flex; align-items:center; justify-content:center; height:100%;">
-    <van-loading size="24px">加载中...</van-loading>
+    <van-loading size="24px" />
   </div>
   <template v-else>
     <div class="card-top-left">
@@ -77,7 +77,7 @@
           </template>
         </template>
         <div v-else class="message-panel">
-          <div v-if="msgLoading" class="msg-tip">加载中…</div>
+          <div v-if="msgLoading" class="msg-tip" aria-label="正在加载"></div>
           <div v-else-if="!threadedMessages.length" class="msg-tip">还没有留言，快来抢沙发～</div>
           <div v-else class="msg-list">
             <div v-for="m in threadedMessages" :key="m.id" class="msg-thread">

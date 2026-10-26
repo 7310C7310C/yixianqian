@@ -77,6 +77,15 @@ var errLegacyHomeAccountUnavailable = errors.New("legacy home: account unavailab
 // serveLegacyApp reuses it for window.__YXQ_BOOTSTRAP__; the handler below is a
 // thin HTTP wrapper so both paths cannot drift.
 func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user db.User, now time.Time) (map[string]any, error) {
+	return a.buildLegacyHomePayloadLimit(ctx, r, user, now, 20)
+}
+
+// buildLegacyHomePayloadLimit lets the shell bootstrap embed only a few cards
+// (3) while the /legacy/api/home contract keeps its 20-card window.
+func (a *App) buildLegacyHomePayloadLimit(ctx context.Context, r *http.Request, user db.User, now time.Time, cardLimit int) (map[string]any, error) {
+	if cardLimit <= 0 {
+		cardLimit = 20
+	}
 	profile, err := a.db.GetProfile(ctx, user.ID)
 	if errors.Is(err, db.ErrNotFound) {
 		profile = db.Profile{
@@ -122,7 +131,7 @@ func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user 
 		deps.quota = &quota
 		deps.praise = &praise
 	}
-	page, err := a.buildCardsPageData(ctx, pageViewer, r.URL.Query(), now, 20, deps)
+	page, err := a.buildCardsPageData(ctx, pageViewer, r.URL.Query(), now, cardLimit, deps)
 	if errors.Is(err, errGenderMissing) {
 		// 性别未填：牌堆为空，但首页仍要显示自己的卡（旧实现的行为：
 		// self 卡 1 张 + cards_total 1）。批次7 合并查询时把 self 一起丢了，
@@ -148,6 +157,8 @@ func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user 
 	} else if countersErr == nil {
 		a.logger(r).Warn("legacy home self card missing", "user_id", user.ID)
 	}
+	// 牌堆/首卡照片的短时授权：只登记本次真正下发给该用户的媒体 ID。
+	a.grantCardOwners(user.ID, views)
 	cards := a.legacyCards(ctx, views)
 	likes, err := a.legacyLikes(ctx, user.ID, now)
 	if err != nil {
@@ -234,6 +245,9 @@ func (a *App) handleLegacyCards(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy cards failed")
 		return
 	}
+	// 缓存命中路径不会走到这里；grant TTL（15m）远大于读缓存 TTL（10s），
+	// 因此命中缓存时上一轮构建登记的 grant 仍然有效。
+	a.grantCardOwners(user.ID, page.Cards)
 	a.writeReadCache(w, r, "cards", map[string]any{
 		"cards":       a.legacyCards(r.Context(), page.Cards),
 		"total":       page.Total,
