@@ -409,7 +409,8 @@ func TestTabChunksPrefetchAndNoLoadingText(t *testing.T) {
 		"yxqPageChunkReady",
 		"yxqEnsurePageChunk",
 		"page-chunk-skeleton",
-		"['likes', 'home', 'profile', 'user_detail', 'group_admin']",
+		"['home', 'profile', 'user_detail', 'group_admin']",
+		"yxqLoadPageChunk('likes'",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("app.js is missing tab prefetch marker %q", want)
