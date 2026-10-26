@@ -346,7 +346,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 - 首次部署 `staging-3cf68c5` 后发现 `assetVersion` 仍为 12，边缘 immutable 缓存继续返回旧
   `app.render.js`/`pages/*.render.js`（含「加载中」文案）；修正为 **13**（含 admin CSS @import），
-  提交 `2b61315` 后重新部署，`?v=13` 强制新缓存键。迁移 0010 四索引、`server.prev=staging-30e4b96`。
+  提交 `2b61315` 后重新部署，`?v=13` 强制新缓存键；静态资源命中新 cache key 后 tab 文案/裁切才生效。迁移 0010 四索引、`server.prev=staging-30e4b96`。
 
 ### 性能批次10（2026-10-26，本地实现，未 push / 未部署）
 

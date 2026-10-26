@@ -18,6 +18,7 @@ import (
 // change would otherwise stay stale in browsers for an hour after deploy. Bump
 // this whenever web/static content referenced from templates changes; module
 // CSS @import lines carry the same value and must be bumped together.
+// Batch10: 13 invalidates edge/browser immutable caches for the shell assets.
 const assetVersion = "13"
 
 // MediaView is the minimal media representation exposed to templates.
