@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-26
+last_verified: 2026-10-27
 sources:
   - cmd/**
   - migrations/**
@@ -70,7 +70,8 @@ sources:
 - 更新日期：2026-10-27
 - 维护者：项目维护者
 - 下一更新点：PM 在 Android Via 真机复验虚拟历史栈、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-c62c163`（虚拟历史栈 + assetVersion 16，migration 10）；生产 `app.nantou.love` 未切换。
+- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-c62c163`（虚拟历史栈 + assetVersion 16，migration 10），
+  改密页闪现修复 `4fdcc38`（assetVersion 17，Reviewer PASS `c62c163..a5d0cf2`）已 push、待 autodeploy；生产 `app.nantou.love` 未切换。
 
 ## 1. 阶段
 
@@ -97,6 +98,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 部署 HEAD（代码） | `c62c163`（顶层 SPA 虚拟历史栈） |
 | `deployed.sha` | ≥ `c62c163`（docs-only 推送持续推进、不重启；本次 `a7d4bd6`；二进制仍 `c62c163`） |
 | `/healthz` version | `staging-c62c163` |
+| 待部署（已 push） | `4fdcc38` 改密页进入闪现修复（assetVersion 17，无 schema/env/route 变化）；Reviewer PASS `c62c163..a5d0cf2`，trailer 已补；等 autodeploy |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用；本次无 migration） |
 | 虚拟历史栈（2026-10-27） | 已部署 `c62c163`：默认 virtual（`?history=legacy` / localStorage 可回退）；assetVersion 16；`no_history_smoke` 390/1280 各 19/19 PASS；启动哨兵 1 次、硬件返回每次 1 次重压；7 smoke + tab_first_load + hero + 授权矩阵 PASS；Via 真机进度条待 PM 复验 |
 | 批次10 | 已部署（前序 `staging-0f14252`）：渐进启动、照片授权、assetVersion 15、likes 立即预取；7 smoke + tab + 授权矩阵 16/16 PASS |
@@ -319,6 +321,21 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   `.team/perf/no-history-report.md`。
 - 状态：**未 push、未部署**；生产未授权。Via 真机进度条无法在 Chromium 断言，待 PM 复验。
 - 回滚：`git revert <本次提交>`（仅前端生成物与 assetVersion；无 schema 变更）。
+
+### 2026-10-27 改密页进入闪现修复（assetVersion 17，已 push 待部署）
+
+- 现象：Android Via 在「我的」页点「修改密码」瞬间闪现「我的」页顶部（点「我的资料」不闪）。
+- 根因：`openPasswordPage()` 在 `page='password'` 后 `nextTick` 同步 `scrollTo(0,0)`，而主内容
+  `Transition` 为 `out-in`（离场 80ms），旧「我的」页仍可见并被滚到顶部，形成一帧闪现；
+  其他子页只靠 `onPageEnter()` 在进场首帧（opacity 0）复位。
+- 修复：删掉该 `nextTick` 同步滚动，滚动复位统一交给 `onPageEnter()`；`passwordReturnScroll`、
+  `passwordFormDone`、password→profile 还滚 watcher、虚拟历史栈均未改。
+- 回归：新增 `tools/browser/password_no_flash_smoke.py`（390x844 / 1280x900，rAF≈16ms 逐帧断言
+  旧页顶部不得在改密页可见前出现）；改前 FAIL（3–4 帧命中）、改后 PASS；稳定 y=0、返回 ±2px；
+  既有 7 smoke + `tab_first_load` + `no_history`(390/1280) 全 PASS；`make ci`、`test-race`、集成 PASS。
+- 状态：`4fdcc38`（原 `a5d0cf2` 补 `Reviewed-By: reviewer` trailer，树不变）已 push，待 autodeploy；
+  证据见 `.team/reviews/2026-10-27-password-flash.md` 与 `.team/perf/password-flash-report.md`。
+- 回滚：`git revert 4fdcc38`（仅前端生成物与 assetVersion）。
 
 ## 4. P0 身份证门禁：补填 + 服务端强制（已实现，待部署/验收）
 
