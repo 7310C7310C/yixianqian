@@ -70,8 +70,8 @@ sources:
 - 更新日期：2026-10-27
 - 维护者：项目维护者
 - 下一更新点：PM 在 Android Via 真机复验虚拟历史栈、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-c62c163`（虚拟历史栈 + assetVersion 16，migration 10），
-  改密页闪现修复 `4fdcc38`（assetVersion 17，Reviewer PASS `c62c163..a5d0cf2`）已 push、待 autodeploy；生产 `app.nantou.love` 未切换。
+- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-ad1f2c1`（代码 `4fdcc38`：改密页闪现修复 + assetVersion 17，migration 10）；
+  生产 `app.nantou.love` 未切换。
 
 ## 1. 阶段
 
@@ -95,16 +95,16 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD（代码） | `c62c163`（顶层 SPA 虚拟历史栈） |
-| `deployed.sha` | ≥ `c62c163`（docs-only 推送持续推进、不重启；本次 `a7d4bd6`；二进制仍 `c62c163`） |
-| `/healthz` version | `staging-c62c163` |
-| 待部署（已 push） | `4fdcc38` 改密页进入闪现修复（assetVersion 17，无 schema/env/route 变化）；Reviewer PASS `c62c163..a5d0cf2`，trailer 已补；等 autodeploy |
+| 部署 HEAD（代码） | `4fdcc38`（改密页进入闪现修复，assetVersion 17；docs 记录 `ad1f2c1`） |
+| `deployed.sha` | `ad1f2c1`（= 部署 tip；docs-only 提交只推进标记、不重启） |
+| `/healthz` version | `staging-ad1f2c1` |
+| `server.prev`（回滚目标） | 旧 `staging-c62c163` binary，sha256 `2d58e11a671e2cb0…` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用；本次无 migration） |
 | 虚拟历史栈（2026-10-27） | 已部署 `c62c163`：默认 virtual（`?history=legacy` / localStorage 可回退）；assetVersion 16；`no_history_smoke` 390/1280 各 19/19 PASS；启动哨兵 1 次、硬件返回每次 1 次重压；7 smoke + tab_first_load + hero + 授权矩阵 PASS；Via 真机进度条待 PM 复验 |
 | 批次10 | 已部署（前序 `staging-0f14252`）：渐进启动、照片授权、assetVersion 15、likes 立即预取；7 smoke + tab + 授权矩阵 16/16 PASS |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
-| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；新版脚本逐提交校验 `Reviewed-By:` trailer（docs-only 豁免），`deployed.sha` 已由 docs-only 提交推进（≥`c62c163`） |
+| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；新版脚本逐提交校验 `Reviewed-By:` trailer（docs-only 豁免），`deployed.sha` 随 docs-only 提交推进（`ad1f2c1`） |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
 | 账号数 | 用户 `1115`：`active=1111`、`observer=4` |
 | v2 生产 | 未切换；`app.nantou.love` 仍是 v1 |
@@ -333,8 +333,11 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 回归：新增 `tools/browser/password_no_flash_smoke.py`（390x844 / 1280x900，rAF≈16ms 逐帧断言
   旧页顶部不得在改密页可见前出现）；改前 FAIL（3–4 帧命中）、改后 PASS；稳定 y=0、返回 ±2px；
   既有 7 smoke + `tab_first_load` + `no_history`(390/1280) 全 PASS；`make ci`、`test-race`、集成 PASS。
-- 状态：`4fdcc38`（原 `a5d0cf2` 补 `Reviewed-By: reviewer` trailer，树不变）已 push，待 autodeploy；
-  证据见 `.team/reviews/2026-10-27-password-flash.md` 与 `.team/perf/password-flash-report.md`。
+- 状态：**已部署 staging**（`/healthz=staging-ad1f2c1`、`deployed.sha=ad1f2c1`）；部署后 `password_no_flash_smoke`
+  390x844/1280x720 PASS、`no_history` 390/1280 各 19/19、7 smoke 全 PASS、`make perf-budget` 8/8 + nginx 19/19、5xx=0。
+  部署走人工流程（autodeploy 对「代码 commit 有 CI 无 Docs、docs tip 有 Docs 无 CI」不可达），原因与证据见
+  `.team/decisions.md` 与 `.team/perf/password-flash-deploy.md`。
+  证据：`.team/reviews/2026-10-27-password-flash.md`、`.team/perf/password-flash-report.md`。
 - 回滚：`git revert 4fdcc38`（仅前端生成物与 assetVersion）。
 
 ## 4. P0 身份证门禁：补填 + 服务端强制（已实现，待部署/验收）
