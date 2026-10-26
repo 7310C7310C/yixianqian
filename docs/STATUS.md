@@ -92,13 +92,13 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
 | 部署 HEAD（代码） | `0f14252`（批次10 hotfix） |
-| `deployed.sha` | `0ae3592`（docs-only 子提交，未重启） |
+| `deployed.sha` | `0ae3592`（docs-only 子提交；后续 docs 推送会继续推进，不重启） |
 | `/healthz` version | `staging-0f14252` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用） |
 | 批次10 | 已部署：渐进启动、照片授权、assetVersion 15、likes 立即预取；7 smoke + tab + 授权矩阵 16/16 PASS |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
-| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；新版脚本逐提交校验 `Reviewed-By:` trailer（docs-only 豁免），`deployed.sha=0ae3592` |
+| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；新版脚本逐提交校验 `Reviewed-By:` trailer（docs-only 豁免），`deployed.sha` 已由 docs-only 提交推进（≥`0ae3592`） |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
 | 账号数 | 用户 `1115`：`active=1111`、`observer=4` |
 | v2 生产 | 未切换；`app.nantou.love` 仍是 v1 |
@@ -346,7 +346,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ### 性能批次10 部署快照（2026-10-26，staging-0f14252）
 
-- **已部署**：代码 HEAD `0f14252`，`/healthz=staging-0f14252`；`deployed.sha=0f14252`;
+- **已部署**：代码 HEAD `0f14252`，`/healthz=staging-0f14252`；`deployed.sha` 已由 docs-only 提交推进（≥`0ae3592`）;
   migration max=10/10，四索引存在；env sha256 `e533a86b…` 未变；`server.prev=staging-9bc7888`。
 - **autodeploy**：新版逐提交校验 `Reviewed-By:` trailer 后部署成功；日志明确
   `部署闸：0f14252 范围内代码提交均含 Reviewed-By trailer`。
