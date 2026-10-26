@@ -367,7 +367,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   `missing Reviewed-By`；docs-only 豁免，`--force`/`YXQ_REQUIRE_REVIEW=0` 为例外；沙箱单测
   `deploy/autodeploy/test_autodeploy.sh` **66 PASS**。
 - 7 smoke 本地最终全 PASS；`make ci`/test-race/integration（fresh DB）绿。**当前 staging 仍是 `staging-9bc7888`，
-  本地 hotfix 链 `197df08` → 本次门禁提交未 push/未部署**；需重审后走部署闸门。
+  本地 hotfix 代码 HEAD `898994f`（`197df08` 之后的门禁/部署闸提交）未 push/未部署**；本文件为其后 docs 快照。
 
 ### 性能批次10（2026-10-26，已部署 staging-9bc7888）
 
