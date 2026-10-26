@@ -15,7 +15,7 @@
 #   YXQ_DEPLOY_ROOT, YXQ_SRC_DIR, YXQ_LOG_FILE, YXQ_LOCK_FILE, YXQ_HEALTH_URL,
 #   YXQ_REPO, YXQ_BRANCH, YXQ_SERVICE, YXQ_SERVICE_USER, YXQ_MIN_FREE_MB,
 #   YXQ_HEALTH_TIMEOUT, YXQ_FAIL_BACKOFF, YXQ_MISSING_GRACE, YXQ_REQUIRED_JOBS,
-#   YXQ_REQUIRE_DOCS, YXQ_SIMULATE_CI（仅 --dry-run）。
+#   YXQ_REQUIRE_DOCS, YXQ_REQUIRE_REVIEW, YXQ_SIMULATE_CI（仅 --dry-run）。
 # 脚本不读取、不打印任何密钥；staging.env 由 systemd 注入 app，与本脚本无关。
 
 set -Eeuo pipefail
@@ -38,6 +38,7 @@ FAIL_BACKOFF=${YXQ_FAIL_BACKOFF:-900}
 MISSING_GRACE=${YXQ_MISSING_GRACE:-3600}
 REQUIRED_JOBS=${YXQ_REQUIRED_JOBS:-lint-build unit integration}
 REQUIRE_DOCS=${YXQ_REQUIRE_DOCS:-1}
+REQUIRE_REVIEW=${YXQ_REQUIRE_REVIEW:-1}
 GH_BIN=${YXQ_GH_BIN:-gh}
 LOG_MAX_BYTES=${YXQ_LOG_MAX_BYTES:-20971520}
 GO_BIN=${YXQ_GO_BIN:-go}
@@ -342,6 +343,14 @@ rollback() {
   return 1
 }
 
+# 部署闸：代码提交（非 docs-only）必须带 Reviewed-By trailer。
+# 独立 Reviewer 的 PASS 以 commit trailer 落地，防止 CI 绿但未审的提交自动上 staging。
+has_reviewed_by() {
+  local sha=$1
+  git -C "$SRC" -c safe.directory="$SRC" show -s --format=%B "$sha" 2>/dev/null \
+    | grep -qiE '^Reviewed-By:[[:space:]]*[^[:space:]]+'
+}
+
 print_plan() {
   local count=$1
   log "DRY-RUN 计划（不执行任何改动）："
@@ -443,6 +452,20 @@ main() {
       log "已更新 deployed.sha=$REMOTE（未重启服务）"
     fi
     exit 0
+  fi
+
+  if ((REQUIRE_REVIEW == 1)); then
+    if has_reviewed_by "$REMOTE"; then
+      log "部署闸：$SHORT 含 Reviewed-By trailer"
+    elif ((FORCE == 1)); then
+      log "警告：$SHORT 缺少 Reviewed-By trailer；--force 例外继续（仅限回滚/热修）"
+    else
+      log "拒绝部署：$SHORT 缺少 Reviewed-By trailer（代码提交需独立 Reviewer PASS；docs-only 豁免；--force 例外）"
+      if ((DRY_RUN == 0)); then
+        record_failure "missing Reviewed-By"
+      fi
+      exit 1
+    fi
   fi
 
   log "CI 闸门检查中（要求 $REQUIRED_JOBS；Docs=$REQUIRE_DOCS）"

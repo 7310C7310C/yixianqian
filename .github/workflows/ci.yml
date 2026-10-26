@@ -25,12 +25,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # 完整历史：asset-version 门禁要覆盖 push before..HEAD / PR base..HEAD 的多提交范围。
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: 静态资源版本
-        run: python3 tools/check_asset_version.py --base HEAD^
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          base="$PR_BASE"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$PUSH_BEFORE"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="origin/main"
+          fi
+          python3 tools/check_asset_version.py --base "$base"
       - name: 文档一致性
         run: python3 tools/check_docs.py --strict
       - uses: actions/setup-go@v5

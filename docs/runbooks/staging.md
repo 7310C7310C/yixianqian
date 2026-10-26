@@ -20,9 +20,10 @@ sources:
 | 项目 | 值 |
 |---|---|
 | 公开入口 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD（二进制） | `30e4b96`（`deployed.sha` 已推进到 `b15433d`，docs-only 不重启） |
-| `/healthz` version | `staging-30e4b96` |
-| migration 最大版本 | `9`（批次10 待部署：`0010_photo_authz_indexes.sql` → 10） |
+| 部署 HEAD（二进制） | `9bc7888`（批次10 及 assetVersion 13 / likes 预取修复） |
+| `/healthz` version | `staging-9bc7888` |
+| migration 最大版本 | `10`（`0010_photo_authz_indexes.sql` 四索引已应用） |
+| 本地 hotfix | `197df08` 之后的 assetVersion 15 门禁/部署闸提交（未 push/部署） |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装（2026-10-22），每 10 分钟 |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
@@ -90,6 +91,12 @@ gofmt/vet → 构建 4 个 binary（`version=staging-<short>`）→ 备份 `serv
 - 脚本：`/opt/yixianqian-next/autodeploy.sh`（仓库 `deploy/autodeploy/`，root:755，支持 `--dry-run`）。
 - 单实例：`flock /run/yxq-autodeploy.lock`；CI 未完成、`git fetch` 失败只等下一轮，不算失败。
 - 仅文档提交（只改 `docs/`、`*.md`、`.team/`）：只推进 `deployed.sha`，不构建、不重启。
+- **部署闸（Reviewed-By trailer）**：代码提交必须在 commit message 含
+  `Reviewed-By: <reviewer>`（独立 Reviewer PASS 的落地凭证）；缺失时 autodeploy 拒绝部署并记录
+  `missing Reviewed-By`。docs-only 提交豁免；`--force` 仅限回滚/热修，会打印警告后继续；
+  测试可设 `YXQ_REQUIRE_REVIEW=0`。
+- **静态资源版本门禁**：CI lint-build 用 push before / PR base 覆盖多提交范围运行
+  `tools/check_asset_version.py`；`web/static/**` 有变更但 `assetVersion` 未 bump 即红。
 - 失败退避：同一提交失败后 15 分钟内不重试（`/opt/yixianqian-next/autodeploy.failed`），
   `--force` 可立即重试。
 - 日志：`/var/log/yxq-autodeploy.log`（logrotate 每日或 10MB 轮转；脚本内置 20MB 自截断兜底）。
@@ -324,7 +331,7 @@ pgx pool 参数（代码默认，无需 env）：`MaxConns=20`、`MinConns=2`、
   q=0 / `gzip;q=abc` / `x-gzip` / identity 均落 identity（147,145B、无 Content-Encoding）；
   同连接命中 TTFB **0.87ms（gzip）/1.89ms（identity）**，首连 ~96–103ms（TLS 握手）。
 
-## 批次10：渐进启动与照片授权（待部署）
+## 批次10：渐进启动与照片授权（已部署 staging-9bc7888；hotfix 本地待部署）
 
 - 壳启动顺序：三个主脚本移除静态 `defer` 与全部 script/style preload，hero 绘制后按序注入；`/app` 首屏逻辑不变。
   部署后 smoke 必须覆盖：首卡 hero 出现、无白屏、管理台 iframe 正常、Vue 缺失时可见错误页。

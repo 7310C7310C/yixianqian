@@ -103,7 +103,11 @@ token:
 
 # 快速本地门禁：push 前必跑；全量仍用 make ci（多 test/test-migration）
 asset-version-check:
-	python3 tools/check_asset_version.py --base "$${ASSET_VERSION_BASE:-HEAD^}"
+	@if [ -n "$$ASSET_VERSION_BASE" ]; then \
+		python3 tools/check_asset_version.py --base "$$ASSET_VERSION_BASE"; \
+	else \
+		python3 tools/check_asset_version.py; \
+	fi
 
 prepush: fmt-check static-gzip-check spa-check docs-check asset-version-check vet build
 

@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-25
+last_verified: 2026-10-26
 sources:
   - Makefile
   - .github/workflows/**
@@ -96,6 +96,11 @@ sources:
 
 - **push 不等于已部署**；以 `/healthz` 版本为准，不以 `git push` 成功为完成。
 - **CI 红不部署**；不允许 `[skip ci]`、绕过 CI、红/取消时先部署“看看”。
+- **静态资源版本门禁**：改动 `web/static/**`（含生成物）必须在同一提交范围 bump
+  `internal/httpserver/templates.go` 的 `assetVersion` 并同步 admin CSS `@import`；
+  `make ci`/prepush 与 CI lint-build 都会跑 `tools/check_asset_version.py`，未 bump 直接失败。
+- **staging 部署闸**：autodeploy 拒绝缺少 `Reviewed-By:` trailer 的代码提交（docs-only 豁免；
+  `--force` 仅限回滚/热修）；Reviewer PASS 必须落成 trailer 才能自动部署。
 - 不得绕过本流程；异常（冻结自动部署、回滚）须记录到 `.team/status.md`/`.team/decisions.md`。
 
 通道分级（唯一差别在第 4 步；第 5–7 步完全相同）：
@@ -156,7 +161,7 @@ make test-race         # -race 单测，排除 internal/db、internal/httpserver
 make vet
 make build             # server/seed/token/facebackfill
 make test-integration  # 需要 TEST_DATABASE_URL；只跑 TestIntegration*
-make test-migration    # 迁移与文档工具的 Python 测试
+make test-migration    # 迁移、文档与 asset-version 门禁自测（Python）
 make test-broadcast-ui # 需要 BASE_URL/SESSION_COOKIE/ACTIVITY_ID
 make static-gzip       # 重生成 web/static/** 的 .gz 预压缩变体（改静态文件后必跑）
 make spa-check         # 校验 SPA 生成物（Vant 子集/render chunk/app.min.js 的 sha/bytes/manifest；CI 不依赖 Node）
@@ -164,8 +169,9 @@ make spa-check-node    # 开发机 Node 重建后复核（部署/CI 不依赖 No
 make docs-gen          # 刷新 REFERENCE 与入口指针
 make docs-check        # 文档元数据/地图/链接/生成物检查
 make docs-check-stale  # 先 git fetch origin main；base 默认 origin/main，须可解析
-make prepush           # 快速本地门禁（push 前必跑）：fmt-check + static-gzip-check + spa-check + docs-check + vet + build
-make ci                # 本地合并门禁：fmt-check + static-gzip-check + spa-check + docs-check + vet + test + 工具测试 + build
+make prepush           # 快速本地门禁（push 前必跑）：fmt-check + static-gzip-check + spa-check + docs-check + asset-version-check + vet + build
+make asset-version-check # 单独跑静态资源版本门禁（默认 base=origin/main）
+make ci                # 本地合并门禁：fmt-check + static-gzip-check + spa-check + docs-check + asset-version-check + vet + test + 工具测试 + build
 make run
 make seed
 go run ./cmd/token -legacy-user-id U-0006

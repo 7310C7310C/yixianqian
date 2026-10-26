@@ -355,15 +355,19 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 ### 性能批次10 hotfix（本地，待部署）
 
-- Reviewer 复审发现 `assetVersion` 在静态变更后仍为 13、消息 tab 首点慢。本地修复：`assetVersion` **14**
-  （admin CSS @import 同步）；新增 `tools/check_asset_version.py` 接入 `make ci`/prepush 与 CI lint-build：
-  `web/static/**` 变更未 bump 即失败。突变验证：改 `app.min.js` 不 bump → 红；仅 bump 不改 admin CSS → 红；
-  bump 14→15 且两处 @import 同步 → 绿。
+- Reviewer 复审发现 `assetVersion` 在静态变更后仍为 13、消息 tab 首点慢。本地修复：`assetVersion` **15**
+  （admin CSS @import 同步）；新增 `tools/check_asset_version.py`：逐提交检查 base..HEAD（含「A 静态不 bump +
+  B docs」）、工作区静态改动、聚合兜底，并要求 admin CSS `@import` 一致。接入 `make ci`/prepush 与 CI
+  lint-build（`fetch-depth: 0`，push before / PR base），无需 Node；自测
+  `tools/test_asset_version.py` 覆盖工作区未提交、两提交、仅 docs、bump 正向 4 形态。
 - likes chunk 改为应用挂载后立即加载（不等 LCP/idle）；安静主机（load 0.24）N=10：
   冷 FCP/LCP **1178/1584ms（P95 LCP 2128）**、热 **674/784ms（P95 1020）**、CLS 0、442,665B/20；
   tab 首点 消息/活动/我的/牵线 **1491/1344/1325/1518ms**，`加载中` 0、CLS 0.0001。
+- **staging 部署闸**：`deploy/autodeploy/autodeploy.sh` 要求代码提交含 `Reviewed-By:` trailer，缺失则拒绝并记录
+  `missing Reviewed-By`；docs-only 豁免，`--force`/`YXQ_REQUIRE_REVIEW=0` 为例外；沙箱单测
+  `deploy/autodeploy/test_autodeploy.sh` **66 PASS**。
 - 7 smoke 本地最终全 PASS；`make ci`/test-race/integration（fresh DB）绿。**当前 staging 仍是 `staging-9bc7888`，
-  hotfix `e24cfd4` 未 push/未部署**；需重审后走部署闸门。
+  本地 hotfix 链 `197df08` → 本次门禁提交未 push/未部署**；需重审后走部署闸门。
 
 ### 性能批次10（2026-10-26，已部署 staging-9bc7888）
 

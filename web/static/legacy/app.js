@@ -172,7 +172,7 @@ function yxqLoadPageChunk(page, done, onError){
   document.head.appendChild(script);
 }
 
-// 批次10 追加：tab 页 chunk 的「就绪」判断、点击守卫与 idle 预取。
+// 批次10 追加：tab 页 chunk 的「就绪」判断、点击守卫与预取（likes 立即，其余 LCP 后 idle）。
 // 预取在应用挂载后的 requestIdleCallback（timeout 200ms + 1.2s 绝对兜底）启动，
 // 此时 hero 已绘制，不抢首屏图/首屏脚本。
 function yxqPageChunkReady(page){
@@ -200,7 +200,7 @@ function yxqEnsurePageChunk(page){
   });
 }
 function yxqPrefetchPageChunks(){
-  // 消息 tab 是用户最常首次点击且 chunk 最小（~5KB gzip）：挂载后立即 idle 预取，
+  // 消息 tab 是用户最常首次点击且 chunk 最小（~5KB gzip）：挂载后立即预取，
   // 不等 LCP，保证首次点「消息」≤1.5s；其余 chunk 等 LCP 后再预取。
   if (!yxqPageChunkReady('likes')) {
     // 立即发起（不等 LCP/idle）：likes chunk 仅 ~5KB gzip，优先保证首次点「消息」。
@@ -5291,7 +5291,7 @@ const yxqApp = createApp({
       window.__YXQ_LOAD_HOME_STARTED__ = false;
       window.__YXQ_LOAD_HOME_DONE__ = false;
       armBootHeroHardLimit();
-      // 首屏 hero 绘制 + 应用挂载后，idle 预取 tab/子页 chunk；
+      // 首屏 hero 绘制 + 应用挂载后，likes 立即预取，其余 chunk LCP 后 idle；
       // 管理台 iframe 不预取，避免占用原生管理页带宽。
       if (!nativeAdmin.value) yxqPrefetchPageChunks();
       // 入口深链：必须在下方 replaceState 清掉 hash 前留存（机器人「报名活动」按钮 → #/activities 直达活动页）
