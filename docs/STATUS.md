@@ -353,6 +353,18 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 部署后 7 smoke + tab + 授权矩阵 16/16 PASS；staging 真实共享 media：B/C 共享、viewer 只 like C → B public 空、
   私有照片按 C 关系 200、候选卡图 200；卡图 naturalWidth>0。
 
+### 性能批次10 hotfix（本地，待部署）
+
+- Reviewer 复审发现 `assetVersion` 在静态变更后仍为 13、消息 tab 首点慢。本地修复：`assetVersion` **14**
+  （admin CSS @import 同步）；新增 `tools/check_asset_version.py` 接入 `make ci`/prepush 与 CI lint-build：
+  `web/static/**` 变更未 bump 即失败。突变验证：改 `app.min.js` 不 bump → 红；仅 bump 不改 admin CSS → 红；
+  bump 14→15 且两处 @import 同步 → 绿。
+- likes chunk 改为应用挂载后立即加载（不等 LCP/idle）；安静主机（load 0.24）N=10：
+  冷 FCP/LCP **1178/1584ms（P95 LCP 2128）**、热 **674/784ms（P95 1020）**、CLS 0、442,665B/20；
+  tab 首点 消息/活动/我的/牵线 **1491/1344/1325/1518ms**，`加载中` 0、CLS 0.0001。
+- 7 smoke 本地最终全 PASS；`make ci`/test-race/integration（fresh DB）绿。**当前 staging 仍是 `staging-9bc7888`，
+  hotfix `e24cfd4` 未 push/未部署**；需重审后走部署闸门。
+
 ### 性能批次10（2026-10-26，已部署 staging-9bc7888）
 
 - **1B 渐进启动**：壳移除三个主脚本的静态 `defer` 与全部 script/style preload；新增 loader 在首卡 hero `load+decode` 并提交一帧后，按 `vue → app.render → app.min` 顺序注入执行（硬上限 2.5s；无 hero 600ms 后启动）。主脚本不 preload 是实测取舍：1.6Mbps 下 preload 与首图抢带宽，冷 LCP 反而高约 350ms；loader 在 hero 绘制后立即开始下载，`app_start` 与带 preload 版本基本一致。hero 在首帧按 bootstrap faces 套用与 app.js `computeFaceCrop` 相同公式，挂载后无裁切跳动；启动前点击只记 pending、不重放；`loadHome` 4s 兜底与管理台 iframe 不变；Vue/Vant/app.min 缺失均有可见错误页。

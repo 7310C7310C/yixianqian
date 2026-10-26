@@ -102,6 +102,9 @@ token:
 	$(GO) run ./cmd/token -legacy-user-id=$(USER_ID)
 
 # 快速本地门禁：push 前必跑；全量仍用 make ci（多 test/test-migration）
-prepush: fmt-check static-gzip-check spa-check docs-check vet build
+asset-version-check:
+	python3 tools/check_asset_version.py --base "$${ASSET_VERSION_BASE:-HEAD^}"
 
-ci: fmt-check static-gzip-check spa-check docs-check vet test test-migration build
+prepush: fmt-check static-gzip-check spa-check docs-check asset-version-check vet build
+
+ci: fmt-check static-gzip-check spa-check docs-check asset-version-check vet test test-migration build

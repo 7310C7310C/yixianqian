@@ -291,15 +291,16 @@ sources: []
 | target | 依赖 |
 |---|---|
 | `all` | `ci` |
+| `asset-version-check` | — |
 | `build` | — |
-| `ci` | `fmt-check static-gzip-check spa-check docs-check vet test test-migration build` |
+| `ci` | `fmt-check static-gzip-check spa-check docs-check asset-version-check vet test test-migration build` |
 | `docs-check` | — |
 | `docs-check-stale` | — |
 | `docs-gen` | — |
 | `fmt` | — |
 | `fmt-check` | — |
 | `generate` | — |
-| `prepush` | `fmt-check static-gzip-check spa-check docs-check vet build` |
+| `prepush` | `fmt-check static-gzip-check spa-check docs-check asset-version-check vet build` |
 | `run` | — |
 | `seed` | — |
 | `spa-check` | — |

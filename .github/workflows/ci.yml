@@ -24,9 +24,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: 静态资源版本
+        run: python3 tools/check_asset_version.py --base HEAD^
       - name: 文档一致性
         run: python3 tools/check_docs.py --strict
       - uses: actions/setup-go@v5

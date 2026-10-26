@@ -203,12 +203,8 @@ function yxqPrefetchPageChunks(){
   // 消息 tab 是用户最常首次点击且 chunk 最小（~5KB gzip）：挂载后立即 idle 预取，
   // 不等 LCP，保证首次点「消息」≤1.5s；其余 chunk 等 LCP 后再预取。
   if (!yxqPageChunkReady('likes')) {
-    var warm = function(){ yxqLoadPageChunk('likes', function(){}, function(){}); };
-    if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(warm, { timeout: 100 });
-    } else {
-      setTimeout(warm, 0);
-    }
+    // 立即发起（不等 LCP/idle）：likes chunk 仅 ~5KB gzip，优先保证首次点「消息」。
+    yxqLoadPageChunk('likes', function(){}, function(){});
   }
   var pages = ['home', 'profile', 'user_detail', 'group_admin'];
   var index = 0, started = false;
