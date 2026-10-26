@@ -67,10 +67,10 @@ sources:
   - .env.example
 -->
 
-- 更新日期：2026-10-26
+- 更新日期：2026-10-27
 - 维护者：项目维护者
-- 下一更新点：下一次 staging 部署、PM 验收批次10、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-26 对 server1 复核；staging 已部署 `staging-0f14252`（migration 10）；生产 `app.nantou.love` 未切换。
+- 下一更新点：PM 在 Android Via 真机复验虚拟历史栈、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
+- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-c62c163`（虚拟历史栈 + assetVersion 16，migration 10）；生产 `app.nantou.love` 未切换。
 
 ## 1. 阶段
 
@@ -94,14 +94,15 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD（代码） | `0f14252`（批次10 hotfix） |
-| `deployed.sha` | `0ae3592`（docs-only 子提交；后续 docs 推送会继续推进，不重启） |
-| `/healthz` version | `staging-0f14252` |
-| migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用） |
-| 批次10 | 已部署：渐进启动、照片授权、assetVersion 15、likes 立即预取；7 smoke + tab + 授权矩阵 16/16 PASS |
+| 部署 HEAD（代码） | `c62c163`（顶层 SPA 虚拟历史栈） |
+| `deployed.sha` | `c62c163`（后续 docs-only 推送会继续推进，不重启） |
+| `/healthz` version | `staging-c62c163` |
+| migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用；本次无 migration） |
+| 虚拟历史栈（2026-10-27） | 已部署 `c62c163`：默认 virtual（`?history=legacy` / localStorage 可回退）；assetVersion 16；`no_history_smoke` 390/1280 各 19/19 PASS；启动哨兵 1 次、硬件返回每次 1 次重压；7 smoke + tab_first_load + hero + 授权矩阵 PASS；Via 真机进度条待 PM 复验 |
+| 批次10 | 已部署（前序 `staging-0f14252`）：渐进启动、照片授权、assetVersion 15、likes 立即预取；7 smoke + tab + 授权矩阵 16/16 PASS |
 | `profile_photos` | 总数 `1028` / `has_face=1019` / `unchecked=0` |
 | 人脸定时增量 | `/etc/cron.d/yxq-facebackfill` 已安装，每 10 分钟运行 |
-| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；新版脚本逐提交校验 `Reviewed-By:` trailer（docs-only 豁免），`deployed.sha` 已由 docs-only 提交推进（≥`0ae3592`） |
+| 自动部署 | `yxq-autodeploy.service/.timer` 已安装并**已启用**（CI+Docs 绿后自动部署，失败自动回滚）；新版脚本逐提交校验 `Reviewed-By:` trailer（docs-only 豁免），`deployed.sha` 已由 docs-only 提交推进（≥`c62c163`） |
 | nginx 请求体上限 | server1 `next.nantou.love` 与 server2 `relay-next.conf` 均为 `96m` |
 | 账号数 | 用户 `1115`：`active=1111`、`observer=4` |
 | v2 生产 | 未切换；`app.nantou.love` 仍是 v1 |
