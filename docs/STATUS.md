@@ -342,6 +342,12 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 缩略图缓存目录不可写时降级关闭（不再拒绝启动）；运行目录 `/opt/yixianqian-next/cache/thumbs`。
 - 边缘：**不做 `/legacy/api/` 缓存**（key 含明文 session 会落盘，违反 token 只存 hash）；静态 gzip 变体沿用已部署配置并复核（gzip HIT 47,033B/0.87ms、q=0 落 identity）。
 
+### 性能批次10 部署快照（2026-10-26）
+
+- 首次部署 `staging-3cf68c5` 后发现 `assetVersion` 仍为 12，边缘 immutable 缓存继续返回旧
+  `app.render.js`/`pages/*.render.js`（含「加载中」文案）；修正为 **13**（含 admin CSS @import），
+  提交 `2b61315` 后重新部署，`?v=13` 强制新缓存键。迁移 0010 四索引、`server.prev=staging-30e4b96`。
+
 ### 性能批次10（2026-10-26，本地实现，未 push / 未部署）
 
 - **1B 渐进启动**：壳移除三个主脚本的静态 `defer` 与全部 script/style preload；新增 loader 在首卡 hero `load+decode` 并提交一帧后，按 `vue → app.render → app.min` 顺序注入执行（硬上限 2.5s；无 hero 600ms 后启动）。主脚本不 preload 是实测取舍：1.6Mbps 下 preload 与首图抢带宽，冷 LCP 反而高约 350ms；loader 在 hero 绘制后立即开始下载，`app_start` 与带 preload 版本基本一致。hero 在首帧按 bootstrap faces 套用与 app.js `computeFaceCrop` 相同公式，挂载后无裁切跳动；启动前点击只记 pending、不重放；`loadHome` 4s 兜底与管理台 iframe 不变；Vue/Vant/app.min 缺失均有可见错误页。
