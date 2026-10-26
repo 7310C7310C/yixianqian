@@ -4223,12 +4223,8 @@ const yxqApp = createApp({
       passwordSubmitError.value = '';
       passwordReturnScroll = window.scrollY || (document.scrollingElement && document.scrollingElement.scrollTop) || 0;
       page.value = 'password';
-      // 从「我的」滚到下方再进子页：同步清零文档滚动，避免首屏停在上页位置被固定返回列遮住
-      nextTick(() => {
-        try { window.scrollTo(0, 0); } catch (e) {}
-        const scroller = document.scrollingElement;
-        if (scroller) scroller.scrollTop = 0;
-      });
+      // 滚动复位交给 Transition @enter（onPageEnter）：out-in 离场期间旧「我的」页仍可见，
+      // 若此处同步 scrollTo(0,0) 会把它闪到顶部；进场首帧 opacity 0 时复位才看不到跳动。
     }
     async function submitPassword() {
       if (passwordSubmitting.value) return;
