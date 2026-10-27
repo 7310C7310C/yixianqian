@@ -87,7 +87,7 @@ sources:
 - 更新日期：2026-10-27
 - 维护者：项目维护者
 - 下一更新点：PM 在 Android Via/Kiwi/荣耀真机复验虚拟历史栈与可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-d5bbe5b`（代码 `d5bbe5b`：用户端报障批次 + 活动按时间结束 + assetVersion 20，migration 10 不变）；
+- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-a68063e`（代码 `a68063e`：大图缩图秒开 + 匿名首页英文 + 活动结束用户侧关卡 + 脱单 gate，assetVersion 27，migration 10 不变）；
   生产 `app.nantou.love` 未切换。
 
 ## 1. 阶段
@@ -112,10 +112,10 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD（代码） | `d5bbe5b`（用户端报障批次 + 活动按时间结束，assetVersion 20；2026-10-27 11:17:46 自动部署） |
-| `deployed.sha` | 由 autodeploy 随 docs-only 提交推进（指向最新 docs tip）；代码部署标记 `d5bbe5b` |
-| `/healthz` version | `staging-d5bbe5b` |
-| `server.prev`（回滚目标） | 旧 `staging-ad1f2c1` binary，sha256 `b51f5022ce253a32…` |
+| 部署 HEAD（代码） | `a68063e`（大图缩图秒开 + 匿名首页英文 + 活动结束用户侧关卡 + 脱单 gate，assetVersion 27；2026-10-27 15:03:03 自动部署） |
+| `deployed.sha` | 由 autodeploy 随 docs-only 提交推进（指向最新 docs tip）；代码部署标记 `a68063e` |
+| `/healthz` version | `staging-a68063e` |
+| `server.prev`（回滚目标） | 旧 `staging-d5bbe5b` binary，sha256 `211f85acd3a32c59…` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用；本次无 migration） |
 | 虚拟历史栈（2026-10-27） | 已部署 `c62c163`：默认 virtual（`?history=legacy` / localStorage 可回退）；assetVersion 16；`no_history_smoke` 390/1280 各 19/19 PASS；启动哨兵 1 次、硬件返回每次 1 次重压；7 smoke + tab_first_load + hero + 授权矩阵 PASS；Via 真机进度条待 PM 复验 |
 | 批次10 | 已部署（前序 `staging-0f14252`）：渐进启动、照片授权、assetVersion 15、likes 立即预取；7 smoke + tab + 授权矩阵 16/16 PASS |
@@ -422,11 +422,28 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 回滚：`git revert <本批提交>`（前端静态生成物 + assetVersion + 后端活动状态派生/关闭任务；无 schema 变更；
   到期落库仅把已过 end_at 的活动置为已结束，回滚 binary 不恢复已落库状态）。
 
-### 2026-10-27 追加：首页英文、活动结束关入口、脱单 gate、大图秒开（本地待部署）
+### 2026-10-27 追加：首页英文、活动结束关入口、脱单 gate、大图秒开（已部署 staging-a68063e）
 
-- 范围：并行 workstream `fix/home-en-20261027`（`e2627ec`、`f16c4f2`、`7f04fd8`）合入本地 main；
-  本批 viewer 秒开（`3b23c7e`）一并整合。assetVersion **27**（register.css 变更 + 移除自订 close queue）；**待 Reviewer/部署**，
-  staging 仍 `staging-d5bbe5b`，生产/v1 未动。
+- 范围：并行 workstream `fix/home-en-20261027`（`e2627ec`、`f16c4f2`、`7f04fd8`）合入 main；
+  本批 viewer 秒开（`3b23c7e`）一并整合，最终 squash 为 `a68063e`（tree `2741dfe0…`，Reviewer PASS）。
+  assetVersion **27**（register.css 变更 + 移除自订 close queue）；生产/v1 未动。
+- 部署：CI run `40464407654`（lint-build/unit/integration 全 success）+ Docs run `40464407656` success；
+  autodeploy 15:02:23 CI+Docs 闸门通过 → 15:03:03 部署成功。`/healthz=staging-a68063e`，
+  `server.prev=staging-d5bbe5b`（sha256 `211f85acd3a32c59…`），migration 10 不变。
+- 部署后真实链路 smoke（部署后 15:03 起）：`public_home_smoke` 390x844/1280x900 PASS（title 精确、title 外无 Han、
+  `lang=en`、英文 CTA/Feishu、无 QR；`/login` 仍中文）；`user_reported_bugs_20261027.py` 390x844 **19/19**、
+  390x700 **18/18** PASS；`no_history_smoke` 390/1280 ALL PASS。活动 A-0011/A-0012/A-0016/A-0017/A-0033
+  用户视图 `group_flag`/`onetoone_flag=否`，DB flags 未被改（A-0017 `group_enabled=true`、
+  A-0011/A-0012/A-0033 `onetoone_enabled=true` 保持）；A-0017 `group/status`=409 `activity_ended`；
+  报名中的 A-0013 `onetoone_flag` 仍=是。U-0006 只读 `EXISTS=false`（3 条历史 ended 报名不阻塞），
+  独立库 `TestIntegrationEndedSignupDoesNotBlockMatched` 6 子用例 PASS；assetVersion 27 全链
+  （`/static/legacy/app.min.js?v=27` 200，admin CSS `@import` 同值）。
+- 秒开测试口径：Playwright `route` 拦截会让 Chromium 绕过 HTTP 缓存，缩图被重新下载（实测 640–700ms），
+  不代表真实用户；smoke 改为预取当前卡缩图字节、由 route `fulfill` 模拟已看到卡图的缓存命中
+  （实测 107–136ms）；无拦截探针复核 open 75ms。该**仅测试侧**修正待 Reviewer 复核后提交。
+- 5xx：app 请求日志 15:04–15:14 共 14 条 `/cards/photo/*` 500，全部为
+  `open media object failed … context canceled`（首批部署后 smoke 用旧版 route 拦截中止 in-flight 请求所致；
+  同对象带 session 重试 200）；15:30 起 ERROR/WARN=0。staging nginx `access_log off`，5xx 以 app 请求日志为准。
 - 匿名首页英文版（`e2627ec`）：title 精确 `一线牵 · 祝你早日找到另一半`；除 title 外 HTML 无 `\p{Han}`；
   `lang="en"`；不渲染站内 header/skip link；Create account/Log in、Feishu 英文 CTA；无 QR；`/login` 仍中文。
   证据：`TestHomeRendersPublicLandingForAnonymous`/`assertEnglishPublicLanding`；本地 HTTP/Playwright 检查。
