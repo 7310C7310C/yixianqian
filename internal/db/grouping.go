@@ -253,6 +253,19 @@ func (d *DB) loadGroupSelection(ctx context.Context, activityID, userID int64) (
 		  WHERE activity_id = $1 AND selector_id = $2`, activityID, userID))
 }
 
+// groupingGate closes the user-side grouping entry once the activity has ended
+// or grouping is not enabled. Admin console methods intentionally bypass it so
+// results stay visible for management.
+func groupingGate(activity Activity, now time.Time) error {
+	if activity.EndedAt(now) {
+		return ErrActivityEnded
+	}
+	if !activity.GroupEnabled {
+		return ErrActivityNotOpen
+	}
+	return nil
+}
+
 // loadSignupGate verifies the user registered and, when sign-in is enabled, is
 // present. It uses the same rule as the legacy endpoints: non-cancelled signup
 // plus a checked-in attendance value.
@@ -303,6 +316,9 @@ func oppositeGender(gender string) string {
 func (d *DB) GroupCandidates(ctx context.Context, userID int64, activityRef string) (Activity, []GroupCandidate, error) {
 	activity, err := d.GetActivity(ctx, activityRef)
 	if err != nil {
+		return Activity{}, nil, err
+	}
+	if err := groupingGate(activity, time.Now()); err != nil {
 		return Activity{}, nil, err
 	}
 	if _, err := d.loadSignupGate(ctx, activity, userID); err != nil {
@@ -373,6 +389,9 @@ func (d *DB) GroupStatusForUser(ctx context.Context, userID int64, activityRef s
 	if err != nil {
 		return GroupStatus{}, err
 	}
+	if err := groupingGate(activity, time.Now()); err != nil {
+		return GroupStatus{}, err
+	}
 	status := GroupStatus{
 		ActivityID:  activity.ID,
 		GroupStatus: activity.GroupStatus,
@@ -397,6 +416,9 @@ func (d *DB) SelectGroupChoices(ctx context.Context, userID int64, activityRef s
 	choices []int64) (GroupSelection, error) {
 	activity, err := d.GetActivity(ctx, activityRef)
 	if err != nil {
+		return GroupSelection{}, err
+	}
+	if err := groupingGate(activity, time.Now()); err != nil {
 		return GroupSelection{}, err
 	}
 	if _, err := d.loadSignupGate(ctx, activity, userID); err != nil {
@@ -548,6 +570,9 @@ func (d *DB) GroupResultForUser(ctx context.Context, userID int64, activityRef s
 	round int) (UserGroupResult, error) {
 	activity, err := d.GetActivity(ctx, activityRef)
 	if err != nil {
+		return UserGroupResult{}, err
+	}
+	if err := groupingGate(activity, time.Now()); err != nil {
 		return UserGroupResult{}, err
 	}
 	result := UserGroupResult{

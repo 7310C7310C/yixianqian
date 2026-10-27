@@ -433,3 +433,26 @@ sources: []
   无重复 `profile_detail`/`profile_edit`，返回一次到「我的」、第二次离开 SPA；改密后无 password 残留；
   遮罩 `elementFromPoint` 命中遮罩、点击取消后 pswp 隐藏、加载完成遮罩消失且关闭按钮可点。
   `no_history_smoke` 390/1280 各 19/19 PASS。
+
+## 37. 匿名首页英文版、活动结束关闭用户入口、脱单 gate 只算未结束报名（2026-10-27）
+
+- 背景：PM 追加三项：①匿名首页改为英文静态页以降低扫描/风控命中；②活动结束后用户侧不应再出现分组/一对一入口；
+  ③U-0006 被已结束活动的历史报名阻塞「脱单」，而用户已无法取消该报名。
+- 决策（首页英文）：匿名 `GET /` 使用英文静态页，`<html lang="en">`，title 精确保留中文
+  `一线牵 · 祝你早日找到另一半`；**除 title 外 HTML 不得出现汉字**；不渲染站内 header/skip link/账号导航；
+  CTA 与 Feishu 说明用英文；不展示二维码。`/login`、注册、SPA/管理台仍中文，不受影响。
+- 决策（活动结束关入口）：`Activity.EndedAt` 统一按「已结束/已取消」或 `end_at <= now` 判定；用户活动视图在
+  ended 时派发 `group_flag=否`、`onetoone_flag=否` 并隐藏匹配入口；**数据库 flags 不改**，管理台继续可管理；
+  用户侧分组四个 DB 方法与 legacy 一对一 result/chat 返回 409 `activity_ended` / `onetoone_disabled`；
+  `/legacy/api/activities/mine/groups` 与入口 flag 排除已结束活动。
+- 决策（脱单 gate）：`HasActiveSignups` 与 `SetAccountStatus(matched)` 共用 `hasActiveSignup`，只统计
+  `signups.status=已报名` 且活动状态为报名中/已满员/未开始、`end_at` 为空或未到的报名；
+  已结束/已取消/end_at 已过的历史报名不阻塞脱单（取消入口在结束后也已被拒绝）。未来/进行中/时间待定报名仍阻塞。
+- 边界：不改 schema、不批量改写历史活动状态或报名；DB flags 保留给管理台；首页英文只针对匿名 `/`，
+  站内所有既有中文页面/接口契约不变；脱单 gate 只改阻塞判定，不改变 matched 状态机其他校验。
+- 证据：`TestHomeRendersPublicLandingForAnonymous`（title 精确、title 外无 Han、无 header/skip/QR）、
+  Playwright `public_home_smoke`；`TestIntegrationActivityAutoEndUserViews`、
+  `TestIntegrationActivityMatchingClosedAfterEnd` / `TestSPAMatchingEntriesAreGatedByFlags`、
+  `TestIntegrationCloseEndedActivities`、`TestIntegrationGroupingEndedActivityGate`；
+  `TestIntegrationEndedSignupDoesNotBlockMatched`（ended/future/ongoing/nil/cancelled）。
+  本地 HTTP 验证：匿名 `/` 200 + 英文/无 Han（title 除外），`/login` 200 且仍中文。

@@ -344,7 +344,8 @@
   /* 必须高于 PhotoSwipe 根层（--pswp-root-z-index: 100000），否则遮罩 DOM 可见但被 pswp 盖住、不可点。 */
   .viewer-loading-mask { position: fixed; inset: 0; z-index: 100001; pointer-events: auto; background: rgba(0,0,0,0.55); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff; }
   .viewer-loading-mask .van-loading, .viewer-loading-mask .van-loading__text { color: #fff; }
-  .viewer-loading-hint { font-size: 12px; color: rgba(255,255,255,0.78); }
+  /* 取消打开后 PhotoSwipe 在 loading 期可能仍保留根节点：立即隐藏，等 destroy 完成。 */
+  .pswp.yxq-viewer-cancelled { display: none !important; }
   .pswp__counter { left: 50%; right: auto; transform: translateX(-50%); }
   /* 全屏图片保持 pointer-events:none：拦截长按保存菜单；单击关闭由 .pswp__zoom-wrap/.pswp__item 承接（见 bg/tap 配置） */
   .pswp img, .pswp__img { pointer-events: none !important; -webkit-touch-callout: none !important; }

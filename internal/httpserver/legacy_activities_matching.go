@@ -94,6 +94,10 @@ func (a *App) writeLegacyGroupActionError(w http.ResponseWriter, r *http.Request
 	switch {
 	case errors.Is(err, db.ErrActivityNotFound):
 		legacyGroupError(w, http.StatusNotFound, "", "活动不存在")
+	case errors.Is(err, db.ErrActivityEnded):
+		legacyGroupError(w, http.StatusConflict, "activity_ended", "活动已经结束，无法进行分组操作")
+	case errors.Is(err, db.ErrActivityNotOpen):
+		legacyGroupError(w, http.StatusConflict, "activity_not_open", "活动未开启分组，无法进行该操作")
 	case errors.Is(err, db.ErrGroupNotSignedUp), errors.Is(err, db.ErrNotSignedUp):
 		legacyGroupError(w, http.StatusForbidden, "", "你未报名此活动")
 	case errors.Is(err, db.ErrGroupSigninRequired):
@@ -117,12 +121,8 @@ func (a *App) handleLegacyGroupStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, err := a.db.GroupStatusForUser(r.Context(), user.ID, activityRefFromRequest(r))
-	if errors.Is(err, db.ErrActivityNotFound) {
-		legacyError(w, http.StatusNotFound, "活动不存在")
-		return
-	}
 	if err != nil {
-		legacyServerError(a, w, r, err, "legacy group status failed")
+		a.writeLegacyGroupActionError(w, r, err)
 		return
 	}
 	profiles, err := a.legacyProfilesByIDs(r.Context(), status.Choices)
@@ -274,6 +274,10 @@ func (a *App) handleLegacyGroupResult(w http.ResponseWriter, r *http.Request) {
 		legacyError(w, http.StatusNotFound, "活动不存在")
 		return
 	}
+	if errors.Is(err, db.ErrActivityEnded) || errors.Is(err, db.ErrActivityNotOpen) {
+		a.writeLegacyGroupActionError(w, r, err)
+		return
+	}
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy group result failed")
 		return
@@ -358,6 +362,14 @@ func (a *App) handleLegacyOnetooneResult(w http.ResponseWriter, r *http.Request)
 	}
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy onetoone activity failed")
+		return
+	}
+	if activity.EndedAt(a.clock.Now()) {
+		legacyGroupError(w, http.StatusConflict, "activity_ended", "活动已经结束，无法查看必聊结果")
+		return
+	}
+	if !activity.OnetooneEnabled {
+		legacyGroupError(w, http.StatusConflict, "onetoone_disabled", "本活动未开启一对一匹配")
 		return
 	}
 	if strings.TrimSpace(activity.OnetooneStatus) != db.OnetooneStatusDone {
@@ -446,6 +458,14 @@ func (a *App) handleLegacyOnetooneChat(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy onetoone chat activity failed")
+		return
+	}
+	if activity.EndedAt(a.clock.Now()) {
+		legacyGroupError(w, http.StatusConflict, "activity_ended", "活动已经结束，无法留言")
+		return
+	}
+	if !activity.OnetooneEnabled {
+		legacyGroupError(w, http.StatusConflict, "onetoone_disabled", "本活动未开启一对一匹配")
 		return
 	}
 	if strings.TrimSpace(activity.OnetooneStatus) != db.OnetooneStatusDone {

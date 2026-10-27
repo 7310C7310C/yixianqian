@@ -19,7 +19,7 @@ import (
 // this whenever web/static content referenced from templates changes; module
 // CSS @import lines carry the same value and must be bumped together.
 // Batch10: 15 invalidates edge/browser immutable caches for the shell assets.
-const assetVersion = "20"
+const assetVersion = "27"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
@@ -49,6 +49,10 @@ type PageData struct {
 	ActiveNav    string
 	ActiveSubnav string
 	PageCSS      string
+	// PublicLanding marks the anonymous English-only landing page. The layout
+	// renders it without the Chinese shell header / skip link and drops the
+	// 「· 一线牵」 title suffix.
+	PublicLanding bool
 	// FeishuURL 是飞书版入口；render 会为所有页面填入默认值，模板无需区分
 	// GET/POST 渲染路径。
 	FeishuURL string

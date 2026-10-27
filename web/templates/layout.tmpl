@@ -1,19 +1,19 @@
 {{define "layout"}}
 <!doctype html>
-<html lang="zh-CN">
+<html lang="{{if .PublicLanding}}en{{else}}zh-CN{{end}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#ff6b81">
-  <title>{{.Title}} · 一线牵</title>
+  <title>{{if .PublicLanding}}{{.Title}}{{else}}{{.Title}} · 一线牵{{end}}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{assetVersion}}">
   <link rel="stylesheet" href="/static/shell.css?v={{assetVersion}}">
   {{if .PageCSS}}<link rel="stylesheet" href="/static/{{.PageCSS}}?v={{assetVersion}}">{{end}}
 </head>
-<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}">
-  <a class="shell-skip" href="#main">跳至主要内容</a>
+<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}{{if .PublicLanding}} public-landing{{end}}">
+  {{if not .PublicLanding}}<a class="shell-skip" href="#main">跳至主要内容</a>
 
   <header class="shell-header">
     <div class="shell-header-inner">
@@ -34,6 +34,7 @@
       {{end}}
     </div>
   </header>
+  {{end}}
 
   <main id="main" class="shell-main" tabindex="-1">
     <div class="shell-container">

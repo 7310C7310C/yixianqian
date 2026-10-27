@@ -140,7 +140,7 @@ func buildActivityView(a db.Activity, now time.Time) ActivityView {
 		EndsAt:     a.EndAt,
 		observedAt: now,
 	}
-	applyActivityTimeWindow(&view)
+	applyActivityTimeWindow(&view, a.EndedAt(now))
 	return view
 }
 
@@ -154,8 +154,10 @@ func (a *App) activityView(activity db.Activity) ActivityView {
 // applyActivityTimeWindow derives 「已结束」 from end_at for open/full
 // activities. Cancelled, already finished and not-yet-open activities keep
 // their stored status, and an activity without end_at stays unchanged.
-func applyActivityTimeWindow(v *ActivityView) {
-	if v.EndsAt == nil || v.observedAt.Before(*v.EndsAt) {
+// Every ended activity also closes the user-side grouping / one-to-one
+// entries; the stored DB flags stay untouched so admin consoles still work.
+func applyActivityTimeWindow(v *ActivityView, ended bool) {
+	if !ended {
 		return
 	}
 	switch v.Status {
@@ -164,8 +166,10 @@ func applyActivityTimeWindow(v *ActivityView) {
 		v.StatusClass = activityStatusClass(v.Status)
 		v.CanSignup = false
 		v.CanCancel = false
-		v.CanSelfSignin = false
 	}
+	v.GroupEnabled = false
+	v.OnetooneEnabled = false
+	v.CanSelfSignin = false
 }
 
 func applySignupToView(v *ActivityView, status string, attendance db.Attendance) {

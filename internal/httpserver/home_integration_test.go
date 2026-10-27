@@ -15,21 +15,7 @@ func TestIntegrationPublicHomeAndLoginEntry(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("anonymous home status = %d body=%s", resp.StatusCode, body)
 	}
-	for _, want := range []string{
-		"一线牵",
-		"立即注册",
-		`href="/register?from=home"`,
-		`href="/login"`,
-		"已在飞书版使用过",
-		publicFeishuAppURL,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("anonymous home missing %q", want)
-		}
-	}
-	if strings.Contains(body, "feishu-qr") || strings.Contains(body, "二维码") {
-		t.Fatalf("anonymous home still renders a QR code: %s", body)
-	}
+	assertEnglishPublicLanding(t, body)
 	if strings.Contains(body, `id="app"`) {
 		t.Fatal("anonymous home should not serve the SPA")
 	}
@@ -58,7 +44,7 @@ func TestIntegrationPublicHomeAndLoginEntry(t *testing.T) {
 		!strings.Contains(body, `window.__YXQ_AUTHENTICATED__=true;`) {
 		t.Fatalf("signed-in home status=%d body=%s", resp.StatusCode, body)
 	}
-	if strings.Contains(body, "已在飞书版使用过") {
+	if strings.Contains(body, "A trusted place for single Christians to meet.") {
 		t.Fatal("signed-in home rendered the public landing page")
 	}
 }
@@ -72,12 +58,7 @@ func TestIntegrationPublicHomeQRAssetRetired(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("anonymous home status = %d body=%s", resp.StatusCode, body)
 	}
-	if !strings.Contains(body, publicFeishuAppURL) {
-		t.Fatalf("anonymous home missing feishu link: %s", body)
-	}
-	if strings.Contains(body, "feishu-qr") || strings.Contains(body, "二维码") {
-		t.Fatalf("anonymous home still renders a QR code: %s", body)
-	}
+	assertEnglishPublicLanding(t, body)
 
 	resp = anonymous.get("/static/feishu-qr.png")
 	defer resp.Body.Close()

@@ -27,8 +27,9 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 		a.trackPublicEvent(r, "page_view", "home")
 	}
 	a.render(w, r, http.StatusOK, "home", PageData{
-		Title:   "祝你早日找到另一半",
-		PageCSS: "register.css",
+		Title:         "一线牵 · 祝你早日找到另一半",
+		PageCSS:       "register.css",
+		PublicLanding: true,
 	})
 }
 

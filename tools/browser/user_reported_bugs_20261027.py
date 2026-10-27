@@ -675,7 +675,175 @@ def arm_viewer_mask_probe(page) -> None:
     )
 
 
-def run_viewer_loading(page, tag: str) -> None:
+def _viewer_open_fallback(page, salt: str) -> str:
+    url = proxy(page, "p.currentCard && p.currentCard.photos && p.currentCard.photos[0]")
+    if not url:
+        raise Failure("第5项 当前卡片没有照片，无法测 fallback")
+    sep = "&" if "?" in url else "?"
+    url = url + sep + "fallback=" + salt
+    page.evaluate("(url) => window.yxqRootProxy.openPhotoViewerForUser({photos:[url], photos_thumb: []})", url)
+    return url
+
+
+def run_viewer_fast_path(page, tag: str) -> None:
+    """秒开：卡片缩图先显示，原图延迟 3s 后后台升级。"""
+    tap_tab(page, "牵线", "cards")
+    wait_cards(page, expect_self=True)
+    # 找一张多图卡，顺带覆盖下一张；找不到就只测当前张。
+    multi = False
+    for _ in range(15):
+        n = proxy(page, "p.currentCard && p.currentCard.photos ? p.currentCard.photos.length : 0")
+        if n and n > 1:
+            multi = True
+            break
+        if not proxy(page, "p.cardsTotal > 1"):
+            break
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(250)
+    pending = []
+
+    def handler(route, request):
+        parsed = urlparse(request.url)
+        if "/cards/photo/" in parsed.path and "size=thumb" not in (parsed.query or ""):
+            pending.append(route)
+            return
+        route.fallback()
+
+    page.route("**/cards/photo/**", handler)
+
+    def release() -> None:
+        for route in pending:
+            try:
+                route.continue_()
+            except Exception:  # noqa: BLE001
+                pass
+        pending.clear()
+
+    try:
+        t0 = time.monotonic()
+        page.locator(".swipe-card .card-photo-wrap").first.click(timeout=12000)
+        try:
+            page.wait_for_function(
+                """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content;
+                  const e = c && c.element; return !!(p && p.element &&
+                  getComputedStyle(p.element).display !== 'none' && e && e.naturalWidth > 0); }""",
+                timeout=3000,
+            )
+        except PlaywrightTimeoutError as exc:
+            raise Failure("第5项 秒开失败：pswp/缩图未在 3s 内可见") from exc
+        open_ms = (time.monotonic() - t0) * 1000
+        try:
+            page.wait_for_function("() => !document.querySelector('.viewer-loading-mask')", timeout=3000)
+        except PlaywrightTimeoutError as exc:
+            raise Failure("第5项 缩图已显示但遮罩未清除") from exc
+        mask_ms = (time.monotonic() - t0) * 1000
+        st = page.evaluate(
+            """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content; const e = c && c.element;
+              return {show: !!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer),
+                      mask: !!document.querySelector('.viewer-loading-mask'),
+                      src: e ? e.src : '', nw: e ? e.naturalWidth : 0, full: e ? (e.dataset.yxqFull || '') : ''}; }"""
+        )
+        if not st["show"] or st["mask"] or not st["nw"]:
+            raise Failure(f"第5项 秒开状态异常：{st}")
+        if "size=thumb" not in st["src"]:
+            raise Failure(f"第5项 初始应显示缩图，实际 src={st['src']!r}")
+        if open_ms > 300 or mask_ms > 300:
+            raise Failure(f"第5项 秒开超时：pswp={open_ms:.0f}ms mask={mask_ms:.0f}ms")
+        screenshot(page, tag, "05-fast-thumb")
+        print(f"PASS {tag} 第5项秒开：{open_ms:.0f}ms 可见缩图、{mask_ms:.0f}ms 无遮罩")
+
+        # 原生 close 语义：等 opening 动画结束（opener.isOpen）后点关闭，1s 内收起。
+        page.wait_for_function(
+            "() => window.pswp && window.pswp.opener && window.pswp.opener.isOpen === true",
+            timeout=2500,
+        )
+        page.locator(".pswp__button--close").first.click(timeout=3000)
+        page.wait_for_function(
+            "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer) && "
+            "(() => { const p = document.querySelector('.pswp'); return !p || getComputedStyle(p).display === 'none'; })()",
+            timeout=1200,
+        )
+        print(f"PASS {tag} 第5项fast：opening 结束后关闭，1s 内收起")
+
+        # 重新打开，继续验证 3s 原图升级与下一张。
+        for route in pending:
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
+        pending.clear()
+        page.wait_for_timeout(250)
+        t0 = time.monotonic()
+        page.locator(".swipe-card .card-photo-wrap").first.click(timeout=12000)
+        page.wait_for_function(
+            """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content;
+              const e = c && c.element; return !!(p && p.element &&
+              getComputedStyle(p.element).display !== 'none' && e && e.naturalWidth > 0); }""",
+            timeout=3000,
+        )
+        page.wait_for_function("() => !document.querySelector('.viewer-loading-mask')", timeout=3000)
+
+        # 原图延迟到 3s 后放行，再升级 src。
+        while time.monotonic() < t0 + 3.0:
+            page.wait_for_timeout(50)
+        release()
+        try:
+            page.wait_for_function(
+                """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content;
+                  return !!(c && c.element && c.element.dataset.yxqFull === '1'); }""",
+                timeout=8000,
+            )
+        except PlaywrightTimeoutError as exc:
+            raise Failure("第5项 原图后台升级未完成") from exc
+        full = page.evaluate(
+            """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content; const e = c && c.element;
+              return {src: e ? e.src : '', nw: e ? e.naturalWidth : 0, full: e ? (e.dataset.yxqFull || '') : ''}; }"""
+        )
+        if full["full"] != "1" or "size=thumb" in full["src"] or not full["nw"]:
+            raise Failure(f"第5项 原图升级状态异常：{full}")
+        print(f"PASS {tag} 第5项原图升级：3s 后 src 换原图、naturalWidth={full['nw']}")
+
+        # 下一张：缩图即时显示，原图后台升级。
+        if multi:
+            before = page.evaluate("() => window.pswp ? window.pswp.currIndex : -1")
+            page.evaluate("() => window.pswp && window.pswp.next()")
+            page.wait_for_function(
+                "idx => window.pswp && window.pswp.currIndex !== idx", arg=before, timeout=5000,
+            )
+            page.wait_for_function(
+                """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content;
+                  const e = c && c.element; return !!(e && e.naturalWidth > 0); }""",
+                timeout=5000,
+            )
+            next_st = page.evaluate(
+                """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content; const e = c && c.element;
+                  return {idx: p ? p.currIndex : -1, src: e ? e.src : '', nw: e ? e.naturalWidth : 0}; }"""
+            )
+            if not next_st["nw"]:
+                raise Failure(f"第5项 下一张缩图未显示：{next_st}")
+            release()
+            page.wait_for_function(
+                """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content;
+                  return !!(c && c.element && c.element.dataset.yxqFull === '1'); }""",
+                timeout=8000,
+            )
+            print(f"PASS {tag} 第5项下一张：缩图即时显示，原图后台升级")
+
+        close_btn = page.locator(".pswp__button--close").first
+        if not close_btn.is_visible():
+            raise Failure("第5项 秒开路径关闭按钮不可见")
+        close_btn.click(timeout=5000)
+        page.wait_for_function(
+            "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
+            timeout=5000,
+        )
+    finally:
+        release()
+        page.unroute("**/cards/photo/**", handler)
+
+
+def run_viewer_fallback_mask(page, tag: str) -> None:
+    """无缩图（海报/fallback）仍显示遮罩；点击可取消，随后可正常打开。"""
     tap_tab(page, "牵线", "cards")
     wait_cards(page, expect_self=True)
     pending = []
@@ -689,26 +857,11 @@ def run_viewer_loading(page, tag: str) -> None:
 
     page.route("**/cards/photo/**", handler)
     try:
-        # —— 5a：加载中遮罩必须在 PhotoSwipe 之上，且可点击取消 ——
-        arm_viewer_mask_probe(page)
-        click_t0 = time.monotonic()
-        page.locator(".swipe-card .card-photo-wrap").first.click(timeout=12000)
-        page.wait_for_function("window.__yxqMaskSeenAt != null", timeout=2000)
-        seen_at = page.evaluate("window.__yxqMaskSeenAt")
-        click_at = page.evaluate("window.__yxqPhotoClickT")
-        latency = None
-        if click_at is not None:
-            latency = seen_at - click_at
-        if latency is not None and latency > 100:
-            raise Failure(f"第5项 遮罩出现太晚：{latency:.0f}ms")
-        if not page.locator(".viewer-loading-mask").is_visible():
-            raise Failure("第5项 遮罩在 DOM 中但不可见")
+        _viewer_open_fallback(page, "maskcancel")
+        page.wait_for_function("() => !!document.querySelector('.viewer-loading-mask')", timeout=3000)
         st = mask_center_state(page)
         if not st["inMask"]:
-            raise Failure(f"第5项 遮罩被遮挡：elementFromPoint={st['tag']}.{st['cls']} "
-                          f"maskZ={st['maskZ']} pswpZ={st['pswpZ']}")
-        screenshot(page, tag, "05-viewer-mask")
-
+            raise Failure(f"第5项 无缩图 fallback 遮罩被遮挡：{st}")
         vp = page.viewport_size or {"width": 390, "height": 844}
         page.mouse.click(vp["width"] // 2, vp["height"] // 2)
         page.wait_for_function(
@@ -716,70 +869,235 @@ def run_viewer_loading(page, tag: str) -> None:
             "!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
             timeout=5000,
         )
-        try:
-            page.locator(".pswp").first.wait_for(state="hidden", timeout=3000)
-        except PlaywrightTimeoutError as exc:
-            raise Failure("第5项 点击遮罩取消后 PhotoSwipe 仍可见") from exc
+        page.locator(".pswp").first.wait_for(state="hidden", timeout=5000)
         for route in pending:
             try:
                 route.abort()
             except Exception:  # noqa: BLE001
                 pass
         pending.clear()
-        screenshot(page, tag, "05-mask-cancelled")
+        print(f"PASS {tag} 第5项fallback：无缩图时遮罩可见、点击取消成功")
 
-        # —— 5b：原图延迟 2s，遮罩清除后 viewer 可交互 ——
-        page.wait_for_timeout(350)
-        arm_viewer_mask_probe(page)
-        click_t0 = time.monotonic()
-        page.locator(".swipe-card .card-photo-wrap").first.click(timeout=12000)
-        page.wait_for_function("window.__yxqMaskSeenAt != null", timeout=2000)
-        seen_at = page.evaluate("window.__yxqMaskSeenAt")
-        click_at = page.evaluate("window.__yxqPhotoClickT")
-        latency = None if click_at is None else seen_at - click_at
-        if latency is not None and latency > 100:
-            raise Failure(f"第5项 遮罩出现太晚：{latency:.0f}ms")
-        st = mask_center_state(page)
-        if not st["inMask"]:
-            raise Failure(f"第5项 遮罩被遮挡：elementFromPoint={st['tag']}.{st['cls']} "
-                          f"maskZ={st['maskZ']} pswpZ={st['pswpZ']}")
-
-        deadline = click_t0 + 2.0
-        while time.monotonic() < deadline:
-            page.wait_for_timeout(50)
-        if not pending:
-            page.wait_for_timeout(100)
-        if not pending:
-            raise Failure("第5项 没有拦截到原图请求（PhotoSwipe 未加载原图）")
+        # fallback 正常关闭：先移除拦截 handler 让原图完成、遮罩消失，
+        # 等 opening 动画结束后再点原生 close。
+        page.unroute("**/cards/photo/**", handler)
         for route in pending:
-            route.continue_()
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
+        pending.clear()
+        cached = proxy(page, "p.currentCard && p.currentCard.photos && p.currentCard.photos[0]")
+        if not cached:
+            raise Failure("第5项 当前卡片没有照片，无法测 fallback 立即关闭")
+        # 预热原图到浏览器缓存，确保 fallback（无缩图）打开后遮罩能快速消失。
+        page.evaluate(
+            """(url) => new Promise((resolve) => {
+              const img = new Image();
+              img.onload = () => resolve(true);
+              img.onerror = () => resolve(false);
+              img.src = url;
+            })""",
+            cached,
+        )
+        page.evaluate(
+            "(url) => window.yxqRootProxy.openPhotoViewerForUser({photos:[url], photos_thumb: []})",
+            cached,
+        )
+        page.wait_for_function(
+            "() => { const p = window.pswp; const e = p && p.element; "
+            "return !!(e && getComputedStyle(e).display !== 'none'); }",
+            timeout=3000,
+        )
+        page.wait_for_function("() => !document.querySelector('.viewer-loading-mask')", timeout=3000)
+        page.wait_for_function(
+            "() => window.pswp && window.pswp.opener && window.pswp.opener.isOpen === true",
+            timeout=2500,
+        )
+        page.locator(".pswp__button--close").first.click(timeout=3000)
+        page.wait_for_function(
+            "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer) && "
+            "(() => { const p = document.querySelector('.pswp'); return !p || getComputedStyle(p).display === 'none'; })()",
+            timeout=1500,
+        )
+        print(f"PASS {tag} 第5项fallback：opening 结束后关闭，1s 内收起")
+
+        # 重新挂回拦截 handler，保留后面的正常 fallback 打开/关闭用例。
+        page.route("**/cards/photo/**", handler)
+        _viewer_open_fallback(page, "fallbackok")
+        page.wait_for_function("() => !!document.querySelector('.viewer-loading-mask')", timeout=3000)
+        for _ in range(20):
+            if pending:
+                break
+            page.wait_for_timeout(50)
+        for route in pending:
+            try:
+                route.continue_()
+            except Exception:  # noqa: BLE001
+                pass
         pending.clear()
         page.wait_for_function(
-            "() => !document.querySelector('.viewer-loading-mask')",
-            timeout=15000,
+            "() => !document.querySelector('.viewer-loading-mask') && "
+            "window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer === true",
+            timeout=10000,
         )
-        page.wait_for_function("window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer === true",
-                               timeout=10000)
-        page.wait_for_timeout(300)
-        st = mask_center_state(page)
-        if st["inMask"]:
-            raise Failure("第5项 加载完成后遮罩仍拦截点击")
-        screenshot(page, tag, "05-viewer-open")
+        page.wait_for_function(
+            "() => { const p = window.pswp; return !!(p && p.opener && p.opener.isOpen); }",
+            timeout=5000,
+        )
         close_btn = page.locator(".pswp__button--close").first
         if not close_btn.is_visible():
-            raise Failure("第5项 加载完成后 PhotoSwipe 关闭按钮不可见")
+            raise Failure("第5项 fallback 成功路径关闭按钮不可见")
         close_btn.click(timeout=5000)
         page.wait_for_function(
             "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
             timeout=5000,
         )
+        print(f"PASS {tag} 第5项fallback：无缩图正常打开并关闭")
     finally:
+        for route in pending:
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
+        pending.clear()
         page.unroute("**/cards/photo/**", handler)
-    if latency is not None:
-        print(f"PASS {tag} 第5项：遮罩 {latency:.0f}ms 且在 PhotoSwipe 之上；点击可取消；"
-              f"延迟 2s 后清除且 viewer 可关闭")
-    else:
-        print(f"PASS {tag} 第5项：遮罩在 PhotoSwipe 之上；点击可取消；延迟 2s 后清除且 viewer 可关闭")
+
+
+def run_viewer_cancel_race(page, tag: str) -> None:
+    """取消后 100/200/300ms 内再点图：旧 abort destroy timer 不得杀掉新 pswp。"""
+    tap_tab(page, "牵线", "cards")
+    wait_cards(page, expect_self=True)
+    pending = []
+
+    def handler(route, request):
+        parsed = urlparse(request.url)
+        if "/cards/photo/" in parsed.path and "size=thumb" not in (parsed.query or ""):
+            pending.append(route)
+            return
+        route.fallback()
+
+    page.route("**/cards/photo/**", handler)
+
+    def cancel_mask() -> None:
+        vp = page.viewport_size or {"width": 390, "height": 844}
+        page.mouse.click(vp["width"] // 2, vp["height"] // 2)
+        page.wait_for_function(
+            "() => !document.querySelector('.viewer-loading-mask') && "
+            "!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
+            timeout=5000,
+        )
+        page.locator(".pswp").first.wait_for(state="hidden", timeout=3000)
+
+    def release_pending() -> None:
+        for route in pending:
+            try:
+                route.continue_()
+            except Exception:  # noqa: BLE001
+                pass
+        pending.clear()
+
+    def abort_pending() -> None:
+        for route in pending:
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
+        pending.clear()
+
+    delays = (100, 200, 300)
+    try:
+        for delay in delays:
+            pending.clear()
+            _viewer_open_fallback(page, f"race{delay}a")
+            page.wait_for_function("() => !!document.querySelector('.viewer-loading-mask')", timeout=3000)
+            cancel_mask()
+            abort_pending()
+            page.wait_for_timeout(delay)
+
+            # 旧 abort timer 的 250ms 边界：重新打开必须创建新 pswp 且不被旧 timer 误杀。
+            _viewer_open_fallback(page, f"race{delay}b")
+            page.wait_for_function(
+                "() => !!document.querySelector('.viewer-loading-mask')",
+                timeout=5000,
+            )
+            # 缓存命中时不会再有原图请求，等遮罩由 loadComplete/已加载兜底清除即可。
+            for _ in range(80):
+                if pending or not page.locator(".viewer-loading-mask").count():
+                    break
+                page.wait_for_timeout(50)
+            release_pending()
+            page.wait_for_function(
+                "() => !document.querySelector('.viewer-loading-mask')",
+                timeout=15000,
+            )
+            page.wait_for_timeout(500)   # 跨过旧 abort timer 的 250ms
+            st = page.evaluate(
+                """() => { const p = document.querySelector('.pswp'); const s = p ? getComputedStyle(p) : null;
+                  return {show: !!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer),
+                          display: s ? s.display : null,
+                          cls: p ? String(p.className || '') : null,
+                          mask: !!document.querySelector('.viewer-loading-mask')}; }"""
+            )
+            if not st["show"] or not st["cls"] or st["display"] == "none" or st["mask"]:
+                raise Failure(f"第5项 取消后 {delay}ms 重开失败：{st}")
+            if "yxq-viewer-cancelled" in st["cls"]:
+                raise Failure(f"第5项 取消后 {delay}ms 重开仍带取消 class：{st}")
+            close_btn = page.locator(".pswp__button--close").first
+            if not close_btn.is_visible():
+                raise Failure(f"第5项 取消后 {delay}ms 重开 close 按钮不可见")
+            close_btn.click(timeout=5000)
+            page.wait_for_function(
+                "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
+                timeout=5000,
+            )
+            page.locator(".pswp").first.wait_for(state="hidden", timeout=5000)
+            page.wait_for_timeout(200)
+            print(f"PASS {tag} 第5项取消竞态：{delay}ms 后重开正常（pswp 可见、mask 清除、可关闭）")
+    finally:
+        abort_pending()
+        page.unroute("**/cards/photo/**", handler)
+
+
+def run_viewer_timeout(page, tag: str) -> None:
+    """10s timeout 走同一取消路径；仅在单个视口跑一次，避免双倍等待。"""
+    tap_tab(page, "牵线", "cards")
+    wait_cards(page, expect_self=True)
+    pending = []
+
+    def handler(route, request):
+        parsed = urlparse(request.url)
+        if "/cards/photo/" in parsed.path and "size=thumb" not in (parsed.query or ""):
+            pending.append(route)
+            return
+        route.fallback()
+
+    page.route("**/cards/photo/**", handler)
+    # 无缩图 fallback + 唯一 query，确保 10s 内一直 loading。
+    try:
+        _viewer_open_fallback(page, "timeout")
+        page.wait_for_function("() => !!document.querySelector('.viewer-loading-mask')", timeout=3000)
+        page.wait_for_function(
+            "() => !document.querySelector('.viewer-loading-mask')",
+            timeout=13000,
+        )
+        page.wait_for_timeout(300)
+        st = page.evaluate(
+            """() => { const p = document.querySelector('.pswp'); const s = p ? getComputedStyle(p) : null;
+              return {show: !!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer),
+                      display: s ? s.display : null, cls: p ? String(p.className || '') : null}; }"""
+        )
+        if st["show"] or (st["display"] is not None and st["display"] != "none"):
+            raise Failure(f"第5项 10s timeout 未隐藏 viewer：{st}")
+        print(f"PASS {tag} 第5项 timeout：10s 后遮罩消失且 pswp 已隐藏")
+    finally:
+        for route in pending:
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
+        pending.clear()
+        page.unroute("**/cards/photo/**", handler)
 
 
 # ---------- 第 6 项：过期活动 UI ----------
@@ -1053,7 +1371,11 @@ def main() -> int:
                 context, page, probe = open_context(browser, (width, height))
                 run_layout(page, tag, height)
                 run_face_crop_resize(page, tag, height)
-                run_viewer_loading(page, tag)
+                run_viewer_fast_path(page, tag)
+                run_viewer_fallback_mask(page, tag)
+                run_viewer_cancel_race(page, tag)
+                if tag == "390x844":
+                    run_viewer_timeout(page, tag)
                 run_password_and_profile(page, tag, "virtual")
                 probe.assert_clean("第2/3/5/7项[virtual]")
             except Exception as exc:  # noqa: BLE001

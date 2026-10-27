@@ -416,7 +416,6 @@
 <!-- 大图打开遮罩：点击后立即出现，PhotoSwipe loadComplete/loadError/close/超时隐藏 -->
 <div v-if="viewerLoading" class="viewer-loading-mask" role="status" aria-live="polite" @click.stop="cancelViewerLoading">
   <van-loading size="30px">图片加载中…</van-loading>
-  <div class="viewer-loading-hint">轻触取消</div>
 </div>
 <!-- 送爱心弹窗 -->
 <van-dialog v-model:show="showLikeDialog" :title="likeDialogTitle" show-cancel-button

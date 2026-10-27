@@ -167,3 +167,38 @@ func TestActivityViewJSONFields(t *testing.T) {
 		t.Fatalf("json leaked raw schedule fields: %s", body)
 	}
 }
+
+// Ended activities close the user-side grouping / one-to-one entries while the
+// stored DB flags stay untouched for the admin console.
+func TestEndedActivityClosesUserMatchingEntries(t *testing.T) {
+	now := time.Date(2026, 10, 27, 20, 0, 0, 0, activityTimeZone)
+	past := now.Add(-time.Minute)
+	future := now.Add(time.Minute)
+	cases := []struct {
+		name       string
+		status     string
+		endAt      *time.Time
+		wantGroup  bool
+		wantOneto1 bool
+	}{
+		{"open before end", db.ActivityStatusOpen, &future, true, true},
+		{"open at end", db.ActivityStatusOpen, &now, false, false},
+		{"open after end", db.ActivityStatusOpen, &past, false, false},
+		{"full after end", db.ActivityStatusFull, &past, false, false},
+		{"finished status", db.ActivityStatusFinished, nil, false, false},
+		{"cancelled status", db.ActivityStatusCancelled, &future, false, false},
+		{"open without end", db.ActivityStatusOpen, nil, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			view := buildActivityView(db.Activity{
+				ID: 1, ActivityNo: "A-TEST", Status: tc.status,
+				GroupEnabled: true, OnetooneEnabled: true, EndAt: tc.endAt,
+			}, now)
+			if view.GroupEnabled != tc.wantGroup || view.OnetooneEnabled != tc.wantOneto1 {
+				t.Fatalf("matching flags = group:%v onetoone:%v, want %v/%v",
+					view.GroupEnabled, view.OnetooneEnabled, tc.wantGroup, tc.wantOneto1)
+			}
+		})
+	}
+}

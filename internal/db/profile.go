@@ -930,13 +930,41 @@ func (d *DB) GetAccountState(ctx context.Context, userID int64) (kind, status st
 	return kind, status, nil
 }
 
-// HasActiveSignups reports whether the user currently holds an active signup.
-func (d *DB) HasActiveSignups(ctx context.Context, userID int64) (bool, error) {
+// activeSignupQuerier is satisfied by both the pool and a transaction.
+type activeSignupQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// activeSignupExistsSQL counts only signups for activities that have not ended
+// yet. Historical signups on ended/cancelled activities must not keep a user
+// from switching to matched (cancelling them is rejected after the end).
+const activeSignupExistsSQL = `SELECT EXISTS (
+	   SELECT 1
+	     FROM signups s
+	     JOIN activities a ON a.id = s.activity_id
+	    WHERE s.user_id = $1
+	      AND s.status = $2
+	      AND a.status IN ($3, $4, $5)
+	      AND (a.end_at IS NULL OR a.end_at > now())
+	 )`
+
+// hasActiveSignup is the single source of truth for HasActiveSignups and
+// SetAccountStatus, so the switch gate cannot drift from the read model.
+func hasActiveSignup(ctx context.Context, q activeSignupQuerier, userID int64) (bool, error) {
 	var exists bool
-	err := d.pool.QueryRow(ctx,
-		`SELECT EXISTS (
-		   SELECT 1 FROM signups WHERE user_id = $1 AND status = '已报名'
-		 )`, userID).Scan(&exists)
+	err := q.QueryRow(ctx, activeSignupExistsSQL, userID, SignupStatusSigned,
+		ActivityStatusOpen, ActivityStatusFull, ActivityStatusNotStarted).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// HasActiveSignups reports whether the user currently holds a signup in an
+// activity that has not ended. Signups on ended/cancelled activities are
+// historical and no longer block the matched switch.
+func (d *DB) HasActiveSignups(ctx context.Context, userID int64) (bool, error) {
+	exists, err := hasActiveSignup(ctx, d.pool, userID)
 	if err != nil {
 		return false, fmt.Errorf("db: check active signups: %w", err)
 	}
@@ -975,10 +1003,8 @@ func (d *DB) SetAccountStatus(ctx context.Context, userID int64, target string) 
 		return current, nil
 	}
 	if target == "matched" {
-		var hasSignup bool
-		if err := tx.QueryRow(ctx,
-			`SELECT EXISTS (SELECT 1 FROM signups WHERE user_id = $1 AND status = '已报名')`,
-			userID).Scan(&hasSignup); err != nil {
+		hasSignup, err := hasActiveSignup(ctx, tx, userID)
+		if err != nil {
 			return "", fmt.Errorf("db: check account status signups: %w", err)
 		}
 		if hasSignup {

@@ -194,6 +194,9 @@ func (a *App) handleLegacyMineGroups(w http.ResponseWriter, r *http.Request) {
 		}
 		view := a.activityView(item.Activity)
 		applySignupToView(&view, item.SignupStatus, item.Attendance)
+		if !view.GroupEnabled {
+			continue
+		}
 		payload := legacyActivityMap(view)
 		payload["my_choice_count"] = a.legacyChoiceCount(r.Context(), user.ID, item.ActivityNo)
 		out = append(out, payload)
@@ -212,7 +215,9 @@ func (a *App) handleLegacyMineGroupsFlag(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	for _, item := range items {
-		if item.GroupEnabled {
+		// Ended activities close the user-side grouping entry even when the
+		// stored DB flag is still true (admin keeps managing it).
+		if a.activityView(item.Activity).GroupEnabled {
 			writeJSON(w, http.StatusOK, map[string]any{"has_group_activity": true})
 			return
 		}

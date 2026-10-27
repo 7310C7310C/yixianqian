@@ -23,6 +23,10 @@ func groupPageError(err error) (int, string) {
 	switch {
 	case errors.Is(err, db.ErrActivityNotFound):
 		return http.StatusNotFound, "活动不存在。"
+	case errors.Is(err, db.ErrActivityEnded):
+		return http.StatusConflict, "活动已经结束，无法进行分组操作。"
+	case errors.Is(err, db.ErrActivityNotOpen):
+		return http.StatusConflict, "活动未开启分组，无法进行该操作。"
 	case errors.Is(err, db.ErrGroupNotSignedUp), errors.Is(err, db.ErrNotSignedUp):
 		return http.StatusForbidden, "你未报名此活动。"
 	case errors.Is(err, db.ErrGroupSigninRequired):
@@ -47,6 +51,10 @@ func groupActionError(err error) (int, string, string) {
 	switch {
 	case errors.Is(err, db.ErrActivityNotFound):
 		return http.StatusNotFound, "activity_not_found", "活动不存在。"
+	case errors.Is(err, db.ErrActivityEnded):
+		return http.StatusConflict, "activity_ended", "活动已经结束，无法进行分组操作。"
+	case errors.Is(err, db.ErrActivityNotOpen):
+		return http.StatusConflict, "activity_not_open", "活动未开启分组，无法进行该操作。"
 	case errors.Is(err, db.ErrGroupNotSignedUp), errors.Is(err, db.ErrNotSignedUp):
 		return http.StatusForbidden, "not_signed_up", "你未报名此活动。"
 	case errors.Is(err, db.ErrGroupSigninRequired):
@@ -122,8 +130,8 @@ func (a *App) writeGroupStatus(w http.ResponseWriter, r *http.Request, api bool)
 	}
 	status, err := a.db.GroupStatusForUser(r.Context(), user.ID, activityRefFromRequest(r))
 	if err != nil {
-		if errors.Is(err, db.ErrActivityNotFound) {
-			writeAPIError(w, http.StatusNotFound, "activity_not_found", "活动不存在。")
+		if httpStatus, code, message := groupActionError(err); httpStatus < http.StatusInternalServerError {
+			writeAPIError(w, httpStatus, code, message)
 			return
 		}
 		a.logger(r).Error("group status failed", "error", err, "user_id", user.ID)

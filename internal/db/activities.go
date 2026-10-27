@@ -108,6 +108,16 @@ type Activity struct {
 	UpdatedAt       time.Time
 }
 
+// EndedAt reports whether the activity is over for user-facing entry points.
+// A finished or cancelled status is always over; otherwise end_at decides. A
+// nil end_at means the schedule is still undecided and never expires.
+func (a Activity) EndedAt(now time.Time) bool {
+	if a.Status == ActivityStatusFinished || a.Status == ActivityStatusCancelled {
+		return true
+	}
+	return a.EndAt != nil && !now.Before(*a.EndAt)
+}
+
 // Signup is one registration row. Cancelled rows are kept as history.
 type Signup struct {
 	ID         int64

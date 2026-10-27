@@ -1,6 +1,6 @@
-/* 一线牵 — 公开引流页与注册表单
-   载入顺序：app.css -> shell.css -> register.css
-   品牌色沿用 shell.css 的粉红 token，全部附 literal fallback。 */
+/* YIXIANQIAN — public landing page and registration form.
+   Load order: app.css -> shell.css -> register.css.
+   Brand colors reuse the pink tokens from shell.css; every value keeps a literal fallback. */
 
 .welcome-hero {
   margin: 0 0 14px;
@@ -136,7 +136,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   注册表单
+   Registration form
    -------------------------------------------------------------------------- */
 
 .register-hero {
@@ -332,7 +332,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   公开首页（匿名 /）
+   Public landing page (anonymous /)
    -------------------------------------------------------------------------- */
 
 .home-hero-mark {

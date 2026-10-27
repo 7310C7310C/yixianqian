@@ -13,6 +13,16 @@ sources:
   - internal/httpserver/activities_view.go
   - internal/httpserver/activities_routes.go
   - internal/db/activities.go
+  - internal/db/grouping.go
+  - internal/db/profile.go
+  - internal/httpserver/legacy_activities_matching.go
+  - internal/httpserver/legacy_activities_routes.go
+  - internal/httpserver/handlers_home.go
+  - internal/httpserver/home_test.go
+  - web/templates/layout.tmpl
+  - web/templates/pages/home.tmpl
+  - web/static/register.css
+  - tools/browser/public_home_smoke.py
   - internal/db/admin*.go
   - internal/db/errors*.go
   - internal/httpserver/admin_*.go
@@ -29,7 +39,6 @@ sources:
   - internal/db/admin_activity_legacy.go
   - internal/db/admin_activity_settings.go
   - internal/db/points_admin_legacy.go
-  - internal/db/grouping.go
   - internal/db/grouping_admin.go
   - internal/db/recommend.go
   - internal/db/recommend_integration_test.go
@@ -368,11 +377,16 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   极老 WebView 无 `visualViewport` 时以 `innerHeight`/`100vh` 兜底。
 - 4 U-1513 点赞按钮：**不改产品规则**。staging 数据 U-0006 已喜欢 U-1513（`likes` 单向）且点赞有效；
   `canPraiseCard` 要求 `!c.liked`，已喜欢时隐藏点赞按钮，属需求第 9 条；其他卡只点赞过显示灰色 `.praise-btn.praised`。
-- 5 首点大图：点击后立即显示全屏 Vant loading 遮罩（实测 2–4ms）；`z-index:100001` 高于 PhotoSwipe 根层
-  （100000），`elementFromPoint` 命中遮罩而非 `pswp__item`；PhotoSwipe JS/CSS 在卡片页 idle 预加载；只探测当前照片
-  尺寸，卡片 DOM 已有 `naturalWidth/Height` 时直接用，其余懒加载；`loadComplete`/`loadError`/`close`/10s 超时撤遮罩。
-  点击遮罩取消本次打开（seq++、清遮罩、close/destroy pswp），返回键语义不变。证据：拦截原图 2s，遮罩在 pswp 之上且
-  可点击取消；加载完成后遮罩消失、viewer 可关闭、无 console error。
+- 5 首点大图（v1 式秒开）：`viewerOpen(photos,index,thumbs)` 的 gallery href 优先缩图
+  （`photos_thumb`/`?size=thumb`），打开即显示已加载缩图；`data-pswp-width/height` 用卡片 DOM 当前图尺寸，
+  其余只探测当前+前后各 1 张缩图。原图在 `slideActivate`/`loadComplete` 后由 `new Image()` 后台加载，成功后替换
+  `content.element.src` 并标记 `data-yxq-full=1`、按原图尺寸重算 slide；失败保留缩图，同一 index 不重复请求。
+  正常有缩图路径不等待原图，实测 `pswp` 可见 **82–119ms**、遮罩 **98–123ms** 清除；原图延迟 3s 后仍会升级。
+  遮罩仅保留给 PhotoSwipe JS 尚未加载或完全无缩图的 fallback（海报）：`z-index:100001` 高于 PhotoSwipe，
+  `elementFromPoint` 命中遮罩；点击取消 `seq++` + `.pswp.yxq-viewer-cancelled` 隐藏 + close/destroy，
+  abort timer 捕获 seq 且新打开前清理、重开前丢弃旧 `window.pswp`；`loadComplete`/`loadError`/`close`/10s timeout
+  均清理；缓存缩图用 30/100/250ms 已加载兜底。证据：原图延迟 3s 下双视口秒开与升级 PASS；下一张缩图即时显示并后台升级；
+  无缩图 fallback 遮罩/取消/正常打开 PASS；取消后 100/200/300ms 重开 PASS；10s timeout 隐藏 PASS；无 console error。
 - 6 活动按时间状态：前端 `pages/home.html`、`my_activities.html`、`my_groups.html`、`activity_detail.html` 的
   签到入口/提示/志愿禁用改走 `can_self_signin`（优先新字段，status=已结束/已取消硬兜底；旧 payload fallback
   `signin_enabled && my_signup`）；状态标签继续显示 `act.status`；已结束活动不再显示「现场签到」「报名中」入口。
@@ -386,13 +400,15 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   改密成功栈内无 password 残留。`profile_edit` 无重复条目，virtual 与 `?history=legacy` 均 PASS；
   全程 virtual 模式 0 次原生 History 调用（除启动哨兵）。
 - 静态资源与门禁：`assetVersion` 17→20（前端批 18、后端整合 19、Reviewer B1/B2 修复 20），admin CSS `@import` 同步；
+  后续小修升 **24**：移除大图遮罩「轻触取消」文案、加固取消/重开竞态，并实现「缩图先显示、原图后台升级」；
+  模板/`app.min.js`/`app.render.js`/critical CSS 重建，待 Reviewer 快速复审后随下次部署生效；
   重建 `spa_minify`、`spa_precompile`（root + pages）、`css_split`（critical 补 `.viewer-loading`）、`static-gzip`。
-  `make perf-budget` 全 PASS：shell 29,169/30,776、app.min 48,968/52,756、initial render 25,029/27,538、
-  critical 8,061/8,406、首载 244,963/266,541。
+  `make perf-budget` 全 PASS：shell 29,141/30,776、app.min 49,790/52,756、initial render 24,983/27,538、
+  critical 8,053/8,406、首载 245,787/266,541。
 - 本地验证（整合后端 `09b62c6` 后）：`make ci` EXIT=0；`make test-race` 全 ok；`make test-integration`
   （本机新库 `yxq_reviewfix_it`）db 12.2s / httpserver 55.0s ok；`go test -race -p 1 ./internal/db ./internal/httpserver`
-  （新库 `yxq_reviewfix_race`）db 15.3s / httpserver 108.6s ok；`user_reported_bugs_20261027.py` 两视口 18/18 PASS
-  （virtual + legacy 两种历史模式；第5项含遮罩遮挡/取消/可交互，第7项含双返回与改密）；
+  （新库 `yxq_reviewfix_race`）db 15.3s / httpserver 108.6s ok；`user_reported_bugs_20261027.py` 两视口全 PASS
+  （virtual + legacy；第5项含秒开缩图、原图 3s 后台升级、下一张、无缩图 fallback、取消/100/200/300ms 重开/10s timeout；第7项含双返回与改密）；
   `no_history_smoke` 390x844 / 1280x900 各 19/19 PASS。证据目录 `/tmp/opencode/user-reported-bugs-20261027`
   （团队临时 artifact，未提交）。
 - 部署：`/healthz=staging-d5bbe5b`、代码部署标记 `d5bbe5b`（autodeploy 完成后 `deployed.sha` 随 docs-only 提交推进到最新 docs tip）、`bin/server.prev=staging-ad1f2c1`；migration 10/10 不变。
@@ -405,6 +421,32 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   暖 **620/640ms**、CLS 0、315,581B/19（冷）；新代码部署后需按同口径复测 P95 再判退化。
 - 回滚：`git revert <本批提交>`（前端静态生成物 + assetVersion + 后端活动状态派生/关闭任务；无 schema 变更；
   到期落库仅把已过 end_at 的活动置为已结束，回滚 binary 不恢复已落库状态）。
+
+### 2026-10-27 追加：首页英文、活动结束关入口、脱单 gate、大图秒开（本地待部署）
+
+- 范围：并行 workstream `fix/home-en-20261027`（`e2627ec`、`f16c4f2`、`7f04fd8`）合入本地 main；
+  本批 viewer 秒开（`3b23c7e`）一并整合。assetVersion **27**（register.css 变更 + 移除自订 close queue）；**待 Reviewer/部署**，
+  staging 仍 `staging-d5bbe5b`，生产/v1 未动。
+- 匿名首页英文版（`e2627ec`）：title 精确 `一线牵 · 祝你早日找到另一半`；除 title 外 HTML 无 `\p{Han}`；
+  `lang="en"`；不渲染站内 header/skip link；Create account/Log in、Feishu 英文 CTA；无 QR；`/login` 仍中文。
+  证据：`TestHomeRendersPublicLandingForAnonymous`/`assertEnglishPublicLanding`；本地 HTTP/Playwright 检查。
+- 活动结束用户侧关入口（`f16c4f2`）：`Activity.EndedAt` 统一判定（已结束/已取消/过 end_at）；
+  用户视图 `group_flag`/`onetoone_flag=否`，DB flags 不改、管理台保留；分组四个用户方法与 legacy 一对一
+  result/chat 返回 409 `activity_ended`/`onetoone_disabled`；我的分组入口排除已结束活动。
+- 脱单 gate（`7f04fd8`）：`HasActiveSignups`/`SetAccountStatus` 只把**未结束**活动的有效报名视为阻塞；
+  已结束/已取消/end_at 已过的历史报名不再阻塞，未来/进行中/待定仍阻塞；新增 U-0006 死锁回归测试。
+- 大图秒开（`3b23c7e`）：viewer href 先用缩图，原图后台升级；实测双视口 82–119ms 见缩图、98–123ms 无遮罩，
+  原图延迟 3s 后替换并标记 `data-yxq-full=1`；下一张缩图即时、无缩图 fallback 遮罩与取消/100/200/300ms
+  重开/10s timeout 保留。**opening 动画期间关闭不做自订排队**：回到 PhotoSwipe 原生 close 语义，
+  开启动画结束（`opener.isOpen=true`）后点关闭正常；动画中点击被忽略属标准行为。smoke 的 fast/fallback
+  关闭用例均等 opening 结束后点击并断言 1s 内收起；正常 fallback 关闭分支同样先等 `opener.isOpen=true`；
+  fallback 立即关闭分支的 route handler 已先 unroute/预热，避免测试自身挂起 full 请求。
+- 生成物：`register.css`/`.gz` 随 workstream 变更；assetVersion 27 同步 admin CSS `@import`；
+  `make static-gzip` 重建；app.min/critical 无源变更未重跑。
+- 验证（本地整合后）：`make ci`、`make test-race`、`make test-integration`（独立库）、
+  `go test -race -p 1 ./internal/db ./internal/httpserver`（独立库）、`make docs-check`；
+  viewer smoke 双视口、`no_history_smoke` 390/1280。部署后需用 staging 真实链路复跑。
+- 回滚：`git revert <本批提交>`（首页/活动 view/DB gate/viewer 静态；无 schema migration）。
 
 ## 4. P0 身份证门禁：补填 + 服务端强制（已实现，待部署/验收）
 

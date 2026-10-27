@@ -1991,6 +1991,11 @@ const yxqApp = createApp({
     const viewerLoading = ref(false);
     let viewerLoadingTimer = null;
     let photoSwipePrefetchStarted = false;
+    // PhotoSwipe 在图片 loading 期间 close/destroy 不会移除根节点；用 seq 标记本次实例，
+    // 取消后立即隐藏根节点，并让 in-flight 回调识别过期实例。
+    let viewerPendingSeq = 0;
+    let viewerCancelledSeq = 0;
+    let viewerAbortTimers = [];
 
     // 进入牵线前的页面（喜欢完最后一人后返回）
     const prevPage = ref('likes');
@@ -3218,6 +3223,10 @@ const yxqApp = createApp({
     let viewerLightbox = null;
     let viewerOpenSeq = 0;
     let viewerDims = new Map();
+    // 本次打开的原图/缩图数组与升级状态：gallery href 用缩图即时出画，原图后台替换。
+    let viewerFullPhotos = [];
+    let viewerDisplayPhotos = [];
+    let viewerFullState = {};
     // 自管理单击/双击：PhotoSwipe 内置双击检测会给单击加固定 300ms 延迟，
     // 这里自行实现 250ms 短窗口——单击即关、双击缩放。
     // 图片保持 pointer-events:none（拦截长按保存菜单），事件在 zoom-wrap/item 上捕获。
@@ -3332,19 +3341,77 @@ const yxqApp = createApp({
     }
     function armViewerLoadingTimeout() {
       if (viewerLoadingTimer) clearTimeout(viewerLoadingTimer);
-      viewerLoadingTimer = setTimeout(clearViewerLoading, 10000);
+      // 超时与用户点击遮罩走同一取消路径：作废 seq + 隐藏根节点 + close/destroy。
+      viewerLoadingTimer = setTimeout(cancelViewerLoading, 10000);
+    }
+    function clearViewerCancelledClass() {
+      try {
+        const roots = document.querySelectorAll('.pswp.yxq-viewer-cancelled');
+        for (let i = 0; i < roots.length; i++) {
+          roots[i].classList.remove('yxq-viewer-cancelled');
+          roots[i].style.display = '';
+        }
+      } catch (e) {}
+    }
+    function hideViewerRoot(pswp) {
+      const root = (pswp && pswp.element) || (viewerLightbox && viewerLightbox.pswp && viewerLightbox.pswp.element) ||
+        document.querySelector('.pswp');
+      if (!root) return;
+      // 不能只依赖 250ms destroy：PhotoSwipe 在 loadAndOpen 未完成时可能不移除根节点。
+      root.classList.add('yxq-viewer-cancelled');
+      root.style.display = 'none';
+    }
+    function clearViewerAbortTimers() {
+      for (let i = 0; i < viewerAbortTimers.length; i++) clearTimeout(viewerAbortTimers[i]);
+      viewerAbortTimers = [];
+    }
+    function discardViewerInstance(pswp) {
+      if (!pswp) return;
+      hideViewerRoot(pswp);
+      try { pswp.destroy(); } catch (e) {}
+      // PhotoSwipeLightbox.loadAndOpen 会因 window.pswp 仍存在而直接 return false；
+      // 若 destroy 是异步/被 loading 卡住，手动移除旧根节点并清掉全局引用，保证新实例能创建。
+      if (window.pswp === pswp) {
+        try {
+          const root = pswp.element || document.querySelector('.pswp');
+          if (root && root.parentNode) root.parentNode.removeChild(root);
+        } catch (e) {}
+        try { delete window.pswp; } catch (e) { window.pswp = undefined; }
+      }
+      if (viewerLightbox && viewerLightbox.pswp === pswp) viewerLightbox.pswp = undefined;
+    }
+    function clearViewerLoadingIfLoaded(seq) {
+      if (seq !== viewerOpenSeq || viewerCancelledSeq === viewerOpenSeq) return;
+      const pswp = viewerLightbox && viewerLightbox.pswp;
+      const content = pswp && pswp.currSlide && pswp.currSlide.content;
+      const el = content && content.element;
+      if (el && el.complete && el.naturalWidth) {
+        clearViewerLoading();
+        upgradeViewerSlide(pswp.currSlide, seq);
+      }
+    }
+    function abortViewerInstance(pswp) {
+      if (!pswp) return;
+      hideViewerRoot(pswp);
+      try { pswp.close(); } catch (e) {}
+      const abortSeq = viewerOpenSeq;
+      const timer = setTimeout(function () {
+        viewerAbortTimers = viewerAbortTimers.filter(function (t) { return t !== timer; });
+        // 取消后 250ms 内用户可能已重新打开：seq 变了或 pswp 实例已被替换时绝不能 destroy。
+        if (viewerOpenSeq !== abortSeq) return;
+        if (!viewerLightbox || viewerLightbox.pswp !== pswp) return;
+        try { pswp.destroy(); } catch (e) {}
+        hideViewerRoot(pswp);
+      }, 250);
+      viewerAbortTimers.push(timer);
     }
     function cancelViewerLoading() {
-      viewerOpenSeq++;                 // 让仍在探测尺寸的旧请求失效
+      viewerOpenSeq++;                 // 让仍在探测尺寸/加载的旧请求失效
+      viewerCancelledSeq = viewerOpenSeq;
       clearViewerLoading();
       const pswp = viewerLightbox && viewerLightbox.pswp;
-      if (pswp) {
-        try { pswp.close(); } catch (e) {}
-        // 原图仍在 loading 时 PhotoSwipe 的 close 动画可能挂起；250ms 后强制销毁同一实例。
-        setTimeout(function () {
-          try { if (viewerLightbox && viewerLightbox.pswp === pswp) pswp.destroy(); } catch (e) {}
-        }, 250);
-      }
+      if (pswp) abortViewerInstance(pswp);
+      else hideViewerRoot(null);
       if (showPhotoViewer.value) showPhotoViewer.value = false;
     }
     // 卡片页空闲时预加载 PhotoSwipe 资源：首次点大图不再等 JS/CSS 下载。
@@ -3354,12 +3421,14 @@ const yxqApp = createApp({
       const run = () => { try { loadPhotoSwipe().catch(() => {}); } catch (e) {} };
       const later = () => {
         try {
-          if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 2500 });
-          else setTimeout(run, 1500);
+          if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 300 });
+          else setTimeout(run, 50);
         } catch (e) { setTimeout(run, 1500); }
       };
-      if (document.readyState === 'complete') setTimeout(later, 1200);
-      else window.addEventListener('load', () => setTimeout(later, 1200), { once: true });
+      // 大图要求秒开：PhotoSwipe 资源在挂载后立即后台抓取（不抢 hero/首卡绘制）。
+      // 不再等 load+1.2s，否则用户首次点图仍要等 JS 下载。
+      if (document.readyState === 'complete') setTimeout(later, 0);
+      else window.addEventListener('load', () => setTimeout(later, 0), { once: true });
     }
     function viewerEnsure() {
       if (viewerLightbox) return;
@@ -3376,6 +3445,15 @@ const yxqApp = createApp({
         hideAnimationDuration: 160,
         preloaderDelay: 200,
       });
+      viewerLightbox.on('afterInit', () => {
+        // 标记本次实例；若打开过程中已被取消，立即隐藏并关闭，不等待 loadComplete。
+        const pswp = viewerLightbox && viewerLightbox.pswp;
+        if (pswp && viewerPendingSeq) pswp.__yxqOpenSeq = viewerPendingSeq;
+        if (viewerCancelledSeq === viewerOpenSeq) {
+          hideViewerRoot(pswp);
+          setTimeout(function () { abortViewerInstance(pswp); }, 0);
+        }
+      });
       viewerLightbox.on('slideInit', (e) => {
         const d = e.slide ? viewerDims.get(e.slide.index) : null;
         if (d && e.slide && e.slide.content) {
@@ -3386,30 +3464,47 @@ const yxqApp = createApp({
           e.slide.container.classList.add('yxq-dim-wait');
         }
       });
+      viewerLightbox.on('slideActivate', (e) => {
+        if (e && e.slide) upgradeViewerSlide(e.slide, viewerOpenSeq);
+      });
       viewerLightbox.on('loadComplete', (e) => {
-        // 当前照片已可显示：撤掉大图加载遮罩
+        const pswp = (e && e.slide && e.slide.pswp) || (viewerLightbox && viewerLightbox.pswp);
+        if (pswp && pswp.__yxqOpenSeq && pswp.__yxqOpenSeq !== viewerOpenSeq) {
+          // 过期实例的 loadComplete：只隐藏旧根节点，不能清掉新打开的遮罩。
+          hideViewerRoot(pswp);
+          return;
+        }
+        if (viewerCancelledSeq === viewerOpenSeq) {
+          hideViewerRoot(pswp);
+          clearViewerLoading();
+          return;
+        }
+        // 缩图/原图已可显示：撤掉遮罩，并以后台原图继续升级。
         clearViewerLoading();
-        // 兜底：以已加载图片的真实宽高为准修正 slide 尺寸（含加载失败时仅恢复显示）
         const s = e && e.slide;
         const c = s && s.content;
         if (!s || !c) return;
         if (s.container) s.container.classList.remove('yxq-dim-wait');
         const nw = c.element && c.element.naturalWidth;
         const nh = c.element && c.element.naturalHeight;
-        if (!nw || !nh) return;
-        s.width = nw; s.height = nh;
-        c.width = nw; c.height = nh;
-        if (s.data) { s.data.w = nw; s.data.h = nh; }
-        try {
-          s.calculateSize();
-          s.currentResolution = 0;
-          s.zoomAndPanToInitial();
-          s.applyCurrentZoomPan();
-          s.updateContentSize(true);
-        } catch (err) {}
+        if (nw && nh) applyViewerSlideSize(s, nw, nh);
+        upgradeViewerSlide(s, viewerOpenSeq);
       });
-      viewerLightbox.on('loadError', () => { clearViewerLoading(); });
+      viewerLightbox.on('loadError', () => {
+        const pswp = viewerLightbox && viewerLightbox.pswp;
+        if (pswp && pswp.__yxqOpenSeq && pswp.__yxqOpenSeq !== viewerOpenSeq) {
+          hideViewerRoot(pswp);
+          return;
+        }
+        if (viewerCancelledSeq === viewerOpenSeq) hideViewerRoot(pswp);
+        clearViewerLoading();
+      });
       viewerLightbox.on('close', () => {
+        const pswp = viewerLightbox && viewerLightbox.pswp;
+        if (pswp && pswp.__yxqOpenSeq && pswp.__yxqOpenSeq !== viewerOpenSeq) {
+          hideViewerRoot(pswp);
+          return;
+        }
         vTapReset();
         clearViewerLoading();
         if (showPhotoViewer.value) showPhotoViewer.value = false;
@@ -3425,6 +3520,61 @@ const yxqApp = createApp({
       im.onload = () => cb(im.naturalWidth ? { w: im.naturalWidth, h: im.naturalHeight } : null);
       im.onerror = () => cb(null);
       im.src = src;
+    }
+    function applyViewerSlideSize(s, nw, nh) {
+      if (!s || !nw || !nh) return;
+      s.width = nw;
+      s.height = nh;
+      if (s.content) {
+        s.content.width = nw;
+        s.content.height = nh;
+      }
+      if (s.data) { s.data.w = nw; s.data.h = nh; }
+      try {
+        s.calculateSize();
+        s.currentResolution = 0;
+        s.zoomAndPanToInitial();
+        s.applyCurrentZoomPan();
+        s.updateContentSize(true);
+      } catch (e) {}
+    }
+    // 原图后台升级：缩图已经显示，原图加载完成后替换当前 slide 的 img src。
+    // 同一 index 只发起一次；失败保留缩图，不弹错误。
+    function upgradeViewerSlide(slide, seq) {
+      if (!slide || seq !== viewerOpenSeq || viewerCancelledSeq === viewerOpenSeq) return;
+      const i = slide.index;
+      const full = viewerFullPhotos[i];
+      const thumb = viewerDisplayPhotos[i];
+      if (!full || !thumb || full === thumb) return;
+      if (viewerFullState[i]) {
+        if (viewerFullState[i] === 'done' && slide.content && slide.content.element) {
+          try {
+            if (slide.content.element.dataset.yxqFull !== '1') {
+              slide.content.element.src = full;
+              slide.content.element.dataset.yxqFull = '1';
+            }
+          } catch (e) {}
+        }
+        return;
+      }
+      viewerFullState[i] = 'loading';
+      const im = new Image();
+      im.onload = function () {
+        if (seq !== viewerOpenSeq) return;
+        viewerFullState[i] = 'done';
+        const content = slide.content;
+        if (content && content.element) {
+          try {
+            content.element.src = full;
+            content.element.dataset.yxqFull = '1';
+          } catch (e) {}
+        }
+        applyViewerSlideSize(slide, im.naturalWidth, im.naturalHeight);
+      };
+      im.onerror = function () {
+        if (seq === viewerOpenSeq) viewerFullState[i] = 'error';
+      };
+      im.src = full;
     }
     function applyDimsToLiveSlide(seq, index, d) {
       // 快速滑动竞态：slide 已在尺寸探针完成前创建，content 宽高为 0，
@@ -3465,10 +3615,19 @@ const yxqApp = createApp({
       } catch (_) {}
       return null;
     }
-    async function viewerOpen(photos, index) {
+    async function viewerOpen(photos, index, thumbs) {
       if (!photos || !photos.length) return;
       const idx = Math.min(Math.max(index || 0, 0), photos.length - 1);
+      // 缩图与 photos 对齐；没有缩图的项回退原图（海报等）。
+      const displayPhotos = photos.map(function (p, i) {
+        return (thumbs && thumbs[i]) ? thumbs[i] : p;
+      });
       const seq = ++viewerOpenSeq;
+      viewerFullPhotos = photos.slice();
+      viewerDisplayPhotos = displayPhotos.slice();
+      viewerFullState = {};
+      // 新一轮打开前取消旧的 abort destroy timer，避免它误杀新实例。
+      clearViewerAbortTimers();
       // 点击后立即显示遮罩；PhotoSwipe 资源未就绪也先给反馈（≤100ms 可见）。
       viewerLoading.value = true;
       armViewerLoadingTimeout();
@@ -3483,26 +3642,48 @@ const yxqApp = createApp({
       }
       if (seq !== viewerOpenSeq) return;
       viewerEnsure();
-      if (viewerLightbox.pswp) { try { viewerLightbox.pswp.destroy(); } catch (e) {} }
+      // 上次取消可能仍在 close/destroy 的异步过程中：必须彻底移除旧实例，
+      // 否则 PhotoSwipeLightbox.loadAndOpen 会因为 window.pswp 仍存在而直接失败。
+      discardViewerInstance((viewerLightbox && viewerLightbox.pswp) || window.pswp);
+      // 上一次取消留下的隐藏类：新实例创建前清掉，避免影响正常打开。
+      clearViewerCancelledClass();
       const gallery = document.getElementById('pswp-gallery');
       if (!gallery) { clearViewerLoading(); return; }
-      gallery.innerHTML = photos.map(p => '<a href="' + attrEscape(p) + '"></a>').join('');
+      // href 优先缩图：PhotoSwipe 一打开就有画面；原图由 upgradeViewerSlide 后台替换。
+      gallery.innerHTML = displayPhotos.map(p => '<a href="' + attrEscape(p) + '"></a>').join('');
       const anchors = gallery.querySelectorAll('a');
       viewerDims = new Map();
+      const setDim = (i, d) => {
+        if (!d || i < 0 || i >= displayPhotos.length) return;
+        viewerDims.set(i, d);
+        if (anchors[i]) {
+          anchors[i].dataset.pswpWidth = d.w;
+          anchors[i].dataset.pswpHeight = d.h;
+        }
+        applyDimsToLiveSlide(seq, i, d);
+      };
       const openAtIndex = (d) => {
         if (seq !== viewerOpenSeq) return;
-        if (d && anchors[idx]) {
-          viewerDims.set(idx, d);
-          anchors[idx].dataset.pswpWidth = d.w;
-          anchors[idx].dataset.pswpHeight = d.h;
-          applyDimsToLiveSlide(seq, idx, d);
-        }
+        if (d) setDim(idx, d);
         showPhotoViewer.value = true;
+        viewerPendingSeq = seq;
         viewerLightbox.loadAndOpen(idx);
+        // 缩图已缓存/初始化前 complete 时 loadComplete 可能不再触发；
+        // 30/100/250ms 兜底撤遮罩并触发原图后台升级。
+        setTimeout(function () { clearViewerLoadingIfLoaded(seq); }, 30);
+        setTimeout(function () { clearViewerLoadingIfLoaded(seq); }, 100);
+        setTimeout(function () { clearViewerLoadingIfLoaded(seq); }, 250);
+        // 只预探当前+前后各一张缩图，避免一次探测整组原图。
+        [idx - 1, idx + 1].forEach(function (j) {
+          if (j < 0 || j >= displayPhotos.length) return;
+          viewerGetDims(displayPhotos[j], function (dj) {
+            if (seq === viewerOpenSeq) setDim(j, dj);
+          });
+        });
       };
       const hint = viewerDimsFromCard(idx);
-      if (hint) { openAtIndex(hint); return; }   // 其余照片交给 PhotoSwipe 懒加载
-      // 无卡片 DOM 兜底（海报/他人资料页）：只探测当前一张，最多等 800ms 就先打开。
+      if (hint) { openAtIndex(hint); return; }
+      // 无卡片 DOM（他人资料页/海报）：只探测当前一张。缩图很小；无缩图时是原图 fallback。
       let settled = false;
       let capTimer = null;
       const finish = (d) => {
@@ -3512,18 +3693,18 @@ const yxqApp = createApp({
         openAtIndex(d);
       };
       capTimer = setTimeout(() => finish(null), 800);
-      viewerGetDims(photos[idx], (d) => finish(d));
+      viewerGetDims(displayPhotos[idx], (d) => finish(d));
     }
     function openPhotoViewerForCurrent() {
       const photos = currentCard.value.photos || (currentCard.value.photo ? [currentCard.value.photo] : []);
-      viewerOpen(photos, photoIndex.value);
+      viewerOpen(photos, photoIndex.value, cardDisplayPhotos(currentCard.value));
     }
     function viewPoster() {
       if (currentActivity.value && currentActivity.value.poster) viewerOpen([currentActivity.value.poster], 0);
     }
     function openPhotoViewerForUser(u) {
       const photos = u.photos || (u.photo ? [u.photo] : []);
-      viewerOpen(photos, 0);
+      viewerOpen(photos, 0, u.photos_thumb || []);
     }
     function gotoCards(from) {
       prevPage.value = from || 'likes';
