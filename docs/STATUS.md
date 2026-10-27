@@ -104,7 +104,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
 | 部署 HEAD（代码） | `d5bbe5b`（用户端报障批次 + 活动按时间结束，assetVersion 20；2026-10-27 11:17:46 自动部署） |
-| `deployed.sha` | `d5bbe5b`（= 部署 tip；docs-only 提交只推进标记、不重启） |
+| `deployed.sha` | 由 autodeploy 随 docs-only 提交推进（指向最新 docs tip）；代码部署标记 `d5bbe5b` |
 | `/healthz` version | `staging-d5bbe5b` |
 | `server.prev`（回滚目标） | 旧 `staging-ad1f2c1` binary，sha256 `b51f5022ce253a32…` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用；本次无 migration） |
@@ -395,7 +395,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   （virtual + legacy 两种历史模式；第5项含遮罩遮挡/取消/可交互，第7项含双返回与改密）；
   `no_history_smoke` 390x844 / 1280x900 各 19/19 PASS。证据目录 `/tmp/opencode/user-reported-bugs-20261027`
   （团队临时 artifact，未提交）。
-- 部署：`/healthz=staging-d5bbe5b`、`deployed.sha=d5bbe5b`、`bin/server.prev=staging-ad1f2c1`；migration 10/10 不变。
+- 部署：`/healthz=staging-d5bbe5b`、代码部署标记 `d5bbe5b`（autodeploy 完成后 `deployed.sha` 随 docs-only 提交推进到最新 docs tip）、`bin/server.prev=staging-ad1f2c1`；migration 10/10 不变。
   部署后真实链路 smoke：`user_reported_bugs_20261027.py` 双视口 **18/18 PASS**；`no_history_smoke` 390/1280
   **ALL PASS（各 1 项自助签到 SKIP：当前账号无开放签到活动）**；`tab_scroll_smoke` PASS；匿名 `/`、`/login` 200，
   顶层 `/admin`（已登录 document）303 `/?admin=1`，直连 origin 403；assetVersion 20 全链；nginx 5xx 0、app
