@@ -155,15 +155,16 @@ failure_backoff_active() {
 
 gh_runs_json() {
   # NO_COLOR/GH_FORCE_TTY：gh 在 pty 下会给 --json 输出加 ANSI 颜色，影响解析。
+  local sha=${1:-$REMOTE}
   NO_COLOR=1 GH_FORCE_TTY=0 GH_PROMPT_DISABLED=1 \
-    "$GH_BIN" run list --repo "$REPO" --commit "$REMOTE" --event push --limit 5 \
+    "$GH_BIN" run list --repo "$REPO" --commit "$sha" --event push --limit 5 \
     --json workflowName,status,conclusion,headSha,databaseId 2>/dev/null
 }
 
 # 单个 workflow 的状态：ok/pending/fail/missing/error|原因|run id
 workflow_state() {
-  local name=$1 json out
-  if ! json=$(gh_runs_json); then
+  local name=$1 sha=${2:-$REMOTE} json out
+  if ! json=$(gh_runs_json "$sha"); then
     printf 'error|gh run list 调用失败|0\n'
     return 0
   fi
@@ -247,8 +248,18 @@ check_gate() {
     return 0
   fi
 
-  local ci docs jobs wf rid
-  wf=$(workflow_state CI)
+  local ci docs jobs wf rid ci_sha=$REMOTE
+  # CI workflow 的 paths-ignore 跳过 docs-only push。若 tip 是 docs-only，
+  # 用最近一个 code commit 的 CI run，避免白等 10 分钟直到 MISSING_GRACE。
+  if ! commit_has_code "$ci_sha"; then
+    if ! ci_sha=$(latest_code_commit "$REMOTE" "$DEPLOYED"); then
+      GATE=fail
+      GATE_REASON="tip $SHORT 是 docs-only，且找不到 code commit"
+      return 0
+    fi
+    log "CI 闸门：tip $SHORT 是 docs-only，改用 code commit ${ci_sha:0:7}"
+  fi
+  wf=$(workflow_state CI "$ci_sha")
   IFS='|' read -r ci GATE_REASON rid <<<"$wf"
   case "$ci" in
     ok) ;;
@@ -261,12 +272,12 @@ check_gate() {
       return 0
       ;;
     missing)
-      if (($(commit_age "$REMOTE") > MISSING_GRACE)); then
+      if (($(commit_age "$ci_sha") > MISSING_GRACE)); then
         GATE=fail
-        GATE_REASON="无 CI run 且提交已超过 ${MISSING_GRACE}s（workflow 未触发？）"
+        GATE_REASON="无 CI run 且提交已超过 ${MISSING_GRACE}s（workflow 未触发？sha=${ci_sha:0:7}）"
       else
         GATE=wait
-        GATE_REASON="等待 CI run 出现"
+        GATE_REASON="等待 CI run 出现（sha=${ci_sha:0:7}）"
       fi
       return 0
       ;;
@@ -285,8 +296,12 @@ check_gate() {
   fi
 
   if ((DOCS_CHANGED == 1 || REQUIRE_DOCS == 1)); then
-    local docs_state docs_reason
-    IFS='|' read -r docs_state docs_reason _ <<<"$(workflow_state Docs)"
+    local docs_state docs_reason docs_sha=$REMOTE
+    IFS='|' read -r docs_state docs_reason _ <<<"$(workflow_state Docs "$docs_sha")"
+    if [[ $docs_state == missing && $ci_sha != "$REMOTE" ]]; then
+      IFS='|' read -r docs_state docs_reason _ <<<"$(workflow_state Docs "$ci_sha")"
+      docs_sha=$ci_sha
+    fi
     case "$docs_state" in
       ok)
         GATE=ok
@@ -301,12 +316,12 @@ check_gate() {
         GATE_REASON="Docs 失败：$docs_reason"
         ;;
       missing)
-        if (($(commit_age "$REMOTE") > MISSING_GRACE)); then
+        if (($(commit_age "$docs_sha") > MISSING_GRACE)); then
           GATE=fail
-          GATE_REASON="无 Docs run 且提交已超过 ${MISSING_GRACE}s"
+          GATE_REASON="无 Docs run 且提交已超过 ${MISSING_GRACE}s（sha=${docs_sha:0:7}）"
         else
           GATE=wait
-          GATE_REASON="等待 Docs run 出现"
+          GATE_REASON="等待 Docs run 出现（sha=${docs_sha:0:7}）"
         fi
         ;;
       *)
@@ -361,6 +376,25 @@ commit_has_code() {
       *) return 0 ;;
     esac
   done < <(git -C "$SRC" -c safe.directory="$SRC" diff-tree --no-commit-id --name-only -r -m "$sha" 2>/dev/null)
+  return 1
+}
+
+# 从 tip 往前找最近的 code commit（跳过 docs-only tip）。
+# CI workflow 的 paths-ignore 会跳过 docs-only push，闸门必须用这个 SHA 查 run。
+latest_code_commit() {
+  local tip=$1 base=${2:-} sha commits
+  if [[ -n $base ]]; then
+    commits=$(git -C "$SRC" -c safe.directory="$SRC" rev-list "$tip" --not "$base" 2>/dev/null || true)
+  else
+    commits=$(git -C "$SRC" -c safe.directory="$SRC" rev-list -n 50 "$tip" 2>/dev/null || true)
+  fi
+  while IFS= read -r sha; do
+    [[ -n $sha ]] || continue
+    if commit_has_code "$sha"; then
+      printf '%s\n' "$sha"
+      return 0
+    fi
+  done <<<"$commits"
   return 1
 }
 

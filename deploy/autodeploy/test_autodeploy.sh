@@ -95,7 +95,7 @@ if [[ ${1:-} == run && ${2:-} == list ]]; then
   first=1
   ci_status=${GH_CI_STATUS:-completed}
   ci_concl=${GH_CI_CONCL:-success}
-  if [[ ${GH_CI:-ok} != missing ]]; then
+  if [[ ${GH_CI:-ok} != missing ]] && { [[ -z ${GH_CI_ONLY_SHA:-} ]] || [[ $sha == "$GH_CI_ONLY_SHA" ]]; }; then
     [[ $first == 0 ]] && out+=','
     out+=$(printf '{"workflowName":"CI","status":"%s","conclusion":"%s","headSha":"%s","databaseId":101}' \
       "$ci_status" "$ci_concl" "$sha")
@@ -160,6 +160,7 @@ run_ad() {
     GH_DOCS_STATUS="${GH_DOCS_STATUS:-completed}" \
     GH_DOCS_CONCL="${GH_DOCS_CONCL:-success}" \
     GH_JOBS="${GH_JOBS:-ok}" \
+    ${GH_CI_ONLY_SHA:+GH_CI_ONLY_SHA="$GH_CI_ONLY_SHA"} \
     GOFMT_DIRTY="${GOFMT_DIRTY:-0}" \
     CURL_FAIL="${CURL_FAIL:-0}" \
     DF_FREE_MB="${DF_FREE_MB:-5000}" \
@@ -284,6 +285,18 @@ assert_eq 1 "$(grep -c 'systemctl restart' "$SB/systemctl.log")" "S8 只重启�
   && ok "S8 seed/token/facebackfill/thumbwarm 已安装" || bad "S8 CLI 未安装"
 assert_contains "fake-binary" "$SB/root/bin/server" "S8 server 已替换（占位内容）"
 
+# 8b) docs-only tip：CI paths-ignore 不跑 tip；必须用前一个 code commit 的 CI run 部署
+C8B_CODE=$(commit_new code '待部署代码')
+C8B_TIP=$(commit_new docs 'docs-only tip')
+reset_run_logs
+write_health "staging-${C8B_TIP:0:7}"
+GH_CI_ONLY_SHA="$C8B_CODE" run_ad
+rc=$?
+assert_eq 0 "$rc" "S8b docs-only tip 退出码 0"
+assert_contains "改用 code commit ${C8B_CODE:0:7}" "$SB/log" "S8b 使用 code commit 查 CI"
+assert_eq "$C8B_TIP" "$(cat "$SB/root/deployed.sha")" "S8b deployed.sha 已更新到 docs tip"
+assert_eq 1 "$(grep -c 'systemctl restart' "$SB/systemctl.log")" "S8b 只重启一次"
+
 # 9) 单实例：持锁时第二次调用直接跳过
 (
   exec 9>"$SB/lock"
@@ -310,7 +323,7 @@ run_ad --force
 rc=$?
 assert_eq 1 "$rc" "S10 脏树退出码 1"
 assert_contains "未提交改动" "$SB/log" "S10 日志说明脏树"
-assert_eq "$C8" "$(cat "$SB/root/deployed.sha")" "S10 未更新 deployed.sha"
+assert_eq "$C8B_TIP" "$(cat "$SB/root/deployed.sha")" "S10 未更新 deployed.sha"
 assert_empty_or_absent "$SB/systemctl.log" "S10 未重启"
 git -C "$SB/root/src" checkout -- . 2>/dev/null
 
@@ -322,7 +335,7 @@ assert_eq 1 "$rc" "S11 模拟 CI 红退出码 1"
 assert_contains "模拟" "$SB/log" "S11 日志标注模拟"
 assert_empty_or_absent "$SB/go.log" "S11 未构建"
 assert_empty_or_absent "$SB/systemctl.log" "S11 未重启"
-assert_eq "$C8" "$(cat "$SB/root/deployed.sha")" "S11 未更新 deployed.sha"
+assert_eq "$C8B_TIP" "$(cat "$SB/root/deployed.sha")" "S11 未更新 deployed.sha"
 
 # 12) 模拟参数不带 --dry-run：拒绝执行
 reset_run_logs
@@ -338,7 +351,7 @@ run_ad
 rc=$?
 assert_eq 1 "$rc" "S13 缺 Reviewed-By 退出码 1"
 assert_contains "缺少 Reviewed-By trailer" "$SB/log" "S13 日志说明部署闸拒绝"
-assert_eq "$C8" "$(cat "$SB/root/deployed.sha")" "S13 未更新 deployed.sha"
+assert_eq "$C8B_TIP" "$(cat "$SB/root/deployed.sha")" "S13 未更新 deployed.sha"
 assert_empty_or_absent "$SB/go.log" "S13 未构建"
 assert_empty_or_absent "$SB/systemctl.log" "S13 未重启"
 
@@ -360,7 +373,7 @@ rc=$?
 assert_eq 1 "$rc" "S15 中间代码提交缺 trailer 退出码 1"
 assert_contains "拒绝部署" "$SB/log" "S15 部署闸拒绝"
 assert_contains "${C13:0:7}" "$SB/log" "S15 日志点名 C13"
-assert_eq "$C8" "$(cat "$SB/root/deployed.sha")" "S15 未更新 deployed.sha"
+assert_eq "$C8B_TIP" "$(cat "$SB/root/deployed.sha")" "S15 未更新 deployed.sha"
 assert_empty_or_absent "$SB/go.log" "S15 未构建"
 assert_empty_or_absent "$SB/systemctl.log" "S15 未重启"
 

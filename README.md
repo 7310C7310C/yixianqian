@@ -137,7 +137,7 @@ set -a; . ./.env; set +a
 
 ```sh
 make ci                 # fmt-check + docs-check + vet + 单测 + 工具测试 + build
-make test-race          # -race 单测（排除 internal/db、internal/httpserver）
+make test-race-full     # 发版前全量 -race（本机 test-race 已废弃；CI 已覆盖全量）
 make test-integration   # 需要 TEST_DATABASE_URL；只跑 TestIntegration*
 make docs-check         # 文档元数据/地图/链接/生成物检查
 make docs-gen           # 刷新 docs/reference 与入口指针

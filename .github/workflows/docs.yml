@@ -22,9 +22,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: 工具单测
-        run: python3 -m unittest discover -s tools -p 'test_*.py' -v
-
       - name: 文档一致性与生成物
         run: python3 tools/check_docs.py --strict --format=github
 

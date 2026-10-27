@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-26
+last_verified: 2026-10-27
 sources:
   - deploy/**
   - .env.example
@@ -95,6 +95,9 @@ gofmt/vet → 构建 4 个 binary（`version=staging-<short>`）→ 备份 `serv
   沙箱单测；脚本对 `deployed.sha..origin/main` 内每个代码提交校验 trailer。代码提交必须在 commit message 含
   `Reviewed-By: <reviewer>`（独立 Reviewer PASS 的落地凭证）；缺失时 autodeploy 拒绝部署并记录
   `missing Reviewed-By`。docs-only 提交豁免；`--force` 仅限回滚/热修，会打印警告后继续；
+- **docs-only tip**：CI workflow 的 `paths-ignore` 不会为纯 docs/.team 变更产生 CI run；
+  autodeploy 会回退到最近一个 code commit 的 CI run（`latest_code_commit`），不再空等
+  `MISSING_GRACE`。tip 本身仍可作为 `deployed.sha`，healthz 显示实际二进制版本。
   测试可设 `YXQ_REQUIRE_REVIEW=0`。安装：备份旧版 → `install -m 755` → `bash -n` → `--dry-run`。
 - **静态资源版本门禁**：CI lint-build 用 push before / PR base 覆盖多提交范围运行
   `tools/check_asset_version.py`；`web/static/**` 有变更但 `assetVersion` 未 bump 即红。

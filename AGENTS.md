@@ -104,6 +104,9 @@ sources:
 
 1. **改动**：小改动直接在 `main`；较大改动用独立 worktree/分支，由维护者本地合并后 push。
 2. **本地验证**：`gofmt -l .` 为空 + `go vet ./...` + 定向测试 + `make ci`（够用时可先 `make prepush` 快速门禁）；前端改动跑对应 browser smoke。
+   - 日常 edit 后只跑 `make fast`（<30s，受影响检查）；`make ci` 每个 commit 一次即可，不要每次编辑全跑。
+   - 本机 `test-race` 已废弃为提示 target（不跑测试）；CI 已对全部 package 跑 `-race`。发版前需要时用 `make test-race-full`。
+
 3. **commit**：简体中文；带 `Docs:` 或 `Docs-Impact: none（理由）`。
 4. **push**：常规/高风险须在 push 前拿到独立 Reviewer 对本地 commit 的 PASS；低风险快速通道可直接 push。
 5. **CI 绿**：当前 HEAD 的 `lint-build`/`unit`/`integration`；有文档变更时 `Docs` 也须绿。
@@ -132,6 +135,21 @@ sources:
 自动部署运维：`systemctl is-active yxq-autodeploy.timer`、`tail -n 50 /var/log/yxq-autodeploy.log`、紧急冻结 `systemctl stop yxq-autodeploy.timer`；细节见 `docs/runbooks/staging.md`「自动部署」。人工部署仅用于回滚/热修。
 
 **文档门禁减负**：仅当改动命中 `docs/`、env、route、migration 时跑 `docs-check-stale`；纯前端模板/样式允许 `Docs-Impact: none（理由）`，不强制刷新 `docs/STATUS.md` 的 sources。
+
+## Agent 快速路径（2026-10-27）
+
+这一节是给 opencode/Codex 等 agent 的固定入口；不要每次重新拼命令。
+
+- **每个 edit 后**：`make fast`。只跑受影响的 gofmt/vet/test/static/docs，<30s。
+- **每个 commit 前**：`make ci` 一次；不要 46 次。`make fast` 已覆盖大部分即时错误。
+- **每个 batch**：`make smoke-fast`（390x844 + 390x700 并行）；**优先在 server1** 跑，`BASE_URL=http://127.0.0.1:8093`，staging 就在本机。
+- **每个 batch 只跑一次全套**：`make smoke-full`；不要每修一个 bug 全跑 19 项。
+- **等部署**：`make deploy-wait`，一个阻塞命令等 CI + healthz；不要每 10 秒发一轮 `gh run list`。
+- **Review 前**：`make review-packet` 生成 diffstat/风险/证据清单；Reviewer 只跑必要的复核。
+- 本机不跑 race；CI 已覆盖全量 race。发版前需要时用 `make test-race-full`。
+- **session 粒度**：一个 batch 最多 3 个 bug 或一次 deploy；之后开新 subagent session，context 控制在 ~150k。
+- **docs stale**：只有 docs/config/route/migration 变更才强制；test-only/frontend 用 `Docs-Impact: none（理由）`。
+- **组织**：前端单文件串行时 dev-lead 可 solo（Lean）；多文件并行才开 developer。不要为了组织图开空转角色。
 
 ## 文档自动更新协议
 
@@ -176,10 +194,15 @@ sources:
 
 ```sh
 make tidy
-make test              # go test -p 1 -count=1 ./...
-make test-race         # -race 单测，排除 internal/db、internal/httpserver
+make test              # go test -p 4 -count=1 ./...
+make test-race-full    # 发版前：全部 package -race（不含 httpserver，CI integration 覆盖）
 make vet
 make build             # server/seed/token/facebackfill
+make fast              # agent 每次 edit 后的快速检查（<30s）
+make smoke-fast        # 每个 batch 的浏览器子集（390x844+390x700 并行）
+make smoke-full        # nightly/release 完整浏览器矩阵
+make deploy-wait       # 阻塞等 CI + staging healthz
+make review-packet     # 生成 Reviewer 用的 diff/风险/证据清单
 make test-integration  # 需要 TEST_DATABASE_URL；只跑 TestIntegration*
 make test-migration    # 迁移、文档与 asset-version 门禁自测（Python）
 make test-broadcast-ui # 需要 BASE_URL/SESSION_COOKIE/ACTIVITY_ID

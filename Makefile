@@ -1,4 +1,5 @@
-GO      ?= go
+GO      ?= $(shell command -v go 2>/dev/null || echo /usr/local/go/bin/go)
+GOFMT   ?= $(shell command -v gofmt 2>/dev/null || echo /usr/local/go/bin/gofmt)
 VERSION ?= dev
 USER_ID ?=
 TEST_DATABASE_URL ?=
@@ -18,10 +19,11 @@ PERF_LCP_OUT ?= /tmp/yxq-perf/lcp.json
 
 LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSION)
 
-.PHONY: all tidy generate fmt fmt-check vet test test-race test-integration test-migration \
+.PHONY: all tidy generate fmt fmt-check vet test test-race test-race-full test-integration test-migration \
         test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale prepush ci \
         static-gzip static-gzip-check spa-check spa-check-node \
-        perf-budget perf-guard-test perf-bench perf-lcp
+        perf-budget perf-guard-test perf-bench perf-lcp \
+        fast smoke-fast smoke-full deploy-wait review-packet
 
 all: ci
 
@@ -32,21 +34,22 @@ generate:
 	$(GO) generate ./...
 
 fmt:
-	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
+	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')
 
 fmt-check:
-	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
+	@test -z "$$($(GOFMT) -l .)" || (echo "gofmt needed:"; $(GOFMT) -l .; exit 1)
 
 vet:
 	$(GO) vet ./...
 
 test:
-	$(GO) test -p 1 -count=1 ./...
+	$(GO) test -p 4 -count=1 ./...
 
-# internal/db 的单元测试（含 notification hub 并发回归 TestNotificationHubFanout*）
-# 不需要数据库，可整包 -race（约 8s，TestIntegration* 无 TEST_DATABASE_URL 会 skip）；
-# internal/httpserver 多数测试需要真实 Postgres，其 -race 由 CI integration job 覆盖。
+# 兼容历史文档；真正的 race 覆盖在 CI。发版前用 test-race-full。
 test-race:
+	@echo "test-race: deprecated; CI 已覆盖全量 race；发版前用 make test-race-full"
+
+test-race-full:
 	@PKGS="$$( $(GO) list ./... | grep -v '/internal/httpserver$$' )"; \
 	$(GO) test -race -p 1 -count=1 $$PKGS
 
@@ -144,3 +147,24 @@ prepush: fmt-check static-gzip-check spa-check docs-check asset-version-check pe
 
 # perf-guard-test 由 test-migration 的 discover 统一执行，ci 不重复显式跑。
 ci: fmt-check static-gzip-check spa-check docs-check asset-version-check perf-budget vet test test-migration build
+
+# ---- Agent fast path (2026-10-27) -----------------------------------------
+# 每次 edit 后用；只跑受影响的检查，<30s。不是 CI 的替代品。
+fast:
+	./tools/agent/fast.sh
+
+# 每个 batch 一次；默认 390x844 + 390x700 并行。
+# 服务器上跑更快：BASE_URL=http://127.0.0.1:8093 SESSION_COOKIE_FILE=/path ...
+smoke-fast:
+	$(PERF_PYTHON) tools/agent/smoke_parallel.py --suite fast
+
+# nightly / release：完整矩阵。
+smoke-full:
+	$(PERF_PYTHON) tools/agent/smoke_parallel.py --suite full
+
+# 一个阻塞命令等 CI + autodeploy；不再用模型轮询。
+deploy-wait:
+	./tools/agent/deploy_wait.sh $(if $(SHA),$(SHA),)
+
+review-packet:
+	./tools/agent/review_packet.sh $(if $(BASE),$(BASE),origin/main)

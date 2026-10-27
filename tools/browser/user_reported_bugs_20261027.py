@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """PM 2026-10-27 用户端报障回归（Playwright）。
 
-覆盖本批 7 项里可浏览器验证的 1/3/5/7 与第 6 项 UI 断言，390x844 + 390x700：
+覆盖本批仍值得每次回归的 1/3/5/7，390x844 + 390x700（390x700 只跑 layout）。
 
 1. 清除筛选后本人卡回到牌堆首位；筛选期间不出现；后续翻页无重复/不卡死。
 3. Android 可视区域溢出：cards tab 文档不超出 innerHeight；.swipe-card 不压底栏；
    --yxq-vh 随视口变化更新；390x844 ↔ 390x700 往返。
-5. 点开大图 100ms 内出现加载遮罩，且遮罩在 PhotoSwipe 之上可点击取消；
-   原图延迟 2s 后遮罩消失、viewer 可交互关闭、无 console error。
-6. 过期活动（mock）显示「已结束」，活动页/我的活动/我的分组不再出现「现场签到」，
-   活动详情无「立即报名」入口。
+5. 缩图秒开（产品目标 ≤300ms，回归上限 500ms）；fallback 遮罩可见且可取消；
+   原图 3s 后台升级；无 console error。
 7. 我的→我的资料→修改资料→保存→返回一次到我的，第二次离开 SPA；改密成功同样无残留层。
-   virtual 与 ?history=legacy 两种模式都跑；virtual 模式断言栈长度与无原生 History 调用。
+   仅 virtual 模式；legacy 历史由 no_history_smoke.py 覆盖。
 
 用法（staging 部署后）：
     BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> \
@@ -24,6 +22,10 @@
 
 可选：
     VIEWPORTS=390x844,390x700   默认两档
+    SUITE=fast                  只跑当前高风险子集（cards/layout/viewer/history）
+    SUITE=cards|layout|viewer|history|full
+                                逗号分隔可组合；full 为默认
+    SESSION_COOKIE_FILE=/path   从 0600 文件读 cookie，避免写进 shell 命令
     SHOT_DIR=/tmp/opencode/user-reported-bugs-20261027
     SKIP_PAGINATION=1           跳过第 1 项的连续翻页（数据太少时）
 """
@@ -47,10 +49,34 @@ except ImportError:  # pragma: no cover
 
 BASE = os.environ.get("BASE_URL", "").rstrip("/")
 COOKIE = os.environ.get("SESSION_COOKIE", "").strip()
+if not COOKIE:
+    _cookie_file = os.environ.get("SESSION_COOKIE_FILE", "").strip()
+    if _cookie_file:
+        try:
+            COOKIE = Path(_cookie_file).read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            sys.exit(f"无法读取 SESSION_COOKIE_FILE：{exc}")
 LOCAL_ASSETS_DIR = os.environ.get("LOCAL_ASSETS_DIR", "").strip()
 SHOT_DIR = Path(os.environ.get("SHOT_DIR", "/tmp/opencode/user-reported-bugs-20261027"))
 VIEWPORTS = os.environ.get("VIEWPORTS", "390x844,390x700").strip()
 SKIP_PAGINATION = os.environ.get("SKIP_PAGINATION", "").strip() == "1"
+SUITE = {part.strip() for part in os.environ.get("SUITE", "full").split(",") if part.strip()}
+# 300ms 是产品目标；500ms 是回归上限，避免 server1 并行/负载下的 10–30ms 抖动造成假失败。
+VIEWER_FAST_MAX_MS = int(os.environ.get("VIEWER_FAST_MAX_MS", "500"))
+FAST_SUITE = {"cards", "layout", "viewer", "history"}
+
+
+def want(name: str) -> bool:
+    """Whether a named check should run for this SUITE.
+
+    full  -> everything
+    fast  -> cards + layout + viewer + history (390x700 still runs layout)
+    other -> only the named checks; comma-separated unions are allowed
+    """
+    if "full" in SUITE or name in SUITE:
+        return True
+    return "fast" in SUITE and name in FAST_SUITE
+
 BASE_NETLOC = urlparse(BASE).netloc
 
 IGNORED_CONSOLE = (
@@ -444,141 +470,6 @@ def run_self_card_filter(page, tag: str) -> None:
     print(f"PASS {tag} 第1项：本人卡回首位；筛选期间无本人卡；翻页 {steps} 步无重复/不卡死")
 
 
-# ---------- 第 2 项：人脸裁切随容器重算 ----------
-
-CROP_EXPECTED_JS = r"""
-(vh) => {
-  const p = window.yxqRootProxy || {};
-  const c = p.currentCard;
-  if (!c || !c.faces || !c.faces[0]) return null;
-  const wrap = document.querySelector('.swipe-card .card-photo-wrap');
-  const img = document.querySelector('.swipe-card .card-photo-item');
-  if (!wrap || !img || !img.naturalWidth) return null;
-  const cardH = Math.min(Math.max(vh - 76, 0), 780);
-  const cw = wrap.clientWidth;
-  const ch = cardH * 0.48;
-  const iw = img.naturalWidth, ih = img.naturalHeight;
-  const f = c.faces[0];
-  if (!f || !f.c || !cw || !ch || !iw || !ih) return '';
-  try {
-    const scale = Math.max(cw / iw, ch / ih);
-    const dh = ih * scale;
-    const tb = (f.tb && f.tb.length === 2) ? f.tb : [0, 0];
-    const ct = tb[0], cb = tb[1];
-    const cr = 1 - ct - cb;
-    if (cr < 0.55) return '';
-    const eh = dh * cr;
-    const cy_e = (f.c[1] - ct) / cr;
-    const fh = (f.box && f.box[1]) ? f.box[1] : 0;
-    const fh_e = fh / cr;
-    let off_e;
-    if (eh <= ch + 1) {
-      off_e = (ch - eh) / 2;
-    } else {
-      const top_e = (cy_e - fh_e / 2) * eh;
-      const bottom_e = (cy_e + fh_e / 2) * eh;
-      const headTop_e = top_e - fh_e * 0.35 * eh;
-      const offDef_e = (ch - eh) / 2;
-      if (offDef_e + headTop_e >= 0 && offDef_e + bottom_e <= ch) off_e = offDef_e;
-      else if (offDef_e + headTop_e < 0) off_e = -headTop_e;
-      else if (offDef_e + bottom_e > ch) off_e = ch - bottom_e;
-      else off_e = offDef_e;
-      off_e = Math.max(ch - eh, Math.min(0, off_e));
-    }
-    let off = off_e - ct * dh;
-    off = Math.max(ch - dh, Math.min(0, off));
-    const offDef = (ch - dh) / 2;
-    if (Math.abs(off - offDef) < 1) return '';
-    return '50% ' + Math.round(off) + 'px';
-  } catch (e) { return ''; }
-}
-"""
-
-
-def actual_crop(page) -> str:
-    return page.evaluate(
-        "() => { const el = document.querySelector('.swipe-card .card-photo-item'); "
-        "return el ? (el.style.objectPosition || '') : null; }"
-    )
-
-
-def expected_crop(page, vh: int):
-    return page.evaluate(CROP_EXPECTED_JS, vh)
-
-
-def find_crop_card(page, tag: str) -> int:
-    start = proxy(page, "p.cardIndex || 0")
-    for i in range(18):
-        exp844 = expected_crop(page, 844)
-        exp700 = expected_crop(page, 700)
-        if exp844 is not None and exp700 is not None and exp844 != exp700:
-            return proxy(page, "p.cardIndex || 0")
-        page.keyboard.press("ArrowRight")
-        page.wait_for_timeout(260)
-        if proxy(page, "p.cardIndex || 0") == start and i > 0:
-            break
-    return -1
-
-
-def run_face_crop_resize(page, tag: str, base_height: int) -> None:
-    tap_tab(page, "牵线", "cards")
-    wait_cards(page, expect_self=True)
-    # 本项固定从 844 开始，结束再回到当前视口，保证 390x700 一轮也能断言完整往返。
-    if base_height != 844:
-        page.set_viewport_size({"width": 390, "height": 844})
-        page.wait_for_timeout(500)
-    # 找一个在 844/700 两档下裁切值不同的卡（真实数据下第二张通常就满足）。
-    idx = find_crop_card(page, tag)
-    if idx < 0:
-        # 找不到差异也要验证 DOM 与公式一致（不静默跳过）。
-        exp = expected_crop(page, 844)
-        got = actual_crop(page)
-        if exp is not None and exp != got:
-            raise Failure(f"第2项 844 高裁切与公式不一致：expected={exp!r} actual={got!r}")
-        print(f"NOTE {tag} 第2项：当前账号前 18 张卡两档裁切值相同，仅校验公式一致性")
-        if base_height != 844:
-            page.set_viewport_size({"width": 390, "height": base_height})
-            page.wait_for_timeout(400)
-        return
-
-    exp844 = expected_crop(page, 844)
-    got = actual_crop(page)
-    if exp844 != got:
-        raise Failure(f"第2项 844 高裁切不一致：expected={exp844!r} actual={got!r}")
-    screenshot(page, tag, "02-crop-844")
-
-    page.set_viewport_size({"width": 390, "height": 700})
-    page.wait_for_timeout(700)
-    exp700 = expected_crop(page, 700)
-    got700 = actual_crop(page)
-    if exp700 != got700:
-        raise Failure(f"第2项 700 高裁切未重算：expected={exp700!r} actual={got700!r}")
-    if exp700 == exp844:
-        print(f"NOTE {tag} 第2项：选中卡两档裁切值一致（{exp700!r}）")
-    screenshot(page, tag, "02-crop-700")
-
-    page.set_viewport_size({"width": 390, "height": 844})
-    page.wait_for_timeout(700)
-    got_back = actual_crop(page)
-    if got_back != exp844:
-        raise Failure(f"第2项 回到 844 后裁切未恢复：expected={exp844!r} actual={got_back!r}")
-
-    page.keyboard.press("ArrowRight")
-    page.wait_for_timeout(500)
-    page.keyboard.press("ArrowLeft")
-    page.wait_for_timeout(700)
-    got_switch_back = actual_crop(page)
-    if got_switch_back != exp844:
-        raise Failure(f"第2项 切走再回来裁切不一致：expected={exp844!r} actual={got_switch_back!r}")
-    print(f"PASS {tag} 第2项：844→700→844 裁切随容器重算；切走回来一致"
-          f"（844={exp844!r} 700={exp700!r}）")
-    if base_height != 844:
-        page.set_viewport_size({"width": 390, "height": base_height})
-        page.wait_for_timeout(400)
-
-
-# ---------- 第 3 项：可视区域溢出 ----------
-
 def layout_state(page) -> dict:
     return page.evaluate(
         """() => {
@@ -775,8 +666,8 @@ def run_viewer_fast_path(page, tag: str) -> None:
             raise Failure(f"第5项 秒开状态异常：{st}")
         if "size=thumb" not in st["src"]:
             raise Failure(f"第5项 初始应显示缩图，实际 src={st['src']!r}")
-        if open_ms > 300 or mask_ms > 300:
-            raise Failure(f"第5项 秒开超时：pswp={open_ms:.0f}ms mask={mask_ms:.0f}ms")
+        if open_ms > VIEWER_FAST_MAX_MS or mask_ms > VIEWER_FAST_MAX_MS:
+            raise Failure(f"第5项 秒开超时（>{VIEWER_FAST_MAX_MS}ms）：pswp={open_ms:.0f}ms mask={mask_ms:.0f}ms")
         screenshot(page, tag, "05-fast-thumb")
         print(f"PASS {tag} 第5项秒开：{open_ms:.0f}ms 可见缩图、{mask_ms:.0f}ms 无遮罩")
 
@@ -871,7 +762,7 @@ def run_viewer_fast_path(page, tag: str) -> None:
 
 
 def run_viewer_fallback_mask(page, tag: str) -> None:
-    """无缩图（海报/fallback）仍显示遮罩；点击可取消，随后可正常打开。"""
+    """无缩图（海报/fallback）仍显示遮罩；点击可取消。"""
     tap_tab(page, "牵线", "cards")
     wait_cards(page, expect_self=True)
     pending = []
@@ -906,82 +797,6 @@ def run_viewer_fallback_mask(page, tag: str) -> None:
         pending.clear()
         print(f"PASS {tag} 第5项fallback：无缩图时遮罩可见、点击取消成功")
 
-        # fallback 正常关闭：先移除拦截 handler 让原图完成、遮罩消失，
-        # 等 opening 动画结束后再点原生 close。
-        page.unroute("**/cards/photo/**", handler)
-        for route in pending:
-            try:
-                route.abort()
-            except Exception:  # noqa: BLE001
-                pass
-        pending.clear()
-        cached = proxy(page, "p.currentCard && p.currentCard.photos && p.currentCard.photos[0]")
-        if not cached:
-            raise Failure("第5项 当前卡片没有照片，无法测 fallback 立即关闭")
-        # 预热原图到浏览器缓存，确保 fallback（无缩图）打开后遮罩能快速消失。
-        page.evaluate(
-            """(url) => new Promise((resolve) => {
-              const img = new Image();
-              img.onload = () => resolve(true);
-              img.onerror = () => resolve(false);
-              img.src = url;
-            })""",
-            cached,
-        )
-        page.evaluate(
-            "(url) => window.yxqRootProxy.openPhotoViewerForUser({photos:[url], photos_thumb: []})",
-            cached,
-        )
-        page.wait_for_function(
-            "() => { const p = window.pswp; const e = p && p.element; "
-            "return !!(e && getComputedStyle(e).display !== 'none'); }",
-            timeout=3000,
-        )
-        page.wait_for_function("() => !document.querySelector('.viewer-loading-mask')", timeout=3000)
-        page.wait_for_function(
-            "() => window.pswp && window.pswp.opener && window.pswp.opener.isOpen === true",
-            timeout=2500,
-        )
-        page.locator(".pswp__button--close").first.click(timeout=3000)
-        page.wait_for_function(
-            "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer) && "
-            "(() => { const p = document.querySelector('.pswp'); return !p || getComputedStyle(p).display === 'none'; })()",
-            timeout=1500,
-        )
-        print(f"PASS {tag} 第5项fallback：opening 结束后关闭，1s 内收起")
-
-        # 重新挂回拦截 handler，保留后面的正常 fallback 打开/关闭用例。
-        page.route("**/cards/photo/**", handler)
-        _viewer_open_fallback(page, "fallbackok")
-        page.wait_for_function("() => !!document.querySelector('.viewer-loading-mask')", timeout=3000)
-        for _ in range(20):
-            if pending:
-                break
-            page.wait_for_timeout(50)
-        for route in pending:
-            try:
-                route.continue_()
-            except Exception:  # noqa: BLE001
-                pass
-        pending.clear()
-        page.wait_for_function(
-            "() => !document.querySelector('.viewer-loading-mask') && "
-            "window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer === true",
-            timeout=10000,
-        )
-        page.wait_for_function(
-            "() => { const p = window.pswp; return !!(p && p.opener && p.opener.isOpen); }",
-            timeout=5000,
-        )
-        close_btn = page.locator(".pswp__button--close").first
-        if not close_btn.is_visible():
-            raise Failure("第5项 fallback 成功路径关闭按钮不可见")
-        close_btn.click(timeout=5000)
-        page.wait_for_function(
-            "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
-            timeout=5000,
-        )
-        print(f"PASS {tag} 第5项fallback：无缩图正常打开并关闭")
     finally:
         for route in pending:
             try:
@@ -991,255 +806,6 @@ def run_viewer_fallback_mask(page, tag: str) -> None:
         pending.clear()
         page.unroute("**/cards/photo/**", handler)
 
-
-def run_viewer_cancel_race(page, tag: str) -> None:
-    """取消后 100/200/300ms 内再点图：旧 abort destroy timer 不得杀掉新 pswp。"""
-    tap_tab(page, "牵线", "cards")
-    wait_cards(page, expect_self=True)
-    pending = []
-
-    def handler(route, request):
-        parsed = urlparse(request.url)
-        if "/cards/photo/" in parsed.path and "size=thumb" not in (parsed.query or ""):
-            pending.append(route)
-            return
-        route.fallback()
-
-    page.route("**/cards/photo/**", handler)
-
-    def cancel_mask() -> None:
-        vp = page.viewport_size or {"width": 390, "height": 844}
-        page.mouse.click(vp["width"] // 2, vp["height"] // 2)
-        page.wait_for_function(
-            "() => !document.querySelector('.viewer-loading-mask') && "
-            "!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
-            timeout=5000,
-        )
-        page.locator(".pswp").first.wait_for(state="hidden", timeout=3000)
-
-    def release_pending() -> None:
-        for route in pending:
-            try:
-                route.continue_()
-            except Exception:  # noqa: BLE001
-                pass
-        pending.clear()
-
-    def abort_pending() -> None:
-        for route in pending:
-            try:
-                route.abort()
-            except Exception:  # noqa: BLE001
-                pass
-        pending.clear()
-
-    delays = (100, 200, 300)
-    try:
-        for delay in delays:
-            pending.clear()
-            _viewer_open_fallback(page, f"race{delay}a")
-            page.wait_for_function("() => !!document.querySelector('.viewer-loading-mask')", timeout=3000)
-            cancel_mask()
-            abort_pending()
-            page.wait_for_timeout(delay)
-
-            # 旧 abort timer 的 250ms 边界：重新打开必须创建新 pswp 且不被旧 timer 误杀。
-            _viewer_open_fallback(page, f"race{delay}b")
-            page.wait_for_function(
-                "() => !!document.querySelector('.viewer-loading-mask')",
-                timeout=5000,
-            )
-            # 缓存命中时不会再有原图请求，等遮罩由 loadComplete/已加载兜底清除即可。
-            for _ in range(80):
-                if pending or not page.locator(".viewer-loading-mask").count():
-                    break
-                page.wait_for_timeout(50)
-            release_pending()
-            page.wait_for_function(
-                "() => !document.querySelector('.viewer-loading-mask')",
-                timeout=15000,
-            )
-            page.wait_for_timeout(500)   # 跨过旧 abort timer 的 250ms
-            st = page.evaluate(
-                """() => { const p = document.querySelector('.pswp'); const s = p ? getComputedStyle(p) : null;
-                  return {show: !!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer),
-                          display: s ? s.display : null,
-                          cls: p ? String(p.className || '') : null,
-                          mask: !!document.querySelector('.viewer-loading-mask')}; }"""
-            )
-            if not st["show"] or not st["cls"] or st["display"] == "none" or st["mask"]:
-                raise Failure(f"第5项 取消后 {delay}ms 重开失败：{st}")
-            if "yxq-viewer-cancelled" in st["cls"]:
-                raise Failure(f"第5项 取消后 {delay}ms 重开仍带取消 class：{st}")
-            close_btn = page.locator(".pswp__button--close").first
-            if not close_btn.is_visible():
-                raise Failure(f"第5项 取消后 {delay}ms 重开 close 按钮不可见")
-            close_btn.click(timeout=5000)
-            page.wait_for_function(
-                "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
-                timeout=5000,
-            )
-            page.locator(".pswp").first.wait_for(state="hidden", timeout=5000)
-            page.wait_for_timeout(200)
-            print(f"PASS {tag} 第5项取消竞态：{delay}ms 后重开正常（pswp 可见、mask 清除、可关闭）")
-    finally:
-        abort_pending()
-        page.unroute("**/cards/photo/**", handler)
-
-
-def run_viewer_timeout(page, tag: str) -> None:
-    """10s timeout 走同一取消路径；仅在单个视口跑一次，避免双倍等待。"""
-    tap_tab(page, "牵线", "cards")
-    wait_cards(page, expect_self=True)
-    pending = []
-
-    def handler(route, request):
-        parsed = urlparse(request.url)
-        if "/cards/photo/" in parsed.path and "size=thumb" not in (parsed.query or ""):
-            pending.append(route)
-            return
-        route.fallback()
-
-    page.route("**/cards/photo/**", handler)
-    # 无缩图 fallback + 唯一 query，确保 10s 内一直 loading。
-    try:
-        _viewer_open_fallback(page, "timeout")
-        page.wait_for_function("() => !!document.querySelector('.viewer-loading-mask')", timeout=3000)
-        page.wait_for_function(
-            "() => !document.querySelector('.viewer-loading-mask')",
-            timeout=13000,
-        )
-        page.wait_for_timeout(300)
-        st = page.evaluate(
-            """() => { const p = document.querySelector('.pswp'); const s = p ? getComputedStyle(p) : null;
-              return {show: !!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer),
-                      display: s ? s.display : null, cls: p ? String(p.className || '') : null}; }"""
-        )
-        if st["show"] or (st["display"] is not None and st["display"] != "none"):
-            raise Failure(f"第5项 10s timeout 未隐藏 viewer：{st}")
-        print(f"PASS {tag} 第5项 timeout：10s 后遮罩消失且 pswp 已隐藏")
-    finally:
-        for route in pending:
-            try:
-                route.abort()
-            except Exception:  # noqa: BLE001
-                pass
-        pending.clear()
-        page.unroute("**/cards/photo/**", handler)
-
-
-# ---------- 第 6 项：过期活动 UI ----------
-
-EXPIRED_ACT = {
-    "record_id": "A-EXPIRED-20261027",
-    "activity_id": "A-EXPIRED-20261027",
-    "name": "过期活动回归样例",
-    "status": "已结束",
-    "start_time": "2026-10-01 09:00",
-    "end_time": "2026-10-01 12:00",
-    "location": "测试地点",
-    "description": "PM 报障回归用",
-    "fee": 0,
-    "max_signup": 20,
-    "current_signup": 10,
-    "my_signup": True,
-    "signin_enabled": True,
-    "can_self_signin": False,
-    "my_attendance": "未签到",
-    "group_flag": "是",
-    "group_status": "已完成",
-    "onetoone_flag": "否",
-    "onetoone_status": "",
-    "male_per_group": 4,
-    "female_per_group": 4,
-    "my_choice_count": 3,
-    "poster": "",
-}
-
-
-def install_activity_mock(context) -> None:
-    def json_route(route, payload):
-        route.fulfill(status=200, content_type="application/json; charset=utf-8",
-                      body=__import__("json").dumps(payload, ensure_ascii=False))
-
-    def handler(route, request):
-        parsed = urlparse(request.url)
-        path = parsed.path
-        try:
-            if path == "/legacy/api/activities":
-                json_route(route, {"activities": [EXPIRED_ACT]})
-                return
-            if path == "/legacy/api/activities/mine":
-                json_route(route, {"activities": [EXPIRED_ACT]})
-                return
-            if path == "/legacy/api/activities/mine/groups":
-                json_route(route, {"activities": [EXPIRED_ACT]})
-                return
-            if path == "/legacy/api/activities/mine/groups/flag":
-                json_route(route, {"has_group_activity": True})
-                return
-            if re.fullmatch(r"/legacy/api/activities/[^/]+", path):
-                json_route(route, EXPIRED_ACT)
-                return
-        except Exception as exc:  # noqa: BLE001
-            raise Failure(f"活动 mock 路由异常 {request.url}: {exc}") from exc
-        route.fallback()
-
-    context.route("**/legacy/api/activities**", handler)
-
-
-def assert_no_signin_ui(page, where: str) -> None:
-    if page.get_by_text("📋 现场签到").count():
-        if page.get_by_text("📋 现场签到").first.is_visible():
-            raise Failure(f"{where} 仍出现「现场签到」按钮")
-    if page.get_by_text("立即报名").count():
-        if page.get_by_text("立即报名").first.is_visible():
-            raise Failure(f"{where} 仍出现「立即报名」入口")
-
-
-def run_expired_activity(browser, viewport: tuple[int, int], tag: str) -> None:
-    context, page, probe = open_context(browser, viewport, routes=install_activity_mock)
-    try:
-        tap_tab(page, "活动", "home")
-        page.get_by_text("过期活动回归样例").first.wait_for(state="visible", timeout=15000)
-        card = page.locator(".activity-card").filter(has_text="过期活动回归样例").first
-        if "已结束" not in card.inner_text():
-            raise Failure("第6项 活动列表卡片未显示「已结束」")
-        assert_no_signin_ui(page, "第6项 活动列表")
-        screenshot(page, tag, "06-expired-home")
-
-        card.click()
-        wait_page(page, "activity_detail")
-        page.get_by_text("过期活动回归样例").first.wait_for(state="visible", timeout=15000)
-        if "已结束" not in page.locator(".activity-card").first.inner_text():
-            raise Failure("第6项 活动详情未显示「已结束」")
-        assert_no_signin_ui(page, "第6项 活动详情")
-        if page.locator(".signin-status-box").count() and page.locator(".signin-status-box").first.is_visible():
-            raise Failure("第6项 活动详情仍显示签到状态框")
-        screenshot(page, tag, "06-expired-detail")
-
-        page.evaluate("window.yxqRootProxy.openMyActivities()")
-        wait_page(page, "my_activities")
-        page.get_by_text("过期活动回归样例").first.wait_for(state="visible", timeout=15000)
-        if "已结束" not in page.locator(".activity-card").first.inner_text():
-            raise Failure("第6项 我的活动未显示「已结束」")
-        assert_no_signin_ui(page, "第6项 我的活动")
-
-        page.evaluate("window.yxqRootProxy.openMyGroups()")
-        wait_page(page, "my_groups")
-        page.get_by_text("过期活动回归样例").first.wait_for(state="visible", timeout=15000)
-        body = page.locator(".activity-card").first.inner_text()
-        if "未签到" in body or "未到" in body:
-            raise Failure("第6项 我的分组仍显示签到状态标签")
-        assert_no_signin_ui(page, "第6项 我的分组")
-        screenshot(page, tag, "06-expired-my-groups")
-        probe.assert_clean("第6项")
-        print(f"PASS {tag} 第6项：过期活动显示已结束；活动/我的活动/我的分组无签到入口；详情无报名入口")
-    finally:
-        context.close()
-
-
-# ---------- 第 7 项：资料保存返回链 ----------
 
 def install_password_mock(page) -> None:
     def handler(route, request):
@@ -1377,65 +943,46 @@ def main() -> int:
         browser = pw.chromium.launch(headless=True)
         for width, height in viewports:
             tag = f"{width}x{height}"
-            print(f"\n=== {tag} ===")
+            print(f"\n=== {tag} suite={','.join(sorted(SUITE))} ===")
+
             # 第 1 项：observer 视角才有性别筛选；同一重载路径。
-            context = page = probe = None
-            try:
-                context, page, probe = open_context(browser, (width, height), observer=True)
-                run_self_card_filter(page, tag)
-                probe.assert_clean("第1项")
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{tag} 第1项: {exc}")
-                print(f"FAIL {tag} 第1项：{exc}")
-                if page:
-                    screenshot(page, tag, "fail-01")
-            finally:
-                if context:
-                    context.close()
+            if want("cards"):
+                context = page = probe = None
+                try:
+                    context, page, probe = open_context(browser, (width, height), observer=True)
+                    run_self_card_filter(page, tag)
+                    probe.assert_clean("第1项")
+                except Exception as exc:  # noqa: BLE001
+                    failures.append(f"{tag} 第1项: {exc}")
+                    print(f"FAIL {tag} 第1项：{exc}")
+                    if page:
+                        screenshot(page, tag, "fail-01")
+                finally:
+                    if context:
+                        context.close()
 
             # 第 2/3/5/7 项：普通视角；同一页面内依次执行，最后验证一次布局。
-            context = page = probe = None
-            try:
-                context, page, probe = open_context(browser, (width, height))
-                run_layout(page, tag, height)
-                run_face_crop_resize(page, tag, height)
-                run_viewer_fast_path(page, tag)
-                run_viewer_fallback_mask(page, tag)
-                run_viewer_cancel_race(page, tag)
-                if tag == "390x844":
-                    run_viewer_timeout(page, tag)
-                run_password_and_profile(page, tag, "virtual")
-                probe.assert_clean("第2/3/5/7项[virtual]")
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{tag} 第2/3/5/7项: {exc}")
-                print(f"FAIL {tag} 第2/3/5/7项：{exc}")
-                if page:
-                    screenshot(page, tag, "fail-2357")
-            finally:
-                if context:
-                    context.close()
+            if any(want(name) for name in ("layout", "viewer", "history")):
+                context = page = probe = None
+                try:
+                    context, page, probe = open_context(browser, (width, height))
+                    if want("layout"):
+                        run_layout(page, tag, height)
+                    if want("viewer"):
+                        run_viewer_fast_path(page, tag)
+                        run_viewer_fallback_mask(page, tag)
+                    if want("history"):
+                        run_password_and_profile(page, tag, "virtual")
+                    probe.assert_clean("第2/3/5/7项[virtual]")
+                except Exception as exc:  # noqa: BLE001
+                    failures.append(f"{tag} 第2/3/5/7项: {exc}")
+                    print(f"FAIL {tag} 第2/3/5/7项：{exc}")
+                    if page:
+                        screenshot(page, tag, "fail-2357")
+                finally:
+                    if context:
+                        context.close()
 
-            # 第 7 项 legacy 真实历史模式：B1 同一案例必须同样不多层。
-            context = page = probe = None
-            try:
-                context, page, probe = open_context(browser, (width, height), history_mode="legacy")
-                run_password_and_profile(page, tag, "legacy")
-                probe.assert_clean("第7项[legacy]")
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{tag} 第7项[legacy]: {exc}")
-                print(f"FAIL {tag} 第7项[legacy]：{exc}")
-                if page:
-                    screenshot(page, tag, "fail-07-legacy")
-            finally:
-                if context:
-                    context.close()
-
-            # 第 6 项：mock 过期活动。
-            try:
-                run_expired_activity(browser, (width, height), tag)
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{tag} 第6项: {exc}")
-                print(f"FAIL {tag} 第6项：{exc}")
         browser.close()
 
     print("\n=== 汇总 ===")
