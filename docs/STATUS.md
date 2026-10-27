@@ -77,8 +77,8 @@ sources:
 
 - 更新日期：2026-10-27
 - 维护者：项目维护者
-- 下一更新点：PM 在 Android Via 真机复验虚拟历史栈、Android Kiwi/荣耀复验本批可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-ad1f2c1`（代码 `4fdcc38`：改密页闪现修复 + assetVersion 17，migration 10）；
+- 下一更新点：PM 在 Android Via/Kiwi/荣耀真机复验虚拟历史栈与可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
+- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-d5bbe5b`（代码 `d5bbe5b`：用户端报障批次 + 活动按时间结束 + assetVersion 20，migration 10 不变）；
   生产 `app.nantou.love` 未切换。
 
 ## 1. 阶段
@@ -103,10 +103,10 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 | 项目 | 值 |
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
-| 部署 HEAD（代码） | `4fdcc38`（改密页进入闪现修复，assetVersion 17；docs 记录 `ad1f2c1`） |
-| `deployed.sha` | `ad1f2c1`（= 部署 tip；docs-only 提交只推进标记、不重启） |
-| `/healthz` version | `staging-ad1f2c1` |
-| `server.prev`（回滚目标） | 旧 `staging-c62c163` binary，sha256 `2d58e11a671e2cb0…` |
+| 部署 HEAD（代码） | `d5bbe5b`（用户端报障批次 + 活动按时间结束，assetVersion 20；2026-10-27 11:17:46 自动部署） |
+| `deployed.sha` | `d5bbe5b`（= 部署 tip；docs-only 提交只推进标记、不重启） |
+| `/healthz` version | `staging-d5bbe5b` |
+| `server.prev`（回滚目标） | 旧 `staging-ad1f2c1` binary，sha256 `b51f5022ce253a32…` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用；本次无 migration） |
 | 虚拟历史栈（2026-10-27） | 已部署 `c62c163`：默认 virtual（`?history=legacy` / localStorage 可回退）；assetVersion 16；`no_history_smoke` 390/1280 各 19/19 PASS；启动哨兵 1 次、硬件返回每次 1 次重压；7 smoke + tab_first_load + hero + 授权矩阵 PASS；Via 真机进度条待 PM 复验 |
 | 批次10 | 已部署（前序 `staging-0f14252`）：渐进启动、照片授权、assetVersion 15、likes 立即预取；7 smoke + tab + 授权矩阵 16/16 PASS |
@@ -348,10 +348,10 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   证据：`.team/reviews/2026-10-27-password-flash.md`、`.team/perf/password-flash-report.md`。
 - 回滚：`git revert 4fdcc38`（仅前端生成物与 assetVersion）。
 
-### 2026-10-27 用户端报障批次（本地实现，待独立 Review / 合并 / 部署）
+### 2026-10-27 用户端报障批次（已部署 staging-d5bbe5b）
 
-- 批次范围：PM 报障 7 项（前端 1/2/3/5/6/7，第 4 项只查证不改）。本批**未 push、未部署、未重启 staging**；
-  本地 main 提交后交 Reviewer 审 integrated diff。
+- 批次范围：PM 报障 7 项（前端 1/2/3/5/6/7，第 4 项只查证不改）。该批与活动按时间结束后端契约合并为
+  `d5bbe5b` 单提交（Reviewer PASS，tree `08e589ea…`），2026-10-27 11:17:46 自动部署 staging。
 - 1 筛选后本人卡：`/legacy/api/home` 的本人卡缓存在 `selfCard`；清除筛选/无筛选 offset=0 时放回首位，
   筛选期间不出现；牌堆改走「含本人卡」的本地全序（请求 offset-1、首屏 limit 49、total+1），
   覆盖 `loadCards`、`loadMoreCards`、`loadPageAt`、`loadPrevPage`、版本重建与 `trimCardsWindow`；
@@ -395,8 +395,14 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   （virtual + legacy 两种历史模式；第5项含遮罩遮挡/取消/可交互，第7项含双返回与改密）；
   `no_history_smoke` 390x844 / 1280x900 各 19/19 PASS。证据目录 `/tmp/opencode/user-reported-bugs-20261027`
   （团队临时 artifact，未提交）。
-- 状态：**本地完成，未 push、未部署**。部署前 staging 旧代码基线（390x844，CPU×4/1.6Mbps/150ms，N=3）：
-  冷 FCP/LCP **1328/2012ms**、暖 **620/640ms**、CLS 0、315,581B/19（冷）；新代码部署后需按同口径复测 P95 再判退化。
+- 部署：`/healthz=staging-d5bbe5b`、`deployed.sha=d5bbe5b`、`bin/server.prev=staging-ad1f2c1`；migration 10/10 不变。
+  部署后真实链路 smoke：`user_reported_bugs_20261027.py` 双视口 **18/18 PASS**；`no_history_smoke` 390/1280
+  **ALL PASS（各 1 项自助签到 SKIP：当前账号无开放签到活动）**；`tab_scroll_smoke` PASS；匿名 `/`、`/login` 200，
+  顶层 `/admin`（已登录 document）303 `/?admin=1`，直连 origin 403；assetVersion 20 全链；nginx 5xx 0、app
+  `level=ERROR/WARN` 0。活动 A-0016「验收演示·分组」status=已结束、can_signup=false、can_self_signin=false；
+  启动任务 `ended activities closed count=4`。
+- 部署前 staging 旧代码 LCP 基线（390x844，CPU×4/1.6Mbps/150ms，N=3）：冷 FCP/LCP **1328/2012ms**、
+  暖 **620/640ms**、CLS 0、315,581B/19（冷）；新代码部署后需按同口径复测 P95 再判退化。
 - 回滚：`git revert <本批提交>`（前端静态生成物 + assetVersion + 后端活动状态派生/关闭任务；无 schema 变更；
   到期落库仅把已过 end_at 的活动置为已结束，回滚 binary 不恢复已落库状态）。
 
