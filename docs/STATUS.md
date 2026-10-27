@@ -510,3 +510,10 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - **追加（首次 tab 无「加载中」）**：应用挂载后等 LCP 条目出现再 idle 预取（likes 优先）likes/home/profile/detail/group chunk；tabbar 守卫在 chunk 未就绪时保留当前页等待（4s 超时），`page-host` 改为无文字骨架，cards/home 数据加载态仅转圈。新增 `tools/browser/tab_first_load_smoke.py`：首次四 tab、快速连点、回退、深链 `#/likes`、管理台 iframe 全 PASS；`加载中` 文本 0 次、CLS noInput 0.0000。**慢机 N=10 复测（最终）**：冷 FCP/LCP 614/1144ms（P95 1396）、热 448/482ms（P95 592，max 592）、CLS 0；冷/热均达 ≤2.5s/≤1.2s（热 P95 592≤1320）。共享 media 修复 + hero 去 opacity 过渡 + bootstrap cards 20→3 + LCP 后预取共同生效。本地 430,741B/20；edge 估算 289,475+43.5KB≈333KB≤350KB。
 - **staging edge 基线（部署前，`staging-30e4b96`，同慢机 N=5）**：冷 FCP/LCP **1948/3264ms**、最长 1530ms、289,475B/15；热 **1284/2348ms**、最长 961ms、7,414B/16。新代码尚未部署到 staging，edge 后值需部署后由 Auditor 复测；本批最终本地慢机冷 LCP 中位 1144ms（P95 1396）、热 482ms（P95 592），均达目标。
 - **已知限制/待审**：grant 为进程内内存，多实例部署需共享 grant 或 HMAC 签名 URL；进程重启后首次图片请求可能回落关系 SQL/404（浏览器已缓存图片不受影响）。`/profile/photo` 对陌生人由原「可浏览即可取」改为 404 属预期行为变化。staging 部署前仍需独立 Reviewer + security-gate/Auditor；生产未授权。
+
+## Agent 快速路径（2026-10-27）
+
+- `make fast` 每次 edit 后跑受影响检查；`make ci` 每 commit 一次；本机不跑 race（CI 全量覆盖）。
+- `make smoke-fast` 在 server1 跑 cards/layout/viewer fast+fallback/history virtual 双视口，实测约 43–60s；`make smoke-full` 只保留 mobile 两档。
+- `make deploy-wait` 一个阻塞命令等 CI + healthz；`make review-packet` 生成 Reviewer 清单。
+- 已删除低收益常跑回归：face crop、expired activity UI、viewer 10s timeout、100/300ms race、legacy history、1280 全套；风险见 `.team/decisions.md`。
