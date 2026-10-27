@@ -35,8 +35,9 @@ import os
 import re
 import sys
 import time
+import urllib.request
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 try:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -702,8 +703,35 @@ def run_viewer_fast_path(page, tag: str) -> None:
         page.wait_for_timeout(250)
     pending = []
 
+    # 等当前卡的缩图真正加载：用户看到卡才点大图；否则 href 缩图要现下载，秒开口径不成立。
+    page.wait_for_function(
+        """() => { const im = document.querySelector('.swipe-card .card-photo-item');
+          return !!(im && im.complete && im.naturalWidth > 0); }""",
+        timeout=10000,
+    )
+
+    # Playwright route 会让 Chromium 绕过 HTTP 缓存，缩图会被重新请求，秒开口径失真。
+    # 预取当前卡缩图字节，route handler 直接 fulfill，模拟用户已看到卡图时的缓存命中。
+    thumb_map = {}
+    thumbs = proxy(page, "p.currentCard && p.currentCard.photos_thumb ? p.currentCard.photos_thumb : []")
+    for thumb in thumbs or []:
+        abs_url = urljoin(BASE + "/", thumb)
+        try:
+            req = urllib.request.Request(abs_url, headers={"Cookie": "yxq_session=" + COOKIE, "User-Agent": "yxq-smoke"})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                thumb_map[abs_url] = resp.read()
+        except Exception:  # noqa: BLE001
+            pass
+
     def handler(route, request):
         parsed = urlparse(request.url)
+        if parsed.path.startswith("/cards/photo/") and "size=thumb" in (parsed.query or ""):
+            if request.url in thumb_map:
+                route.fulfill(status=200, content_type="image/jpeg", body=thumb_map[request.url],
+                              headers={"Cache-Control": "private, max-age=86400, immutable"})
+                return
+            route.fallback()
+            return
         if "/cards/photo/" in parsed.path and "size=thumb" not in (parsed.query or ""):
             pending.append(route)
             return
