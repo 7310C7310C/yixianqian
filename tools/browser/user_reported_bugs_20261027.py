@@ -809,6 +809,23 @@ def run_viewer_fallback_timeout(page, tag: str) -> None:
             timeout=8000,
         )
         assert_no_viewer_indicator(page, tag)
+        # 重新打开验证完成后必须关闭：查看器全屏拦截 pointer events，
+        # 留着会把后续「我的」tab 点击挡在 .pswp__item 下（smoke-fast 假失败）。
+        # PhotoSwipe 在 opening 动画结束前 close() 是 no-op，先等 opener.isOpen。
+        page.wait_for_function(
+            "() => window.pswp && window.pswp.opener && window.pswp.opener.isOpen === true",
+            timeout=8000,
+        )
+        close_btn = page.locator(".pswp__button--close").first
+        if not close_btn.is_visible():
+            raise Failure("第5项 fallback 重新打开后关闭按钮不可见")
+        close_btn.click(timeout=5000)
+        page.wait_for_function(
+            "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer) && "
+            "(() => { const p = document.querySelector('.pswp'); "
+            "return !p || getComputedStyle(p).display === 'none'; })()",
+            timeout=8000,
+        )
         print(f"PASS {tag} 第5项fallback：无缩图时无加载指示、10s timeout 取消、取消后可重新打开")
     finally:
         for route in pending:
