@@ -366,12 +366,25 @@ func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Requ
 		a.legacyPhotoUploadError(w, r, err)
 		return
 	}
+	// v1 语义（决策 44）：验证并写入 media 后、附加资料照片（进而腾讯判定）
+	// 之前取 1 次；超限时把本次已写入的 media/对象一并删除后回 429。
+	if a.cfg.PhotoDailyLimit > 0 {
+		allowed, _, qerr := a.db.TakePhotoQuota(r.Context(), user.ID,
+			a.photoQuotaDay(a.clock.Now()), 1, a.cfg.PhotoDailyLimit)
+		if qerr != nil {
+			a.discardMedia(r, user.ID, saved.ID)
+			legacyServerError(a, w, r, qerr, "legacy profile photo quota failed")
+			return
+		}
+		if !allowed {
+			a.discardMedia(r, user.ID, saved.ID)
+			legacyErrorCode(w, http.StatusTooManyRequests, "photo_daily_limit", a.photoQuotaMessage())
+			return
+		}
+	}
 	photo, err := a.db.AddProfilePhoto(r.Context(), user.ID, saved.ID)
 	if err != nil {
-		if m, removed, derr := a.db.RemoveMediaOwned(r.Context(), user.ID, saved.ID); derr == nil && removed {
-			a.removeObject(r, m.ID, m.ObjectKey)
-			a.removeObject(r, m.ID, m.ThumbKey)
-		}
+		a.discardMedia(r, user.ID, saved.ID)
 		if errors.Is(err, db.ErrPhotoLimit) {
 			legacyError(w, http.StatusBadRequest,
 				fmt.Sprintf("最多只能上传 %d 张照片", db.MaxProfilePhotos))

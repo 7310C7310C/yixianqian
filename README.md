@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-28
 sources:
   - go.mod
 -->
@@ -186,6 +186,7 @@ go run ./cmd/token -phone 13900000000 -name 王小明
 - 用户照片与活动海报均为私有媒体；读取必须经过应用鉴权，不能把对象存储 URL 暴露给浏览器。
 - 上传图片在服务端校验后重编码：原图与缩图都不含 EXIF/GPS/XMP/文本元数据，并按 EXIF 方向自动校正（JPEG/PNG 均处理）。
 - 上传上限：单张 10 MiB、单边 8000px、12.5 MP（iPhone 常见的 4032×3024=12,192,768 像素可通过）、并发 1；HEIC/HEIF 返回 400，并提示先在相册转 JPEG 或关闭「高效」。nginx 请求体上限 `96m` 覆盖注册表单理论上限 `9*10MiB+2MiB=92MiB`。
+- 照片每日配额（决策 44）：每账号每自然日最多 `PHOTO_DAILY_LIMIT` 张（默认 10，`0` 关闭），日界用 `PHOTO_QUOTA_TZ`（默认 `Asia/Shanghai`）而非服务器本地时区；超限返回 429「今日上传照片次数已达上限（N 次），请明天再试」。注册按一次提交的照片张数一次性计入，额度不足不建立账号；删除照片不返还当日额度。
 - 可选的照片内容合规：`TENCENT_FACE_ENABLED=true` 时，上传照片会压到最长边 1080 的 JPEG 后调用腾讯云
   （tiia 图像标签 + iai 静默活体）；命中动物/卡通且活体判定无人脸时 `has_face=false`（照片仍可上传）。
   默认关闭；异常一律放行。凭证只放 env，成本与回滚见 `docs/runbooks/staging.md`，取舍见 `docs/DECISIONS.md` 决策 41。

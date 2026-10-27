@@ -91,6 +91,19 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	if cfg.MediaMaxDim <= 0 {
 		cfg.MediaMaxDim = media.DefaultMaxDimension
 	}
+	// 照片配额日界时区：Load() 已校验；直接构造 Config 的测试/工具也走同一
+	// 默认与校验，非法值直接拒绝启动（决策 44）。
+	if cfg.PhotoQuotaLocation == nil {
+		name := cfg.PhotoQuotaTZ
+		if name == "" {
+			name = "Asia/Shanghai"
+		}
+		loc, err := time.LoadLocation(name)
+		if err != nil {
+			return nil, fmt.Errorf("httpserver: photo quota timezone %q: %w", name, err)
+		}
+		cfg.PhotoQuotaLocation = loc
+	}
 	tpl, err := LoadTemplates()
 	if err != nil {
 		return nil, err

@@ -107,7 +107,7 @@ func run() error {
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 	}
 
-	go cleanupLoop(ctx, database, logger)
+	go cleanupLoop(ctx, database, logger, cfg)
 	go inviteLoop(ctx, database, logger)
 	go recommendLoop(ctx, database, logger)
 	go mutualWechatLoop(ctx, database, logger)
@@ -240,7 +240,7 @@ func mutualWechatLoop(ctx context.Context, database *db.DB, logger *slog.Logger)
 	}
 }
 
-func cleanupLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
+func cleanupLoop(ctx context.Context, database *db.DB, logger *slog.Logger, cfg config.Config) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 
@@ -248,6 +248,13 @@ func cleanupLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
 		cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		closeEndedActivities(cleanupCtx, database, logger)
+		// 照片配额只保留今天+昨天（v1 prune_days 语义，决策 44）。
+		cutoff := photoQuotaCutoff(time.Now(), cfg.PhotoQuotaLocation)
+		if rows, err := database.PrunePhotoQuota(cleanupCtx, cutoff); err != nil {
+			logger.Warn("photo quota prune failed", "error", err)
+		} else if rows > 0 {
+			logger.Info("photo quota pruned", "rows", rows)
+		}
 		sessions, tokens, err := database.CleanupExpired(cleanupCtx)
 		if err != nil {
 			logger.Warn("expired row cleanup failed", "error", err)
@@ -266,6 +273,17 @@ func cleanupLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
 			run()
 		}
 	}
+}
+
+// photoQuotaCutoff returns yesterday's local midnight in the quota timezone, so
+// pruning keeps today and yesterday exactly like v1's prune_days.
+func photoQuotaCutoff(now time.Time, loc *time.Location) time.Time {
+	if loc == nil {
+		loc = time.UTC
+	}
+	t := now.In(loc)
+	today := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
+	return today.AddDate(0, 0, -1)
 }
 
 // closeEndedActivities 把已过 end_at 的「报名中/已满员」活动落库为「已结束」。

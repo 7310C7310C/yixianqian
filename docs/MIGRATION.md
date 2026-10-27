@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-26
+last_verified: 2026-10-28
 sources:
   - migrations/**
   - tools/migrate_testapp.py
@@ -79,6 +79,11 @@ sources:
   `profile_photos(media_id)`（单图按 media_id 取行，缺少时全表扫）、`likes(target_id,initiator_id)`（反向喜欢）、
   `signups(activity_id,user_id)`（同活动）、`messages(author_id,target_user_id)`（消息对手方）。
   staging 克隆 EXPLAIN：单图授权 14.3ms → 1.9ms。回滚不删索引（旧 binary 不读也不受影响）。
+- **照片每日配额（决策 44）**：`0011_photo_upload_daily.sql` 只新增 `photo_upload_daily(user_id, day, used)`，
+  主键 `(user_id, day)`、`user_id` 级联删除；不改既有表与数据。计数是单条
+  `INSERT … ON CONFLICT … DO UPDATE … WHERE used+n<=limit RETURNING used`，并发不超限；
+  `cleanupLoop` 每小时删除早于「昨天」的行（v1 prune 语义）。回滚 binary 后旧版本不读该表，
+  无需回滚 schema；如需清理只能手工 drop table（数据为派生计数，可接受丢失）。
 
 ## 4. 工具
 

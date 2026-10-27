@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-27
+last_verified: 2026-10-28
 sources:
   - deploy/**
   - .env.example
@@ -211,6 +211,7 @@ nginx -t && systemctl reload nginx
 - 媒体上限（应用默认）：`MEDIA_MAX_BYTES=10MiB`、`MEDIA_MAX_PIXELS=12_500_000`、`MEDIA_MAX_DIMENSION=8000`、`MAX_CONCURRENT_MEDIA=1`。12.5MP 覆盖 iPhone 12MP（4032×3024=12,192,768）；更高像素或 HEIC/HEIF 返回 400（提示转 JPEG）。改任一上限需同步 nginx 与注册页文案。
 - 上传原图在服务端重编码：去 EXIF/GPS/XMP/文本元数据并按 EXIF 方向校正，缩图同样；迁移导入的历史原图未批量重写（见 `docs/MIGRATION.md`）。
 - 部署本版本前检查 `/opt/yixianqian-next/config/staging.env`：若仍显式设置 `MEDIA_MAX_PIXELS=12000000`（或 `13000000`），改为 `12500000` 或删除该行以采用新默认，否则 12MP iPhone 原图仍会被拒。
+- 照片每日配额（2026-10-28，决策 44）：`PHOTO_DAILY_LIMIT` 默认 10 张/账号/自然日，`0` 关闭；`PHOTO_QUOTA_TZ` 默认 `Asia/Shanghai`，非法值启动失败（不用服务器本地时区）。staging.env 不设即用默认；临时关闭只改 `PHOTO_DAILY_LIMIT=0` 并重启。部署本版本会新增 migration `0011_photo_upload_daily`（只增表，不改既有数据）；回滚 binary 不需要回滚 schema，旧版本忽略该表。
 - 请求体上限必须两端一致：理论值 `9*10MiB+2MiB=92MiB`，向上取整为 `96m` 留 multipart 余量：
 
 ```bash

@@ -44,6 +44,10 @@ func setupActivitiesHTTPEnv(t *testing.T, mutate func(*config.Config)) *profileH
 
 func setupActivitiesHTTPEnvWithOptions(t *testing.T, mutate func(*config.Config), opts ...db.OpenOption) *profileHTTPEnv {
 	t.Helper()
+	// 注册限流器是进程级全局变量；多个注册场景共用 127.0.0.1，若不重置，
+	// 包内测试顺序会耗尽 10 次/小时的 IP 预算并让后面的用例误收 429。
+	registerIPLimiter = auth.NewLimiter(10, time.Hour)
+	registerPhoneLimiter = auth.NewLimiter(5, 15*time.Minute)
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")

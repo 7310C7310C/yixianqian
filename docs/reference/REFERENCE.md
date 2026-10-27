@@ -253,6 +253,8 @@ sources: []
 | `MEDIA_MAX_DIMENSION` | 是 | 是 |
 | `MEDIA_MAX_PIXELS` | 是 | 是 |
 | `MEDIA_THUMB_SIZE` | 是 | 是 |
+| `PHOTO_DAILY_LIMIT` | 是 | 是 |
+| `PHOTO_QUOTA_TZ` | 是 | 是 |
 | `R2_ACCESS_KEY_ID` | 是 | 是 |
 | `R2_BUCKET` | 是 | 是 |
 | `R2_ENDPOINT` | 是 | 是 |
@@ -291,6 +293,7 @@ sources: []
 | 0008 | `0008_perf_indexes.sql` | 性能批次1：卡片页/通知热路径索引。只增不改、不改数据。 |
 | 0009 | `0009_perf_indexes_b7.sql` | 性能批次7：按 EXPLAIN 证据补通知/赞美/留言/报名热路径索引。 |
 | 0010 | `0010_photo_authz_indexes.sql` | 批次10：跨用户照片授权（/cards/photo、/profile/photo）的索引。 |
+| 0011 | `0011_photo_upload_daily.sql` | 照片上传每日配额（PM 2026-10-28，决策 44）：每账号每自然日最多 N 张。 |
 
 ## 6. make targets
 
@@ -364,6 +367,6 @@ sources: []
 | `docs/DECISIONS.md` | — |
 | `docs/MIGRATION.md` | `migrations/**`, `tools/migrate_testapp.py` |
 | `docs/PROJECT_CHARTER.md` | — |
-| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/activities_view.go`, `internal/httpserver/activities_routes.go`, `internal/httpserver/handlers_home.go`, `web/templates/layout.tmpl`, `web/templates/pages/home.tmpl`, `web/static/home.css`, `web/static/home.js`, `web/static/auth.css`, `web/static/public-copy.js`, `web/static/register.js`, `web/static/legacy/index.html`, `internal/httpserver/social_pages.go`, `internal/httpserver/register_pages.go`, `internal/db/activities.go`, `internal/db/grouping.go`, `internal/db/profile.go`, `internal/tencentface/**`, `.env.example` |
+| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/activities_view.go`, `internal/httpserver/activities_routes.go`, `internal/httpserver/handlers_home.go`, `web/templates/layout.tmpl`, `web/templates/pages/home.tmpl`, `web/static/home.css`, `web/static/home.js`, `web/static/auth.css`, `web/static/public-copy.js`, `web/static/register.js`, `web/static/legacy/index.html`, `internal/httpserver/social_pages.go`, `internal/httpserver/register_pages.go`, `internal/db/activities.go`, `internal/db/grouping.go`, `internal/db/profile.go`, `internal/db/photo_quota.go`, `internal/httpserver/photo_quota.go`, `internal/config/config.go`, `internal/tencentface/**`, `.env.example` |
 | `docs/product-spec.md` | — |
 | `docs/runbooks/staging.md` | `deploy/**`, `.env.example`, `migrations/**`, `.github/workflows/ci.yml`, `internal/tencentface/**`, `internal/face/**`, `cmd/facebackfill/main.go`, `cmd/facebackfill/main_guard.go` |

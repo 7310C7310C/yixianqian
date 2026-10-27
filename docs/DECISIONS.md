@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-27
+last_verified: 2026-10-28
 sources: []
 -->
 
@@ -669,3 +669,46 @@ sources: []
   移除 `sign.go` 的 `.UTC()` 后必红（m1）。
 - 回滚：`git revert` 本提交即可，无 schema、无 env、无数据变化；部署后如需临时绕过守卫，
   只能显式设 `TENCENT_FACE_BACKFILL=true` 并配置凭证（不要改二进制）。
+
+## 44. 照片上传每账号每自然日配额（2026-10-28，PM 1B + 2A）
+
+- 背景：v1 用 `lib/photo_quota.py` 限制每用户每自然日 `PHOTO_DAILY_LIMIT`（默认 10）次上传，
+  v2 独立网页版没有该限制；PM 要求补齐，同时确认腾讯云照片合规判定**维持同步**，不做背景批次。
+- 决策（PM 2026-10-28）：
+  1. 腾讯云「图像标签 + 静默活体」判定保持现有同步流程（决策 41 不变），不新增队列/jobs 表。
+  2. 新增照片上传每日配额（v1 2A）：每账号每自然日最多 `PHOTO_DAILY_LIMIT` 张（默认 10），跨自然日重置。
+  3. 生产切换与隐私告知仍未授权；本批只做 staging，不改 `staging.env`、不部署生产、不动 v1。
+- 语义（照抄 v1，可调参数）：
+  - 超限 HTTP **429**；legacy JSON 沿用 `{"error": <消息>, "code": "photo_daily_limit"}`，
+    消息「今日上传照片次数已达上限（N 次），请明天再试」（N=当前配置）。
+  - 计数时机：单张上传在图片格式/压缩验证并写入 media **之后**、`AddProfilePhoto`（进而腾讯判定）
+    **之前**取 1 次；被腾讯拦下或后续存储失败不返还。封面、删除、管理台不计数；删除旧照片不返还。
+  - 注册：先验证/重编码全部照片（格式/像素/数量），再按提交张数 N **一次性**计入；额度不足时
+    整笔事务回滚，不建立 user/media（禁止部分建立）。POST 错误页保留已填表单值。
+  - `PHOTO_DAILY_LIMIT=0` 关闭限制；负数或非数字启动报错。日界由 `PHOTO_QUOTA_TZ`
+    （默认 `Asia/Shanghai`，`time.LoadLocation` 校验，非法值启动报错）决定，不使用服务器本地时区；
+    `internal/config` 内嵌 `time/tzdata`，不依赖部署机 tzdata。
+- 实现：
+  - `migrations/0011_photo_upload_daily.sql`：只新增 `photo_upload_daily(user_id, day, used)`，
+    主键 `(user_id, day)`、`used>=0`、`user_id` 级联删除。
+  - `db.TakePhotoQuota` 用单条
+    `INSERT … SELECT … WHERE n<=limit ON CONFLICT (user_id,day) DO UPDATE SET used=used+n WHERE used+n<=limit RETURNING used`；
+    并发由主键行锁串行化，拒绝时 `used` 不增量。`limit<=0` 不限制且不写行。
+  - 注册走新增的 `db.CreateRegisteredUserWithQuota`：同一事务内建 user + credential + 取 N 次配额，
+    拒绝返回 `ErrPhotoDailyLimit` 并整体回滚。照片先重编码到私有临时目录（`os.MkdirTemp`），
+    避免 9 张 12.5MP 照片同时驻留内存（systemd `MemoryMax=768M`）。
+  - 配额行按 v1 `prune_days` 语义在 `cleanupLoop` 每小时删除早于「昨天」（配额时区）的行。
+- 边界/注记：不改腾讯判定/同步流程；不改 `/register` 扫描契约与 `web/**`（429 文案仍经
+  `renderRegister` 的 ASCII 文案目录注入）；不改封面/删除语义。v2 资料照片上限为 9
+  （`db.MaxProfilePhotos`），因此「注册 9 张后同日再补」必须先删照片腾出资料位；删除不返还配额，
+  测试用「注册 9 → 删 1 → 补 1（第 10 次）→ 删 1 → 再补 1（429）」覆盖 10/日边界。
+- 残余风险：注册在取配额后若 R2/DB 保存失败，该次配额不返还（与 v1「存储失败仍计一次」一致）；
+  时区配置变更只影响之后写入的 `day` 行；多实例并发由单条 upsert 保证，不依赖进程内状态。
+- 证据：`make fast`/`make ci`/`make perf-budget`（19 passed）全绿；`internal/db` 新集成测试覆盖
+  10 次入账/第 11 次拒绝且 used 不增、20 goroutine 只放行 10、跨日重置、limit=0 不写行、级联删除、
+  注册事务回滚与 prune；`internal/httpserver` 新集成测试覆盖单张 429 `photo_daily_limit`、
+  注册 9 张→删 1→补 1（第 10 次）→删 1→再补 1（429）、注册额度不足 429 且 users/media 0 增长、
+  上海时区 00:00 跨日；新建库上 `make test-integration` 全 PASS。EXPLAIN (ANALYZE, BUFFERS)：
+  `Insert on photo_upload_daily`、`Conflict Arbiter Indexes: photo_upload_daily_pkey`，
+  首次 1.065ms / 冲突更新 0.618ms，无 Seq Scan。
+- 回滚：`git revert` 本提交即可；0011 只增表，回滚 binary 不需要回滚 schema，旧版本忽略该表。

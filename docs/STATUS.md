@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-27
+last_verified: 2026-10-28
 sources:
   - cmd/**
   - migrations/**
@@ -26,16 +26,42 @@ sources:
   - internal/db/activities.go
   - internal/db/grouping.go
   - internal/db/profile.go
+  - internal/db/photo_quota.go
+  - internal/httpserver/photo_quota.go
+  - internal/config/config.go
   - internal/tencentface/**
   - .env.example
 -->
 
-- 更新日期：2026-10-27
+- 更新日期：2026-10-28
 - 维护者：项目维护者
 - 下一更新点：PM 在 Android Via/Kiwi/荣耀真机复验虚拟历史栈与可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
 - 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-aab3bb5`（代码 `aab3bb5`：腾讯云照片合规判定接回，assetVersion 30，migration 10 不变；`/healthz` 2026-10-27T13:57Z）；
   生产 `app.nantou.love` 未切换。本地批次 2026-10-27c（welcome 合并 + 公开页扫描防护 + 大图全屏缩图）、
-  2026-10-27f（/register 表单扫描防护）与 2026-10-27g（facebackfill 守卫）已实现，**未 push、未部署**。
+  2026-10-27f（/register 表单扫描防护）、2026-10-27g（facebackfill 守卫）与 2026-10-28（照片每日配额）
+  已实现，**未 push、未部署**。
+
+## 2026-10-28 照片上传每日配额（本地实现，待部署）
+
+- 触发：PM 2026-10-28 决定——腾讯判定维持同步（1B），补 v1 的每账号每自然日 10 张照片上限（2A）；
+  生产切换/隐私告知未授权，本批只做 staging。决策见 `docs/DECISIONS.md` 44。
+- 实现：migration `0011_photo_upload_daily`（只增表）；`db.TakePhotoQuota` 单条 upsert 原子计数；
+  注册走 `db.CreateRegisteredUserWithQuota` 同事务建号+取 N 次，额度不足整笔回滚不建 user/media；
+  `/legacy/api/profile/photo`（含 `/api/profile/photo`）与资料上传在 media 写入后、腾讯判定前取 1 次，
+  超限删已写 media/对象并回 429 `photo_daily_limit`；`PHOTO_DAILY_LIMIT`（默认 10，0 关闭）与
+  `PHOTO_QUOTA_TZ`（默认 Asia/Shanghai，非法启动失败）；`cleanupLoop` 每小时 prune 早于昨天的行。
+- 注记：v2 资料照片上限 9，注册 9 张后同日再补需先删照片腾位；删除不返还配额。
+- 证据：`make fast` PASS；`make ci` exit 0（fmt/docs/asset-version/perf-budget/vet/test/build）；`make perf-budget` 19 passed；
+  `go test ./internal/db -run 'TestIntegrationPhotoQuota|TestIntegrationCreateRegisteredUserWithQuota|TestIntegrationPrunePhotoQuota'`
+  与 `go test ./internal/httpserver -run 'TestIntegrationLegacyPhotoDailyQuota|TestIntegrationRegisterPhotoDailyQuota|TestIntegrationRegisterQuotaRejectsWithoutUser|TestIntegrationPhotoQuotaCrossesShanghaiMidnight'`
+  全 PASS（覆盖 10 次入账/第 11 次拒绝且 used 不变、20 goroutine 只放行 10、跨上海 00:00、注册 9 张后 429 回滚、`limit=0` 不限制）；
+  `TestPhotoQuotaDayUsesConfiguredTimezone`/`TestAppRejectsInvalidPhotoQuotaTimezone` 覆盖时区日界与非法 TZ 启动失败；
+  新建库 `yxq_quota_verify` 上 `make test-integration`：`internal/db` 9.551s、`internal/httpserver` 57.735s 全 PASS；
+  既有 register/legacy profile/腾讯门禁用例包含在内。EXPLAIN：`Insert on photo_upload_daily` +
+  `Conflict Arbiter Indexes: photo_upload_daily_pkey`，首次 1.065ms / 冲突更新 0.618ms，无 Seq Scan。
+  注：长期共享的 `yixianqian_test` 库存在历史 super_admin 残留，会让 `TestIntegrationAdminRBAC` 先红（与本批无关），
+  故集成门禁用新建库复核。
+- 状态：本地 commit，未 push、未部署；assetVersion 不变（无 `web/**` 改动）。
 
 ## 2026-10-27g facebackfill `-all` 守卫 + 合规回填 fail-fast（本地实现，待部署）
 

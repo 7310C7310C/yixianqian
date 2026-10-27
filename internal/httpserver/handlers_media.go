@@ -138,6 +138,22 @@ func (a *App) allowUpload(w http.ResponseWriter, r *http.Request, userID int64, 
 	return false
 }
 
+// discardMedia removes a media row and its stored objects after an upload is
+// rejected post-write (daily quota, attach failure). Shared by the profile and
+// legacy upload handlers so the object keys are always purged together.
+func (a *App) discardMedia(r *http.Request, userID int64, mediaID string) {
+	m, removed, err := a.db.RemoveMediaOwned(r.Context(), userID, mediaID)
+	if err != nil {
+		a.logger(r).Warn("remove rejected media failed", "error", err, "user_id", userID, "media_id", mediaID)
+		return
+	}
+	if !removed {
+		return
+	}
+	a.removeObject(r, m.ID, m.ObjectKey)
+	a.removeObject(r, m.ID, m.ThumbKey)
+}
+
 func (a *App) receiveUpload(r *http.Request, user db.User) (db.Media, error) {
 	return a.receiveUploadField(r, user, "file")
 }

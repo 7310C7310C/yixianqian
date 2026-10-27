@@ -99,6 +99,48 @@ func (d *DB) CreateRegisteredUser(ctx context.Context, p RegisterParams) (User, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	u, err := insertRegisteredUserTx(ctx, tx, p)
+	if err != nil {
+		return User{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return User{}, fmt.Errorf("db: commit registration: %w", err)
+	}
+	return u, nil
+}
+
+// CreateRegisteredUserWithQuota creates the account, its first credential and
+// the photo-quota reservation in one transaction. When the daily quota cannot
+// cover photos, the whole transaction rolls back and no user row is committed;
+// callers get ErrPhotoDailyLimit. limit <= 0 disables the quota.
+func (d *DB) CreateRegisteredUserWithQuota(ctx context.Context, p RegisterParams,
+	day time.Time, photos, limit int) (User, error) {
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return User{}, fmt.Errorf("db: begin registration: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	u, err := insertRegisteredUserTx(ctx, tx, p)
+	if err != nil {
+		return User{}, err
+	}
+	allowed, _, err := takePhotoQuota(ctx, tx, u.ID, day, photos, limit)
+	if err != nil {
+		return User{}, err
+	}
+	if !allowed {
+		return User{}, ErrPhotoDailyLimit
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return User{}, fmt.Errorf("db: commit registration: %w", err)
+	}
+	return u, nil
+}
+
+// insertRegisteredUserTx writes the account row and its credential; the caller
+// owns the transaction and must commit it.
+func insertRegisteredUserTx(ctx context.Context, tx pgx.Tx, p RegisterParams) (User, error) {
 	u, err := scanUser(tx.QueryRow(ctx,
 		`INSERT INTO users (
 		   legacy_user_id, phone, name, nickname, gender, birthday, height_cm, education,
@@ -135,9 +177,6 @@ func (d *DB) CreateRegisteredUser(ctx context.Context, p RegisterParams) (User, 
 		`INSERT INTO auth_credentials (user_id, password_hash, algorithm)
 		 VALUES ($1, $2, 'argon2id')`, u.ID, p.PasswordHash); err != nil {
 		return User{}, mapWriteError(err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return User{}, fmt.Errorf("db: commit registration: %w", err)
 	}
 	return u, nil
 }

@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -159,7 +160,38 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		last4 = input.IDCard[len(input.IDCard)-4:]
 	}
 
-	user, err := a.db.CreateRegisteredUser(ctx, db.RegisterParams{
+	// 先把所有照片验证/重编码到临时目录，再在事务里建账号并一次取 N 次配额：
+	// 格式/像素有问题时不会建立 user；额度不足整笔回滚，不产生 user/media。
+	// 临时文件而非内存，避免 9 张 12.5MP 照片在 MemoryMax=768M 下单进程堆积。
+	if !a.acquireMedia(w, r, false) {
+		return
+	}
+	mediaReleased := false
+	releaseMedia := func() {
+		if !mediaReleased {
+			a.releaseMedia()
+			mediaReleased = true
+		}
+	}
+	defer releaseMedia()
+	stageDir, err := os.MkdirTemp("", "yxq-register-photos-*")
+	if err != nil {
+		a.logger(r).Error("create registration staging dir failed", "error", err)
+		a.renderRegister(w, r, http.StatusInternalServerError, values, "系统暂时无法处理，请稍后再试。")
+		return
+	}
+	defer func() { _ = os.RemoveAll(stageDir) }()
+	staged, err := a.stageRegistrationPhotos(photos, stageDir)
+	if err != nil {
+		status, message := registrationPhotoError(err)
+		if status >= 500 {
+			a.logger(r).Error("stage registration photos failed", "error", err)
+		}
+		a.renderRegister(w, r, status, values, message)
+		return
+	}
+
+	user, err := a.db.CreateRegisteredUserWithQuota(ctx, db.RegisterParams{
 		Phone:           input.Phone,
 		Name:            input.Name,
 		Nickname:        input.Nickname,
@@ -198,8 +230,11 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		IsForChild:      input.IsForChild,
 		ContactConsent:  true,
 		PasswordHash:    passwordHash,
-	})
+	}, a.photoQuotaDay(a.clock.Now()), len(staged), a.cfg.PhotoDailyLimit)
 	switch {
+	case errors.Is(err, db.ErrPhotoDailyLimit):
+		a.renderRegister(w, r, http.StatusTooManyRequests, values, a.photoQuotaMessage())
+		return
 	case errors.Is(err, db.ErrPhoneConflict):
 		a.renderRegister(w, r, http.StatusConflict, values, "此手机号码已注册，请直接登录或联系小天使。")
 		return
@@ -215,12 +250,8 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !a.acquireMedia(w, r, false) {
-		a.cleanupRegistration(r, user.ID)
-		return
-	}
-	mediaIDs, photoErr := a.saveRegistrationPhotos(ctx, user.ID, photos)
-	a.releaseMedia()
+	mediaIDs, photoErr := a.saveStagedRegistrationPhotos(ctx, user.ID, staged)
+	releaseMedia()
 	if photoErr != nil {
 		a.cleanupRegistration(r, user.ID)
 		status, message := registrationPhotoError(photoErr)
@@ -332,11 +363,27 @@ func registrationPhotoParts(files []*multipart.FileHeader) ([]*multipart.FileHea
 	return out, nil
 }
 
-// saveRegistrationPhotos 保存注册照片并返回 media ID 列表。调用方负责
-// mediaSem；本函数不运行 probe。
-func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []*multipart.FileHeader) ([]string, error) {
-	mediaIDs := make([]string, 0, len(files))
-	for _, header := range files {
+// stagedRegistrationPhoto is one validated, re-encoded registration photo
+// written to a private temp file before the account row exists. Staging to disk
+// keeps memory bounded when a submission carries up to nine 12.5MP photos
+// (systemd MemoryMax=768M) and lets quota failures roll back before any upload.
+type stagedRegistrationPhoto struct {
+	OriginalPath string
+	ThumbPath    string
+	ContentType  string
+	Width        int
+	Height       int
+	ByteSize     int64
+	ThumbSize    int64
+	Filename     string
+}
+
+// stageRegistrationPhotos validates every photo (format, HEIC, size, pixels)
+// and writes the re-encoded original + thumbnail into dir. Caller owns mediaSem
+// and dir cleanup; no database or object-store write happens here.
+func (a *App) stageRegistrationPhotos(files []*multipart.FileHeader, dir string) ([]stagedRegistrationPhoto, error) {
+	staged := make([]stagedRegistrationPhoto, 0, len(files))
+	for i, header := range files {
 		file, err := header.Open()
 		if err != nil {
 			return nil, fmt.Errorf("register: open photo: %w", err)
@@ -352,42 +399,75 @@ func (a *App) saveRegistrationPhotos(ctx context.Context, userID int64, files []
 		if int64(len(data)) > a.cfg.MediaMaxBytes {
 			return nil, media.ErrFileTooLarge
 		}
-
 		processed, err := media.ProcessWithLimits(data, a.cfg.MediaThumbSize,
 			a.cfg.MediaMaxDim, a.cfg.MediaMaxPixels)
 		if err != nil {
 			return nil, err
 		}
+		originalPath := fmt.Sprintf("%s/%d-original", dir, i+1)
+		thumbPath := fmt.Sprintf("%s/%d-thumb.jpg", dir, i+1)
+		if err := os.WriteFile(originalPath, processed.Original, 0o600); err != nil {
+			return nil, fmt.Errorf("register: stage original: %w", err)
+		}
+		if err := os.WriteFile(thumbPath, processed.Thumbnail, 0o600); err != nil {
+			return nil, fmt.Errorf("register: stage thumbnail: %w", err)
+		}
+		staged = append(staged, stagedRegistrationPhoto{
+			OriginalPath: originalPath,
+			ThumbPath:    thumbPath,
+			ContentType:  processed.ContentType,
+			Width:        processed.Width,
+			Height:       processed.Height,
+			ByteSize:     int64(len(processed.Original)),
+			ThumbSize:    int64(len(processed.Thumbnail)),
+			Filename:     header.Filename,
+		})
+	}
+	return staged, nil
+}
 
+// saveStagedRegistrationPhotos uploads staged photos and attaches them to the
+// profile, returning the media ID list. Caller owns mediaSem; no probe runs here.
+func (a *App) saveStagedRegistrationPhotos(ctx context.Context, userID int64, staged []stagedRegistrationPhoto) ([]string, error) {
+	mediaIDs := make([]string, 0, len(staged))
+	for _, item := range staged {
+		original, err := os.ReadFile(item.OriginalPath)
+		if err != nil {
+			return nil, fmt.Errorf("register: read staged photo: %w", err)
+		}
+		thumb, err := os.ReadFile(item.ThumbPath)
+		if err != nil {
+			return nil, fmt.Errorf("register: read staged thumbnail: %w", err)
+		}
 		id, err := platform.NewUUID()
 		if err != nil {
 			return nil, fmt.Errorf("register: generate media id: %w", err)
 		}
 		ext := "jpg"
-		if processed.ContentType == "image/png" {
+		if item.ContentType == "image/png" {
 			ext = "png"
 		}
 		key := fmt.Sprintf("media/%d/%s.%s", userID, id, ext)
 		thumbKey := fmt.Sprintf("media/%d/%s_thumb.jpg", userID, id)
 
-		if err := a.store.Put(ctx, key, processed.Original, processed.ContentType); err != nil {
+		if err := a.store.Put(ctx, key, original, item.ContentType); err != nil {
 			return nil, err
 		}
-		if err := a.store.Put(ctx, thumbKey, processed.Thumbnail, "image/jpeg"); err != nil {
+		if err := a.store.Put(ctx, thumbKey, thumb, "image/jpeg"); err != nil {
 			a.removeStoredObject(ctx, id, key)
 			return nil, err
 		}
 		saved, err := a.db.CreateMedia(ctx, db.Media{
 			ID:           id,
 			UserID:       userID,
-			OriginalName: sanitizeFilename(header.Filename),
+			OriginalName: sanitizeFilename(item.Filename),
 			ObjectKey:    key,
 			ThumbKey:     thumbKey,
-			ContentType:  processed.ContentType,
-			ByteSize:     int64(len(processed.Original)),
-			ThumbSize:    int64(len(processed.Thumbnail)),
-			Width:        processed.Width,
-			Height:       processed.Height,
+			ContentType:  item.ContentType,
+			ByteSize:     item.ByteSize,
+			ThumbSize:    item.ThumbSize,
+			Width:        item.Width,
+			Height:       item.Height,
 		})
 		if err != nil {
 			a.removeStoredObject(ctx, id, key)

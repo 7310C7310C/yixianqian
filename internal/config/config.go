@@ -11,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	// 内嵌 tzdata：PHOTO_QUOTA_TZ 的日界必须与部署机是否安装 tzdata 无关，
+	// 精简容器或 scratch 镜像也要能 LoadLocation("Asia/Shanghai")。
+	_ "time/tzdata"
 
 	"github.com/7310C7310C/yixianqian/internal/platform"
 )
@@ -77,6 +80,13 @@ type Config struct {
 	MaxHashes        int
 	MaxMedia         int
 	ActivationTTL    time.Duration
+
+	// PhotoDailyLimit 是每账号每自然日可上传的照片数（v1 PHOTO_DAILY_LIMIT 语义）；
+	// 0 关闭限制。PhotoQuotaLocation 是判定自然日边界的时区（默认 Asia/Shanghai），
+	// 不使用服务器本地时区。
+	PhotoDailyLimit    int
+	PhotoQuotaTZ       string
+	PhotoQuotaLocation *time.Location
 
 	// FaceProbeCmd 是本地人脸检测命令（空格分隔，图片路径追加在末尾）。
 	// FaceProbeTimeout 是单张照片检测超时；失败只记录并放行上传。
@@ -282,6 +292,22 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	}
 	if cfg.FaceProbeTimeout < time.Second || cfg.FaceProbeTimeout > time.Minute {
 		errs = append(errs, errors.New("config: FACE_PROBE_TIMEOUT must be between 1s and 60s"))
+	}
+
+	// 照片每日上传配额（PM 2026-10-28，决策 44）：v1 语义，0 关闭。
+	if v, err := parseInt64(getenv("PHOTO_DAILY_LIMIT"), 10); err != nil {
+		errs = append(errs, fmt.Errorf("config: PHOTO_DAILY_LIMIT: %w", err))
+	} else {
+		cfg.PhotoDailyLimit = int(v)
+	}
+	if cfg.PhotoDailyLimit < 0 {
+		errs = append(errs, errors.New("config: PHOTO_DAILY_LIMIT must be >= 0 (0 disables the limit)"))
+	}
+	cfg.PhotoQuotaTZ = get("PHOTO_QUOTA_TZ", "Asia/Shanghai")
+	if loc, err := time.LoadLocation(cfg.PhotoQuotaTZ); err != nil {
+		errs = append(errs, fmt.Errorf("config: PHOTO_QUOTA_TZ: %w", err))
+	} else {
+		cfg.PhotoQuotaLocation = loc
 	}
 
 	// 腾讯云照片合规判定（默认关闭）。凭证只从环境变量读，缺失时运行时

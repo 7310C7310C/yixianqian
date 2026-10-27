@@ -598,6 +598,14 @@ func profilePhotoUploadRedirectCode(err error) string {
 }
 
 func (a *App) respondProfilePhotoError(w http.ResponseWriter, r *http.Request, api bool, err error) {
+	if errors.Is(err, errPhotoDailyLimit) {
+		if api {
+			writeAPIError(w, http.StatusTooManyRequests, "photo_daily_limit", a.photoQuotaMessage())
+		} else {
+			a.renderError(w, r, http.StatusTooManyRequests, "无法上传照片", a.photoQuotaMessage())
+		}
+		return
+	}
 	if api {
 		switch {
 		case errors.Is(err, db.ErrPhotoLimit):
@@ -670,12 +678,26 @@ func (a *App) handleProfilePhotoUpload(w http.ResponseWriter, r *http.Request, a
 		a.respondProfilePhotoError(w, r, api, err)
 		return
 	}
+	// v1 语义（决策 44）：格式/压缩验证并写入 media 后、附加资料照片（进而腾讯
+	// 判定）之前取 1 次配额；超限连同已写入的 media/对象一起回滚。
+	if a.cfg.PhotoDailyLimit > 0 {
+		allowed, _, qerr := a.db.TakePhotoQuota(r.Context(), user.ID,
+			a.photoQuotaDay(a.clock.Now()), 1, a.cfg.PhotoDailyLimit)
+		if qerr != nil {
+			a.discardMedia(r, user.ID, saved.ID)
+			a.logger(r).Error("photo daily quota failed", "error", qerr, "user_id", user.ID)
+			a.respondProfilePhotoError(w, r, api, qerr)
+			return
+		}
+		if !allowed {
+			a.discardMedia(r, user.ID, saved.ID)
+			a.respondProfilePhotoError(w, r, api, errPhotoDailyLimit)
+			return
+		}
+	}
 	photo, err := a.db.AddProfilePhoto(r.Context(), user.ID, saved.ID)
 	if err != nil {
-		if m, removed, derr := a.db.RemoveMediaOwned(r.Context(), user.ID, saved.ID); derr == nil && removed {
-			a.removeObject(r, m.ID, m.ObjectKey)
-			a.removeObject(r, m.ID, m.ThumbKey)
-		}
+		a.discardMedia(r, user.ID, saved.ID)
 		if !errors.Is(err, db.ErrPhotoLimit) {
 			a.logger(r).Error("attach profile photo failed", "error", err, "user_id", user.ID)
 		}

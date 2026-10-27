@@ -132,6 +132,47 @@ func TestEndpointNormalization(t *testing.T) {
 	}
 }
 
+func TestPhotoQuotaConfig(t *testing.T) {
+	cfg, err := LoadFrom(envGetter(minimalEnv()))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.PhotoDailyLimit != 10 {
+		t.Fatalf("photo daily limit = %d, want 10", cfg.PhotoDailyLimit)
+	}
+	if cfg.PhotoQuotaTZ != "Asia/Shanghai" || cfg.PhotoQuotaLocation == nil ||
+		cfg.PhotoQuotaLocation.String() != "Asia/Shanghai" {
+		t.Fatalf("photo quota tz = %q loc=%v", cfg.PhotoQuotaTZ, cfg.PhotoQuotaLocation)
+	}
+
+	env := minimalEnv()
+	env["PHOTO_DAILY_LIMIT"] = "0"
+	env["PHOTO_QUOTA_TZ"] = "UTC"
+	cfg, err = LoadFrom(envGetter(env))
+	if err != nil {
+		t.Fatalf("load disabled: %v", err)
+	}
+	if cfg.PhotoDailyLimit != 0 || cfg.PhotoQuotaLocation.String() != "UTC" {
+		t.Fatalf("photo quota config = %d %v", cfg.PhotoDailyLimit, cfg.PhotoQuotaLocation)
+	}
+
+	for key, value := range map[string]string{
+		"PHOTO_DAILY_LIMIT": "-1",
+		"PHOTO_QUOTA_TZ":    "Not/AZone",
+	} {
+		bad := minimalEnv()
+		bad[key] = value
+		if _, err := LoadFrom(envGetter(bad)); err == nil || !strings.Contains(err.Error(), key) {
+			t.Fatalf("%s=%s: err = %v, want startup error naming the variable", key, value, err)
+		}
+	}
+	bad := minimalEnv()
+	bad["PHOTO_DAILY_LIMIT"] = "ten"
+	if _, err := LoadFrom(envGetter(bad)); err == nil || !strings.Contains(err.Error(), "PHOTO_DAILY_LIMIT") {
+		t.Fatalf("non-numeric limit err = %v", err)
+	}
+}
+
 func TestInvalidSettings(t *testing.T) {
 	cases := map[string]string{
 		"SESSION_COOKIE_SECURE": "maybe",
