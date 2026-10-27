@@ -17,6 +17,8 @@ die() { echo "deploy-wait: $*" >&2; exit 1; }
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
 [[ -n $SHA ]] || die "usage: tools/agent/deploy_wait.sh [sha]"
+# gh run list --commit 需要完整 SHA；短 SHA 会返回空。
+SHA=$(git rev-parse "$SHA^{commit}" 2>/dev/null) || die "unknown sha: $SHA"
 
 # 非 docs 提交？
 has_code() {
