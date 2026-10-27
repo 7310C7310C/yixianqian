@@ -87,6 +87,8 @@ POST 表单错误消息与内部 500/管理台错误页是明示例外。旧 `/w
 - `internal/auth`：Argon2id、session/activation token 哈希、CSRF、进程内限流。
 - `internal/media`：图片校验/缩图、R2 存储与读取。
 - `internal/face`：人脸检测、`has_face` 门禁与回填。
+- `internal/tencentface`：可选的腾讯云照片合规判定（图像标签 + 静默活体），
+  TC3 直连、fail-open，只影响 `has_face`，不产生人脸几何。
 - `internal/matching`：分组与一对一纯算法。
 - `internal/platform`：时钟、日志、请求 ID、客户端 IP、构建版本。
 - `internal/httpserver`：路由、中间件、handler、模板渲染、`/legacy/api/*`。

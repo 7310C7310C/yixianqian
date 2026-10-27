@@ -32,6 +32,9 @@ const (
 	defaultMediaDim      = 8000
 	defaultFaceProbeCmd  = "python3 tools/face_probe.py"
 	defaultFaceProbeTime = 8 * time.Second
+	// defaultTencentFaceTimeout 覆盖一次完整合规判定（标签 + 活体两次调用）。
+	defaultTencentFaceTimeout = 8 * time.Second
+	defaultTencentRegion      = "ap-guangzhou"
 )
 
 // Config holds every runtime setting. Secrets are never logged.
@@ -79,6 +82,17 @@ type Config struct {
 	// FaceProbeTimeout 是单张照片检测超时；失败只记录并放行上传。
 	FaceProbeCmd     string
 	FaceProbeTimeout time.Duration
+
+	// TencentFaceEnabled 打开腾讯云「照片合规判定」（图像标签 + 静默活体）。
+	// TencentSecretID/Key 只从环境变量读；缺失时判定 fail-open。
+	// TencentFaceBackfill 只对 cmd/facebackfill 生效：默认关闭，避免历史
+	// 照片批量调用产生费用。
+	TencentFaceEnabled  bool
+	TencentFaceBackfill bool
+	TencentSecretID     string
+	TencentSecretKey    string
+	TencentRegion       string
+	TencentFaceTimeout  time.Duration
 
 	LogLevel  slog.Level
 	LogFormat string
@@ -270,6 +284,30 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		errs = append(errs, errors.New("config: FACE_PROBE_TIMEOUT must be between 1s and 60s"))
 	}
 
+	// 腾讯云照片合规判定（默认关闭）。凭证只从环境变量读，缺失时运行时
+	// fail-open，不在启动阶段报错阻断服务。
+	cfg.TencentSecretID = get("TENCENT_SECRET_ID", "")
+	cfg.TencentSecretKey = get("TENCENT_SECRET_KEY", "")
+	cfg.TencentRegion = get("TENCENT_REGION", defaultTencentRegion)
+	if v, err := parseBool(getenv("TENCENT_FACE_ENABLED"), false); err != nil {
+		errs = append(errs, fmt.Errorf("config: TENCENT_FACE_ENABLED: %w", err))
+	} else {
+		cfg.TencentFaceEnabled = v
+	}
+	if v, err := parseBool(getenv("TENCENT_FACE_BACKFILL"), false); err != nil {
+		errs = append(errs, fmt.Errorf("config: TENCENT_FACE_BACKFILL: %w", err))
+	} else {
+		cfg.TencentFaceBackfill = v
+	}
+	if v, err := parseDuration(getenv("TENCENT_FACE_TIMEOUT"), defaultTencentFaceTimeout); err != nil {
+		errs = append(errs, fmt.Errorf("config: TENCENT_FACE_TIMEOUT: %w", err))
+	} else {
+		cfg.TencentFaceTimeout = v
+	}
+	if cfg.TencentFaceTimeout < 500*time.Millisecond || cfg.TencentFaceTimeout > 30*time.Second {
+		errs = append(errs, errors.New("config: TENCENT_FACE_TIMEOUT must be between 500ms and 30s"))
+	}
+
 	trusted, err := platform.ParseTrustedProxies(get("TRUSTED_PROXY", defaultTrustedProxy))
 	if err != nil {
 		errs = append(errs, fmt.Errorf("config: TRUSTED_PROXY: %w", err))
@@ -333,6 +371,12 @@ func (c Config) ValidateServer() error {
 		errs = append(errs, errors.New("config: R2_BUCKET is required for the server"))
 	}
 	return errors.Join(errs...)
+}
+
+// TencentFaceConfigured 报告腾讯云凭证是否齐备。只返回布尔，不暴露值；
+// 缺凭证时运行期 fail-open，不阻断启动。
+func (c Config) TencentFaceConfigured() bool {
+	return c.TencentSecretID != "" && c.TencentSecretKey != ""
 }
 
 // CSRFKey derives the fixed-size HMAC key. A dedicated secret is preferred;

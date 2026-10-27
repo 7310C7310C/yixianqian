@@ -24,6 +24,7 @@ import (
 	"github.com/7310C7310C/yixianqian/internal/face"
 	"github.com/7310C7310C/yixianqian/internal/media"
 	"github.com/7310C7310C/yixianqian/internal/platform"
+	"github.com/7310C7310C/yixianqian/internal/tencentface"
 )
 
 func main() {
@@ -112,6 +113,30 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// 腾讯云照片合规判定在回填里默认关闭：1000+ 张历史照片会按次计费，
+	// 只有显式 TENCENT_FACE_BACKFILL=true 才启用（TENCENT_FACE_ENABLED 只
+	// 控制上传路径）。凭证缺失时 fail-open，不阻断回填。
+	var compliance face.Compliance
+	if !cfg.TencentFaceBackfill {
+		logger.Info("tencent face backfill disabled", "hint", "set TENCENT_FACE_BACKFILL=true to enable")
+	}
+	if cfg.TencentFaceBackfill {
+		checker, err := tencentface.NewChecker(tencentface.Options{
+			SecretID:  cfg.TencentSecretID,
+			SecretKey: cfg.TencentSecretKey,
+			Region:    cfg.TencentRegion,
+			Timeout:   cfg.TencentFaceTimeout,
+			Logger:    logger,
+		})
+		if err != nil {
+			return err
+		}
+		if !checker.Configured() {
+			logger.Warn("tencent face backfill requested without credentials; compliance will be skipped")
+		}
+		compliance = checker
+		logger.Info("tencent face backfill enabled", "timeout", cfg.TencentFaceTimeout)
+	}
 
 	tmpDir, err := os.MkdirTemp("", "yxq-facebackfill-")
 	if err != nil {
@@ -131,7 +156,7 @@ func run() error {
 		go func() {
 			defer wg.Done()
 			for item := range jobs {
-				hasFace, err := processPhoto(ctx, store, probe, database, tmpDir, item, cfg.MediaMaxBytes)
+				hasFace, err := processPhoto(ctx, store, probe, compliance, database, tmpDir, item, cfg.MediaMaxBytes)
 				if err != nil {
 					atomic.AddInt64(&failed, 1)
 					logger.Warn("face backfill photo failed", "media_id", item.MediaID, "error", err)
@@ -171,6 +196,7 @@ func processPhoto(
 	ctx context.Context,
 	store media.Store,
 	probe face.Probe,
+	compliance face.Compliance,
 	database *db.DB,
 	tmpDir string,
 	item db.FaceBackfillCandidate,
@@ -205,6 +231,9 @@ func processPhoto(
 	result, err := probe.Probe(photoCtx, tmpName)
 	if err != nil {
 		return false, err
+	}
+	if compliance != nil {
+		result = face.ApplyCompliance(result, compliance.CheckPhoto(photoCtx, item.MediaID, tmpName))
 	}
 	row := db.ProfilePhotoFace{MediaID: item.MediaID, Checked: true, HasFace: result.HasFace}
 	if len(result.Center) == 2 && len(result.Box) == 2 {

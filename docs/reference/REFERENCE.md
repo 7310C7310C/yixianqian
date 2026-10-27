@@ -267,6 +267,12 @@ sources: []
 | `SESSION_COOKIE_SECURE` | 是 | 是 |
 | `SESSION_SECRET` | 是 | 是 |
 | `SESSION_TTL` | 是 | 是 |
+| `TENCENT_FACE_BACKFILL` | 是 | 是 |
+| `TENCENT_FACE_ENABLED` | 是 | 是 |
+| `TENCENT_FACE_TIMEOUT` | 是 | 是 |
+| `TENCENT_REGION` | 是 | 是 |
+| `TENCENT_SECRET_ID` | 是 | 是 |
+| `TENCENT_SECRET_KEY` | 是 | 是 |
 | `TRUSTED_PROXY` | 是 | 是 |
 
 > 本表不复制任何 env 值。
@@ -344,6 +350,7 @@ sources: []
 | `internal/matching` | matching | Package matching implements the legacy grouping algorithm. |
 | `internal/media` | media | — |
 | `internal/platform` | platform | — |
+| `internal/tencentface` | tencentface | Package tencentface 实现腾讯云「照片内容合规判定」：先做图像标签 |
 | `migrations` | — | — |
 | `tools` | — | — |
 | `web` | — | — |
@@ -357,6 +364,6 @@ sources: []
 | `docs/DECISIONS.md` | — |
 | `docs/MIGRATION.md` | `migrations/**`, `tools/migrate_testapp.py` |
 | `docs/PROJECT_CHARTER.md` | — |
-| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/activities_view.go`, `internal/httpserver/activities_routes.go`, `internal/httpserver/handlers_home.go`, `web/templates/layout.tmpl`, `web/templates/pages/home.tmpl`, `web/static/home.css`, `web/static/home.js`, `web/static/auth.css`, `web/static/public-copy.js`, `web/static/legacy/index.html`, `internal/httpserver/social_pages.go`, `internal/db/activities.go`, `internal/db/grouping.go`, `internal/db/profile.go`, `.env.example` |
+| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/activities_view.go`, `internal/httpserver/activities_routes.go`, `internal/httpserver/handlers_home.go`, `web/templates/layout.tmpl`, `web/templates/pages/home.tmpl`, `web/static/home.css`, `web/static/home.js`, `web/static/auth.css`, `web/static/public-copy.js`, `web/static/legacy/index.html`, `internal/httpserver/social_pages.go`, `internal/db/activities.go`, `internal/db/grouping.go`, `internal/db/profile.go`, `internal/tencentface/**`, `.env.example` |
 | `docs/product-spec.md` | — |
 | `docs/runbooks/staging.md` | `deploy/**`, `.env.example`, `migrations/**`, `.github/workflows/ci.yml` |

@@ -88,6 +88,7 @@ internal/db/            pgxpool、SQL、事务、迁移、领域仓储
 internal/auth/          Argon2id、session、CSRF、限流
 internal/media/         图片校验/缩图、R2 存储与读取
 internal/face/          本地人脸检测、has_face 门禁与回填
+internal/tencentface/  可选的照片合规判定（腾讯云图像标签 + 静默活体）
 internal/matching/      分组与一对一的纯算法
 internal/platform/      时钟、日志、请求 ID、构建版本等基础设施
 internal/httpserver/    路由、中间件、handler、模板渲染、各功能模块
@@ -185,6 +186,9 @@ go run ./cmd/token -phone 13900000000 -name 王小明
 - 用户照片与活动海报均为私有媒体；读取必须经过应用鉴权，不能把对象存储 URL 暴露给浏览器。
 - 上传图片在服务端校验后重编码：原图与缩图都不含 EXIF/GPS/XMP/文本元数据，并按 EXIF 方向自动校正（JPEG/PNG 均处理）。
 - 上传上限：单张 10 MiB、单边 8000px、12.5 MP（iPhone 常见的 4032×3024=12,192,768 像素可通过）、并发 1；HEIC/HEIF 返回 400，并提示先在相册转 JPEG 或关闭「高效」。nginx 请求体上限 `96m` 覆盖注册表单理论上限 `9*10MiB+2MiB=92MiB`。
+- 可选的照片内容合规：`TENCENT_FACE_ENABLED=true` 时，上传照片会压到最长边 1080 的 JPEG 后调用腾讯云
+  （tiia 图像标签 + iai 静默活体）；命中动物/卡通且活体判定无人脸时 `has_face=false`（照片仍可上传）。
+  默认关闭；异常一律放行。凭证只放 env，成本与回滚见 `docs/runbooks/staging.md`，取舍见 `docs/DECISIONS.md` 决策 41。
 - 迁移工具、汇出格式、手机号唯一化与对账流程见 `docs/MIGRATION.md`。
 - 生产数据不得导入开发库；staging 可用脱敏/测试数据。
 

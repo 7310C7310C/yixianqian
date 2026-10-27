@@ -631,6 +631,58 @@ tail -n 5 /var/log/yxq-facebackfill.log   # 正常接近空跑：count=0 include
 - 检测失败的照片保持 `face_checked=false`，可直接重跑；日志只含 media_id。
 - 不要给 cron 加 `-all`；不要重跑全量。首次上线的 venv/FACE_* 细节已从本文件移除。
 
+## 腾讯云照片合规判定（可选，默认关闭）
+
+语义照 v1 `web/backend/tencent_face.py`：`DetectLabel`（tiia 2019-05-29）命中动物
+（二级分类属 `ANIMAL_C2`，或名称含 猫/狗/宠物/哺乳动物/兔/仓鼠/动物，置信度 ≥30）
+或明确卡通（名称含 动漫/卡通/漫画/插画/手办/玩偶/表情包，置信度 ≥80）时，再调
+`DetectLiveFaceAccurate`（iai 2020-03-03）；只有「标签命中 + 活体返回
+`NoFaceInPhoto`」才判为非人类照片。**效果**：照片仍可上传，但
+`has_face=false`（v2 不返回 400；v1 当时直接拒绝）。任何异常（超时/鉴权/限频/
+5xx/无凭证）一律 fail-open，只记固定码。
+
+| 环境变量 | 作用 |
+|---|---|
+| `TENCENT_FACE_ENABLED` | 上传路径开关；默认 false，staging 设 true |
+| `TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY` | 只放 600 权限 env；不得 echo/进 git |
+| `TENCENT_REGION` | 默认 `ap-guangzhou` |
+| `TENCENT_FACE_TIMEOUT` | 一次完整判定（最多两次调用）总预算，默认 8s，500ms–30s |
+| `TENCENT_FACE_BACKFILL` | 只给 `cmd/facebackfill`；默认 false（历史照片按次计费） |
+
+凭证来源：v1 生产配置 `/opt/yixianqian/local_config.py`（root 600）的
+`TENCENT_SECRET_ID`/`TENCENT_SECRET_KEY`/`TENCENT_REGION`，写入 staging env 时不要在
+终端回显。变更步骤（先备份，再原子替换，保持 600）：
+
+```bash
+TS=$(date +%Y%m%d-%H%M%S)
+cp -p /opt/yixianqian-next/config/staging.env /opt/yixianqian-next/config/staging.env.bak-tencent-$TS
+# 用编辑器/umask 077 写入下列 key（值从 v1 local_config.py 读取，不打印）：
+#   TENCENT_FACE_ENABLED=true
+#   TENCENT_SECRET_ID=…  TENCENT_SECRET_KEY=…  TENCENT_REGION=ap-guangzhou
+#   TENCENT_FACE_TIMEOUT=8s
+systemctl restart yixianqian-next-test
+curl -sS http://127.0.0.1:8093/healthz
+```
+
+验证（不泄露任何密钥）：
+
+```bash
+# 上传一张合成图后，日志只应有固定字段；命中/放行/失败都用固定 result 码
+journalctl -u yixianqian-next-test --since '5 min ago' | grep 'tencent face' | tail -5
+# 期望字段：photo_id=… action=DetectLabel|DetectLiveFaceAccurate|check result=… latency_ms=…
+```
+
+`TENCENT_FACE_TIMEOUT` 覆盖一次判定的两次调用；超时后 fail-open（放行）。
+**成本**：每张上传至少 1 次 `DetectLabel`；命中动物/卡通再 1 次活体。staging 实测
+各约 1.0s / 0.7s。`TENCENT_FACE_BACKFILL=true` 会对候选照片逐张调用（1000+ 张 =
+1000+ 次标签，命中再翻倍），只在明确预算时短时开启，跑完立刻置回 false。
+
+**回滚**：`TENCENT_FACE_ENABLED=false`（或删除该行）→ `systemctl restart
+yixianqian-next-test`。无需数据回滚：已判定的照片保留现有 `has_face`；要纠正历史
+结果需显式 `facebackfill -all`（谨慎）。凭证轮换同样改 env 后重启，旧值不保留在
+repo/日志。**隐私**：启用后照片会压缩到最长边 1080 的 JPEG q85 发往腾讯云
+（tiia/iai）；不选该开关则照片不出 R2/应用（详见 `docs/DECISIONS.md` 决策 41）。
+
 ## 每周推荐位（D10）
 
 服务启动时补跑「本周缺失」的名单，之后整点检查一次；ISO 周切换（周一）换批：

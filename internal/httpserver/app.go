@@ -17,6 +17,7 @@ import (
 	"github.com/7310C7310C/yixianqian/internal/face"
 	"github.com/7310C7310C/yixianqian/internal/media"
 	"github.com/7310C7310C/yixianqian/internal/platform"
+	"github.com/7310C7310C/yixianqian/internal/tencentface"
 )
 
 // App holds the process-wide dependencies shared by all handlers.
@@ -37,6 +38,9 @@ type App struct {
 
 	// faceProbe 在照片上传后同步运行；失败只记日志，不阻断上传。
 	faceProbe face.Probe
+	// faceCompliance 是腾讯云照片合规判定（图像标签 + 静默活体）；nil =
+	// 未启用。它只影响 has_face，不产生人脸几何。
+	faceCompliance face.Compliance
 
 	loginIPLimiter    *auth.Limiter
 	loginPhoneLimiter *auth.Limiter
@@ -99,6 +103,25 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 	if err != nil {
 		return nil, fmt.Errorf("httpserver: face probe: %w", err)
 	}
+	// 腾讯云照片合规判定：默认关闭；开启但缺凭证时只警告并继续（运行期
+	// fail-open），不阻断启动。凭证不写日志。
+	var faceCompliance face.Compliance
+	if cfg.TencentFaceEnabled {
+		checker, err := tencentface.NewChecker(tencentface.Options{
+			SecretID:  cfg.TencentSecretID,
+			SecretKey: cfg.TencentSecretKey,
+			Region:    cfg.TencentRegion,
+			Timeout:   cfg.TencentFaceTimeout,
+			Logger:    logger,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("httpserver: tencent face: %w", err)
+		}
+		if !checker.Configured() {
+			logger.Warn("tencent face enabled without credentials; photo compliance will fail open")
+		}
+		faceCompliance = checker
+	}
 	var notifier *db.NotificationHub
 	if database != nil {
 		notifier = db.NewNotificationHub(context.Background(), database.DSN(), logger)
@@ -130,6 +153,7 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		trusted:                     trusted,
 		clock:                       platform.SystemClock{},
 		faceProbe:                   probe,
+		faceCompliance:              faceCompliance,
 		loginIPLimiter:              auth.NewLimiter(20, 15*time.Minute),
 		loginPhoneLimiter:           auth.NewLimiter(10, 15*time.Minute),
 		activationLimiter:           auth.NewLimiter(10, time.Hour),

@@ -108,6 +108,16 @@ func (a *App) probePhotoFace(ctx context.Context, userID int64, mediaID string) 
 		return face.Result{}, faceProbeFailed
 	}
 
+	// 腾讯云照片合规判定（标签 + 静默活体）：命中非人类照片时只把
+	// has_face 置 false，几何仍用本地检测结果；任何失败都放行。
+	if a.faceCompliance != nil {
+		verdict := a.faceCompliance.CheckPhoto(probeCtx, mediaID, tmpName)
+		if verdict.Blocked {
+			a.log.Info("face compliance blocked", "media_id", mediaID, "reason", verdict.Reason)
+		}
+		result = face.ApplyCompliance(result, verdict)
+	}
+
 	row := db.ProfilePhotoFace{MediaID: mediaID, Checked: true, HasFace: result.HasFace}
 	if len(result.Center) == 2 && len(result.Box) == 2 {
 		centerX, centerY := result.Center[0], result.Center[1]

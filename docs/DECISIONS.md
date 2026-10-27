@@ -550,3 +550,40 @@ sources: []
   （409 掃描頁；無效 session 仍 303 `/login` 不渲染頁面）、`TestPublicErrorCopyCoversCodes`、
   `TestLoadTemplatesAndRenderPages/public_error`；Playwright `public_scan_pages_smoke.py`
   雙視口渲染五種錯誤頁中文 + 無 console error。
+## 41. 接回腾讯云照片合规判定（图像标签 + 静默活体，2026-10-27）
+
+- 背景：PM 询问 v2 的人脸/活体识别是否用腾讯云，并授权取用 v1 生产凭证接回。
+  v1 `web/backend/tencent_face.py` 用「tiia `DetectLabel` + iai `DetectLiveFaceAccurate`」
+  拦宠物/卡通等非人类照片；v2 此前只有本地 YuNet，`docs/STATUS.md` 把该能力列为缺口。
+- 决策（语义照抄 v1，不放宽）：标签命中动物（二级分类属 `ANIMAL_C2`，或名称含
+  猫/狗/宠物/哺乳动物/兔/仓鼠/动物，置信度 ≥30）或明确卡通（动漫/卡通/漫画/插画/
+  手办/玩偶/表情包，置信度 ≥80）才调用静默活体；只有「标签命中 + 活体
+  `NoFaceInPhoto`」判为非人类。超时/鉴权失败/限频/5xx/无凭证等一律 fail-open，
+  只记固定码；不重试（避免重复计费）。
+- 决策（Go 直连）：新增 `internal/tencentface`，按 TC3-HMAC-SHA256 直接调用两个
+  action，不引入 Python/腾讯 SDK 运行时依赖；endpoint 可注入供测试，TLS 校验开启，
+  非 loopback 禁止 http；一次判定总预算默认 8s，最多两次调用。
+- 决策（接线）：上传路径 `TENCENT_FACE_ENABLED=true` 时启用；合规结论只影响
+  `has_face = 本地 YuNet 检出 && !blocked`，人脸中心/框继续用本地检测值，不用腾讯
+  结果伪造几何。v1 在命中时直接 400 拒绝上传；v2 改为「照片可上传但 `has_face=false`」，
+  因为 v2 的门禁是 `has_face`，拒绝上传只会让用户反复重试；不改变 ID 门禁。
+- 决策（成本）：`cmd/facebackfill` 默认**不**调用腾讯（`TENCENT_FACE_BACKFILL`
+  默认 false），避免 1000+ 张历史照片按次计费；需要时显式短时开启。上传路径每张
+  至少 1 次标签调用，命中动物/卡通才翻倍；日志只记 action/result/latency_ms/photo_id。
+- 决策（凭证）：只从环境变量读；staging 值从 v1 生产 `/opt/yixianqian/local_config.py`
+  （root 600）经 shell 读入 systemd `EnvironmentFile`，不 echo、不进 repo/commit/日志/
+  报告；错误只暴露固定码（`no_face`/`auth_failure`/`timeout`/…）。
+- 备选与不采纳：①Python 子进程或腾讯 SDK——多一套运行时依赖，与 Go 部署/回滚不一致；
+  ②先无条件活体再判标签——成本翻倍且 v1 不是这样；③缺凭证启动失败——会阻断上传，
+  违背 v1 的 fail-open；④命中即 400 拒传——见上，v2 用门禁表达。
+- 风险/限制：腾讯侧抖动时可能放过非人类照片（与 v1 相同，fail-open 是刻意取舍）；
+  启用后照片会以最长边 1080、JPEG q85 外发腾讯云（隐私影响，需 PM 知情；不启用则不出
+  R2）；每张上传有固定外部时延（staging 实测标签约 1.0s、活体约 0.7s，超时放行）；
+  `profile_photos` 只存 `has_face`，不存 blocked 原因（不改 schema）；历史照片不会自动
+  重判，需显式回填。
+- 证据：`internal/tencentface` 单测（TC3 固定向量 + 独立重算签名、fake tiia/iai 覆盖
+  命中/未命中/NoFaceInPhoto/超时/500/鉴权失败、判定表移植 v1 7 例、成本控制只调一次、
+  图片压到 1080）；`internal/face` 合并单测（blocked → has_face=false，几何不变）；
+  `TestIntegrationTencentComplianceBlocksHasFace`；config 解析单测。server1 合成图实调：
+  `DetectLabel` HTTP 200 OK ≈1.0s，`DetectLiveFaceAccurate` HTTP 200
+  `InvalidParameterValue.NoFaceInPhoto` ≈0.7s；Go 实现实调 1.1s/0.7s、`errors.Is` 命中。

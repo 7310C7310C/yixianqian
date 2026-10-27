@@ -21,6 +21,10 @@ var ErrProbeUnavailable = errors.New("face: probe_unavailable")
 // Result 是 tools/face_probe.py 的输出。Center 与 Box 为相对原图的比例
 // （0~1）；无脸或检测失败时为 nil。Error 是脚本返回的固定错误码，
 // 不包含图片路径或凭证。
+//
+// Blocked/Reason 由第三方照片合规判定（腾讯云图像标签 + 静默活体）填充，
+// reason 是固定码（animal/cartoon），不是厂商标签名。本地 probe 不填这两个
+// 字段；合并规则见 ApplyCompliance。
 type Result struct {
 	HasFace bool      `json:"has_face"`
 	Center  []float64 `json:"center"`
@@ -28,6 +32,8 @@ type Result struct {
 	Width   int       `json:"width"`
 	Height  int       `json:"height"`
 	Error   string    `json:"error"`
+	Blocked bool      `json:"blocked,omitempty"`
+	Reason  string    `json:"reason,omitempty"`
 }
 
 // Valid 报告检测结果中的几何数据是否可用于卡片人脸对准。

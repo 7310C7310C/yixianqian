@@ -24,6 +24,7 @@ sources:
   - internal/db/activities.go
   - internal/db/grouping.go
   - internal/db/profile.go
+  - internal/tencentface/**
   - .env.example
 -->
 
@@ -84,6 +85,24 @@ sources:
   390x844/390x700 PASS（秒开 85/71ms、无加载指示、10s timeout 取消、取消后可重开），
   用本地静态树 + staging 只读 API 跑，临时 session 已删除。
 - 状态：未 push、未部署；staging 仍 `staging-a68063e`，`deployed.sha` 不变。生产未动。
+
+## 2026-10-27e 腾讯云照片合规判定（本地实现，staging env 已配置）
+
+- 新增 `internal/tencentface`（Go 直连 TC3-HMAC-SHA256，无 Python/SDK 运行时依赖）：
+  tiia `DetectLabel` 命中动物（≥30）/明确卡通（≥80）才调 iai `DetectLiveFaceAccurate`；
+  只有「标签命中 + 活体 `NoFaceInPhoto`」判为非人类。语义照 v1 `tencent_face.py`。
+- 接线：`TENCENT_FACE_ENABLED=true` 时上传路径启用；结果只影响
+  `has_face = 本地 YuNet 检出 && !blocked`，几何仍用本地检测；照片可上传（v1 是 400 拒绝）。
+  任何异常 fail-open，日志只记 `action/result/latency_ms/photo_id`。
+- 成本：每张上传至少 1 次标签调用，命中动物/卡通再 1 次活体，总预算 8s；
+  `cmd/facebackfill` 默认不打腾讯，需显式 `TENCENT_FACE_BACKFILL=true`。
+- 凭证：staging env `/opt/yixianqian-next/config/staging.env`（600，已备份 `staging.env.bak-tencent-*`）
+  新增 `TENCENT_SECRET_ID/KEY/REGION/FACE_ENABLED/FACE_TIMEOUT`；值来自 v1 生产
+  `/opt/yixianqian/local_config.py`，未 echo、未进 repo。server1 合成图实调：`DetectLabel`
+  HTTP 200 OK ≈1.0s、`DetectLiveFaceAccurate` HTTP 200 `InvalidParameterValue.NoFaceInPhoto` ≈0.7s；
+  Go 实现同样 200（1.1s/0.7s，`errors.Is(ErrNoFaceInPhoto)` 命中）。
+- 状态：本地实现 + 单测/集成测试；未 push、未部署；staging 运行时仍以 deployed 二进制为准
+  （env 已就绪，部署后生效）。生产未动。
 
 ## 1. 阶段
 
@@ -486,7 +505,11 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 
 - **人脸照片缺口**：`104` 个 `active` 普通用户没有 `has_face=true` 的照片，其中 `101` 个完全没有照片；可通过资料页上传修复，不是死锁（与身份证 P0 区分）。
 - **媒体孤儿（P3）**：非属主删除最后一个 `profile_photos` 引用时，按安全规则保留 `media` 行与 R2 对象；当前无 GC，staging 量小（约 29 个共享 media），未造成越权访问。后续可加 refs=0 的离线清理任务。
-- **内容合规**：腾讯云照片内容合规（宠物/卡通判定、活体）未实现。
+- **内容合规**：腾讯云照片内容合规（宠物/卡通判定 + 静默活体）已实现（2026-10-27e，
+  `internal/tencentface`），上传路径由 `TENCENT_FACE_ENABLED` 控制；staging env 已配置，
+  待部署后在 `/healthz` 新版本上验证日志与 has_face 行为。
+- **内容合规（历史照片）**：`facebackfill` 默认不调用腾讯，历史 1028 张未按新规则重判；
+  如需纠正需显式 `TENCENT_FACE_BACKFILL=true` 短时回填（按次计费）。
 - **裁切**：v1 黑边裁切未移植，`faces.tb/lr` 固定 `[0,0]`。
 - **真机与性能**：真机 iOS/Android/微信、旧设备宽度、图片/首屏性能未完成。
 - **运维演练**：备份还原、回滚演练、安全最终审查未完成。

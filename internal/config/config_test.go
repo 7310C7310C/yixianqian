@@ -224,3 +224,74 @@ func TestFaceProbeConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestTencentFaceConfigDefaults(t *testing.T) {
+	cfg, err := LoadFrom(envGetter(minimalEnv()))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.TencentFaceEnabled || cfg.TencentFaceBackfill {
+		t.Fatalf("tencent face must default off: enabled=%v backfill=%v",
+			cfg.TencentFaceEnabled, cfg.TencentFaceBackfill)
+	}
+	if cfg.TencentRegion != "ap-guangzhou" || cfg.TencentFaceTimeout != 8*time.Second {
+		t.Fatalf("tencent defaults: %q %v", cfg.TencentRegion, cfg.TencentFaceTimeout)
+	}
+	if cfg.TencentFaceConfigured() {
+		t.Fatal("credentials must be absent by default")
+	}
+	if cfg.TencentSecretID != "" || cfg.TencentSecretKey != "" {
+		t.Fatal("credentials must never default to a value")
+	}
+}
+
+func TestTencentFaceConfigParsesEnv(t *testing.T) {
+	env := minimalEnv()
+	env["TENCENT_SECRET_ID"] = "AKIDtest"
+	env["TENCENT_SECRET_KEY"] = "secret"
+	env["TENCENT_REGION"] = "ap-shanghai"
+	env["TENCENT_FACE_ENABLED"] = "true"
+	env["TENCENT_FACE_BACKFILL"] = "1"
+	env["TENCENT_FACE_TIMEOUT"] = "3s"
+	cfg, err := LoadFrom(envGetter(env))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !cfg.TencentFaceEnabled || !cfg.TencentFaceBackfill {
+		t.Fatalf("flags: enabled=%v backfill=%v", cfg.TencentFaceEnabled, cfg.TencentFaceBackfill)
+	}
+	if cfg.TencentRegion != "ap-shanghai" || cfg.TencentFaceTimeout != 3*time.Second {
+		t.Fatalf("region/timeout: %q %v", cfg.TencentRegion, cfg.TencentFaceTimeout)
+	}
+	if !cfg.TencentFaceConfigured() {
+		t.Fatal("credentials should be configured")
+	}
+}
+
+func TestTencentFaceEnabledWithoutCredentialsIsAllowed(t *testing.T) {
+	// 缺凭证不能阻断启动：运行期 fail-open，只在 server 启动时警告。
+	env := minimalEnv()
+	env["TENCENT_FACE_ENABLED"] = "true"
+	cfg, err := LoadFrom(envGetter(env))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !cfg.TencentFaceEnabled || cfg.TencentFaceConfigured() {
+		t.Fatalf("cfg = enabled=%v configured=%v", cfg.TencentFaceEnabled, cfg.TencentFaceConfigured())
+	}
+}
+
+func TestTencentFaceConfigRejectsBadValues(t *testing.T) {
+	cases := map[string]string{
+		"TENCENT_FACE_ENABLED":  "maybe",
+		"TENCENT_FACE_BACKFILL": "maybe",
+		"TENCENT_FACE_TIMEOUT":  "100ms",
+	}
+	for key, raw := range cases {
+		env := minimalEnv()
+		env[key] = raw
+		if _, err := LoadFrom(envGetter(env)); err == nil {
+			t.Fatalf("expected error for %s=%q", key, raw)
+		}
+	}
+}
