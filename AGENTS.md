@@ -59,8 +59,9 @@ sources:
 外不得出现汉字，文案由 `/static/home.js`（`\uXXXX` 转义）在浏览器注入，页面引用的 CSS/JS
 必须 0 汉字（扫描防护；见 `docs/DECISIONS.md` 决策 38）。同一契约自 2026-10-27 起覆盖
 `/login`、`/activate`、`/password`、`/register/done` 与 404：源码 0 汉字，文案由
-`/static/public-copy.js` 注入，样式用 `home.css` + `auth.css`（决策 39）；POST 表单错误消息
-与 `renderError` 错误页是明示例外。旧 `/welcome` 已并入首页，`GET /welcome` 301 → `/`，
+`/static/public-copy.js` 注入，样式用 `home.css` + `auth.css`（决策 39）；公开 GET 错误页
+（`/activate` 400/410、`/password` 409）同样纳入契约（`data-error-code`，决策 40）；
+POST 表单错误消息与内部 500/管理台错误页是明示例外。旧 `/welcome` 已并入首页，`GET /welcome` 301 → `/`，
 `/register?from=welcome` 仍记录 `join_click`。登录后 `/` 才进入用户 SPA。
 用户端复用 v1 Vue 3 + Vant SPA；
 管理台使用 Go 服务端渲染（SSR），只经用户 SPA 的同源 iframe（`/admin?embed=1`）使用；

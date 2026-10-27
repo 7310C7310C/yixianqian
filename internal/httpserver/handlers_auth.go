@@ -264,7 +264,7 @@ func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleActivatePage(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
-		a.renderError(w, r, http.StatusBadRequest, "启用链接不完整", "请使用管理员提供的完整启用链接。")
+		a.renderPublicError(w, r, http.StatusBadRequest, publicErrorActivateMissing)
 		return
 	}
 	a.renderActivate(w, r, http.StatusOK, token, "")
@@ -273,7 +273,7 @@ func (a *App) handleActivatePage(w http.ResponseWriter, r *http.Request) {
 func (a *App) renderActivate(w http.ResponseWriter, r *http.Request, status int, token, message string) {
 	at, err := a.db.GetActivationToken(r.Context(), auth.HashToken(token))
 	if errors.Is(err, db.ErrInvalidActivation) {
-		a.renderError(w, r, http.StatusBadRequest, "启用链接无效", "请向管理员索取新的启用链接。")
+		a.renderPublicError(w, r, http.StatusBadRequest, publicErrorActivateInvalid)
 		return
 	}
 	if err != nil {
@@ -283,9 +283,9 @@ func (a *App) renderActivate(w http.ResponseWriter, r *http.Request, status int,
 	}
 	if !at.Valid {
 		if at.ConsumedAt != nil {
-			a.renderError(w, r, http.StatusGone, "启用链接已使用", "此链接只能使用一次，请直接登录。")
+			a.renderPublicError(w, r, http.StatusGone, publicErrorActivateUsed)
 		} else {
-			a.renderError(w, r, http.StatusGone, "启用链接已过期", "请向管理员索取新的启用链接。")
+			a.renderPublicError(w, r, http.StatusGone, publicErrorActivateExpired)
 		}
 		return
 	}
@@ -297,7 +297,7 @@ func (a *App) renderActivate(w http.ResponseWriter, r *http.Request, status int,
 			return
 		}
 		if has {
-			a.renderError(w, r, http.StatusGone, "账号已启用", "此账号已设定密码，请直接登录。")
+			a.renderPublicError(w, r, http.StatusGone, publicErrorActivateAlready)
 			return
 		}
 	}
@@ -309,6 +309,52 @@ func (a *App) renderActivate(w http.ResponseWriter, r *http.Request, status int,
 		ScanSafe: true,
 		CopyPage: "activate",
 		Data:     activatePageData{NameHTML: asciiEntityText(at.Name)},
+	})
+}
+
+// Public GET error page copy codes. The Chinese heading/message live in
+// public-copy.js (\uXXXX) and are injected by data-error-code; only the
+// <title> may carry Chinese server-side.
+const (
+	publicErrorActivateMissing = "activate_missing"
+	publicErrorActivateInvalid = "activate_invalid"
+	publicErrorActivateUsed    = "activate_used"
+	publicErrorActivateExpired = "activate_expired"
+	publicErrorActivateAlready = "activate_already"
+	publicErrorPasswordNoCred  = "password_no_credential"
+)
+
+var publicErrorTitles = map[string]string{
+	publicErrorActivateMissing: "启用链接不完整",
+	publicErrorActivateInvalid: "启用链接无效",
+	publicErrorActivateUsed:    "启用链接已使用",
+	publicErrorActivateExpired: "启用链接已过期",
+	publicErrorActivateAlready: "账号已启用",
+	publicErrorPasswordNoCred:  "尚未设定密码",
+}
+
+// publicErrorData carries the error code used by public-copy.js to inject the
+// right Chinese copy on the scan-safe public error page.
+type publicErrorData struct {
+	Code string
+}
+
+// renderPublicError renders the scan-safe error page for public GET failures
+// (activation/password). Status codes and previously set headers (Retry-After,
+// X-Error-Code, ...) are preserved; the layout loads only ASCII CSS/JS and the
+// Chinese copy is injected by public-copy.js. Admin/authenticated error pages
+// keep using renderError.
+func (a *App) renderPublicError(w http.ResponseWriter, r *http.Request, status int, code string) {
+	title := publicErrorTitles[code]
+	if title == "" {
+		title = "无法完成操作"
+	}
+	a.render(w, r, status, "public_error", PageData{
+		Title:     title,
+		ScanSafe:  true,
+		CopyPage:  "public_error",
+		ErrorCode: code,
+		Data:      publicErrorData{Code: code},
 	})
 }
 

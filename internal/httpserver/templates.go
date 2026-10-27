@@ -22,9 +22,10 @@ import (
 // Batch11 (landing scan-guard + viewer overlay removal): 28 invalidated the new
 // home.css/home.js pair and the regenerated critical CSS / root render.
 // Batch12 (welcome merge + scan-safe login/activate/password/register-done +
-// viewer photos_meta): 29 invalidates the new auth.css/public-copy.js pair and
-// the regenerated app.min.js/app.css.
-const assetVersion = "29"
+// viewer photos_meta): 29 invalidated the auth.css/public-copy.js pair and the
+// regenerated app.min.js/app.css.
+// Batch12b (scan-safe public GET error pages + app.js /welcome cleanup): 30.
+const assetVersion = "30"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
@@ -70,6 +71,9 @@ type PageData struct {
 	// NoticeCopyKey renders a JS-injected notice instead of the server-side
 	// Chinese Notice string on scan-safe pages (e.g. /login?logged_out=1).
 	NoticeCopyKey string
+	// ErrorCode selects the public-copy.js error table on the scan-safe public
+	// error page; publicErrorData repeats it for template assertions.
+	ErrorCode string
 	// FeishuURL 是飞书版入口；render 会为所有页面填入默认值，模板无需区分
 	// GET/POST 渲染路径。
 	FeishuURL string

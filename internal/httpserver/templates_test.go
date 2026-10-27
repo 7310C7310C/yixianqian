@@ -115,6 +115,21 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 			notWant: []string{"查看我的资料", `/static/app.css`, `/static/shell.css`},
 		},
 		{
+			name: "public_error",
+			page: "public_error",
+			data: PageData{
+				Title: "启用链接无效", ScanSafe: true, CopyPage: "public_error",
+				ErrorCode: publicErrorActivateInvalid,
+				Data:      publicErrorData{Code: publicErrorActivateInvalid},
+			},
+			want: []string{
+				`data-copy-page="public_error"`, `data-error-code="activate_invalid"`,
+				`data-copy-error="heading"`, `data-copy-error="message"`, `data-copy-error="action"`,
+				`/static/auth.css`, `/static/public-copy.js`,
+			},
+			notWant: []string{`/static/app.css`, `/static/shell.css`, `class="shell-header"`},
+		},
+		{
 			name: "not_found",
 			page: "not_found",
 			data: PageData{Title: "找不到页面", ScanSafe: true, CopyPage: "not_found"},

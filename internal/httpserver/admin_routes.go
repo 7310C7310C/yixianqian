@@ -1643,7 +1643,7 @@ func (a *App) handlePasswordPage(w http.ResponseWriter, r *http.Request) {
 	}
 	mustChange, _, err := a.db.GetCredentialState(r.Context(), user.ID)
 	if errors.Is(err, db.ErrNotFound) {
-		a.renderError(w, r, http.StatusConflict, "尚未设定密码", "请使用启用链接设定密码。")
+		a.renderPublicError(w, r, http.StatusConflict, publicErrorPasswordNoCred)
 		return
 	}
 	if err != nil {

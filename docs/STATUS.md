@@ -53,6 +53,21 @@ sources:
   无 console error。详见 `.team/` 本批记录与 `.team/reviews/`。
 - 状态：未 push、未部署；staging 仍 `staging-9210ee2`，生产未动。
 
+### 2026-10-27d Reviewer FAIL 修复：公开 GET 错误页扫描防护（本地实现，待部署）
+
+- 触发：独立 Reviewer 对 `a74be1a` 判 **FAIL**（`.team/reviews/2026-10-27-a74be1a-public-batch.md`）：
+  `/activate` 缺失/无效 400、过期/已用 410 与 `/password` 无 credential 409 仍是中文 `renderError` 页，
+  引用 `app.css`/`shell.css`；PM 只允许 POST 错误消息中文。
+- 修复：新增 scan-safe `public_error` 页与 `data-error-code` 文案表；上述 GET 错误保留原状态码，
+  body 除 `<title>` 外 0 汉字、引用资源 0 汉字；500/管理台/已登录 `renderError` 与 POST 错误行为不变。
+- 同时修 Reviewer minor：`app.js` 移除 `/welcome` iframe 特判；`public_scan_pages_smoke.py`
+  不再跳过无 token `/activate`、不硬编码激活用户名；`viewer_fullframe_smoke.py` 下一张尺寸改由
+  API `photos_meta` 推导，不硬编码 `1000x1000`。`assetVersion` 29→30。
+- 证据（本地）：`make fast`/`make ci` EXIT=0；`make perf-budget` 8/8；全量 `-run Integration`
+  （db/httpserver）PASS；`curl /activate` 400 body Han=0、`data-error-code=activate_missing`；
+  Playwright 双视口五类错误页中文渲染 + 无 console error；viewer 双视口 rect 差 0.00px。
+- 状态：本地新 commit（不 amend 审查轨迹），未 push、未部署；等独立 Reviewer 重审。
+
 ## 2026-10-27b 匿名首页扫描防护 + 大图移除加载指示（本地实现，待部署）
 
 - 匿名 `/` 从英文页改回中文，但源码保持零汉字：`<title>`「一线牵 · 祝你早日找到另一半」是唯一汉字，

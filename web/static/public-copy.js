@@ -80,6 +80,32 @@
         'register_done.privacyHint': '\u4e00\u7ebf\u7275\u4e0d\u4f1a\u5728\u9875\u9762\u663e\u793a\u4f60\u7684\u8eab\u4efd\u8bc1\u5168\u53f7\uff0c\u4e5f\u8bf7\u52ff\u628a\u5bc6\u7801\u63d0\u4f9b\u7ed9\u4ed6\u4eba\u3002',
       },
     },
+    public_error: {
+      text: {
+        'public_error.eyebrow': '\u63d0\u793a',
+        'public_error.activate_missing.heading': '\u542f\u7528\u94fe\u63a5\u4e0d\u5b8c\u6574',
+        'public_error.activate_missing.message': '\u8bf7\u4f7f\u7528\u7ba1\u7406\u5458\u63d0\u4f9b\u7684\u5b8c\u6574\u542f\u7528\u94fe\u63a5\u3002',
+        'public_error.activate_missing.action': '\u56de\u5230\u9996\u9875',
+        'public_error.activate_invalid.heading': '\u542f\u7528\u94fe\u63a5\u65e0\u6548',
+        'public_error.activate_invalid.message': '\u8bf7\u5411\u7ba1\u7406\u5458\u7d22\u53d6\u65b0\u7684\u542f\u7528\u94fe\u63a5\u3002',
+        'public_error.activate_invalid.action': '\u56de\u5230\u9996\u9875',
+        'public_error.activate_used.heading': '\u542f\u7528\u94fe\u63a5\u5df2\u4f7f\u7528',
+        'public_error.activate_used.message': '\u6b64\u94fe\u63a5\u53ea\u80fd\u4f7f\u7528\u4e00\u6b21\uff0c\u8bf7\u76f4\u63a5\u767b\u5f55\u3002',
+        'public_error.activate_used.action': '\u56de\u5230\u9996\u9875',
+        'public_error.activate_expired.heading': '\u542f\u7528\u94fe\u63a5\u5df2\u8fc7\u671f',
+        'public_error.activate_expired.message': '\u8bf7\u5411\u7ba1\u7406\u5458\u7d22\u53d6\u65b0\u7684\u542f\u7528\u94fe\u63a5\u3002',
+        'public_error.activate_expired.action': '\u56de\u5230\u9996\u9875',
+        'public_error.activate_already.heading': '\u8d26\u53f7\u5df2\u542f\u7528',
+        'public_error.activate_already.message': '\u6b64\u8d26\u53f7\u5df2\u8bbe\u5b9a\u5bc6\u7801\uff0c\u8bf7\u76f4\u63a5\u767b\u5f55\u3002',
+        'public_error.activate_already.action': '\u56de\u5230\u9996\u9875',
+        'public_error.password_no_credential.heading': '\u5c1a\u672a\u8bbe\u5b9a\u5bc6\u7801',
+        'public_error.password_no_credential.message': '\u8bf7\u4f7f\u7528\u542f\u7528\u94fe\u63a5\u8bbe\u5b9a\u5bc6\u7801\u3002',
+        'public_error.password_no_credential.action': '\u56de\u5230\u9996\u9875',
+        'public_error.default.heading': '\u65e0\u6cd5\u5b8c\u6210\u64cd\u4f5c',
+        'public_error.default.message': '\u8bf7\u7a0d\u540e\u518d\u8bd5\u6216\u8054\u7cfb\u7ba1\u7406\u5458\u3002',
+        'public_error.default.action': '\u56de\u5230\u9996\u9875',
+      },
+    },
     not_found: {
       text: {
         'not_found.eyebrow': '\u63d0\u793a',
@@ -134,11 +160,29 @@
     }
   }
 
+  // Error pages resolve their copy from <body data-error-code>: the template
+  // only carries data-copy-error="heading|message|action" nodes.
+  function fillError(root) {
+    var code = document.body ? (document.body.getAttribute('data-error-code') || 'default') : 'default';
+    var nodes = root.querySelectorAll('[data-copy-error]');
+    for (var i = 0; i < nodes.length; i++) {
+      var suffix = nodes[i].getAttribute('data-copy-error');
+      var key = 'public_error.' + code + '.' + suffix;
+      if (!Object.prototype.hasOwnProperty.call(table.text || {}, key)) {
+        key = 'public_error.default.' + suffix;
+      }
+      if (Object.prototype.hasOwnProperty.call(table.text || {}, key)) {
+        nodes[i].textContent = table.text[key];
+      }
+    }
+  }
+
   function start() {
     fillText(document);
     fillHTML(document);
     fillAria(document);
     fillPlaceholders(document);
+    fillError(document);
     if (document.body) document.body.classList.remove('copy-pending');
   }
 

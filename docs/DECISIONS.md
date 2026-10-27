@@ -528,3 +528,25 @@ sources: []
   `TestIntegrationLegacyHomeSelfCard` / `TestIntegrationLegacyProfilePhotosMeta` /
   `TestIntegrationPublicProfileHidesUnauthorizedPhotos`（photos_meta 对齐/尺寸/未授权不泄露）、
   Playwright `public_scan_pages_smoke.py` + `user_reported_bugs_20261027.py` viewer 段（双视口 rect 差）。
+
+## 40. 公開 GET 錯誤頁納入掃描防護（決策 39 例外收窄，2026-10-27）
+
+- 背景：Reviewer 對 `a74be1a` 判 FAIL：`GET /activate`（缺 token/無效）400、過期/已用 410，
+  `/password` 無 credential 409 仍走 `renderError` + `error.tmpl`，body 除 title 有 37–40 漢字，
+  且引用含中文註釋的 `app.css`/`shell.css`；PM 只允許「POST 後錯誤訊息」中文，GET 錯誤頁不得例外。
+- 決策：新增 scan-safe `public_error` 頁（`web/templates/pages/public_error.tmpl` + layout
+  `ScanSafe`/`CopyPage`/`ErrorCode`）：body 除 `<title>` 外 0 漢字，引用 `home.css`+`auth.css`+
+  `public-copy.js`（0 漢字）；文案由 JS 依 `<body data-error-code>` 從 `public_error.<code>.*`
+  注入（`data-copy-error="heading|message|action"`），未知 code 回落 `public_error.default.*`。
+- 覆蓋範圍：`/activate` 缺 token 400（`activate_missing`）、無效 400（`activate_invalid`）、
+  過期 410（`activate_expired`）、已用 410（`activate_used`）、帳號已啟用 410（`activate_already`）；
+  `/password` 無 credential 409（`password_no_credential`）。HTTP 狀態碼與既有 header
+  （`Cache-Control: no-store`、`Retry-After`、`X-Error-Code` 等）不變；未新增/刪除 header。
+- 邊界：`renderError` 對已登入/管理台頁面保持原行為；公開 `500` 與其他非掃描錯誤頁仍走原頁
+  （內部錯誤不屬 PM 掃描契約）；POST 表單錯誤訊息（啟動/改密表單重渲染、登入失敗等）仍可中文，
+  為決策 39 保留的唯一例外；`/register` 表單頁仍留下一批。
+- 證據：`TestIntegrationPublicActivateErrorPages`（missing/invalid/expired/used/already：狀態碼 +
+  0 Han + `data-error-code` + 引用資源 0 Han）、`TestIntegrationPublicPasswordErrorPages`
+  （409 掃描頁；無效 session 仍 303 `/login` 不渲染頁面）、`TestPublicErrorCopyCoversCodes`、
+  `TestLoadTemplatesAndRenderPages/public_error`；Playwright `public_scan_pages_smoke.py`
+  雙視口渲染五種錯誤頁中文 + 無 console error。

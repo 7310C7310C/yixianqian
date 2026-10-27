@@ -11,8 +11,10 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -33,6 +35,32 @@ if not COOKIE:
 SHOT_DIR = Path(os.environ.get("SHOT_DIR", "/tmp/opencode/viewer-fullframe-20261027"))
 VIEWPORTS = os.environ.get("VIEWPORTS", "390x844,1280x900").strip()
 TOLERANCE = float(os.environ.get("RECT_TOLERANCE_PX", "2"))
+
+
+def next_slide_dims() -> tuple[int, int] | None:
+    """Read the first home card's second photo dimensions from the API.
+
+    Avoids hard-coding a fixture size: the check follows whatever the fixture
+    (or staging data) provides. Returns None when unavailable (e.g. old API
+    without photos_meta or a card with a single photo).
+    """
+    req = urllib.request.Request(BASE + "/legacy/api/home",
+                                 headers={"Cookie": "yxq_session=" + COOKIE})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            payload = json.load(resp)
+    except Exception:
+        return None
+    cards = payload.get("cards") or []
+    if not cards:
+        return None
+    meta = cards[0].get("photos_meta") or []
+    if len(meta) < 2:
+        return None
+    w, h = int(meta[1].get("w") or 0), int(meta[1].get("h") or 0)
+    if w <= 0 or h <= 0:
+        return None
+    return w, h
 FULL_WAIT_MS = int(os.environ.get("FULL_WAIT_MS", "8000"))
 
 MEASURE_JS = """
@@ -176,20 +204,25 @@ def check_viewport(p, viewport: str, console_errors: list[str]) -> None:
     if worst > TOLERANCE:
         raise SystemExit(f"[{viewport}] thumbnail/full frame jumped by {worst:.2f}px > {TOLERANCE}px: {delta}")
 
-    # 下一张（左右滑 / 方向键）：方形照片用 meta 的 1:1 框，不依赖缩图尺寸。
+    # 下一张（左右滑 / 方向键）：用 API photos_meta 的第二张尺寸，不硬编码 fixture。
+    dims = next_slide_dims()
     try:
+        if dims is None:
+            raise RuntimeError("no second-photo photos_meta")
+        want_w, want_h = dims
         # PhotoSwipe 的键盘模块未启用；用核心 next() 等价触发「下一张」。
         page.evaluate("() => { if (window.pswp && window.pswp.next) window.pswp.next(); }")
         page.wait_for_function(
-            "() => { const s = window.pswp && window.pswp.currSlide;"
+            "([w, h]) => { const s = window.pswp && window.pswp.currSlide;"
             " const i = s && s.content && s.content.element;"
             " return s && s.index === 1 && i && i.dataset.yxqFull === '1'"
-            " && i.naturalWidth === 1000 && i.naturalHeight === 1000; }",
-            timeout=8000)
+            " && i.naturalWidth === w && i.naturalHeight === h; }",
+            arg=[want_w, want_h], timeout=8000)
         nxt = page.evaluate(MEASURE_JS)
-        if nxt is None or abs(nxt["w"] / nxt["h"] - 1) > 0.02:
-            raise SystemExit(f"[{viewport}] next slide frame not 1:1: {nxt}")
-        print(f"PASS viewer [{viewport}]: next slide square frame {nxt['w']:.1f}x{nxt['h']:.1f}")
+        if nxt is None or abs(nxt["w"] / nxt["h"] - want_w / want_h) > 0.02:
+            raise SystemExit(f"[{viewport}] next slide frame mismatch: {nxt} vs {want_w}x{want_h}")
+        print(f"PASS viewer [{viewport}]: next slide frame {nxt['w']:.1f}x{nxt['h']:.1f}"
+              f" (meta {want_w}x{want_h})")
     except SystemExit:
         raise
     except Exception:

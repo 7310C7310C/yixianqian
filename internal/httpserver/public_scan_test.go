@@ -115,6 +115,15 @@ func TestPublicScanPagesAreHanFree(t *testing.T) {
 			},
 		},
 		{
+			name: "public_error",
+			page: "public_error",
+			data: PageData{
+				Title: "启用链接已过期", ScanSafe: true, CopyPage: "public_error",
+				ErrorCode: publicErrorActivateExpired,
+				Data:      publicErrorData{Code: publicErrorActivateExpired},
+			},
+		},
+		{
 			name: "not_found",
 			page: "not_found",
 			data: PageData{Title: "找不到页面", ScanSafe: true, CopyPage: "not_found"},

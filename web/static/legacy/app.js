@@ -3988,7 +3988,7 @@ const yxqApp = createApp({
       }
       // 退出登录或会话失效：关闭 overlay，回到 SPA 的登录入口
       closeEmbed();
-      if (path === '/login' || path === '/welcome' || path === '/activate') {
+      if (path === '/login' || path === '/activate') {
         // 会话已失效：先出 App 内提示，用户点了再跳登录页，不自动整页导航
         notifySessionExpired();
         return;
