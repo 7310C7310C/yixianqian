@@ -113,7 +113,7 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 |---|---|
 | 域名 | `https://next.nantou.love`（server2 HK relay → server1） |
 | 部署 HEAD（代码） | `a68063e`（大图缩图秒开 + 匿名首页英文 + 活动结束用户侧关卡 + 脱单 gate，assetVersion 27；2026-10-27 15:03:03 自动部署） |
-| `deployed.sha` | 由 autodeploy 随 docs-only 提交推进（指向最新 docs tip）；代码部署标记 `a68063e` |
+| `deployed.sha` | 由 autodeploy 随 docs-only 提交推进（指向最新 docs tip）；代码部署标记 `a68063e`；smoke harness 修正 `b6c0034`（test-only，未触发重建） |
 | `/healthz` version | `staging-a68063e` |
 | `server.prev`（回滚目标） | 旧 `staging-d5bbe5b` binary，sha256 `211f85acd3a32c59…` |
 | migration 最大版本 | `10`（`0010_photo_authz_indexes.sql`，四索引已应用；本次无 migration） |
@@ -444,6 +444,15 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
 - 5xx：app 请求日志 15:04–15:14 共 14 条 `/cards/photo/*` 500，全部为
   `open media object failed … context canceled`（首批部署后 smoke 用旧版 route 拦截中止 in-flight 请求所致；
   同对象带 session 重试 200）；15:30 起 ERROR/WARN=0。staging nginx `access_log off`，5xx 以 app 请求日志为准。
+- smoke harness 修正 `b6c0034`（**test-only**，+29/−1，`web/static`/`internal`/`cmd`/`migrations` 空 diff）：
+  秒开改按「已看到卡图」的缓存命中口径测量（先等卡片缩图 `complete`，再预取缩图字节由 route `fulfill`）。
+  该文件是本文档 doc-meta 的 source，首次 Docs run `40470042686` 因
+  「sources 命中变更但本文档未更新」失败，autodeploy 按闸门拒绝部署 `b6c0034`（未重建/未重启）。
+- 因此本轮运行态不变：`/healthz=staging-a68063e`、server 源码 `a68063e`；`deployed.sha` 由本次 docs-only
+  提交推进到 docs tip（既有语义：`deployed.sha` 指向最新 docs tip，代码部署标记 `a68063e`）。
+  以 `b6c0034` harness 复跑部署中产品：`public_home_smoke` 390x844/1280x900 PASS；
+  `user_reported_bugs_20261027.py` 390x844 **19/19**、390x700 **18/18**（秒开 93–100ms、遮罩 97–104ms）；
+  `no_history_smoke` 390/1280 ALL PASS；16:08 起 5xx=0（ERROR 仅 `context canceled`，为 smoke 关闭页时中止请求）。
 - 匿名首页英文版（`e2627ec`）：title 精确 `一线牵 · 祝你早日找到另一半`；除 title 外 HTML 无 `\p{Han}`；
   `lang="en"`；不渲染站内 header/skip link；Create account/Log in、Feishu 英文 CTA；无 QR；`/login` 仍中文。
   证据：`TestHomeRendersPublicLandingForAnonymous`/`assertEnglishPublicLanding`；本地 HTTP/Playwright 检查。
