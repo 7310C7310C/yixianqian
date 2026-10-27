@@ -15,8 +15,10 @@ sources:
   - internal/httpserver/legacy_ui.go
   - internal/httpserver/readcache.go
   - internal/httpserver/app.go
+  - internal/httpserver/register_pages.go
   - tools/test_perf_guardrails.py
   - web/static/public-copy.js
+  - web/static/register.js
   - web/static/auth.css
 -->
 
@@ -61,6 +63,9 @@ sources:
 `/login`、`/activate`、`/password`、`/register/done` 与 404：源码 0 汉字，文案由
 `/static/public-copy.js` 注入，样式用 `home.css` + `auth.css`（决策 39）；公开 GET 错误页
 （`/activate` 400/410、`/password` 409）同样纳入契约（`data-error-code`，决策 40）；
+`/register` 表单页由服务端生成 ASCII 文案目录（`data-copy-json`，非 ASCII 全 `\uXXXX`）+
+`/static/register.js` 注入标签/提示/占位符/选项，option 的中文 value 由 JS 写入后按原契约提交，
+POST 失败重渲染的原始响应同样 0 汉字（决策 42）；
 POST 表单错误消息与内部 500/管理台错误页是明示例外。旧 `/welcome` 已并入首页，`GET /welcome` 301 → `/`，
 `/register?from=welcome` 仍记录 `join_click`。登录后 `/` 才进入用户 SPA。
 用户端复用 v1 Vue 3 + Vant SPA；

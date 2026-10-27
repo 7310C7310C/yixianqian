@@ -81,8 +81,12 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	resp = anon.get("/register")
 	body = readBody(t, resp)
 	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `name="photos"`) ||
-		!strings.Contains(body, "身份证号码") {
+		!strings.Contains(body, `data-register-text="field.id_card.label"`) {
 		t.Fatalf("register page status=%d body=%s", resp.StatusCode, body)
+	}
+	assertHanFreePublicBody(t, body)
+	if catalog := registerCatalogFromBody(t, body); catalog.Text["field.id_card.label"] != "身份证号码" {
+		t.Fatalf("register catalog lost the id card label: %q", catalog.Text["field.id_card.label"])
 	}
 	csrf := anon.pageCSRF("/register")
 
@@ -112,8 +116,12 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	fields.Set("csrf_token", csrf)
 	resp = postRegisterMultipart(t, anon, fields, [][]byte{testJPEG(t), testJPEG(t)})
 	body = readBody(t, resp)
-	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "请上传 3-9") {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("two-photo status=%d body=%s", resp.StatusCode, body)
+	}
+	assertHanFreePublicBody(t, body)
+	if catalog := registerCatalogFromBody(t, body); !strings.Contains(catalog.Text["page.error"], "请上传 3-9") {
+		t.Fatalf("two-photo re-render lost the error message: %q", catalog.Text["page.error"])
 	}
 	if _, err := env.database.GetUserByPhone(ctx, phone); !errors.Is(err, db.ErrNotFound) {
 		t.Fatalf("user created with too few photos: err=%v", err)
@@ -243,6 +251,11 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 		[][]byte{testJPEG(t), testJPEG(t), testJPEG(t)})
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("duplicate status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	dupBody := readBody(t, resp)
+	assertHanFreePublicBody(t, dupBody)
+	if catalog := registerCatalogFromBody(t, dupBody); catalog.Text["page.error"] == "" {
+		t.Fatal("duplicate re-render lost the error message")
 	}
 	var samePhone int
 	if err := env.conn.QueryRow(ctx, `SELECT count(*) FROM users WHERE phone = $1`, phone).

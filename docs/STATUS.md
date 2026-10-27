@@ -19,8 +19,10 @@ sources:
   - web/static/home.js
   - web/static/auth.css
   - web/static/public-copy.js
+  - web/static/register.js
   - web/static/legacy/index.html
   - internal/httpserver/social_pages.go
+  - internal/httpserver/register_pages.go
   - internal/db/activities.go
   - internal/db/grouping.go
   - internal/db/profile.go
@@ -31,8 +33,49 @@ sources:
 - 更新日期：2026-10-27
 - 维护者：项目维护者
 - 下一更新点：PM 在 Android Via/Kiwi/荣耀真机复验虚拟历史栈与可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-9210ee2`（代码 `9210ee2`：匿名首页中文化 + 大图移除加载指示，assetVersion 28，migration 10 不变）；
-  生产 `app.nantou.love` 未切换。本地批次 2026-10-27c（welcome 合并 + 公开页扫描防护 + 大图全屏缩图）已实现，**未 push、未部署**。
+- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-aab3bb5`（代码 `aab3bb5`：腾讯云照片合规判定接回，assetVersion 30，migration 10 不变；`/healthz` 2026-10-27T13:57Z）；
+  生产 `app.nantou.love` 未切换。本地批次 2026-10-27c（welcome 合并 + 公开页扫描防护 + 大图全屏缩图）、
+  2026-10-27f（/register 表单扫描防护）与 2026-10-27g（facebackfill 守卫）已实现，**未 push、未部署**。
+
+## 2026-10-27g facebackfill `-all` 守卫 + 合规回填 fail-fast（本地实现，待部署）
+
+- 触发：Reviewer M1——`facebackfill -all` 在 `TENCENT_FACE_BACKFILL=false` 时只跑本地 YuNet，
+  会把腾讯云已判为非人类的照片 `has_face` 翻回 true，无声撤销合规结论；runbook 旧段落还建议这样用。
+- 修复：`-all` 必须 `TENCENT_FACE_BACKFILL=true`，否则 exit 1 并打印原因（`-dry-run` 同样拒绝）；
+  只要 `TENCENT_FACE_ENABLED`/`TENCENT_FACE_BACKFILL` 任一为 true，就要求凭证齐备且 Checker
+  初始化成功，否则拒绝回填（不再静默 skip）。守卫在 DB/R2 连接前执行，拒绝无副作用；
+  cron 增量（两个开关都没有、不带 `-all`）保持原行为。上传路径仍 fail-open。
+- 同时修 Reviewer minor：m1 UTC 测试 fixture 改 00:30+08（移除 `.UTC()` 必红）；
+  m2/m3/m4/m5 runbook（删除「合规未实现」矛盾行、明示静默活体≠身份认证、日志期望对齐
+  `LOG_LEVEL=info`、sources 补 `internal/tencentface/**`）；m6 成本与重试重复计费记录在
+  决策 43（不改行为）；WS1 viewer harness 稳定化（test-only）；WS3 补 catalog↔模板钩子
+  双向断言（删 hook 由 Go 测试抓，不再只靠 Playwright）。
+- 证据（本地，base `185ad30`）：`make fast`、`make ci`、`make perf-budget` 全绿；
+  `go test -race ./internal/face ./internal/tencentface ./internal/config ./cmd/facebackfill` PASS；
+  守卫真实输出：`-all` 无开关 exit 1、`TENCENT_FACE_BACKFILL=true` 无凭证 exit 1、
+  补凭证后越过守卫并在 DB 连接失败；mutation：移除 `.UTC()` 测试红、删除模板 hook 测试红；
+  `tools/browser/viewer_fullframe_smoke.py` 双视口连续 3 次稳定 PASS。
+- 状态：本地 commit，未 push、未部署；staging/生产与 migration 不变。
+
+## 2026-10-27f /register 表单扫描防护（本地实现，待部署）
+
+- 契约闭合：`GET /register`（含 `?from=home|welcome`）与 POST 失败重渲染的原始响应，除 `<title>` 外
+  **0 汉字**，引用的 `home.css`/`auth.css`/`register.css`/`register.js` 均 0 汉字（决策 42）。
+- 实现：`renderRegister` 用 `registerSections()`/`buildRegisterPageData()` 生成
+  `registerCopyCatalog{text,options,values}` → 非 ASCII 全 `\uXXXX` 的 ASCII JSON →
+  `<body data-copy-json>`；新 `/static/register.js` 注入标签/提示/占位符/选项，并把中文 option value
+  写回 `option.value` 与 checkbox value，提交契约不变。POST 错误文案文本不变，改经 `page.error` 注入，
+  因此失败重渲染也 0 汉字且保留已填值/已选状态；无 JS 时表单不可用（与首页同取舍，已记录）。
+- 兼容：字段顺序/required/min/max/maxlength/选项集合/多选/checkbox/上传/CSRF/POST 校验与写库不变；
+  `register.css` 补齐 select/textarea/number/date/file 控件样式（从 shell.css 逐字复制）；
+  `assetVersion` 30→31，admin CSS `@import` 同步；`register.js`/`register.css` 的 `.gz` 已重建。
+- 证据（本地，base `aab3bb5`）：`TestRegisterCopyCatalogIsASCII`、`TestRegisterCopyCoversTemplateKeys`、
+  `TestRegisterPageReferencesHanFreeAssets`、`TestRegisterCopyCarriesPostError`、
+  `TestRegisterTemplatesRender`、`TestIntegrationHTTPRegisterFlow`（GET 与 400/409 重渲染 0 Han）；
+  `make fast`/`make ci`/`make perf-budget`/`make static-gzip`/`make spa-check`/`make asset-version-check`；
+  Playwright `tools/browser/register_scan_smoke.py` 双视口（390x844/1280x900）：渲染文案齐全、
+  option value 中文、提交 payload 中文、错误重渲染值/选中保留、0 console error、截图。
+- 状态：本地 commit，未 push、未部署；staging/生产与 migration 不变。
 
 ## 2026-10-27c welcome 合并 + 公开页扫描防护 + 大图全屏缩图（本地实现，待部署）
 
@@ -509,7 +552,8 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   `internal/tencentface`），上传路径由 `TENCENT_FACE_ENABLED` 控制；staging env 已配置，
   待部署后在 `/healthz` 新版本上验证日志与 has_face 行为。
 - **内容合规（历史照片）**：`facebackfill` 默认不调用腾讯，历史 1028 张未按新规则重判；
-  如需纠正需显式 `TENCENT_FACE_BACKFILL=true` 短时回填（按次计费）。
+  如需纠正必须显式 `TENCENT_FACE_BACKFILL=true` 短时回填（按次计费）；未设该开关的 `-all`
+  会被守卫直接拒绝（决策 43）。合规判定本身 fail-open，外部失败时该照片不会重判。
 - **裁切**：v1 黑边裁切未移植，`faces.tb/lr` 固定 `[0,0]`。
 - **真机与性能**：真机 iOS/Android/微信、旧设备宽度、图片/首屏性能未完成。
 - **运维演练**：备份还原、回滚演练、安全最终审查未完成。

@@ -29,15 +29,20 @@ func TestSignUsesUTCAndLowercasesAction(t *testing.T) {
 	s := signer{
 		secretID:  "id",
 		secretKey: "key",
-		// 2025-10-09 23:30 UTC+8 = 2025-10-09 15:30 UTC；必须按 UTC 取日期。
-		now: func() time.Time { return time.Date(2025, 10, 9, 23, 30, 0, 0, time.FixedZone("CST", 8*3600)) },
+		// 2025-10-10 00:30 UTC+8 = 2025-10-09 16:30 UTC。本地日期是 10-10、
+		// UTC 日期是 10-09：只有真正 .UTC() 后取日期才会命中下面的 scope，
+		// 去掉 .UTC() 直接红（staging TZ=Asia/Shanghai 正是这个失效场景）。
+		now: func() time.Time { return time.Date(2025, 10, 10, 0, 30, 0, 0, time.FixedZone("CST", 8*3600)) },
 	}
 	auth, ts := s.sign(serviceIai, "iai.tencentcloudapi.com", "DetectLiveFaceAccurate", []byte("{}"))
-	if want := "1760023800"; ts != want {
+	if want := "1760027400"; ts != want {
 		t.Fatalf("timestamp = %q, want %q", ts, want)
 	}
 	if want := "/2025-10-09/iai/tc3_request"; !strings.Contains(auth, want) {
 		t.Fatalf("authorization missing scope %q: %s", want, auth)
+	}
+	if strings.Contains(auth, "/2025-10-10/") {
+		t.Fatalf("authorization used local date instead of UTC: %s", auth)
 	}
 }
 

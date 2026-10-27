@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -209,6 +210,115 @@ type registerPageData struct {
 	MinPhotos int
 	MaxPhotos int
 	MaxMB     int
+}
+
+// registerCopyStatic is the hand-authored page copy. Go source may contain
+// Chinese; registerCopyJSON escapes every non-ASCII rune so the rendered HTML
+// stays Han-free outside <title> (scan guard, docs/DECISIONS.md decision 42).
+func registerCopyStatic(data registerPageData) map[string]string {
+	return map[string]string{
+		"hero.eyebrow": "一线牵 · 注册",
+		"hero.title":   "填写你的资料",
+		"hero.lead": "亲爱的兄弟姐妹，为了更容易找到另一半，请确保以下资料真实可信。" +
+			"资料仅用于一线牵，不会外泄；身份证号码只供活动保险与人工审核，不会公开。",
+		"hero.loginHint":    "已有账号？",
+		"hero.loginCta":     "直接登录",
+		"hero.loginHintEnd": "。",
+		"photos.title":      "个人照片",
+		"photos.hint": fmt.Sprintf(
+			"请上传 %d–%d 张 JPEG/PNG 照片；第一张会作为封面，建议使用横版照片。单张上限 %d MB。",
+			data.MinPhotos, data.MaxPhotos, data.MaxMB),
+		"photos.heic": "iPhone 默认的 HEIC 照片无法直接上传：请先在相册转成 JPEG，" +
+			"或在「设置 → 相机 → 格式」选择「兼容性最佳」。",
+		"photos.label":          "选择照片",
+		"photos.retry":          "若提交失败，需要重新选择照片。",
+		"password.title":        "登录密码",
+		"password.hint":         "注册后即可用手机号码＋这组密码登录，查看审核状态。",
+		"password.label":        "密码",
+		"password.confirmLabel": "再次输入密码",
+		"password.hint2":        "至少 8 个字元。",
+		"select.required":       "请选择",
+		"select.optional":       "未填",
+		"submit.hint": "送出后状态为「待审核」，小天使/管理员审核通过后会以站内通知告知。" +
+			"审核期间请勿重复提交。",
+		"submit.button":  "送出注册资料",
+		"submit.altHint": "已经填过？",
+		"submit.altCta":  "登录查看审核状态",
+	}
+}
+
+// registerCopyCatalog is the JSON payload consumed by /static/register.js.
+// Text holds static copy, Options maps "<field>.<index>" to the Chinese option
+// value (also its visible label), Values echoes safe POST values so even a
+// failed re-render stays Han-free in the raw response.
+type registerCopyCatalog struct {
+	Text    map[string]string `json:"text"`
+	Options map[string]string `json:"options"`
+	Values  map[string]string `json:"values"`
+}
+
+func registerCopyJSON(data registerPageData, message string) string {
+	cat := registerCopyCatalog{
+		Text:    registerCopyStatic(data),
+		Options: make(map[string]string),
+		Values:  make(map[string]string),
+	}
+	for sectionIndex, section := range data.Sections {
+		cat.Text[fmt.Sprintf("section.%d.title", sectionIndex)] = section.Title
+		for _, field := range section.Fields {
+			name := "field." + field.Name
+			cat.Text[name+".label"] = field.Label
+			if field.Hint != "" {
+				cat.Text[name+".hint"] = field.Hint
+			}
+			if field.Placeholder != "" {
+				cat.Text[name+".placeholder"] = field.Placeholder
+			}
+			for optionIndex, option := range field.Options {
+				cat.Options[fmt.Sprintf("%s.%d", field.Name, optionIndex)] = option.Value
+			}
+			switch registerFieldKind(field.Type) {
+			case registerKindCheckbox:
+				cat.Options[field.Name+".0"] = field.Option
+			case registerKindText, registerKindTextarea, registerKindTel,
+				registerKindDate, registerKindNumber:
+				if field.Value != "" {
+					cat.Values[field.Name] = field.Value
+				}
+			}
+		}
+	}
+	if message != "" {
+		cat.Text["page.error"] = message
+	}
+	raw, err := json.Marshal(cat)
+	if err != nil {
+		return ""
+	}
+	return escapeJSONNonASCII(raw)
+}
+
+// escapeJSONNonASCII rewrites every non-ASCII rune as a \uXXXX escape so the
+// JSON can be embedded in HTML without shipping Han bytes. json.Marshal already
+// escapes <, > and &, and this pass guarantees no raw quote appears inside a
+// string value, which keeps the html/template attribute escaping lossless.
+func escapeJSONNonASCII(raw []byte) string {
+	var out strings.Builder
+	out.Grow(len(raw))
+	for _, r := range string(raw) {
+		if r < utf8.RuneSelf {
+			out.WriteByte(byte(r))
+			continue
+		}
+		if r <= 0xFFFF {
+			fmt.Fprintf(&out, `\u%04x`, r)
+			continue
+		}
+		hi := 0xD800 + ((r - 0x10000) >> 10)
+		lo := 0xDC00 + ((r - 0x10000) & 0x3FF)
+		fmt.Fprintf(&out, `\u%04x\u%04x`, hi, lo)
+	}
+	return out.String()
 }
 
 // registerFormValues keeps only safe-to-reflect values when a submission is

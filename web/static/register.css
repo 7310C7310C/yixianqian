@@ -1,6 +1,7 @@
 /* YIXIANQIAN — public landing page and registration form.
-   Load order: app.css -> shell.css -> register.css.
-   Brand colors reuse the pink tokens from shell.css; every value keeps a literal fallback. */
+   /register loads home.css -> auth.css -> register.css (scan-safe set); the
+   landing page loads home.css -> register.css. Brand colors reuse the pink
+   tokens from shell.css; every value keeps a literal fallback. */
 
 .welcome-hero {
   margin: 0 0 14px;
@@ -258,6 +259,72 @@
   min-height: 0;
   margin-right: 6px;
   vertical-align: -2px;
+}
+
+/* Remaining form controls. /register loads home.css + auth.css instead of
+   app.css + shell.css (scan guard: those files contain Chinese comments), and
+   auth.css only covers text/tel/password inputs. Values copied verbatim from
+   shell.css; keep in sync when the shell form styles change. */
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+  width: 100%;
+  min-height: 44px;
+  min-height: var(--shell-tap, 44px);
+  padding: 10px 12px;
+  border: 1px solid #8a8a8e;
+  border-color: var(--shell-border-strong, #8a8a8e);
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+  background: #ffffff;
+  background: var(--shell-input-bg, #ffffff);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+input[type="file"] {
+  width: 100%;
+  min-height: 44px;
+  min-height: var(--shell-tap, 44px);
+  padding: 8px;
+  border: 1px solid #8a8a8e;
+  border-color: var(--shell-border-strong, #8a8a8e);
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+  background: #ffffff;
+  background: var(--shell-input-bg, #ffffff);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font: inherit;
+  font-size: 16px;
+}
+
+input[type="number"]:focus,
+input[type="date"]:focus,
+input[type="file"]:focus,
+select:focus,
+textarea:focus {
+  border-color: #cc304e;
+  border-color: var(--shell-focus, #cc304e);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 107, 129, 0.24);
+  box-shadow: 0 0 0 3px var(--shell-focus-ring, rgba(255, 107, 129, 0.24));
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #969799;
+  color: var(--shell-placeholder, #969799);
+  opacity: 1;
 }
 
 .register-submit {

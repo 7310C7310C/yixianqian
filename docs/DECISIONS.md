@@ -587,3 +587,85 @@ sources: []
   `TestIntegrationTencentComplianceBlocksHasFace`；config 解析单测。server1 合成图实调：
   `DetectLabel` HTTP 200 OK ≈1.0s，`DetectLiveFaceAccurate` HTTP 200
   `InvalidParameterValue.NoFaceInPhoto` ≈0.7s；Go 实现实调 1.1s/0.7s、`errors.Is` 命中。
+
+## 42. /register 表单纳入扫描防护：服务端生成 ASCII 文案目录（2026-10-27）
+
+- 背景：决策 39/40 已把 `/`、`/login`、`/activate`、`/password`、`/register/done`、404 与公开 GET
+  错误页纳入「源码除 `<title>` 0 汉字、引用 CSS/JS 0 汉字」契约，但 `/register` 表单仍直接输出中文
+  标签、提示与 option 文案（option 的 value 本身也是中文，是提交契约的一部分），是最后一个公开缺口。
+- 决策（文案目录由服务端生成，不手抄第二份）：`renderRegister` 用 `registerSections()` +
+  `buildRegisterPageData()` 生成 `registerCopyCatalog{text, options, values}`，`encoding/json` 序列化后
+  把所有非 ASCII 字符改写成 `\uXXXX`（含代理对），得到纯 ASCII JSON，放入 `<body data-copy-json>`
+  属性由 `/static/register.js` 注入：
+  - `text`：hero/照片/密码/送出区、每个 section 标题、每个字段 label/hint/placeholder、`select.required|optional`、
+    以及 POST 失败时的 `page.error`。
+  - `options`：`<field>.<index>` → 中文 option 值（当前 value 与 label 同一字符串）。
+  - `values`：`text|textarea|tel|date|number` 的已填值（继续经 `registerFormValues` 过滤，身份证与密码永不回填）。
+  - 模板只输出 ASCII 钩子（`data-register-text/-placeholder/-option/-option-text/-value/-error`）与
+    `selected`/`checked` 布尔属性；字段顺序、required、min/max、maxlength、选项集合、多选/单选/checkbox 语义、
+    上传、CSRF、POST 校验与写库完全不变，option 的 value/text 仍由 JS 写成中文后按原契约提交。
+- 决策（CSP/缓存/请求数）：目录随页面内联在属性里，不新增端点、不新增请求；页面本身
+  `Cache-Control: no-store`，目录与本次渲染的表单天然一致，不存在缓存串版本；CSP 仍是
+  `script-src 'self'`（无 inline script，只多一个同源 `/static/register.js`）。代价是
+  `/register` HTML 变大（实测原始 67.1KB、gzip 7.4KB，目录 JSON 13.4KB、属性转义后 17.6KB；
+  该页不在静态首载预算口径内）。
+- 决策（POST 错误消息）：错误文案文本一字不改（仍是中文、仍是 POST 例外），但改为经 `page.error`
+  由 JS 渲染，因此 POST 失败重渲染的**原始响应**同样除 `<title>` 外 0 汉字，且已填值与已选状态保留。
+  这比决策 39 的「POST 重渲染可含中文」更严格，不改变用户可见语言。
+- 决策（无 JS 取舍）：与首页/其他扫描页一致，禁用 JS 时表单不可用（文案与 option value 均由 JS 注入），
+  `body.copy-pending` 保持隐藏避免空白闪；已记录接受。
+- 决策（页面外壳）：`/register` 改用 `ScanSafe` 布局，与 `/password` 一样不渲染含中文/用户名的 shell 头部；
+  已登录会员「替子女报名」时同样看不到顶部退出链接（页面底部仍有登录/说明入口），这是扫描契约的必然代价，
+  与决策 39 对登录后扫描页的处理一致。
+- 备选与不采纳：①独立 ASCII JSON 端点 + fetch——多一次请求与缓存/版本对齐成本，且首屏表单要等第二个
+  请求才能填充；②把 option 的中文 value 改成 ASCII 代号——会破坏提交契约与历史数据；③在 Go 里手写第二份
+  文案表——与 `registerSections()` 漂移；④POST 重渲染继续保留中文——不满足 PM 本次验收口径。
+- 风险：目录体积随选项表增长（新增选项自动进入，无需改 JS）；`register.js` 解析失败时表单保持隐藏
+  （同 public-copy.js 策略）；`register.css` 现需自带 select/textarea/number/date/file 控件样式
+  （从 shell.css 逐字复制，auth.css 只覆盖 text/tel/password），shell 基础样式变更时需同步。
+- 证据：`TestRegisterCopyCatalogIsASCII`（目录全 ASCII、可解析、选项数对齐、中文还原）、
+  `TestRegisterCopyCoversTemplateKeys`（每个 DOM 钩子都有目录键）、
+  `TestRegisterPageReferencesHanFreeAssets`（home.css/auth.css/register.css/register.js 0 汉字）、
+  `TestRegisterCopyCarriesPostError`（错误+已填值在目录内、原始 body 0 汉字）、
+  `TestRegisterTemplatesRender`（选中状态与恶意输入转义）、
+  `TestIntegrationHTTPRegisterFlow`（GET /register 与 400/409 重渲染 0 汉字、`page.error` 保留中文、
+  成功注册/写库/审核门禁不变）；Playwright `tools/browser/register_scan_smoke.py`
+  （390x844/1280x900：渲染文案齐全、option value 中文、已选/已填保留、提交 payload 中文、
+  0 console error、原始响应 0 汉字）。
+
+## 43. facebackfill `-all` 守卫与合规回填 fail-fast（2026-10-27）
+
+- 背景：决策 41 的合规结论只落在 `profile_photos.has_face`，没有单独列保存 blocked 原因。
+  `cmd/facebackfill -all` 默认只跑本地 YuNet/Haar，会把腾讯云已判为非人类（动物/卡通）的照片
+  `has_face` 从 false 重算回 true，等于**静默撤销合规结论**；runbook 旧段落还建议用 `-all`
+  纠正历史结果，进一步放大了这个风险（Reviewer M1）。
+- 决策（最小守卫，不改产品行为）：
+  1. `-all` 在 `TENCENT_FACE_BACKFILL!=true` 时**拒绝执行**（stderr 明确原因、exit 1），
+     `-dry-run` 也不例外；守卫在任何 DB/R2 连接之前执行，拒绝无副作用。
+  2. 只要检测到 `TENCENT_FACE_ENABLED=true` 或 `TENCENT_FACE_BACKFILL=true`，就要求
+     `TENCENT_SECRET_ID`/`TENCENT_SECRET_KEY` 齐备且 `tencentface.NewChecker` 初始化成功；
+     否则**拒绝运行回填**，不再「缺凭证只告警然后静默跳过合规」。
+  3. 不带 `-all`、两个开关都为 false 的增量模式（cron wrapper 只加载
+     `facebackfill.cli.env`，其中没有 TENCENT key）**保持现行为**，cron 不受影响。
+- 备选与不采纳：
+  - 持久化 blocked（新增 `blocked_reason` 列）：能同时修「合规 skip 仍写 `face_checked=true`」，
+    但需要 migration、回填与回滚方案，风险高于本次范围；留作后续独立评估（schema 只增不改）。
+  - 只在 runbook 写「谨慎使用 `-all`」：靠人记，Reviewer 已证明会漂移，不采纳。
+  - 增量模式也禁止：会停掉 cron 的本地补测，影响线上 `has_face` 门禁，不采纳。
+- 残余风险（本次明确接受）：
+  - **合规 skip 仍写 `checked=true`**：外部超时/429/鉴权失败时 fail-open 返回 Blocked=false，
+    落库 `face_checked=true` 后增量不会重判；只有显式 `TENCENT_FACE_BACKFILL=true -all`
+    （按次计费）能纠正。这是决策 41 fail-open 的既有取舍，守卫只堵住「本地重扫翻回 true」。
+  - **`has_face=false` 仍外呼**（Reviewer m6）：上传路径在本地点未检出人脸时仍调用
+    `DetectLabel`，多一次计费；实现上可安全短路（`ApplyCompliance` 只会把 `has_face`
+    置 false，已 false 时结果等价），但本次任务边界只允许 guard/fail-fast，且短路会改变
+    外呼与成本口径，故不改行为，仅记录为后续优化项。
+  - **retry 重复计费**（m6）：Go client 不重试；但同一张照片的上传后重试、后台补测与回填
+    会各自计费一次，没有去重键。无数据正确性影响。
+- 证据：`cmd/facebackfill/guard_test.go`（8 例，含 cron 现状放行与凭证缺失拒绝）；
+  真实二进制：`-all`（无 BACKFILL）exit 1 且输出守卫文案、`-all -dry-run` 同样拒绝；
+  `BACKFILL=true`/`ENABLED=true` 缺凭证 exit 1；补上凭证后越过守卫、按预期在 DB 连接失败
+  （证明守卫顺序与放行路径）；`TestSignUsesUTCAndLowercasesAction` 改用 00:30+08 fixture，
+  移除 `sign.go` 的 `.UTC()` 后必红（m1）。
+- 回滚：`git revert` 本提交即可，无 schema、无 env、无数据变化；部署后如需临时绕过守卫，
+  只能显式设 `TENCENT_FACE_BACKFILL=true` 并配置凭证（不要改二进制）。

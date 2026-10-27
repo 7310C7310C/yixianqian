@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
@@ -62,6 +63,11 @@ def next_slide_dims() -> tuple[int, int] | None:
         return None
     return w, h
 FULL_WAIT_MS = int(os.environ.get("FULL_WAIT_MS", "8000"))
+# 首次访问的引导遮罩/公告弹窗/SPA 重渲染都会让“点击卡片”在 staging 上偶发失败；
+# 这些重试只作用于交互（打开查看器），断言仍然只跑一次，避免掩盖真实回归。
+OPEN_RETRIES = int(os.environ.get("OPEN_RETRIES", "3"))
+STABLE_TIMEOUT_MS = int(os.environ.get("RECT_STABLE_TIMEOUT_MS", "2500"))
+GUIDE_TEXTS = ("我知道了", "知道了", "开始体验", "开始")
 
 MEASURE_JS = """
 () => {
@@ -81,35 +87,163 @@ MEASURE_JS = """
 """
 
 
-def dismiss_overlays(page) -> None:
-    """Close first-visit guides / release-note dialogs that can cover the card."""
-    for _ in range(3):
-        try:
-            dlg = page.locator(".van-dialog:visible")
-            if dlg.count():
-                dlg.locator("button").last.click(timeout=2000)
-                page.wait_for_timeout(300)
-                continue
-            if page.locator(".van-overlay:visible").count():
+def _overlay_visible(page, selector: str) -> bool:
+    try:
+        loc = page.locator(selector)
+        return loc.count() > 0 and loc.first.is_visible()
+    except Exception:
+        return False
+
+
+def dismiss_overlays(page, budget_s: float = 5.0) -> None:
+    """Close first-visit guides / release-note dialogs that can cover the card.
+
+    Bounded: only known overlay selectors, no blanket click on every popup
+    button (that could re-open another dialog and spin), stops as soon as
+    nothing is visible. A guide that still appears late is retried by
+    click_card.
+    """
+    deadline = time.time() + budget_s
+    for _ in range(20):
+        acted = False
+        if _overlay_visible(page, ".swipe-guide-mask"):
+            clicked = False
+            for label in GUIDE_TEXTS:
+                btn = page.locator(f".swipe-guide-mask >> text={label}")
+                try:
+                    if btn.count():
+                        btn.first.click(timeout=1200)
+                        clicked = True
+                        break
+                except Exception:
+                    continue
+            if not clicked:
+                try:
+                    page.keyboard.press("Escape")
+                except Exception:
+                    pass
+            acted = True
+        elif _overlay_visible(page, ".van-dialog"):
+            try:
+                page.locator(".van-dialog .van-dialog__confirm, .van-dialog button").last.click(timeout=1200)
+            except Exception:
+                try:
+                    page.keyboard.press("Escape")
+                except Exception:
+                    pass
+            acted = True
+        elif _overlay_visible(page, ".van-overlay"):
+            try:
                 page.keyboard.press("Escape")
-                page.wait_for_timeout(300)
-                continue
+            except Exception:
+                pass
+            acted = True
+        if not acted or time.time() > deadline:
             return
-        except Exception:
-            page.wait_for_timeout(300)
+        page.wait_for_timeout(250)
 
 
 def click_card(page) -> None:
-    """Click the card photo, dismissing any late first-visit overlay first."""
-    for attempt in range(6):
+    """Click the card photo, retiring late overlays / detached DOM first."""
+    last: Exception | None = None
+    for attempt in range(8):
         try:
-            page.locator(".swipe-card .card-photo-wrap").click(timeout=2500)
-            return
-        except Exception:
-            if attempt == 5:
-                raise
             dismiss_overlays(page)
+            wrap = page.locator(".swipe-card .card-photo-wrap").first
+            wrap.wait_for(state="visible", timeout=5000)
+            wrap.click(timeout=3000)
+            return
+        except Exception as exc:  # overlay intercept / detached re-render
+            last = exc
+            dismiss_overlays(page)
+            page.wait_for_timeout(300 + 150 * attempt)
+    raise SystemExit(f"cannot click card after 8 attempts: {last}")
+
+
+def goto_home(page) -> None:
+    """Load the deck and wait until the first card photo is decoded.
+
+    Retries the navigation only; assertions still run once on the final DOM.
+    """
+    last: Exception | None = None
+    for _ in range(3):
+        try:
+            page.goto(BASE + "/", wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_selector(".swipe-card .card-photo-item", timeout=20000)
+            page.wait_for_function(
+                "() => { const i = document.querySelector('.swipe-card .card-photo-item');"
+                " return i && i.complete && i.naturalWidth > 0; }", timeout=20000)
+            return
+        except Exception as exc:
+            last = exc
             page.wait_for_timeout(500)
+    raise SystemExit(f"home deck did not become ready: {last}")
+
+
+def prepare_card(page) -> None:
+    """Dismiss the first-visit swipe guide (if it is going to appear) and settle."""
+    try:
+        page.wait_for_selector(".swipe-guide-mask", state="visible", timeout=6000)
+    except Exception:
+        pass  # not a first visit / already dismissed
+    dismiss_overlays(page)
+
+
+def measure_stable(page) -> dict | None:
+    """Measure the viewer frame once it stops moving (avoids mid-animation rects)."""
+    deadline = time.time() + STABLE_TIMEOUT_MS / 1000
+    prev = None
+    while True:
+        cur = page.evaluate(MEASURE_JS)
+        if cur is None:
+            return None
+        if prev is not None and all(abs(cur[k] - prev[k]) <= 0.5
+                                    for k in ("x", "y", "w", "h")):
+            return cur
+        prev = cur
+        if time.time() > deadline:
+            return cur
+        page.wait_for_timeout(120)
+
+
+def release_held(held) -> None:
+    for route in held:
+        try:
+            route.continue_()
+        except Exception:
+            pass
+    held.clear()
+
+
+def open_viewer(page, held) -> dict:
+    """Open the first card photo and return the settled thumbnail frame.
+
+    Retries the interaction (overlay/DOM replacement races) without retrying
+    the geometry assertion itself.
+    """
+    last: Exception | None = None
+    for attempt in range(OPEN_RETRIES):
+        try:
+            click_card(page)
+            page.wait_for_selector(".pswp", state="visible", timeout=15000)
+            page.wait_for_function(
+                "() => { const i = document.querySelector('.pswp__img');"
+                " return i && i.complete && i.naturalWidth > 0; }", timeout=FULL_WAIT_MS)
+            rect = measure_stable(page)
+            if rect is None:
+                raise RuntimeError("viewer img missing")
+            return rect
+        except Exception as exc:
+            last = exc
+            release_held(held)
+            try:
+                if page.locator(".pswp").count():
+                    page.keyboard.press("Escape")
+                    page.wait_for_selector(".pswp", state="detached", timeout=4000)
+            except Exception:
+                pass
+            page.wait_for_timeout(400 + 300 * attempt)
+    raise SystemExit(f"cannot open viewer after {OPEN_RETRIES} attempts: {last}")
 
 
 def rect_delta(a, b) -> dict[str, float]:
@@ -148,37 +282,19 @@ def check_viewport(p, viewport: str, console_errors: list[str]) -> None:
             else None)
     page.on("pageerror", lambda exc: console_errors.append(str(exc)))
 
-    page.goto(BASE + "/", wait_until="domcontentloaded")
-    page.wait_for_selector(".swipe-card .card-photo-item", timeout=20000)
-    # First-visit swipe guide covers the card; dismiss it like a real user.
-    try:
-        page.wait_for_selector(".swipe-guide-mask", state="visible", timeout=8000)
-        page.locator("text=我知道了").click(timeout=4000)
-        page.wait_for_selector(".swipe-guide-mask", state="detached", timeout=5000)
-    except Exception:
-        pass
-    dismiss_overlays(page)
-    page.wait_for_function(
-        "() => { const i = document.querySelector('.swipe-card .card-photo-item');"
-        " return i && i.complete && i.naturalWidth > 0; }", timeout=20000)
+    goto_home(page)
+    prepare_card(page)
 
     SHOT_DIR.mkdir(parents=True, exist_ok=True)
     # 缩图阶段：点开第一张并暂停原图请求，等缩图解码后量框。
     mode["on"] = "hold"
-    page.click(".swipe-card .card-photo-wrap")
-    page.wait_for_selector(".pswp", state="visible", timeout=15000)
-    page.wait_for_function(
-        "() => { const i = document.querySelector('.pswp__img');"
-        " return i && i.complete && i.naturalWidth > 0; }", timeout=FULL_WAIT_MS)
-    thumb = page.evaluate(MEASURE_JS)
-    if thumb is None:
-        raise SystemExit(f"[{viewport}] viewer img missing")
+    thumb_rect = open_viewer(page, held)
+    thumb = thumb_rect
     if "size=thumb" not in thumb["src"]:
         raise SystemExit(f"[{viewport}] first frame is not the thumbnail: {thumb['src']}")
     if thumb["objectFit"] != "cover":
         raise SystemExit(f"[{viewport}] viewer thumbnail object-fit={thumb['objectFit']}, want cover")
     page.screenshot(path=str(SHOT_DIR / f"viewer-thumb-{viewport}.png"))
-    thumb_rect = thumb
 
     # 放行原图请求，等 data-yxq-full=1 且 naturalWidth 变成原图
     mode["on"] = "pass"
@@ -189,7 +305,7 @@ def check_viewport(p, viewport: str, console_errors: list[str]) -> None:
         "() => { const i = document.querySelector('.pswp__img');"
         " return i && i.dataset.yxqFull === '1' && i.naturalWidth > 0; }",
         timeout=FULL_WAIT_MS)
-    full = page.evaluate(MEASURE_JS)
+    full = measure_stable(page)
     page.screenshot(path=str(SHOT_DIR / f"viewer-full-{viewport}.png"))
     if full is None or "size=thumb" in full["src"]:
         raise SystemExit(f"[{viewport}] original did not replace thumbnail: {full}")
@@ -230,21 +346,12 @@ def check_viewport(p, viewport: str, console_errors: list[str]) -> None:
 
     # 原图失败：保留缩图，不关查看器（模拟网络失败/10s 内不升级）。
     # 重新载入页面，避免关闭动画/遮罩残影干扰第二次点击。
-    page.goto(BASE + "/", wait_until="domcontentloaded")
-    page.wait_for_selector(".swipe-card .card-photo-wrap", timeout=20000)
-    page.wait_for_function(
-        "() => { const i = document.querySelector('.swipe-card .card-photo-item');"
-        " return i && i.complete && i.naturalWidth > 0; }", timeout=20000)
-    page.wait_for_timeout(1800)
-    dismiss_overlays(page)
+    goto_home(page)
+    prepare_card(page)
     mode["on"] = "abort"
-    click_card(page)
-    page.wait_for_selector(".pswp", state="visible", timeout=15000)
-    page.wait_for_function(
-        "() => { const i = document.querySelector('.pswp__img');"
-        " return i && i.complete && i.naturalWidth > 0; }", timeout=FULL_WAIT_MS)
+    open_viewer(page, held)
     page.wait_for_timeout(1500)
-    kept = page.evaluate(MEASURE_JS)
+    kept = measure_stable(page)
     if kept is None or "size=thumb" not in kept["src"]:
         raise SystemExit(f"[{viewport}] original failure did not keep the thumbnail: {kept}")
     if not page.is_visible(".pswp"):

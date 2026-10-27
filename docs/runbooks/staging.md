@@ -9,6 +9,10 @@ sources:
   - .env.example
   - migrations/**
   - .github/workflows/ci.yml
+  - internal/tencentface/**
+  - internal/face/**
+  - cmd/facebackfill/main.go
+  - cmd/facebackfill/main_guard.go
 -->
 
 > v2 专用；旧 `yixianqian-deploy` skill 只适用 v1。当前 staging 已是 post-0005
@@ -620,8 +624,11 @@ runuser -u yxq -- psql -d yixianqian_staging -Atc \
 # 手动增量（cron 每 10 分钟也会跑；advisory lock 防重入）
 sudo -u yxq /opt/yixianqian-next/bin/facebackfill-incremental
 
-# 单用户补测 / 强制重扫（谨慎，避免周期性全量）
-# bin/facebackfill -user U-0006 / -all -user U-0006
+# 单用户补测（安全）
+# bin/facebackfill -user U-0006
+# 强制重扫：必须同时 TENCENT_FACE_BACKFILL=true（有凭证），否则程序直接拒绝；
+# 不要给 cron 加 -all。
+# TENCENT_FACE_BACKFILL=true bin/facebackfill -all -user U-0006
 
 ls -l /etc/cron.d/yxq-facebackfill
 tail -n 5 /var/log/yxq-facebackfill.log   # 正常接近空跑：count=0 include_checked=false
@@ -629,6 +636,12 @@ tail -n 5 /var/log/yxq-facebackfill.log   # 正常接近空跑：count=0 include
 
 - 回填候选按 `media_id` 去重；`-limit`/`-dry-run` 的数量不要与 `profile_photos` 行数对账。
 - 检测失败的照片保持 `face_checked=false`，可直接重跑；日志只含 media_id。
+- **`-all` 守卫（2026-10-27）**：`-all` 会重扫 `face_checked=true` 的照片。若只跑本地 YuNet，
+  会把腾讯云已判为非人类（动物/卡通，`has_face=false`）的照片翻回 true，等于无声撤销合规结论。
+  因此 `-all` 在未设 `TENCENT_FACE_BACKFILL=true` 时**直接拒绝（exit 1）**；`-dry-run` 也不例外。
+  未设该开关时只允许增量模式（不带 `-all`），cron 不受影响。
+- 同理，只要检测到 `TENCENT_FACE_ENABLED=true` 或 `TENCENT_FACE_BACKFILL=true` 却缺凭证，
+  回填也会 fail-fast（拒绝运行），不会静默跳过合规判定。
 - 不要给 cron 加 `-all`；不要重跑全量。首次上线的 venv/FACE_* 细节已从本文件移除。
 
 ## 腾讯云照片合规判定（可选，默认关闭）
@@ -641,13 +654,17 @@ tail -n 5 /var/log/yxq-facebackfill.log   # 正常接近空跑：count=0 include
 `has_face=false`（v2 不返回 400；v1 当时直接拒绝）。任何异常（超时/鉴权/限频/
 5xx/无凭证）一律 fail-open，只记固定码。
 
+> **边界（务必对外说清）**：这里的「静默活体」只判断**照片里有没有人脸**，
+> 不是用户活体检测，也不是身份认证；它不确认照片是否本人、不防翻拍/合成，
+> 结果只用于 `has_face` 门禁，不产生任何身份结论。
+
 | 环境变量 | 作用 |
 |---|---|
 | `TENCENT_FACE_ENABLED` | 上传路径开关；默认 false，staging 设 true |
 | `TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY` | 只放 600 权限 env；不得 echo/进 git |
 | `TENCENT_REGION` | 默认 `ap-guangzhou` |
 | `TENCENT_FACE_TIMEOUT` | 一次完整判定（最多两次调用）总预算，默认 8s，500ms–30s |
-| `TENCENT_FACE_BACKFILL` | 只给 `cmd/facebackfill`；默认 false（历史照片按次计费） |
+| `TENCENT_FACE_BACKFILL` | 只给 `cmd/facebackfill`；默认 false（历史照片按次计费）；**`-all` 必须为 true** |
 
 凭证来源：v1 生产配置 `/opt/yixianqian/local_config.py`（root 600）的
 `TENCENT_SECRET_ID`/`TENCENT_SECRET_KEY`/`TENCENT_REGION`，写入 staging env 时不要在
@@ -667,9 +684,12 @@ curl -sS http://127.0.0.1:8093/healthz
 验证（不泄露任何密钥）：
 
 ```bash
-# 上传一张合成图后，日志只应有固定字段；命中/放行/失败都用固定 result 码
+# 上传一张合成图后，日志只应有固定字段。staging 的 LOG_LEVEL=info：
+# 每次判定只有 1 行汇总，action=check（result=pass|blocked|skipped:<code>）。
 journalctl -u yixianqian-next-test --since '5 min ago' | grep 'tencent face' | tail -5
-# 期望字段：photo_id=… action=DetectLabel|DetectLiveFaceAccurate|check result=… latency_ms=…
+# 期望：tencent face photo_id=… action=check result=… latency_ms=…
+# 需要逐次调用的细分（action=DetectLabel / DetectLiveFaceAccurate / result=hit|no_hit|face|skipped:*）
+# 时临时把 LOG_LEVEL 调成 debug；info 级别不输出这两行，属预期，不是故障。
 ```
 
 `TENCENT_FACE_TIMEOUT` 覆盖一次判定的两次调用；超时后 fail-open（放行）。
@@ -677,11 +697,27 @@ journalctl -u yixianqian-next-test --since '5 min ago' | grep 'tencent face' | t
 各约 1.0s / 0.7s。`TENCENT_FACE_BACKFILL=true` 会对候选照片逐张调用（1000+ 张 =
 1000+ 次标签，命中再翻倍），只在明确预算时短时开启，跑完立刻置回 false。
 
+**回填守卫（2026-10-27）**：`cmd/facebackfill -all` 在 `TENCENT_FACE_BACKFILL!=true` 时
+**拒绝执行**（exit 1，stderr 明确说明原因），因为只跑本地 YuNet 会把已判非人类的照片
+`has_face` 翻回 true；`-dry-run` 同样拒绝。另有 fail-fast：只要 `TENCENT_FACE_ENABLED=true`
+或 `TENCENT_FACE_BACKFILL=true` 但缺 `TENCENT_SECRET_ID`/`TENCENT_SECRET_KEY`（或 Checker
+初始化失败），回填直接拒绝，不会静默跳过合规判定。上传路径仍是 fail-open（缺凭证只告警）。
+
+```bash
+# 反例（应 exit 1，且不连接 DB/R2）
+bin/facebackfill -all; echo "exit=$?"
+# 正例：显式带上合规开关与凭证（值从 env 读取，不打印）
+TENCENT_FACE_BACKFILL=true bin/facebackfill -all -dry-run
+# 日常增量（cron 用法）不受影响：
+bin/facebackfill
+```
+
 **回滚**：`TENCENT_FACE_ENABLED=false`（或删除该行）→ `systemctl restart
 yixianqian-next-test`。无需数据回滚：已判定的照片保留现有 `has_face`；要纠正历史
-结果需显式 `facebackfill -all`（谨慎）。凭证轮换同样改 env 后重启，旧值不保留在
+结果必须显式 `TENCENT_FACE_BACKFILL=true facebackfill -all`（按次计费，谨慎；
+守卫会拒绝缺少该开关的 `-all`）。凭证轮换同样改 env 后重启，旧值不保留在
 repo/日志。**隐私**：启用后照片会压缩到最长边 1080 的 JPEG q85 发往腾讯云
-（tiia/iai）；不选该开关则照片不出 R2/应用（详见 `docs/DECISIONS.md` 决策 41）。
+（tiia/iai）；不选该开关则照片不出 R2/应用（详见 `docs/DECISIONS.md` 决策 41、43）。
 
 ## 每周推荐位（D10）
 
@@ -725,7 +761,10 @@ runuser -u yxq -- psql -d yixianqian_staging -Atc \
 - observer 沿用 v1 的 `has_face` 放行；`yxq_view_role=observer` 只是 UI 视角，不会让 `has_face` 变 true。
 - observer 的身份证不豁免；`has_face=true` 但 `id_valid=false` 属预期，`/legacy/api/cards` 仍 403。
 - 卡片照片 `faces` 只回传 `{c,box,tb:[0,0],lr:[0,0]}`；v1 黑边裁切未移植。
-- 腾讯云照片内容合规（宠物/卡通/活体）未实现；`has_face` 仅代表本地 YuNet/Haar 检出人脸。
+- 腾讯云照片内容合规（宠物/卡通 + 静默活体）已实现（2026-10-27，`internal/tencentface`，决策 41）：
+  启用 `TENCENT_FACE_ENABLED=true` 后 `has_face = 本地 YuNet/Haar 检出 && 未被判为非人类`；
+  未启用或判定失败（fail-open）时 `has_face` 仍只代表本地检出。静默活体只判断「照片里有没有人脸」，
+  不是用户活体/身份认证。
 - 人脸照片缺口：104 个 active 普通用户没有 `has_face=true` 照片（101 个无照片），可通过资料页上传修复。
 
 ## 安全与限制

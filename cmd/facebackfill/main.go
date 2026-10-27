@@ -1,8 +1,9 @@
 // Command facebackfill 批量补齐迁移照片的本地人脸检测结果。
 //
-// 只处理 face_checked=false 的照片；-all 可强制重扫。检测失败的照片保持
-// checked=false，方便下次重试。日志只输出 media_id 与计数，不输出对象键、
-// 临时文件路径或凭证。
+// 只处理 face_checked=false 的照片；-all 可强制重扫，但必须同时开启
+// TENCENT_FACE_BACKFILL=true，否则拒绝执行：只跑本地检测会把腾讯云已判为
+// 非人类的照片 has_face 翻回 true。检测失败的照片保持 checked=false，方便
+// 下次重试。日志只输出 media_id 与计数，不输出对象键、临时文件路径或凭证。
 package main
 
 import (
@@ -38,7 +39,7 @@ func run() error {
 	limit := flag.Int("limit", 0, "最多处理多少张照片（按 media_id 去重）；0=全部")
 	workers := flag.Int("workers", 2, "并发检测数（1-8）")
 	legacyUser := flag.String("user", "", "只处理指定 legacy user id，例如 U-0006")
-	includeChecked := flag.Bool("all", false, "连已检测过的照片一起重扫")
+	includeChecked := flag.Bool("all", false, "连已检测过的照片一起重扫（需 TENCENT_FACE_BACKFILL=true，否则拒绝执行）")
 	dryRun := flag.Bool("dry-run", false, "只列出待处理数量，不执行检测")
 	flag.Parse()
 
@@ -55,6 +56,10 @@ func run() error {
 	}
 	logger := platform.NewLogger(cfg.LogLevel, "text", os.Stderr)
 	if err := cfg.ValidateServer(); err != nil {
+		return err
+	}
+	// 守卫先于任何 DB/R2 连接：被拒绝的组合不产生副作用。
+	if err := guardBackfill(cfg, *includeChecked); err != nil {
 		return err
 	}
 
@@ -115,12 +120,13 @@ func run() error {
 	}
 	// 腾讯云照片合规判定在回填里默认关闭：1000+ 张历史照片会按次计费，
 	// 只有显式 TENCENT_FACE_BACKFILL=true 才启用（TENCENT_FACE_ENABLED 只
-	// 控制上传路径）。凭证缺失时 fail-open，不阻断回填。
+	// 控制上传路径）。回填工具用 fail-fast：开了开关却缺凭证或初始化失败
+	// 时直接拒绝，避免把未经合规判定的 has_face 写进库（上传路径仍 fail-open）。
 	var compliance face.Compliance
 	if !cfg.TencentFaceBackfill {
 		logger.Info("tencent face backfill disabled", "hint", "set TENCENT_FACE_BACKFILL=true to enable")
 	}
-	if cfg.TencentFaceBackfill {
+	if cfg.TencentFaceEnabled || cfg.TencentFaceBackfill {
 		checker, err := tencentface.NewChecker(tencentface.Options{
 			SecretID:  cfg.TencentSecretID,
 			SecretKey: cfg.TencentSecretKey,
@@ -129,13 +135,13 @@ func run() error {
 			Logger:    logger,
 		})
 		if err != nil {
-			return err
+			// 初始化失败同样拒绝运行：继续跑只会写进未经合规判定的 has_face。
+			return fmt.Errorf("腾讯云合规判定初始化失败，拒绝运行回填: %w", err)
 		}
-		if !checker.Configured() {
-			logger.Warn("tencent face backfill requested without credentials; compliance will be skipped")
+		if cfg.TencentFaceBackfill {
+			compliance = checker
+			logger.Info("tencent face backfill enabled", "timeout", cfg.TencentFaceTimeout)
 		}
-		compliance = checker
-		logger.Info("tencent face backfill enabled", "timeout", cfg.TencentFaceTimeout)
 	}
 
 	tmpDir, err := os.MkdirTemp("", "yxq-facebackfill-")

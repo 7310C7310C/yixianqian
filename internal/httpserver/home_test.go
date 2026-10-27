@@ -199,7 +199,7 @@ func TestLoginPageShowsRegisterCTA(t *testing.T) {
 // contract: the CSS/JS the landing page requests must be ASCII-only too, so a
 // scanner cannot match sensitive words in them.
 func TestPublicLandingAssetsAreHanFree(t *testing.T) {
-	for _, name := range []string{"static/home.js", "static/home.css", "static/register.css"} {
+	for _, name := range []string{"static/home.js", "static/home.css", "static/register.css", "static/register.js"} {
 		data, err := fs.ReadFile(webassets.FS, name)
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)

@@ -2,9 +2,16 @@ package httpserver
 
 import (
 	"bytes"
+	"encoding/json"
+	"html"
+	"io/fs"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	webassets "github.com/7310C7310C/yixianqian/web"
 )
 
 func makeTestIDCard(t *testing.T, birth, seq string) string {
@@ -256,32 +263,68 @@ func TestRegisterTemplatesRender(t *testing.T) {
 	}
 
 	id := makeTestIDCard(t, "19900101", "002")
+	data := buildRegisterPageData(validRegisterValues(t, "13800138000", id, "1990-01-01"))
 	var register bytes.Buffer
 	if err := tpl.Render(&register, "register", PageData{
 		Title: "注册", CSRFToken: "csrf-value", PageCSS: "register.css",
-		Data: buildRegisterPageData(validRegisterValues(t, "13800138000", id, "1990-01-01")),
+		ScanSafe: true, CopyJSON: registerCopyJSON(data, ""),
+		Data: data,
 	}); err != nil {
 		t.Fatal(err)
 	}
+	body := register.String()
 	for _, want := range []string{`action="/register"`, `enctype="multipart/form-data"`,
-		`name="csrf_token" value="csrf-value"`, `name="photos"`, "身份证号码", "登录密码",
-		`name="phone"`, `placeholder="手机号"`} {
-		if !strings.Contains(register.String(), want) {
+		`name="csrf_token" value="csrf-value"`, `name="photos"`, `id="register-form"`,
+		`data-copy-json=`, `data-register-text="field.id_card.label"`,
+		`data-register-option="gender.0"`, `data-register-value="name"`,
+		`/static/register.js`} {
+		if !strings.Contains(body, want) {
 			t.Fatalf("register missing %q", want)
 		}
+	}
+	assertHanFreePublicBody(t, body)
+	catalog := registerCatalogFromBody(t, body)
+	for key, want := range map[string]string{
+		"field.id_card.label": "身份证号码",
+		"field.name.hint":     "不公开，请填写真实姓名。",
+		"select.required":     "请选择",
+		"page.error":          "",
+	} {
+		if got := catalog.Text[key]; got != want {
+			t.Fatalf("catalog text[%q] = %q, want %q", key, got, want)
+		}
+	}
+	if catalog.Values["name"] != "测试用户" {
+		t.Fatalf("catalog echoed name = %q", catalog.Values["name"])
+	}
+	if catalog.Options["gender.1"] != "女性" {
+		t.Fatalf("catalog gender option = %q", catalog.Options["gender.1"])
+	}
+	// The submitted gender (女性) must stay selected after the round trip.
+	if !strings.Contains(body, `data-register-option="gender.1" selected`) {
+		t.Fatal("register did not preserve the selected option")
 	}
 
 	evilValues := validRegisterValues(t, "13800138000", id, "1990-01-01")
 	evilValues.Set("name", `<script>alert(1)</script>`)
+	evilData := buildRegisterPageData(evilValues)
 	var evil bytes.Buffer
 	if err := tpl.Render(&evil, "register", PageData{
 		Title: "注册", CSRFToken: "csrf-value", PageCSS: "register.css",
-		Data: buildRegisterPageData(evilValues),
+		ScanSafe: true, CopyJSON: registerCopyJSON(evilData, ""),
+		Data: evilData,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(evil.String(), "<script>alert(1)</script>") {
 		t.Fatal("register form did not escape user data")
+	}
+	if strings.Contains(evil.String(), `alert(1)</script>`) {
+		t.Fatal("register form re-emitted the raw payload")
+	}
+	evilCatalog := registerCatalogFromBody(t, evil.String())
+	if evilCatalog.Values["name"] != `<script>alert(1)</script>` {
+		t.Fatalf("hostile value not carried verbatim in the catalog: %q", evilCatalog.Values["name"])
 	}
 
 	var done bytes.Buffer
@@ -296,6 +339,219 @@ func TestRegisterTemplatesRender(t *testing.T) {
 		if !strings.Contains(done.String(), want) {
 			t.Fatalf("done missing %q", want)
 		}
+	}
+}
+
+var registerCopyAttrPattern = regexp.MustCompile(`data-copy-json="([^"]*)"`)
+var registerHookPattern = regexp.MustCompile(`data-register-(text|placeholder|option|option-text|value)="([^"]+)"`)
+var registerStaticRefPattern = regexp.MustCompile(`(?:src|href)="(/static/[^"?#]+)`)
+
+// registerCatalogFromBody decodes the ASCII-only catalog the register page
+// carries in <body data-copy-json>. The attribute is HTML-escaped by
+// html/template, so unescape before parsing the JSON.
+func registerCatalogFromBody(t *testing.T, body string) registerCopyCatalog {
+	t.Helper()
+	match := registerCopyAttrPattern.FindStringSubmatch(body)
+	if len(match) != 2 {
+		t.Fatalf("register page has no data-copy-json attribute")
+	}
+	var catalog registerCopyCatalog
+	if err := json.Unmarshal([]byte(html.UnescapeString(match[1])), &catalog); err != nil {
+		t.Fatalf("decode register catalog: %v", err)
+	}
+	return catalog
+}
+
+func renderRegisterForTest(t *testing.T, values url.Values, message string) string {
+	t.Helper()
+	tpl, err := LoadTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := buildRegisterPageData(values)
+	data.MaxMB = 20
+	var buf bytes.Buffer
+	if err := tpl.Render(&buf, "register", PageData{
+		Title: "注册", CSRFToken: "csrf-value", PageCSS: "register.css",
+		ScanSafe: true, CopyJSON: registerCopyJSON(data, message),
+		Data: data, Error: message,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+// TestRegisterCopyCatalogIsASCII guards the scan contract for the generated
+// catalog: no raw non-ASCII byte may reach the HTML, and the decoded copy must
+// still match registerSections().
+func TestRegisterCopyCatalogIsASCII(t *testing.T) {
+	id := makeTestIDCard(t, "19900101", "002")
+	data := buildRegisterPageData(validRegisterValues(t, "13800138000", id, "1990-01-01"))
+	data.MaxMB = 20
+	raw := registerCopyJSON(data, "请上传 3-9 张个人照片。")
+	if raw == "" {
+		t.Fatal("empty catalog")
+	}
+	for i := 0; i < len(raw); i++ {
+		if raw[i] >= utf8.RuneSelf {
+			t.Fatalf("catalog has a non-ASCII byte at %d: %q", i, raw[i])
+		}
+	}
+	if match := hanPattern.FindString(raw); match != "" {
+		t.Fatalf("catalog contains Han (%q)", match)
+	}
+	var catalog registerCopyCatalog
+	if err := json.Unmarshal([]byte(raw), &catalog); err != nil {
+		t.Fatalf("catalog is not valid JSON: %v", err)
+	}
+	if len(catalog.Text) < 30 || len(catalog.Options) < 50 || len(catalog.Values) == 0 {
+		t.Fatalf("suspiciously small catalog: text=%d options=%d values=%d",
+			len(catalog.Text), len(catalog.Options), len(catalog.Values))
+	}
+	if got := catalog.Text["field.id_card.label"]; got != "身份证号码" {
+		t.Fatalf("id card label = %q", got)
+	}
+	if got := catalog.Text["page.error"]; got != "请上传 3-9 张个人照片。" {
+		t.Fatalf("page.error = %q", got)
+	}
+	if got := catalog.Values["family"]; got != "两个兄弟姐妹" {
+		t.Fatalf("echoed family = %q", got)
+	}
+	optionCount := 0
+	for _, section := range data.Sections {
+		for _, field := range section.Fields {
+			if field.Type == string(registerKindCheckbox) {
+				optionCount++
+				continue
+			}
+			optionCount += len(field.Options)
+		}
+	}
+	if len(catalog.Options) != optionCount {
+		t.Fatalf("catalog options = %d, want %d", len(catalog.Options), optionCount)
+	}
+}
+
+// TestRegisterCopyCoversTemplateKeys keeps the empty markup hooks and the
+// server catalog in sync: a missing key would render a blank label.
+func TestRegisterCopyCoversTemplateKeys(t *testing.T) {
+	body := renderRegisterForTest(t, nil, "")
+	assertHanFreePublicBody(t, body)
+	catalog := registerCatalogFromBody(t, body)
+
+	fieldNames := map[string]bool{}
+	for _, spec := range registerFields() {
+		fieldNames[spec.Name] = true
+	}
+	hooks := registerHookPattern.FindAllStringSubmatch(body, -1)
+	if len(hooks) < 100 {
+		t.Fatalf("expected many register hooks, got %d", len(hooks))
+	}
+	textHooks := map[string]bool{}
+	optionHooks := map[string]bool{}
+	valueHooks := map[string]bool{}
+	for _, hook := range hooks {
+		kind, key := hook[1], hook[2]
+		switch kind {
+		case "text", "placeholder":
+			textHooks[key] = true
+			if _, ok := catalog.Text[key]; !ok {
+				t.Fatalf("catalog has no text for %s=%q", kind, key)
+			}
+		case "option", "option-text":
+			optionHooks[key] = true
+			if _, ok := catalog.Options[key]; !ok {
+				t.Fatalf("catalog has no option for %s=%q", kind, key)
+			}
+		case "value":
+			valueHooks[key] = true
+			if !fieldNames[key] {
+				t.Fatalf("data-register-value=%q is not a register field", key)
+			}
+		default:
+			t.Fatalf("unexpected hook kind %q", kind)
+		}
+	}
+
+	// 反向断言：catalog 里的每个 key 都必须有模板钩子。只查 hooks→catalog
+	// 时，删掉一个钩子会让该文案/选项/回填值在页面上静默消失而 Go 测试仍绿
+	// （此前只有 Playwright 能抓）。
+	for key := range catalog.Text {
+		if key == "page.error" { // 只在失败重渲染时注入，由错误用例覆盖。
+			continue
+		}
+		if !textHooks[key] {
+			t.Fatalf("catalog text %q has no template hook (data-register-text/-placeholder); the copy would render blank", key)
+		}
+	}
+	for key := range catalog.Options {
+		if !optionHooks[key] {
+			t.Fatalf("catalog option %q has no template hook (data-register-option/-option-text); the option would render blank", key)
+		}
+	}
+	for key := range catalog.Values {
+		if !valueHooks[key] {
+			t.Fatalf("catalog value %q has no data-register-value hook; the submitted value would not be restored", key)
+		}
+	}
+}
+
+// TestRegisterPageReferencesHanFreeAssets covers the second half of the scan
+// contract: every same-origin CSS/JS the form loads is ASCII-only too.
+func TestRegisterPageReferencesHanFreeAssets(t *testing.T) {
+	body := renderRegisterForTest(t, nil, "")
+	refs := registerStaticRefPattern.FindAllStringSubmatch(body, -1)
+	if len(refs) == 0 {
+		t.Fatal("register page references no static assets")
+	}
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		name := strings.TrimPrefix(ref[1], "/")
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		data, err := fs.ReadFile(webassets.FS, name)
+		if err != nil {
+			t.Fatalf("register references missing asset %q: %v", ref[1], err)
+		}
+		if match := hanPattern.FindString(string(data)); match != "" {
+			t.Fatalf("%s contains Han (%q); referenced assets must stay ASCII-only", name, match)
+		}
+	}
+	for _, want := range []string{"static/home.css", "static/auth.css", "static/register.css", "static/register.js"} {
+		if !seen[want] {
+			t.Fatalf("register page should load %q", want)
+		}
+	}
+	for _, unwanted := range []string{"static/app.css", "static/shell.css", "static/public-copy.js"} {
+		if seen[unwanted] {
+			t.Fatalf("register page must not load %q", unwanted)
+		}
+	}
+}
+
+// TestRegisterCopyCarriesPostError proves a rejected POST re-renders Han-free
+// while the user still receives the unchanged Chinese error message.
+func TestRegisterCopyCarriesPostError(t *testing.T) {
+	id := makeTestIDCard(t, "19900101", "002")
+	values := validRegisterValues(t, "13800138000", id, "1990-01-01")
+	values.Del("angel_ack")
+	message := "请确认已加小天使微信号并备注真实姓名。"
+	body := renderRegisterForTest(t, values, message)
+	assertHanFreePublicBody(t, body)
+	catalog := registerCatalogFromBody(t, body)
+	if catalog.Text["page.error"] != message {
+		t.Fatalf("page.error = %q, want %q", catalog.Text["page.error"], message)
+	}
+	if catalog.Values["name"] != "测试用户" || catalog.Values["church"] != "南头堂" {
+		t.Fatalf("echoed values missing: %+v", catalog.Values)
+	}
+	if !strings.Contains(body, `data-register-error`) {
+		t.Fatal("missing error hook")
+	}
+	if strings.Contains(body, message) {
+		t.Fatal("server error message leaked into the raw HTML")
 	}
 }
 

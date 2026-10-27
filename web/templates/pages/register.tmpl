@@ -1,54 +1,54 @@
 {{define "content"}}
 <section class="register-hero">
-  <p class="eyebrow">一线牵 · 注册</p>
-  <h1>填写你的资料</h1>
-  <p class="muted">亲爱的兄弟姐妹，为了更容易找到另一半，请确保以下资料真实可信。资料仅用于一线牵，不会外泄；身份证号码只供活动保险与人工审核，不会公开。</p>
-  <p class="hint">已有账号？<a href="/login">直接登录</a>。</p>
+  <p class="eyebrow" data-register-text="hero.eyebrow"></p>
+  <h1 data-register-text="hero.title"></h1>
+  <p class="muted" data-register-text="hero.lead"></p>
+  <p class="hint"><span data-register-text="hero.loginHint"></span><a href="/login" data-register-text="hero.loginCta"></a><span data-register-text="hero.loginHintEnd"></span></p>
 </section>
 
-{{template "flash" .}}
+{{if .Error}}<div class="alert alert-error" role="alert" data-register-error></div>{{end}}
 
 <form method="post" action="/register" enctype="multipart/form-data" class="register-form" id="register-form">
   <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
   <section class="card register-section">
-    <h2>个人照片</h2>
-    <p class="hint">请上传 {{.Data.MinPhotos}}–{{.Data.MaxPhotos}} 张 JPEG/PNG 照片；第一张会作为封面，建议使用横版照片。单张上限 {{.Data.MaxMB}} MB。</p>
-    <p class="hint">iPhone 默认的 HEIC 照片无法直接上传：请先在相册转成 JPEG，或在「设置 → 相机 → 格式」选择「兼容性最佳」。</p>
+    <h2 data-register-text="photos.title"></h2>
+    <p class="hint" data-register-text="photos.hint"></p>
+    <p class="hint" data-register-text="photos.heic"></p>
     <div class="register-field">
-      <label for="f_photos">选择照片<span class="req" aria-hidden="true">*</span></label>
+      <label for="f_photos"><span data-register-text="photos.label"></span><span class="req" aria-hidden="true">*</span></label>
       <input id="f_photos" name="photos" type="file" accept="image/jpeg,image/png" multiple required>
-      <p class="hint">若提交失败，需要重新选择照片。</p>
+      <p class="hint" data-register-text="photos.retry"></p>
     </div>
   </section>
 
   <section class="card register-section">
-    <h2>登录密码</h2>
-    <p class="hint">注册后即可用手机号码＋这组密码登录，查看审核状态。</p>
+    <h2 data-register-text="password.title"></h2>
+    <p class="hint" data-register-text="password.hint"></p>
     <div class="register-field">
-      <label for="f_password">密码<span class="req" aria-hidden="true">*</span></label>
+      <label for="f_password"><span data-register-text="password.label"></span><span class="req" aria-hidden="true">*</span></label>
       <input id="f_password" name="password" type="password" autocomplete="new-password"
              minlength="8" maxlength="128" required>
     </div>
     <div class="register-field">
-      <label for="f_password_confirm">再次输入密码<span class="req" aria-hidden="true">*</span></label>
+      <label for="f_password_confirm"><span data-register-text="password.confirmLabel"></span><span class="req" aria-hidden="true">*</span></label>
       <input id="f_password_confirm" name="password_confirm" type="password"
              autocomplete="new-password" minlength="8" maxlength="128" required>
-      <p class="hint">至少 8 个字元。</p>
+      <p class="hint" data-register-text="password.hint2"></p>
     </div>
   </section>
 
-  {{range .Data.Sections}}
+  {{range $i, $section := .Data.Sections}}
   <section class="card register-section">
-    <h2>{{.Title}}</h2>
+    <h2 data-register-text="section.{{$i}}.title"></h2>
     {{range .Fields}}{{template "register_field" .}}{{end}}
   </section>
   {{end}}
 
   <section class="card register-submit">
-    <p class="hint">送出后状态为「待审核」，小天使/管理员审核通过后会以站内通知告知。审核期间请勿重复提交。</p>
-    <button type="submit" class="button primary block">送出注册资料</button>
-    <p class="register-alt">已经填过？<a href="/login">登录查看审核状态</a></p>
+    <p class="hint" data-register-text="submit.hint"></p>
+    <button type="submit" class="button primary block" data-register-text="submit.button"></button>
+    <p class="register-alt"><span data-register-text="submit.altHint"></span><a href="/login" data-register-text="submit.altCta"></a></p>
   </section>
 </form>
 {{end}}

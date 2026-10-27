@@ -25,7 +25,9 @@ import (
 // viewer photos_meta): 29 invalidated the auth.css/public-copy.js pair and the
 // regenerated app.min.js/app.css.
 // Batch12b (scan-safe public GET error pages + app.js /welcome cleanup): 30.
-const assetVersion = "30"
+// Batch13 (scan-safe /register form: server-generated ASCII copy catalog +
+// register.js): 31.
+const assetVersion = "31"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
@@ -68,6 +70,11 @@ type PageData struct {
 	// the layout loads public-copy.js and exposes the value as
 	// <body data-copy-page>.
 	CopyPage string
+	// CopyJSON carries a per-request, ASCII-only (all non-ASCII escaped as
+	// \uXXXX) JSON copy catalog for pages whose copy is generated on the server
+	// (currently /register). The layout exposes it as <body data-copy-json> and
+	// loads /static/register.js to inject it.
+	CopyJSON string
 	// NoticeCopyKey renders a JS-injected notice instead of the server-side
 	// Chinese Notice string on scan-safe pages (e.g. /login?logged_out=1).
 	NoticeCopyKey string
