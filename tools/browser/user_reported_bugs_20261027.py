@@ -6,8 +6,8 @@
 1. 清除筛选后本人卡回到牌堆首位；筛选期间不出现；后续翻页无重复/不卡死。
 3. Android 可视区域溢出：cards tab 文档不超出 innerHeight；.swipe-card 不压底栏；
    --yxq-vh 随视口变化更新；390x844 ↔ 390x700 往返。
-5. 缩图秒开（产品目标 ≤300ms，回归上限 500ms）；fallback 遮罩可见且可取消；
-   原图 3s 后台升级；无 console error。
+5. 缩图秒开（产品目标 ≤300ms，回归上限 500ms）；大图任何阶段都不出现「图片加载中」
+   遮罩/文字；无缩图 fallback 由 10s timeout 自动取消；原图 3s 后台升级；无 console error。
 7. 我的→我的资料→修改资料→保存→返回一次到我的，第二次离开 SPA；改密成功同样无残留层。
    仅 virtual 模式；legacy 历史由 no_history_smoke.py 覆盖。
 
@@ -526,45 +526,52 @@ def run_layout(page, tag: str, vh_expected: int) -> None:
           f"--yxq-vh={st['vh']}、按钮 {len(st['buttons'])} 个在视口内")
 
 
-# ---------- 第 5 项：大图加载遮罩 ----------
+# ---------- 第 5 项：大图加载指示（已移除）----------
 
-def mask_center_state(page) -> dict:
+def viewer_indicator_state(page) -> dict:
     return page.evaluate(
         """() => {
-          const el = document.elementFromPoint(Math.round(innerWidth / 2), Math.round(innerHeight / 2));
+          let loadingText = false;
+          const loaders = document.querySelectorAll('.van-loading, .van-loading__text');
+          for (const el of loaders) {
+            if ((el.textContent || '').indexOf('图片加载中') >= 0) loadingText = true;
+          }
+          const mask = document.querySelector('.viewer-loading-mask');
           return {
-            tag: el ? el.tagName : '',
-            cls: el ? String(el.className || '') : '',
-            inMask: !!(el && el.closest && el.closest('.viewer-loading-mask')),
-            maskZ: (() => { const m = document.querySelector('.viewer-loading-mask');
-              return m ? getComputedStyle(m).zIndex : ''; })(),
-            pswpZ: (() => { const p = document.querySelector('.pswp');
-              return p ? getComputedStyle(p).zIndex : ''; })()
+            masks: mask ? 1 : 0,
+            hasText: loadingText,
+            statuses: document.querySelectorAll('[role="status"]').length
           };
         }"""
     )
 
 
-def arm_viewer_mask_probe(page) -> None:
+def arm_viewer_indicator_probe(page) -> None:
+    """记录打开大图过程中是否出现过旧加载遮罩/「图片加载中」文字。"""
     page.evaluate(
         """() => {
-          window.__yxqMaskSeenAt = null;
-          window.__yxqPhotoClickT = null;
-          const wrap = document.querySelector('.swipe-card .card-photo-wrap');
-          if (!wrap) return;
-          const hit = () => { if (window.__yxqPhotoClickT == null) window.__yxqPhotoClickT = performance.now(); };
-          wrap.addEventListener('pointerdown', hit, {capture: true, once: true});
-          wrap.addEventListener('mousedown', hit, {capture: true, once: true});
-          wrap.addEventListener('touchstart', hit, {capture: true, once: true});
-          const ob = new MutationObserver(() => {
-            if (document.querySelector('.viewer-loading-mask')) {
-              window.__yxqMaskSeenAt = performance.now();
-              ob.disconnect();
+          window.__yxqLoadingIndicatorSeen = false;
+          const seen = () => {
+            if (document.querySelector('.viewer-loading-mask')) return true;
+            const loaders = document.querySelectorAll('.van-loading, .van-loading__text');
+            for (const el of loaders) {
+              if ((el.textContent || '').indexOf('图片加载中') >= 0) return true;
             }
-          });
-          ob.observe(document.body, {childList: true, subtree: true});
+            return false;
+          };
+          if (seen()) window.__yxqLoadingIndicatorSeen = true;
+          const ob = new MutationObserver(() => { if (seen()) window.__yxqLoadingIndicatorSeen = true; });
+          ob.observe(document.body, {childList: true, subtree: true, characterData: true});
         }"""
     )
+
+
+def assert_no_viewer_indicator(page, tag: str) -> None:
+    st = viewer_indicator_state(page)
+    if st["masks"] or st["hasText"]:
+        raise Failure(f"第5项 大图仍有加载指示：{st}")
+    if page.evaluate("() => window.__yxqLoadingIndicatorSeen === true"):
+        raise Failure(f"第5项 大图打开过程中出现过加载遮罩（应已移除）")
 
 
 def _viewer_open_fallback(page, salt: str) -> str:
@@ -639,6 +646,7 @@ def run_viewer_fast_path(page, tag: str) -> None:
         pending.clear()
 
     try:
+        arm_viewer_indicator_probe(page)
         t0 = time.monotonic()
         page.locator(".swipe-card .card-photo-wrap").first.click(timeout=12000)
         try:
@@ -651,25 +659,20 @@ def run_viewer_fast_path(page, tag: str) -> None:
         except PlaywrightTimeoutError as exc:
             raise Failure("第5项 秒开失败：pswp/缩图未在 3s 内可见") from exc
         open_ms = (time.monotonic() - t0) * 1000
-        try:
-            page.wait_for_function("() => !document.querySelector('.viewer-loading-mask')", timeout=3000)
-        except PlaywrightTimeoutError as exc:
-            raise Failure("第5项 缩图已显示但遮罩未清除") from exc
-        mask_ms = (time.monotonic() - t0) * 1000
+        assert_no_viewer_indicator(page, tag)
         st = page.evaluate(
             """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content; const e = c && c.element;
               return {show: !!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer),
-                      mask: !!document.querySelector('.viewer-loading-mask'),
                       src: e ? e.src : '', nw: e ? e.naturalWidth : 0, full: e ? (e.dataset.yxqFull || '') : ''}; }"""
         )
-        if not st["show"] or st["mask"] or not st["nw"]:
+        if not st["show"] or not st["nw"]:
             raise Failure(f"第5项 秒开状态异常：{st}")
         if "size=thumb" not in st["src"]:
             raise Failure(f"第5项 初始应显示缩图，实际 src={st['src']!r}")
-        if open_ms > VIEWER_FAST_MAX_MS or mask_ms > VIEWER_FAST_MAX_MS:
-            raise Failure(f"第5项 秒开超时（>{VIEWER_FAST_MAX_MS}ms）：pswp={open_ms:.0f}ms mask={mask_ms:.0f}ms")
+        if open_ms > VIEWER_FAST_MAX_MS:
+            raise Failure(f"第5项 秒开超时（>{VIEWER_FAST_MAX_MS}ms）：pswp={open_ms:.0f}ms")
         screenshot(page, tag, "05-fast-thumb")
-        print(f"PASS {tag} 第5项秒开：{open_ms:.0f}ms 可见缩图、{mask_ms:.0f}ms 无遮罩")
+        print(f"PASS {tag} 第5项秒开：{open_ms:.0f}ms 可见缩图、无加载指示")
 
         # 原生 close 语义：等 opening 动画结束（opener.isOpen）后点关闭，1s 内收起。
         page.wait_for_function(
@@ -700,7 +703,7 @@ def run_viewer_fast_path(page, tag: str) -> None:
               getComputedStyle(p.element).display !== 'none' && e && e.naturalWidth > 0); }""",
             timeout=3000,
         )
-        page.wait_for_function("() => !document.querySelector('.viewer-loading-mask')", timeout=3000)
+        assert_no_viewer_indicator(page, tag)
 
         # 原图延迟到 3s 后放行，再升级 src。
         while time.monotonic() < t0 + 3.0:
@@ -761,8 +764,8 @@ def run_viewer_fast_path(page, tag: str) -> None:
         page.unroute("**/cards/photo/**", handler)
 
 
-def run_viewer_fallback_mask(page, tag: str) -> None:
-    """无缩图（海报/fallback）仍显示遮罩；点击可取消。"""
+def run_viewer_fallback_timeout(page, tag: str) -> None:
+    """无缩图（海报/fallback）：不再显示加载指示，10s timeout 自动取消后可重新打开。"""
     tap_tab(page, "牵线", "cards")
     wait_cards(page, expect_self=True)
     pending = []
@@ -776,28 +779,17 @@ def run_viewer_fallback_mask(page, tag: str) -> None:
 
     page.route("**/cards/photo/**", handler)
     try:
-        _viewer_open_fallback(page, "maskcancel")
-        page.wait_for_function("() => !!document.querySelector('.viewer-loading-mask')", timeout=3000)
-        st = mask_center_state(page)
-        if not st["inMask"]:
-            raise Failure(f"第5项 无缩图 fallback 遮罩被遮挡：{st}")
-        vp = page.viewport_size or {"width": 390, "height": 844}
-        page.mouse.click(vp["width"] // 2, vp["height"] // 2)
+        arm_viewer_indicator_probe(page)
+        _viewer_open_fallback(page, "noindicator")
+        page.wait_for_timeout(600)
+        assert_no_viewer_indicator(page, tag)
+        # 卡住的大图仍由 10s timeout 取消（无可见指示，也不再有点击遮罩取消）。
         page.wait_for_function(
-            "() => !document.querySelector('.viewer-loading-mask') && "
-            "!(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer)",
-            timeout=5000,
+            "() => !(window.yxqRootProxy && window.yxqRootProxy.showPhotoViewer) && "
+            "(() => { const p = document.querySelector('.pswp'); "
+            "return !p || getComputedStyle(p).display === 'none'; })()",
+            timeout=15000,
         )
-        page.locator(".pswp").first.wait_for(state="hidden", timeout=5000)
-        for route in pending:
-            try:
-                route.abort()
-            except Exception:  # noqa: BLE001
-                pass
-        pending.clear()
-        print(f"PASS {tag} 第5项fallback：无缩图时遮罩可见、点击取消成功")
-
-    finally:
         for route in pending:
             try:
                 route.abort()
@@ -805,6 +797,30 @@ def run_viewer_fallback_mask(page, tag: str) -> None:
                 pass
         pending.clear()
         page.unroute("**/cards/photo/**", handler)
+
+        # 超时取消后必须还能重新打开（seq/abort 状态机未回归）。
+        page.wait_for_timeout(300)
+        arm_viewer_indicator_probe(page)
+        page.locator(".swipe-card .card-photo-wrap").first.click(timeout=12000)
+        page.wait_for_function(
+            """() => { const p = window.pswp; const c = p && p.currSlide && p.currSlide.content;
+              const e = c && c.element; return !!(p && p.element &&
+              getComputedStyle(p.element).display !== 'none' && e && e.naturalWidth > 0); }""",
+            timeout=8000,
+        )
+        assert_no_viewer_indicator(page, tag)
+        print(f"PASS {tag} 第5项fallback：无缩图时无加载指示、10s timeout 取消、取消后可重新打开")
+    finally:
+        for route in pending:
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
+        pending.clear()
+        try:
+            page.unroute("**/cards/photo/**", handler)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def install_password_mock(page) -> None:
@@ -970,7 +986,7 @@ def main() -> int:
                         run_layout(page, tag, height)
                     if want("viewer"):
                         run_viewer_fast_path(page, tag)
-                        run_viewer_fallback_mask(page, tag)
+                        run_viewer_fallback_timeout(page, tag)
                     if want("history"):
                         run_password_and_profile(page, tag, "virtual")
                     probe.assert_clean("第2/3/5/7项[virtual]")

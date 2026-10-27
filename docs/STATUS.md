@@ -13,6 +13,11 @@ sources:
   - internal/httpserver/activities_view.go
   - internal/httpserver/activities_routes.go
   - internal/httpserver/handlers_home.go
+  - web/templates/layout.tmpl
+  - web/templates/pages/home.tmpl
+  - web/static/home.css
+  - web/static/home.js
+  - web/static/legacy/index.html
   - internal/httpserver/social_pages.go
   - internal/db/activities.go
   - internal/db/grouping.go
@@ -25,6 +30,23 @@ sources:
 - 下一更新点：PM 在 Android Via/Kiwi/荣耀真机复验虚拟历史栈与可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
 - 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-a68063e`（代码 `a68063e`：大图缩图秒开 + 匿名首页英文 + 活动结束用户侧关卡 + 脱单 gate，assetVersion 27，migration 10 不变）；
   生产 `app.nantou.love` 未切换。
+
+## 2026-10-27b 匿名首页扫描防护 + 大图移除加载指示（本地实现，待部署）
+
+- 匿名 `/` 从英文页改回中文，但源码保持零汉字：`<title>`「一线牵 · 祝你早日找到另一半」是唯一汉字，
+  文案由 `/static/home.js` 的 `\uXXXX` 表在浏览器注入（HTML 只留 `data-home-text` 空节点 +
+  `body.home-pending` 防闪）；首页只加载 `home.css` + `register.css`，两者与 home.js 均 0 汉字
+  （`TestPublicLandingAssetsAreHanFree`；Playwright 断言实际请求的每个同源 CSS/JS 响应 0 Han）。
+- 大图 viewer 移除 `.viewer-loading-mask` 与「图片加载中」；`viewerLoading` + 10s timeout/cancel
+  状态机保留，缩图优先秒开与关闭/重开不变；不再提供点击遮罩取消（卡住由 10s timeout 取消）。
+- 生成物：`app.critical.css`（7,733B gzip，−220B）、`app.render.js`（root 模板 −96B）重建；
+  `assetVersion` 27→28，admin CSS `@import` 同步；`home.css`/`home.js` 新增 `.gz` 预压缩变体。
+- 证据（本地）：`make ci` EXIT=0、`make perf-budget` 8/8（critical 7,822B ≤ 8,406）、
+  `make spa-check` 绿；`public_home_smoke` 390/1280 PASS（raw body 除 title 0 Han、3 个同源
+  CSS/JS 0 Han、无横向滚动/console error）；`user_reported_bugs_20261027.py` viewer 段
+  390x844/390x700 PASS（秒开 85/71ms、无加载指示、10s timeout 取消、取消后可重开），
+  用本地静态树 + staging 只读 API 跑，临时 session 已删除。
+- 状态：未 push、未部署；staging 仍 `staging-a68063e`，`deployed.sha` 不变。生产未动。
 
 ## 1. 阶段
 

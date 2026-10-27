@@ -413,10 +413,8 @@
 </div>
 <!-- 全屏图片预览（PhotoSwipe） -->
 <div id="pswp-gallery" style="display:none"></div>
-<!-- 大图打开遮罩：点击后立即出现，PhotoSwipe loadComplete/loadError/close/超时隐藏 -->
-<div v-if="viewerLoading" class="viewer-loading-mask" role="status" aria-live="polite" @click.stop="cancelViewerLoading">
-  <van-loading size="30px">图片加载中…</van-loading>
-</div>
+<!-- 大图不再显示「图片加载中」遮罩：缩图优先秒开，PhotoSwipe 自带加载态；
+     旧遮罩的取消/超时状态机保留在 app.js（viewerLoading + 10s timeout）。 -->
 <!-- 送爱心弹窗 -->
 <van-dialog v-model:show="showLikeDialog" :title="likeDialogTitle" show-cancel-button
   confirm-button-text="发送" cancel-button-text="取消" confirm-button-color="#ff6b81"

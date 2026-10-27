@@ -321,7 +321,7 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || strings.Contains(body, `window.__YXQ_AUTHENTICATED__=true;`) {
 		t.Fatalf("rejected user home status=%d body=%s", resp.StatusCode, body)
 	}
-	if !strings.Contains(body, "A trusted place for single Christians to meet.") {
+	if !strings.Contains(body, `class="welcome-hero home-hero"`) {
 		t.Fatal("rejected user did not fall back to the public landing page")
 	}
 }

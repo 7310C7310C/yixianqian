@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""公开首页 / 登录页 Playwright 回归。
+"""公开首页 / 登录页 Playwright 回归（扫描防护契约）。
 
 匿名（必跑）：
-1. GET / 返回 200 且不跳转，渲染英文公开首页；
-2. <title> 精确为「一线牵 · 祝你早日找到另一半」，移除 title 后整页无 CJK；
-3. 无中文 shell header / skip link；注册是 primary block 主按钮，登录入口与飞书链接（target/rel）都在，页面不再展示二维码图片；
+1. GET / 返回 200 且不跳转，渲染中文公开首页；中文文案由 /static/home.js 注入；
+2. 原始 HTTP body 的 <title> 精确为「一线牵 · 祝你早日找到另一半」，移除 title 后整页无 CJK；
+   页面引用的同源 CSS/JS 响应体也必须 0 汉字；
+3. 无中文 shell header / skip link；注册是 primary block 主按钮，登录入口与飞书链接（target/rel）都在，
+   页面不再展示二维码图片；390/1280 双视口无横向滚动、无 console error；
 4. 点登录进入 /login，注册按钮仍是 primary block，登录页保持中文，飞书老用户说明存在。
 已登录（设置 SESSION_COOKIE 时）：
 5. GET / 仍是 v1 Vue SPA，__YXQ_AUTHENTICATED__=true，不渲染公开首页。
 
-用法（staging）：
+用法（staging 或本地预览服务）：
     BASE_URL=https://next.nantou.love \
     SESSION_COOKIE=<yxq_session 原始值> \
     SHOT_DIR=/tmp/opencode/public-home-smoke \
@@ -22,6 +24,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 try:
     from playwright.sync_api import sync_playwright
@@ -32,6 +35,14 @@ VIEWPORTS = ((390, 844), (1280, 900))
 FEISHU_URL = "https://applink.feishu.cn/T996FhMkTERp"
 PUBLIC_TITLE = "一线牵 · 祝你早日找到另一半"
 HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+STATIC_ASSET_RE = re.compile(r'(?:href|src)="(/static/[^"]+\.(?:css|js)(?:\?[^"]*)?)"')
+# Rendered copy that must appear once home.js has injected the TEXT table.
+RENDERED_COPY = (
+    "立即注册", "已有账号，登录", "免费注册 · 人工审核 · 手机号码即可登录",
+    "人工审核", "匿名喜欢", "动态通知",
+    "已在飞书版使用过", "打开飞书版一线牵",
+)
+REQUIRED_ASSETS = ("/static/home.css", "/static/home.js", "/static/register.css")
 
 
 class SmokeFailure(AssertionError):
@@ -80,28 +91,79 @@ def assert_primary_block(locator, context: str) -> None:
         raise SmokeFailure(f"{context}: 不是 primary block（{classes}）")
 
 
-def assert_english_landing(page, width: int) -> None:
-    """PM 要求：除 <title> 外不得出现任何中文（避免被扫描/墙）。"""
-    if page.title() != PUBLIC_TITLE:
-        raise SmokeFailure(f"{width}px: title = {page.title()!r}, want {PUBLIC_TITLE!r}")
-    html = page.content()
-    title_tag = f"<title>{PUBLIC_TITLE}</title>"
-    if html.count(title_tag) != 1:
-        raise SmokeFailure(f"{width}px: exactly one exact title tag expected")
-    rest = html.replace(title_tag, "", 1)
-    match = HAN_RE.search(rest)
+def assert_han_free(text: str, context: str) -> None:
+    match = HAN_RE.search(text)
     if match:
         start = max(0, match.start() - 40)
-        snippet = rest[start:match.start() + 40]
-        raise SmokeFailure(f"{width}px: 公开首页 title 之外出现中文：{snippet!r}")
-    if page.locator("html").get_attribute("lang") != "en":
-        raise SmokeFailure(f"{width}px: 公开首页 lang 必须为 en")
+        snippet = text[start:match.start() + 40]
+        raise SmokeFailure(f"{context} 出现汉字：{snippet!r}")
+
+
+def assert_landing_source(raw_html: str, width: int) -> None:
+    """PM 要求：源码除 <title> 外不得出现任何汉字（避免被扫描/墙）。"""
+    title_tag = f"<title>{PUBLIC_TITLE}</title>"
+    if raw_html.count(title_tag) != 1:
+        raise SmokeFailure(f"{width}px: 源码 title 必须精确且唯一：{PUBLIC_TITLE!r}")
+    rest = raw_html.replace(title_tag, "", 1)
+    assert_han_free(rest, f"{width}px 首页源码（title 之外）")
+    for wanted in REQUIRED_ASSETS:
+        if wanted not in raw_html:
+            raise SmokeFailure(f"{width}px: 首页源码缺少 {wanted}")
+    for unwanted in ("/static/app.css", "/static/shell.css", "feishu-qr", "home-qr"):
+        if unwanted in raw_html:
+            raise SmokeFailure(f"{width}px: 首页源码不应引用 {unwanted}")
+
+
+def assert_assets_han_free(context, base_url: str, raw_html: str, width: int) -> list[str]:
+    """首页实际引用的同源 CSS/JS 响应体必须 0 汉字。"""
+    checked: list[str] = []
+    for ref in sorted(set(STATIC_ASSET_RE.findall(raw_html))):
+        if urlparse(ref).netloc:
+            continue
+        resp = context.request.get(base_url + ref)
+        if resp.status != 200:
+            raise SmokeFailure(f"{width}px: 静态资源 {ref} status={resp.status}")
+        assert_han_free(resp.text(), f"{width}px 静态资源 {ref}")
+        checked.append(ref.split("?")[0])
+    if not checked:
+        raise SmokeFailure(f"{width}px: 首页没有引用任何同源 CSS/JS")
+    for required in REQUIRED_ASSETS:
+        if required not in checked:
+            raise SmokeFailure(f"{width}px: 首页未实际引用 {required}（checked={checked}）")
+    return checked
+
+
+def assert_rendered_copy(page, width: int) -> None:
+    for copy in RENDERED_COPY:
+        locator = page.get_by_text(copy, exact=False).first
+        locator.wait_for(state="visible", timeout=10000)
+    if page.locator("html").get_attribute("lang") != "zh-CN":
+        raise SmokeFailure(f"{width}px: 公开首页 lang 必须为 zh-CN")
     if "public-landing" not in (page.locator("body").get_attribute("class") or ""):
         raise SmokeFailure(f"{width}px: 公开首页缺少 public-landing class")
+    pending = page.evaluate("() => document.body.classList.contains('home-pending')")
+    if pending:
+        raise SmokeFailure(f"{width}px: home.js 未清除 home-pending，文案可能仍未注入")
+    unfilled = page.evaluate(
+        """() => Array.from(document.querySelectorAll('[data-home-text]'))
+             .filter(el => !(el.textContent || '').trim())
+             .map(el => el.getAttribute('data-home-text'))"""
+    )
+    if unfilled:
+        raise SmokeFailure(f"{width}px: 以下文案节点为空：{unfilled}")
     if page.locator(".shell-header").count():
         raise SmokeFailure(f"{width}px: 公开首页不应渲染 shell header")
     if page.locator(".shell-skip").count():
         raise SmokeFailure(f"{width}px: 公开首页不应渲染 skip link")
+
+
+def assert_no_horizontal_scroll(page, width: int, context: str) -> None:
+    metrics = page.evaluate(
+        """() => ({scrollWidth: document.documentElement.scrollWidth,
+                   innerWidth: window.innerWidth})"""
+    )
+    if metrics["scrollWidth"] > metrics["innerWidth"] + 1:
+        raise SmokeFailure(f"{width}px {context}: 出现横向滚动 {metrics}")
 
 
 def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path) -> list[str]:
@@ -115,21 +177,24 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
             raise SmokeFailure(f"{width}px: / status={getattr(resp, 'status', None)}")
         if page.url.rstrip("/") != base_url.rstrip("/"):
             raise SmokeFailure(f"{width}px: / 被重定向到 {page.url}")
+        raw_html = resp.text()
 
         page.locator(".home-hero").wait_for(state="visible", timeout=10000)
         if page.locator("#app").count():
             raise SmokeFailure(f"{width}px: 匿名首页不应出现 SPA #app")
-        assert_english_landing(page, width)
+        assert_landing_source(raw_html, width)
+        checked = assert_assets_han_free(context, base_url, raw_html, width)
+        assert_rendered_copy(page, width)
 
         register = page.locator('.home-hero a[href="/register?from=home"]')
         register.wait_for(state="visible", timeout=10000)
         assert_primary_block(register, f"{width}px 首页注册按钮")
-        if register.inner_text().strip() != "Create account":
+        if register.inner_text().strip() != "立即注册":
             raise SmokeFailure(f"{width}px: 注册按钮文案 = {register.inner_text()!r}")
 
         login_link = page.locator('.home-hero a[href="/login"]')
         login_link.wait_for(state="visible", timeout=10000)
-        if login_link.inner_text().strip() != "Log in":
+        if login_link.inner_text().strip() != "已有账号，登录":
             raise SmokeFailure(f"{width}px: 登录按钮文案 = {login_link.inner_text()!r}")
 
         feishu = page.locator(f'.home-feishu a[href="{FEISHU_URL}"]')
@@ -142,11 +207,9 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
         qr = page.locator(".home-qr img")
         if qr.count():
             raise SmokeFailure(f"{width}px: 公开首页不应再有二维码图片")
-        if "feishu-qr" in page.content():
-            raise SmokeFailure(f"{width}px: 公开首页仍引用 feishu-qr 资产")
-        page.get_by_text("Used the Feishu version before?", exact=False).first.wait_for(
-            state="visible", timeout=10000)
+        assert_no_horizontal_scroll(page, width, "匿名首页")
         page.screenshot(path=str(out_dir / f"home-anon-{tag}.png"), full_page=True)
+        print(f"PASS {width}px 匿名首页：中文注入、标题唯一、静态资源 0 汉字（{len(checked)} 个）")
 
         page.locator('.home-hero a[href="/login"]').click()
         page.wait_for_url(lambda url: "/login" in url, timeout=10000)
@@ -154,8 +217,12 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
         login_register.wait_for(state="visible", timeout=10000)
         assert_primary_block(login_register, f"{width}px 登录页注册按钮")
         page.get_by_text("已在飞书版使用过", exact=False).first.wait_for(state="visible", timeout=10000)
-        if not HAN_RE.search(page.content()):
+        login_html = page.content()
+        if not HAN_RE.search(login_html):
             raise SmokeFailure(f"{width}px: 登录页应保持中文")
+        if "/static/home.js" in login_html:
+            raise SmokeFailure(f"{width}px: 登录页不应加载首页注入脚本")
+        assert_no_horizontal_scroll(page, width, "登录页")
         page.screenshot(path=str(out_dir / f"login-anon-{tag}.png"), full_page=True)
 
         assert_no_console_errors(errors, f"{width}px 匿名")

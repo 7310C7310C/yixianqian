@@ -1,15 +1,15 @@
 {
   "source": {
     "path": "app.css",
-    "bytes": 90835,
-    "sha256": "d9c9354989b2d7397ad4fd360ea8844a5172e469f32e406e1e8a9c1e7294e2c4"
+    "bytes": 90276,
+    "sha256": "cad57e41ec404bc1970aef3e538aceef65bb6c43902a0826064a16567e4d0bdf"
   },
   "critical": {
     "path": "app.critical.css",
-    "bytes": 30412,
-    "gzip_bytes": 7955,
-    "sha256": "660ba94484235cc4b492f2ffede3416fb299709c0202051865f15888abf1a4d4",
-    "blocks": 263
+    "bytes": 29799,
+    "gzip_bytes": 7733,
+    "sha256": "46d8f64d55c3fc408e615d74324785ac9dd8db7760c88076c8a6f4ce941e5910",
+    "blocks": 261
   },
   "keep_prefixes": [
     ":root",
@@ -39,7 +39,6 @@
     ".login-",
     ".theme-toggle",
     ".update-bar",
-    ".viewer-loading",
     ".van-tabbar",
     ".van-nav-bar",
     ".van-loading",

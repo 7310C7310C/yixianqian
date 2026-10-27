@@ -15,7 +15,7 @@ func TestIntegrationPublicHomeAndLoginEntry(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("anonymous home status = %d body=%s", resp.StatusCode, body)
 	}
-	assertEnglishPublicLanding(t, body)
+	assertPublicLandingContract(t, body)
 	if strings.Contains(body, `id="app"`) {
 		t.Fatal("anonymous home should not serve the SPA")
 	}
@@ -44,7 +44,7 @@ func TestIntegrationPublicHomeAndLoginEntry(t *testing.T) {
 		!strings.Contains(body, `window.__YXQ_AUTHENTICATED__=true;`) {
 		t.Fatalf("signed-in home status=%d body=%s", resp.StatusCode, body)
 	}
-	if strings.Contains(body, "A trusted place for single Christians to meet.") {
+	if strings.Contains(body, `class="welcome-hero home-hero"`) {
 		t.Fatal("signed-in home rendered the public landing page")
 	}
 }
@@ -58,7 +58,7 @@ func TestIntegrationPublicHomeQRAssetRetired(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("anonymous home status = %d body=%s", resp.StatusCode, body)
 	}
-	assertEnglishPublicLanding(t, body)
+	assertPublicLandingContract(t, body)
 
 	resp = anonymous.get("/static/feishu-qr.png")
 	defer resp.Body.Close()

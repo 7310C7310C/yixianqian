@@ -1,6 +1,6 @@
 {{define "layout"}}
 <!doctype html>
-<html lang="{{if .PublicLanding}}en{{else}}zh-CN{{end}}">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,11 +8,17 @@
   <meta name="theme-color" content="#ff6b81">
   <title>{{if .PublicLanding}}{{.Title}}{{else}}{{.Title}} · 一线牵{{end}}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  {{if .PublicLanding}}
+  <!-- Public landing: dedicated ASCII-only stylesheet (no app.css/shell.css,
+       whose comments contain Chinese); the copy itself comes from home.js. -->
+  <link rel="stylesheet" href="/static/home.css?v={{assetVersion}}">
+  {{else}}
   <link rel="stylesheet" href="/static/app.css?v={{assetVersion}}">
   <link rel="stylesheet" href="/static/shell.css?v={{assetVersion}}">
+  {{end}}
   {{if .PageCSS}}<link rel="stylesheet" href="/static/{{.PageCSS}}?v={{assetVersion}}">{{end}}
 </head>
-<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}{{if .PublicLanding}} public-landing{{end}}">
+<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}{{if .PublicLanding}} public-landing home-pending{{end}}">
   {{if not .PublicLanding}}<a class="shell-skip" href="#main">跳至主要内容</a>
 
   <header class="shell-header">
@@ -42,6 +48,7 @@
     </div>
   </main>
   {{if .ActiveNav}}<script src="/static/admin.js?v={{assetVersion}}" defer></script>{{end}}
+  {{if .PublicLanding}}<script src="/static/home.js?v={{assetVersion}}" defer></script>{{end}}
 </body>
 </html>
 {{end}}

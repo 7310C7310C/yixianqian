@@ -456,3 +456,29 @@ sources: []
   `TestIntegrationCloseEndedActivities`、`TestIntegrationGroupingEndedActivityGate`；
   `TestIntegrationEndedSignupDoesNotBlockMatched`（ended/future/ongoing/nil/cancelled）。
   本地 HTTP 验证：匿名 `/` 200 + 英文/无 Han（title 除外），`/login` 200 且仍中文。
+
+## 38. 匿名首页扫描防护：HTML/CSS/JS 零汉字 + 大图移除加载指示（2026-10-27）
+
+- 背景：决策 37 把匿名 `/` 改成英文静态页，PM 判定为误解；要求照 v1 做法——源码除 `<title>` 外
+  看似没有文案（无汉字），中文由 JS 在浏览器注入；首頁引用的 CSS/JS 也不得含汉字
+  （站点为天主教青年相亲类、境外服务器，避免敏感词被扫描/墙）。另：查看大图不再显示「图片加载中」。
+- 决策（首页文案注入）：匿名 `/` 的 markup 只保留空节点 + `data-home-text` / `data-home-aria` 键；
+  `web/static/home.js` 的 `TEXT`/`HTML` 文案表全部 `\uXXXX` 转义（JS 源 0 汉字），
+  `defer` 注入后移除 `body.home-pending`；`home.css` 用 `visibility:hidden` 隐藏未填充节点防空白闪。
+- 决策（资源零汉字）：PublicLanding 不再加载含中文注释的 `app.css`/`shell.css`，改用专用
+  `web/static/home.css`（从 shell.css 逐字复制 token/base/按钮规则，ASCII 注释）+ 现成
+  `register.css`（0 汉字）；单测断言 home.js/home.css/register.css 0 Han，
+  Playwright smoke 断言实际请求的每个同源 CSS/JS 响应 0 Han。
+- 决策（标题/lang）：`<title>` 是唯一允许的汉字（「一线牵 · 祝你早日找到另一半」）；
+  `<html lang="zh-CN">` 直接写死（ASCII 值）。
+- 决策（大图）：删除 `index.html` 的 `viewer-loading-mask` 与 `<van-loading>图片加载中…</van-loading>`
+  及对应 app.css/critical 规则；`viewerLoading` 状态与 10s timeout/cancel 状态机保留
+  （缩图优先秒开、关闭/重开不变）；不再提供「点击遮罩取消」，卡住时由 10s timeout 取消。
+- 备选与不采纳：①生成「去注释」的 app.css/shell.css 变体——二份 30KB 副本漂移风险更大；
+  ②英文兜底文案——会再次把文案放回源码，违背 PM 要求；③大范围删 legacy app.css 中文注释——影响面过大。
+- 风险：home.css 是 shell token/按钮的子集副本，shell.css 改基础样式时需同步；无 JS 时首页文案为空
+  （同源静态资源，失败率低）；无缩图 fallback 打开期间无视觉反馈（最长 10s 自动取消）。
+- 证据：`TestHomeRendersPublicLandingForAnonymous`、`TestPublicLandingAssetsAreHanFree`、
+  `TestPublicLandingTextKeysCoveredByHomeJS`、`TestLoadTemplatesAndRenderPages` home 契约；
+  `tools/browser/public_home_smoke.py`（原始 body + 同源 CSS/JS 0 Han、双视口、无横向滚动）；
+  `tools/browser/user_reported_bugs_20261027.py` 第 5 项（无加载指示、10s 取消、重开）。

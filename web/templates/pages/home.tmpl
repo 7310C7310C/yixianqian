@@ -1,45 +1,49 @@
 {{define "content"}}
+<!-- Landing copy is injected by /static/home.js (ASCII-only source): the markup
+     stays free of Chinese so a scanner reading it finds nothing to match.
+     Every [data-home-text] node must be filled before .home-pending is removed
+     from <body>; see web/static/home.css for the visibility guard. -->
 <section class="welcome-hero home-hero">
   <div class="home-hero-mark" aria-hidden="true">💕</div>
-  <h1 class="welcome-title">YIXIANQIAN</h1>
-  <p class="welcome-lead">A trusted place for single Christians to meet.<br>Real profiles, human review, and meaningful connections.</p>
+  <h1 class="welcome-title" data-home-text="hero.title"></h1>
+  <p class="welcome-lead" data-home-text="hero.lead"></p>
   <div class="welcome-actions">
-    <a class="button primary block" href="/register?from=home">Create account</a>
-    <a class="button block" href="/login">Log in</a>
+    <a class="button primary block" href="/register?from=home" data-home-text="hero.ctaRegister"></a>
+    <a class="button block" href="/login" data-home-text="hero.ctaLogin"></a>
   </div>
-  <p class="welcome-note">Free to join · Human review · Phone number login</p>
+  <p class="welcome-note" data-home-text="hero.note"></p>
 </section>
 
-<section class="welcome-features" aria-label="Why YIXIANQIAN">
+<section class="welcome-features" data-home-aria="features.label">
   <article class="welcome-feature">
     <div class="home-feature-icon" aria-hidden="true">🛡️</div>
-    <h2>Human review</h2>
-    <p>Every profile is reviewed by a real person to keep fakes out.</p>
+    <h2 data-home-text="features.review.title"></h2>
+    <p data-home-text="features.review.body"></p>
   </article>
   <article class="welcome-feature">
     <div class="home-feature-icon" aria-hidden="true">💌</div>
-    <h2>Anonymous likes</h2>
-    <p>Send a like anonymously. A mutual like connects you automatically.</p>
+    <h2 data-home-text="features.like.title"></h2>
+    <p data-home-text="features.like.body"></p>
   </article>
   <article class="welcome-feature">
     <div class="home-feature-icon" aria-hidden="true">🔔</div>
-    <h2>Activity updates</h2>
-    <p>Get notified when someone you like signs up for an activity.</p>
+    <h2 data-home-text="features.notify.title"></h2>
+    <p data-home-text="features.notify.body"></p>
   </article>
 </section>
 
 <section class="home-feishu" id="feishu">
-  <h2>Used the Feishu version before?</h2>
-  <p class="home-feishu-lead">If you already registered on Feishu, set your password there first, then sign in here with your phone number and password. No need to register again.</p>
+  <h2 data-home-text="feishu.title"></h2>
+  <p class="home-feishu-lead" data-home-text="feishu.lead"></p>
   <ol class="home-steps">
-    <li>Open the Feishu version of YIXIANQIAN using the link below.</li>
-    <li>Set your login password there.</li>
-    <li>Come back to this page and sign in with your phone number and password.</li>
+    <li data-home-text="feishu.step1"></li>
+    <li data-home-text="feishu.step2"></li>
+    <li data-home-text="feishu.step3"></li>
   </ol>
-  <a class="button block home-feishu-link" href="{{.FeishuURL}}" target="_blank" rel="noopener noreferrer">Open the Feishu version ↗</a>
+  <a class="button block home-feishu-link" href="{{.FeishuURL}}" target="_blank" rel="noopener noreferrer" data-home-text="feishu.cta"></a>
 </section>
 
 <div class="welcome-footer-note">
-  <p>YIXIANQIAN · Meet the right person</p>
+  <p data-home-text="footer.note"></p>
 </div>
 {{end}}

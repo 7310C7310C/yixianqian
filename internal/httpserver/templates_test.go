@@ -53,16 +53,18 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 				PublicLanding: true,
 			},
 			want: []string{
-				"<!doctype html>", `lang="en"`, "<title>" + publicLandingTitle + "</title>",
-				`class="shell-body public-landing"`,
-				"YIXIANQIAN", "Create account", `href="/register?from=home"`,
-				`href="/login"`, "Human review", "Anonymous likes", "Activity updates",
-				"Used the Feishu version before?", "Open the Feishu version",
+				"<!doctype html>", `lang="zh-CN"`, "<title>" + publicLandingTitle + "</title>",
+				`class="shell-body public-landing home-pending"`,
+				`/static/home.css`, `/static/home.js`,
+				`href="/register?from=home"`, `href="/login"`, `id="feishu"`,
+				`data-home-text="hero.ctaRegister"`, `data-home-aria="features.label"`,
 				publicFeishuAppURL, `target="_blank"`, `rel="noopener noreferrer"`,
 			},
 			notWant: []string{
 				`id="app"`, `feishu-qr`, "跳至主要内容", "shell-header",
 				"shell-account", "立即注册", "人工审核", "二维码",
+				`/static/app.css`, `/static/shell.css`, `lang="en"`,
+				"A trusted place", "Create account", "Used the Feishu version before?",
 			},
 		},
 		{

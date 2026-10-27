@@ -406,7 +406,7 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || strings.Contains(body, `window.__YXQ_AUTHENTICATED__=true;`) {
 		t.Fatalf("revoked session status=%d body=%s", resp.StatusCode, body)
 	}
-	if !strings.Contains(body, "A trusted place for single Christians to meet.") {
+	if !strings.Contains(body, `class="welcome-hero home-hero"`) {
 		t.Fatal("revoked session did not fall back to the public landing page")
 	}
 

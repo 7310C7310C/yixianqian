@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -11,16 +12,26 @@ import (
 
 	"github.com/7310C7310C/yixianqian/internal/config"
 	"github.com/7310C7310C/yixianqian/internal/db"
+	webassets "github.com/7310C7310C/yixianqian/web"
 )
 
 const publicLandingTitle = "一线牵 · 祝你早日找到另一半"
 
-var hanPattern = regexp.MustCompile(`\p{Han}`)
+var (
+	hanPattern = regexp.MustCompile(`\p{Han}`)
+	// Landing copy is injected by /static/home.js, so the rendered markup must
+	// only carry empty data-* hooks: one per copy key, plus aria-label keys.
+	homeTextAttr  = regexp.MustCompile(`data-home-text="([^"]+)"`)
+	homeTextEmpty = regexp.MustCompile(`data-home-text="[^"]+"[^>]*>\s*<`)
+	homeAriaAttr  = regexp.MustCompile(`data-home-aria="([^"]+)"`)
+)
 
-// assertEnglishPublicLanding enforces the PM scan-resistance contract: the
-// landing page may contain Chinese only inside <title>, never in the header,
-// body copy, aria labels or links.
-func assertEnglishPublicLanding(t *testing.T, body string) {
+// assertPublicLandingContract enforces the PM scan-resistance contract: the
+// anonymous landing page may contain Chinese only inside <title>. Every piece
+// of copy is injected at runtime by /static/home.js, whose source — like the
+// landing stylesheets — is ASCII-only, so a scanner reading the page or its
+// assets has nothing to match.
+func assertPublicLandingContract(t *testing.T, body string) {
 	t.Helper()
 	titleTag := "<title>" + publicLandingTitle + "</title>"
 	if strings.Count(body, titleTag) != 1 {
@@ -42,28 +53,26 @@ func assertEnglishPublicLanding(t *testing.T, body string) {
 	}
 	for _, unwanted := range []string{
 		"跳至主要内容", "shell-skip", "shell-header", "shell-account",
-		"一线牵", "立即注册", "人工审核", "匿名喜欢", "动态通知",
+		"立即注册", "人工审核", "匿名喜欢", "动态通知",
 		"已在飞书版使用过", "feishu-qr", "二维码", "扫一扫",
+		`id="app"`, `/static/app.css`, `/static/shell.css`, `lang="en"`,
+		"A trusted place", "Create account", "Human review",
+		"Used the Feishu version before?",
 	} {
 		if strings.Contains(rest, unwanted) {
 			t.Fatalf("public landing still contains %q", unwanted)
 		}
 	}
 	for _, want := range []string{
-		`lang="en"`,
-		`class="shell-body public-landing"`,
-		"YIXIANQIAN",
-		"A trusted place for single Christians to meet.",
-		"Create account",
-		"Log in",
-		"Free to join · Human review · Phone number login",
-		"Human review",
-		"Anonymous likes",
-		"Activity updates",
-		"Used the Feishu version before?",
-		"Open the Feishu version",
+		`lang="zh-CN"`,
+		`class="shell-body public-landing home-pending"`,
+		`/static/home.css`,
+		`/static/home.js`,
 		`href="/register?from=home"`,
 		`href="/login"`,
+		`id="feishu"`,
+		`data-home-text="hero.ctaRegister"`,
+		`data-home-aria="features.label"`,
 		publicFeishuAppURL,
 		`target="_blank"`,
 		`rel="noopener noreferrer"`,
@@ -71,6 +80,11 @@ func assertEnglishPublicLanding(t *testing.T, body string) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %q in landing page", want)
 		}
+	}
+	// The markup ships without copy: all data-home-text nodes stay empty until
+	// home.js fills them.
+	if got, empty := len(homeTextAttr.FindAllString(body, -1)), len(homeTextEmpty.FindAllString(body, -1)); got == 0 || got != empty {
+		t.Fatalf("data-home-text nodes = %d, empty ones = %d; copy must be injected by home.js", got, empty)
 	}
 }
 
@@ -100,7 +114,7 @@ func TestHomeRendersPublicLandingForAnonymous(t *testing.T) {
 		t.Fatalf("cache-control = %q", got)
 	}
 	body := rec.Body.String()
-	assertEnglishPublicLanding(t, body)
+	assertPublicLandingContract(t, body)
 	if strings.Contains(body, `id="app"`) {
 		t.Fatal("anonymous landing page should not serve the SPA")
 	}
@@ -167,8 +181,63 @@ func TestLoginPageShowsRegisterCTA(t *testing.T) {
 			t.Fatalf("missing %q in login page", want)
 		}
 	}
-	// The login page stays Chinese: only the public landing page is English.
+	// The login page stays Chinese and keeps the regular site shell: only the
+	// anonymous landing page is scan-resistant.
 	if !hanPattern.MatchString(body) {
 		t.Fatal("login page should remain Chinese")
+	}
+	for _, want := range []string{`/static/app.css`, `/static/shell.css`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("login page should load %q", want)
+		}
+	}
+	if strings.Contains(body, `/static/home.css`) || strings.Contains(body, `/static/home.js`) {
+		t.Fatal("login page must not load the landing-only assets")
+	}
+}
+
+// TestPublicLandingAssetsAreHanFree guards the second half of the scan
+// contract: the CSS/JS the landing page requests must be ASCII-only too, so a
+// scanner cannot match sensitive words in them.
+func TestPublicLandingAssetsAreHanFree(t *testing.T) {
+	for _, name := range []string{"static/home.js", "static/home.css", "static/register.css"} {
+		data, err := fs.ReadFile(webassets.FS, name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if len(data) == 0 {
+			t.Fatalf("%s is empty", name)
+		}
+		if match := hanPattern.FindString(string(data)); match != "" {
+			t.Fatalf("%s contains Han characters (%q); landing CSS/JS must stay ASCII-only", name, match)
+		}
+	}
+}
+
+// TestPublicLandingTextKeysCoveredByHomeJS keeps the empty markup hooks and the
+// injected copy table in sync: a missing key would render a blank node.
+func TestPublicLandingTextKeysCoveredByHomeJS(t *testing.T) {
+	app := newHomeTestApp(t, nil)
+	rec := httptest.NewRecorder()
+	app.handleHome(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	js, err := fs.ReadFile(webassets.FS, "static/home.js")
+	if err != nil {
+		t.Fatalf("read static/home.js: %v", err)
+	}
+	src := string(js)
+	keys := append(homeTextAttr.FindAllStringSubmatch(body, -1), homeAriaAttr.FindAllStringSubmatch(body, -1)...)
+	if len(keys) == 0 {
+		t.Fatal("landing markup has no data-home-* copy keys")
+	}
+	for _, match := range keys {
+		key := match[1]
+		if !strings.Contains(src, "'"+key+"'") && !strings.Contains(src, `"`+key+`"`) {
+			t.Fatalf("home.js has no copy for key %q", key)
+		}
 	}
 }
