@@ -3414,6 +3414,40 @@ const yxqApp = createApp({
       else hideViewerRoot(null);
       if (showPhotoViewer.value) showPhotoViewer.value = false;
     }
+    // 大图左右切换：>=2 张时显示左右按键，首尾循环。
+    // PhotoSwipe 5 自带的箭头在触摸端默认隐藏；这里自绘按钮并用取模跳转，
+    // 保证移动端也可见，且任意张数（含 2 张）都能从首张/末张循环。
+    function viewerStep(pswp, dir) {
+      if (!pswp || pswp.isDestroying || pswp.isClosing) return;
+      if (!viewerLightbox || viewerLightbox.pswp !== pswp) return;
+      if (pswp.opener && !pswp.opener.isOpen) return;
+      const n = pswp.getNumItems();
+      if (n < 2) return;
+      pswp.goTo((pswp.currIndex + dir + n) % n);
+    }
+    function viewerInjectArrows(pswp) {
+      if (!pswp || !pswp.scrollWrap) return;
+      if (pswp.scrollWrap.querySelector('.yxq-viewer-arrow')) return;
+      [
+        { dir: -1, cls: 'prev', label: '上一张', path: 'M15 5l-7 7 7 7' },
+        { dir: 1, cls: 'next', label: '下一张', path: 'M9 5l7 7-7 7' },
+      ].forEach(function (d) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pswp__button pswp__hide-on-close yxq-viewer-arrow yxq-viewer-arrow--' + d.cls;
+        btn.setAttribute('aria-label', d.label);
+        btn.setAttribute('aria-controls', 'pswp__items');
+        btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+          '<path d="' + d.path + '" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+          'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          viewerStep(pswp, d.dir);
+        });
+        pswp.scrollWrap.appendChild(btn);
+      });
+    }
     // 卡片页空闲时预加载 PhotoSwipe 资源：首次点大图不再等 JS/CSS 下载。
     function prefetchPhotoSwipe() {
       if (photoSwipePrefetchStarted) return;
@@ -3444,11 +3478,15 @@ const yxqApp = createApp({
         imageClickAction: 'close',
         hideAnimationDuration: 160,
         preloaderDelay: 200,
+        // 用自绘左右按键（触摸端可见 + 循环），关闭自带箭头避免桌面端重复。
+        arrowPrev: false,
+        arrowNext: false,
       });
       viewerLightbox.on('afterInit', () => {
         // 标记本次实例；若打开过程中已被取消，立即隐藏并关闭，不等待 loadComplete。
         const pswp = viewerLightbox && viewerLightbox.pswp;
         if (pswp && viewerPendingSeq) pswp.__yxqOpenSeq = viewerPendingSeq;
+        viewerInjectArrows(pswp);
         if (viewerCancelledSeq === viewerOpenSeq) {
           hideViewerRoot(pswp);
           setTimeout(function () { abortViewerInstance(pswp); }, 0);

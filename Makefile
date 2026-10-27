@@ -23,7 +23,7 @@ LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSI
         test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale prepush ci \
         static-gzip static-gzip-check spa-check spa-check-node \
         perf-budget perf-guard-test perf-bench perf-lcp \
-        fast smoke-fast smoke-full deploy-wait review-packet
+        fast smoke-fast smoke-full smoke-viewer-arrows deploy-wait review-packet
 
 all: ci
 
@@ -161,6 +161,10 @@ smoke-fast:
 # nightly / release：完整矩阵。
 smoke-full:
 	$(PERF_PYTHON) tools/agent/smoke_parallel.py --suite full
+
+# 大图左右按键/循环（390 触摸 + 1280 鼠标）；需 BASE_URL + SESSION_COOKIE(_FILE)。
+smoke-viewer-arrows:
+	$(PERF_PYTHON) tools/browser/viewer_arrows_smoke.py
 
 # 一个阻塞命令等 CI + autodeploy；不再用模型轮询。
 deploy-wait:

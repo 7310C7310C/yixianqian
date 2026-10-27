@@ -546,6 +546,8 @@ BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> \
 - 四 tab / 活动详情 / 弹层 / 管理台 iframe 的滚动隔离（防 tab 间串位、返回丢位置）用
   `tools/browser/tab_scroll_smoke.py` 回归；需真实账号 cookie，命令见脚本头注释：
   `BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> python3 tools/browser/tab_scroll_smoke.py`。
+- 大图左右按键与首尾循环（>=2 张；390 触摸 + 1280 鼠标）：
+  `BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> make smoke-viewer-arrows`。
 - 「我的→管理」只保留「🛠️ 管理后台」单一入口；活动/麦穗/举报的 v1 SPA 页面暂不暴露。
   管理权限与 `/legacy/api/admin/*` 形状用 `tools/admin_legacy_api_smoke.py` 回归；需管理员与普通用户两个 cookie：
   `BASE_URL=https://next.nantou.love SESSION_COOKIE=<管理员> USER_SESSION_COOKIE=<普通用户> python3 tools/admin_legacy_api_smoke.py`。

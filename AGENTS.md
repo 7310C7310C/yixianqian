@@ -216,6 +216,7 @@ make build             # server/seed/token/facebackfill
 make fast              # agent 每次 edit 后的快速检查（<30s）
 make smoke-fast        # 每个 batch 的浏览器子集（390x844+390x700 并行）
 make smoke-full        # nightly/release 完整浏览器矩阵
+make smoke-viewer-arrows # 大图左右按键/首尾循环（390 触摸 + 1280 鼠标）；需 BASE_URL + SESSION_COOKIE(_FILE)
 make deploy-wait       # 阻塞等 CI + staging healthz
 make review-packet     # 生成 Reviewer 用的 diff/风险/证据清单
 make test-integration  # 需要 TEST_DATABASE_URL；只跑 TestIntegration*

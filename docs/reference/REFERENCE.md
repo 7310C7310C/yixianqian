@@ -321,6 +321,7 @@ sources: []
 | `seed` | — |
 | `smoke-fast` | — |
 | `smoke-full` | — |
+| `smoke-viewer-arrows` | — |
 | `spa-check` | — |
 | `spa-check-node` | — |
 | `static-gzip` | — |

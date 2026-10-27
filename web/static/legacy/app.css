@@ -343,6 +343,40 @@
   /* 取消打开后 PhotoSwipe 在 loading 期可能仍保留根节点：立即隐藏，等 destroy 完成。 */
   .pswp.yxq-viewer-cancelled { display: none !important; }
   .pswp__counter { left: 50%; right: auto; transform: translateX(-50%); }
+  /* 大图左右按键：>=2 张时显示，首尾循环；触摸端也常显（PhotoSwipe 默认只在鼠标端显示箭头）。 */
+  .pswp .yxq-viewer-arrow {
+    position: absolute;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    margin-top: -22px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
+    cursor: pointer;
+    -webkit-appearance: none;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    -webkit-touch-callout: none;
+  }
+  .pswp .yxq-viewer-arrow--prev { left: 12px; left: calc(12px + env(safe-area-inset-left)); }
+  .pswp .yxq-viewer-arrow--next { right: 12px; right: calc(12px + env(safe-area-inset-right)); }
+  .pswp .yxq-viewer-arrow svg { width: 24px; height: 24px; display: block; pointer-events: none; }
+  /* photoswipe.css 在查看器打开时追加到 app.css 之后，`.pswp__button:hover/:focus`
+     会把背景重置为 none；这里用更高特异性保持按钮底色与描边。 */
+  .pswp .yxq-viewer-arrow:hover,
+  .pswp .yxq-viewer-arrow:focus {
+    background: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.32);
+  }
+  .pswp .yxq-viewer-arrow:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .pswp .yxq-viewer-arrow:active { background: rgba(0, 0, 0, 0.65); }
+  .pswp--one-slide .yxq-viewer-arrow { display: none; }
   /* 全屏图片保持 pointer-events:none：拦截长按保存菜单；单击关闭由 .pswp__zoom-wrap/.pswp__item 承接（见 bg/tap 配置） */
   .pswp img, .pswp__img { pointer-events: none !important; -webkit-touch-callout: none !important; }
   /* 大图框由原图尺寸决定；缩图阶段用 cover 填满同一框（不拉伸、只裁边），
