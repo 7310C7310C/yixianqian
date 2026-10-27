@@ -163,9 +163,8 @@ POST 表单错误消息与内部 500/管理台错误页是明示例外。旧 `/w
 - **等部署**：`make deploy-wait`，一个阻塞命令等 CI + healthz；不要每 10 秒发一轮 `gh run list`。
 - **Review 前**：`make review-packet` 生成 diffstat/风险/证据清单；Reviewer 只跑必要的复核。
 - 本机不跑 race；CI 已覆盖全量 race。发版前需要时用 `make test-race-full`。
-- **session 粒度**：一个 batch 最多 3 个 bug 或一次 deploy；之后开新 subagent session，context 控制在 ~150k。
+- **session 粒度**：一个 batch 最多 3 个 bug 或一次 deploy；之后开新 builder session，context 控制在 ~150k。
 - **docs stale**：只有 docs/config/route/migration 变更才强制；test-only/frontend 用 `Docs-Impact: none（理由）`。
-- **组织**：前端单文件串行时 dev-lead 可 solo（Lean）；多文件并行才开 developer。不要为了组织图开空转角色。
 
 ## 文档自动更新协议
 
