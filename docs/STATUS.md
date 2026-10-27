@@ -448,8 +448,9 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   秒开改按「已看到卡图」的缓存命中口径测量（先等卡片缩图 `complete`，再预取缩图字节由 route `fulfill`）。
   该文件是本文档 doc-meta 的 source，首次 Docs run `40470042686` 因
   「sources 命中变更但本文档未更新」失败，autodeploy 按闸门拒绝部署 `b6c0034`（未重建/未重启）。
-- 因此本轮运行态不变：`/healthz=staging-a68063e`、server 源码 `a68063e`；`deployed.sha` 由本次 docs-only
-  提交推进到 docs tip（既有语义：`deployed.sha` 指向最新 docs tip，代码部署标记 `a68063e`）。
+- 因此本轮运行态不变：`/healthz=staging-a68063e`、server 源码 `a68063e`（代码部署标记仍为 `a68063e`）。
+  autodeploy 对 tip 仍按「range 含代码提交」要求 CI，而 docs-only 提交不触发 CI run，故 `deployed.sha`
+  停在 `f404e3d`；处置与选项见 `.team/decisions.md`（本未重建/未重启）。
   以 `b6c0034` harness 复跑部署中产品：`public_home_smoke` 390x844/1280x900 PASS；
   `user_reported_bugs_20261027.py` 390x844 **19/19**、390x700 **18/18**（秒开 93–100ms、遮罩 97–104ms）；
   `no_history_smoke` 390/1280 ALL PASS；16:08 起 5xx=0（ERROR 仅 `context canceled`，为 smoke 关闭页时中止请求）。
