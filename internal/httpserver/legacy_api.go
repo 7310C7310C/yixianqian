@@ -501,7 +501,7 @@ func (a *App) handleLegacyActivityDetail(w http.ResponseWriter, r *http.Request)
 		legacyServerError(a, w, r, err, "legacy activity detail failed")
 		return
 	}
-	view := buildActivityView(activity)
+	view := a.activityView(activity)
 	if signup, err := a.db.GetSignup(r.Context(), activity.ID, user.ID); err == nil {
 		applySignupToView(&view, signup.Status, signup.Attendance)
 	} else if !errors.Is(err, db.ErrNotSignedUp) {
@@ -572,7 +572,7 @@ func (a *App) legacyActivities(ctx context.Context, userID int64) ([]map[string]
 	}
 	out := make([]map[string]any, 0, len(items))
 	for _, item := range items {
-		view := buildActivityView(item.Activity)
+		view := a.activityView(item.Activity)
 		if item.SignupStatus != "" {
 			applySignupToView(&view, item.SignupStatus, item.Attendance)
 		}
@@ -971,6 +971,7 @@ func legacyActivityMap(view ActivityView) map[string]any {
 		"my_attendance":    view.Attendance,
 		"can_signup":       view.CanSignup,
 		"can_cancel":       view.CanCancel,
+		"can_self_signin":  view.CanSelfSignin,
 		"my_choice_count":  0,
 	}
 }

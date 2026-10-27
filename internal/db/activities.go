@@ -302,6 +302,24 @@ func (d *DB) ListActivities(ctx context.Context) ([]Activity, error) {
 	return out, nil
 }
 
+// CloseEndedActivities persists the derived 「已结束」 status for open/full
+// activities whose end_at has passed. It is idempotent and returns the number
+// of rows changed. Cancelled, already finished and not-yet-open activities are
+// never touched, and activities without end_at stay open.
+func (d *DB) CloseEndedActivities(ctx context.Context) (int64, error) {
+	tag, err := d.pool.Exec(ctx,
+		`UPDATE activities
+		    SET status = $1, updated_at = now()
+		  WHERE status IN ($2, $3)
+		    AND end_at IS NOT NULL
+		    AND end_at < now()`,
+		ActivityStatusFinished, ActivityStatusOpen, ActivityStatusFull)
+	if err != nil {
+		return 0, fmt.Errorf("db: close ended activities: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // GetActivity resolves an activity by number, legacy record id or numeric id.
 func (d *DB) GetActivity(ctx context.Context, ref string) (Activity, error) {
 	text, numeric := activityRefQueryArgs(ref)

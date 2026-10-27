@@ -10,6 +10,9 @@ sources:
   - deploy/**
   - internal/httpserver/routes.go
   - internal/httpserver/legacy_api.go
+  - internal/httpserver/activities_view.go
+  - internal/httpserver/activities_routes.go
+  - internal/db/activities.go
   - internal/db/admin*.go
   - internal/db/errors*.go
   - internal/httpserver/admin_*.go
@@ -39,7 +42,12 @@ sources:
   - web/static/admin.js
   - web/static/legacy/index.html
   - web/static/legacy/app.js
+  - web/static/legacy/app.css
+  - web/static/legacy/pages/home.html
+  - web/static/legacy/pages/my_activities.html
+  - web/static/legacy/pages/my_groups.html
   - tools/browser/no_history_smoke.py
+  - tools/browser/user_reported_bugs_20261027.py
   - internal/httpserver/legacy_test.go
   - web/templates/pages/admin.tmpl
   - web/templates/pages/admin_activities.tmpl
@@ -69,7 +77,7 @@ sources:
 
 - 更新日期：2026-10-27
 - 维护者：项目维护者
-- 下一更新点：PM 在 Android Via 真机复验虚拟历史栈、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
+- 下一更新点：PM 在 Android Via 真机复验虚拟历史栈、Android Kiwi/荣耀复验本批可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
 - 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-ad1f2c1`（代码 `4fdcc38`：改密页闪现修复 + assetVersion 17，migration 10）；
   生产 `app.nantou.love` 未切换。
 
@@ -339,6 +347,58 @@ M6 进入条件：上述验收项完成，`docs/product-spec.md` 有证据地签
   `.team/decisions.md` 与 `.team/perf/password-flash-deploy.md`。
   证据：`.team/reviews/2026-10-27-password-flash.md`、`.team/perf/password-flash-report.md`。
 - 回滚：`git revert 4fdcc38`（仅前端生成物与 assetVersion）。
+
+### 2026-10-27 用户端报障批次（本地实现，待独立 Review / 合并 / 部署）
+
+- 批次范围：PM 报障 7 项（前端 1/2/3/5/6/7，第 4 项只查证不改）。本批**未 push、未部署、未重启 staging**；
+  本地 main 提交后交 Reviewer 审 integrated diff。
+- 1 筛选后本人卡：`/legacy/api/home` 的本人卡缓存在 `selfCard`；清除筛选/无筛选 offset=0 时放回首位，
+  筛选期间不出现；牌堆改走「含本人卡」的本地全序（请求 offset-1、首屏 limit 49、total+1），
+  覆盖 `loadCards`、`loadMoreCards`、`loadPageAt`、`loadPrevPage`、版本重建与 `trimCardsWindow`；
+  证据：`user_reported_bugs_20261027.py` 390x844/390x700 均 PASS（选性别应用后无 self、清除后 self 回首位且唯一、连续翻 62 张无重复/不卡死）。
+- 2 首次看卡人脸位置：`ResizeObserver(.card-photo-wrap)` + `visualViewport.resize` / `orientationchange` /
+  `visibilitychange` / 切卡与照片过渡后重算；`faces` 晚到重算；值相等不写 ref，回到默认居中时清空旧像素偏移。
+  证据：844→700→844 裁切值由 `''` 变 `50% -66px` 再恢复，切走再回来一致。
+- 3 Android 可视区域：根级 `--yxq-vh`（默认 `100vh` → `@supports 100dvh` → 壳内联脚本按 `visualViewport.height`
+  写 px，rAF 节流）；`#app`/`.app-boot-skeleton`/`.login-page`/`.password-page`/`.tab-main`/`.cards-page`/`.swipe-card`
+  改用该变量；`.swipe-card` 高度改为「可视高度 − 底栏/安全区 − 8px 余量」，不再用 90vh；底栏新增
+  `--yxq-vv-bottom` 适配浏览器工具栏/推荐搜索栏。证据：390x844 与 390x700 下
+  `scrollHeight = innerHeight`、卡片底边 ≤ 底栏顶边、操作按钮均在视口内、`--yxq-vh` 跟随 innerHeight。
+  真机 Kiwi/荣耀无法本地复现，由 PM 复验；浏览器自身地址栏/推荐搜索栏不可控，前端只能让内容与底栏适配可见视口，
+  极老 WebView 无 `visualViewport` 时以 `innerHeight`/`100vh` 兜底。
+- 4 U-1513 点赞按钮：**不改产品规则**。staging 数据 U-0006 已喜欢 U-1513（`likes` 单向）且点赞有效；
+  `canPraiseCard` 要求 `!c.liked`，已喜欢时隐藏点赞按钮，属需求第 9 条；其他卡只点赞过显示灰色 `.praise-btn.praised`。
+- 5 首点大图：点击后立即显示全屏 Vant loading 遮罩（实测 2–4ms）；`z-index:100001` 高于 PhotoSwipe 根层
+  （100000），`elementFromPoint` 命中遮罩而非 `pswp__item`；PhotoSwipe JS/CSS 在卡片页 idle 预加载；只探测当前照片
+  尺寸，卡片 DOM 已有 `naturalWidth/Height` 时直接用，其余懒加载；`loadComplete`/`loadError`/`close`/10s 超时撤遮罩。
+  点击遮罩取消本次打开（seq++、清遮罩、close/destroy pswp），返回键语义不变。证据：拦截原图 2s，遮罩在 pswp 之上且
+  可点击取消；加载完成后遮罩消失、viewer 可关闭、无 console error。
+- 6 活动按时间状态：前端 `pages/home.html`、`my_activities.html`、`my_groups.html`、`activity_detail.html` 的
+  签到入口/提示/志愿禁用改走 `can_self_signin`（优先新字段，status=已结束/已取消硬兜底；旧 payload fallback
+  `signin_enabled && my_signup`）；状态标签继续显示 `act.status`；已结束活动不再显示「现场签到」「报名中」入口。
+  后端契约已合入 `09b62c6`：`legacyActivityMap` 新增 `can_self_signin`；`buildActivityView(a, now)` 对
+  `end_at < now` 且原状态「报名中/已满员」派生「已结束」并关闭 `can_signup`/`can_cancel`；
+  `CloseEndedActivities` 启动补跑 + 整点清理落库，读路径仍派生兜底。证据：mock 过期活动四页无签到/报名入口；
+  `TestCanSelfSigninBoundaries`、`TestIntegrationActivityAutoEndUserViews`、`TestIntegrationCloseEndedActivities` 绿。
+- 7 资料保存返回链：新增 `hist.dropCurrent(state)`；`profileFormDone` 保存成功后丢弃当前 edit 条目（virtual 直接 pop；
+  legacy/real 用 back + 一次性吞 popstate + replaceState），`passwordFormDone` 同样丢弃 password 条目；失败/取消不丢。
+  证据：我的→我的资料→修改资料→保存 后栈只保留 `[profile, profile_detail]`；返回一次到「我的」，第二次离开 SPA；
+  改密成功栈内无 password 残留。`profile_edit` 无重复条目，virtual 与 `?history=legacy` 均 PASS；
+  全程 virtual 模式 0 次原生 History 调用（除启动哨兵）。
+- 静态资源与门禁：`assetVersion` 17→20（前端批 18、后端整合 19、Reviewer B1/B2 修复 20），admin CSS `@import` 同步；
+  重建 `spa_minify`、`spa_precompile`（root + pages）、`css_split`（critical 补 `.viewer-loading`）、`static-gzip`。
+  `make perf-budget` 全 PASS：shell 29,169/30,776、app.min 48,968/52,756、initial render 25,029/27,538、
+  critical 8,061/8,406、首载 244,963/266,541。
+- 本地验证（整合后端 `09b62c6` 后）：`make ci` EXIT=0；`make test-race` 全 ok；`make test-integration`
+  （本机新库 `yxq_reviewfix_it`）db 12.2s / httpserver 55.0s ok；`go test -race -p 1 ./internal/db ./internal/httpserver`
+  （新库 `yxq_reviewfix_race`）db 15.3s / httpserver 108.6s ok；`user_reported_bugs_20261027.py` 两视口 18/18 PASS
+  （virtual + legacy 两种历史模式；第5项含遮罩遮挡/取消/可交互，第7项含双返回与改密）；
+  `no_history_smoke` 390x844 / 1280x900 各 19/19 PASS。证据目录 `/tmp/opencode/user-reported-bugs-20261027`
+  （团队临时 artifact，未提交）。
+- 状态：**本地完成，未 push、未部署**。部署前 staging 旧代码基线（390x844，CPU×4/1.6Mbps/150ms，N=3）：
+  冷 FCP/LCP **1328/2012ms**、暖 **620/640ms**、CLS 0、315,581B/19（冷）；新代码部署后需按同口径复测 P95 再判退化。
+- 回滚：`git revert <本批提交>`（前端静态生成物 + assetVersion + 后端活动状态派生/关闭任务；无 schema 变更；
+  到期落库仅把已过 end_at 的活动置为已结束，回滚 binary 不恢复已落库状态）。
 
 ## 4. P0 身份证门禁：补填 + 服务端强制（已实现，待部署/验收）
 

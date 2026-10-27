@@ -6,6 +6,38 @@
 <base href="/static/legacy/">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<script>
+// 可视区域高度：移动浏览器地址栏/推荐搜索栏会让 visualViewport 小于 100vh。
+// 默认 100vh / 100dvh 由 CSS 提供；这里尽早写成 px，后续 resize/横竖屏 rAF 节流刷新。
+(function(){
+  var root = document.documentElement, raf = 0, lastH = 0, lastBottom = 0;
+  function apply(){
+    raf = 0;
+    var vv = window.visualViewport;
+    var h = Math.round((vv && vv.height) || window.innerHeight || 0);
+    if (h > 0 && h !== lastH) { lastH = h; root.style.setProperty('--yxq-vh', h + 'px'); }
+    var layout = window.innerHeight || 0, bottom = 0;
+    if (vv && layout && vv.height) {
+      bottom = Math.max(0, Math.round(layout - (vv.height + (vv.offsetTop || 0))));
+      // 键盘弹出时可视高度骤降：底栏留在布局底，不跟着键盘跳。
+      if (vv.height < layout * 0.72) bottom = 0;
+    }
+    if (bottom !== lastBottom) { lastBottom = bottom; root.style.setProperty('--yxq-vv-bottom', bottom + 'px'); }
+  }
+  function queue(){ if (raf) return; raf = (window.requestAnimationFrame || function(cb){ return setTimeout(cb, 16); })(apply); }
+  apply();
+  try {
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', queue);
+      window.visualViewport.addEventListener('scroll', queue);
+    }
+    window.addEventListener('resize', queue);
+    window.addEventListener('orientationchange', queue);
+    document.addEventListener('visibilitychange', function(){ if (!document.hidden) queue(); });
+  } catch (e) {}
+  window.__YXQ_SET_VH__ = queue;
+})();
+</script>
 <script>try{if(localStorage.getItem('yxq_dark')==='1')document.documentElement.classList.add('van-theme-dark');}catch(e){}</script>
 <title>一线牵</title>
 <link rel="icon" href="favicon.ico?v=__ASSET_URL_VERSION__" sizes="any">
@@ -381,6 +413,11 @@
 </div>
 <!-- 全屏图片预览（PhotoSwipe） -->
 <div id="pswp-gallery" style="display:none"></div>
+<!-- 大图打开遮罩：点击后立即出现，PhotoSwipe loadComplete/loadError/close/超时隐藏 -->
+<div v-if="viewerLoading" class="viewer-loading-mask" role="status" aria-live="polite" @click.stop="cancelViewerLoading">
+  <van-loading size="30px">图片加载中…</van-loading>
+  <div class="viewer-loading-hint">轻触取消</div>
+</div>
 <!-- 送爱心弹窗 -->
 <van-dialog v-model:show="showLikeDialog" :title="likeDialogTitle" show-cancel-button
   confirm-button-text="发送" cancel-button-text="取消" confirm-button-color="#ff6b81"

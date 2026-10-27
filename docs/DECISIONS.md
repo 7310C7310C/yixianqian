@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-26
+last_verified: 2026-10-27
 sources: []
 -->
 
@@ -390,3 +390,46 @@ sources: []
   既有 public_home / spa_nav / tab_scroll / batch6_bundle / app_hero_deck / admin_native_activity /
   app_integration 7 smoke + tab_first_load 全 PASS；`make ci`（Go 1.24.7，asset-version 用本地
   `origin/main` 补跑）、`make test-race`、`make test-integration`（含授权矩阵）全 PASS。
+
+## 35. 活动按时间派生状态与到期自动结束（2026-10-27）
+
+- 背景：PM 反馈活动已过结束时间仍显示「报名中」，且仍出现「现场签到」入口；旧逻辑只靠机器人/管理操作写
+  `status`，没有按 `end_at` 派生，也没有到期落库任务；前端各页各自用 `signin_enabled && my_signup` 判断签到，
+  无法覆盖「已结束/已取消/已签到/未到时间窗」。
+- 决策（后端契约，由活动 workstream 实现）：用户端活动 JSON 在**读路径**派生 `status`：`end_at < now` 且原状态为
+  「报名中/已满员」时返回「已结束」；同时 `can_signup`、`can_cancel` 返回 `false`；新增 `can_self_signin`（bool，
+  综合 `signin_enabled`、`my_signup`、签到状态与活动时间窗）。新增**小时级到期任务**（整点检查，幂等）把过期活动
+  落库为「已结束」，与读时派生同一规则；不新增常驻进程。
+- 决策（前端契约）：`pages/home.html`、`pages/my_activities.html`、`pages/my_groups.html`、`activity_detail.html`
+  的现场签到按钮/提示/志愿禁用统一改为 `can_self_signin`；`status=已结束/已取消` 是硬兜底，优先于旧 payload 的
+  `signin_enabled`；后端未返回新字段时 fallback 为 `signin_enabled && my_signup`（已签到仍用 `my_attendance`
+  显示「已签到」）。状态标签继续显示 `act.status`，前端不自行按 `end_time` 推算；已结束/已取消不再显示
+  「现场签到」与「报名中」入口。
+- 边界：不改历史活动状态语义、不批量改写既有 `status`；到期落库只由后端小时任务/管理操作执行；前端 fallback
+  在后端上线后保留一个发布周期，随后可删除；不改报名/签到 API 的权限与审计。
+- 实现：后端 `09b62c6`（合入本地 main `0cbba0f`）：`legacyActivityMap` 新增 `can_self_signin`；`buildActivityView(a, now)`
+  派生「已结束」并关闭 `can_signup`/`can_cancel`；`CloseEndedActivities` 在 `cmd/server` 启动补跑并挂到整点 `cleanupLoop`。
+- 证据：前端 `tools/browser/user_reported_bugs_20261027.py` 第 6 项 mock 断言（活动列表/详情/我的活动/我的分组
+  均显示已结束、无签到/报名入口）；后端 `TestCanSelfSigninBoundaries`、`TestIntegrationActivityAutoEndUserViews`、
+  `TestIntegrationCloseEndedActivities` 覆盖时间窗、HTTP 契约与落库幂等；整合后 `make ci`、`make test-race`、
+  `make test-integration`、`go test -race -p 1 ./internal/db ./internal/httpserver` 全绿。真机与 staging 部署后
+  需再用真实过期活动复验。
+
+## 36. 保存成功丢弃历史条目与大图遮罩层级（2026-10-27，Reviewer B1/B2）
+
+- 背景：独立 Reviewer 判 FAIL——`profileFormDone`/`passwordFormDone` 只把当前条目 replace 成父页，旧父页条目仍在，
+  返回一次看似正常、第二次跳到「牵线」；大图加载遮罩 `z-index:12000` 低于 PhotoSwipe 的 100000，
+  遮罩 DOM 出现但被 `pswp__item` 完全盖住，「轻触取消」不可点。
+- 决策（历史）：`hist` 新增 `dropCurrent(state)`。virtual 模式直接 pop 当前条目并把新 top 写成 state，
+  不触发 UI 切页；legacy/real 模式 `realHistory.back()` + 一次性 `dropCurrentPending` 吞掉 popstate，
+  再 `replaceState(state)` 修正父条目。资料保存成功用 `dropCurrent({page:'profile_detail'})`，
+  改密成功用 `dropCurrent({page:'profile'})`；失败/取消不设置旗标，不丢条目。
+- 决策（遮罩）：`.viewer-loading-mask` 固定 `z-index:100001`（高于 PhotoSwipe 根层 100000）并 `pointer-events:auto`，
+  点击遮罩取消本次打开：`viewerOpenSeq++`、清遮罩、`pswp.close()`，250ms 后对同一实例兜底 `destroy()`；
+  `loadComplete`/`loadError`/`close`/10s timeout 清遮罩，清除后不拦截 PhotoSwipe 手势。
+- 边界：不改变主 tab/子页既有返回语义；legacy 模式的 forward 条目保留浏览器限制，但硬件返回只落到父条目。
+  不改变 PhotoSwipe 单击关闭/双击缩放/长按拦截；遮罩只在加载期存在。
+- 证据：`user_reported_bugs_20261027.py` 双视口、virtual + `?history=legacy` 各跑一次：保存后栈长度回到进 edit 前、
+  无重复 `profile_detail`/`profile_edit`，返回一次到「我的」、第二次离开 SPA；改密后无 password 残留；
+  遮罩 `elementFromPoint` 命中遮罩、点击取消后 pswp 隐藏、加载完成遮罩消失且关闭按钮可点。
+  `no_history_smoke` 390/1280 各 19/19 PASS。

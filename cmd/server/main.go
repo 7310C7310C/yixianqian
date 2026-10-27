@@ -66,6 +66,12 @@ func run() error {
 		}
 	}
 
+	// 活动结束以 end_at 为准：启动先补一次，之后由 cleanupLoop 的整点任务
+	// 继续落库；用户端读取另有时间派生兜底，不依赖这次更新。
+	closeCtx, cancelClose := context.WithTimeout(ctx, 30*time.Second)
+	closeEndedActivities(closeCtx, database, logger)
+	cancelClose()
+
 	store, err := media.NewR2(media.R2Config{
 		Endpoint:        cfg.R2Endpoint,
 		Region:          cfg.R2Region,
@@ -241,6 +247,7 @@ func cleanupLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
 	run := func() {
 		cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
+		closeEndedActivities(cleanupCtx, database, logger)
 		sessions, tokens, err := database.CleanupExpired(cleanupCtx)
 		if err != nil {
 			logger.Warn("expired row cleanup failed", "error", err)
@@ -258,5 +265,18 @@ func cleanupLoop(ctx context.Context, database *db.DB, logger *slog.Logger) {
 		case <-ticker.C:
 			run()
 		}
+	}
+}
+
+// closeEndedActivities 把已过 end_at 的「报名中/已满员」活动落库为「已结束」。
+// 幂等：没有命中时返回 0，日志只在有变更时记录 count。
+func closeEndedActivities(ctx context.Context, database *db.DB, logger *slog.Logger) {
+	closed, err := database.CloseEndedActivities(ctx)
+	if err != nil {
+		logger.Warn("close ended activities failed", "error", err)
+		return
+	}
+	if closed > 0 {
+		logger.Info("ended activities closed", "count", closed)
 	}
 }

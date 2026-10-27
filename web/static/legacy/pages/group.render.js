@@ -3167,7 +3167,7 @@ function render(_ctx, _cache) {
                           _: 1 /* STABLE */
                         }, 8 /* PROPS */, ["onClick"]))
                       : _createCommentVNode("v-if", true),
-                    (_ctx.currentActivity.my_signup && _ctx.currentActivity.signin_enabled)
+                    (_ctx.currentActivity.my_signup && _ctx.currentActivity.signin_enabled && !_ctx.isActivityEnded(_ctx.currentActivity))
                       ? (_openBlock(), _createElementBlock("div", _hoisted_13, [
                           (_ctx.isDetailCheckedIn)
                             ? (_openBlock(), _createElementBlock("span", _hoisted_14, "✅ 已签到"))

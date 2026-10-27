@@ -34,7 +34,7 @@
           <van-tag v-else-if="!isDetailCheckedIn" type="warning">{{ currentActivity.status }}</van-tag>
         </div>
         <van-button v-if="showSignupInfo" plain type="primary" color="#ff6b81" size="small" block class="btn-44" @click="openSignupSheet" style="margin-top:8px;">查看报名名单（{{ currentActivity.current_signup }}）</van-button>
-        <div v-if="currentActivity.my_signup && currentActivity.signin_enabled" class="signin-status-box">
+        <div v-if="currentActivity.my_signup && currentActivity.signin_enabled && !isActivityEnded(currentActivity)" class="signin-status-box">
           <span v-if="isDetailCheckedIn">✅ 已签到</span>
           <span v-else-if="currentActivity.my_attendance==='未到'" class="signin-status-danger">⚠️ 未到：本活动需现场签到，请联系管理员</span>
           <span v-else>⏳ 已报名 · 待现场签到</span>

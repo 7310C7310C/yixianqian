@@ -58,6 +58,7 @@ KEEP_PREFIXES = (
     ".login-",
     ".theme-toggle",
     ".update-bar",
+    ".viewer-loading",   # 大图遮罩：必须早于 PhotoSwipe 出现就带层级/定位，避免异步 app.css 未到时裸样式
     ".van-tabbar",
     ".van-nav-bar",
     ".van-loading",

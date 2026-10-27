@@ -47,12 +47,22 @@ type ActivityView struct {
 	OnetooneEnabled bool   `json:"onetoone_enabled"`
 	SigninEnabled   bool   `json:"signin_enabled"`
 
-	MySignup     bool   `json:"my_signup"`
-	SignupStatus string `json:"signup_status,omitempty"`
-	Attendance   string `json:"my_attendance"`
-	CheckedIn    bool   `json:"checked_in"`
-	CanSignup    bool   `json:"can_signup"`
-	CanCancel    bool   `json:"can_cancel"`
+	MySignup      bool   `json:"my_signup"`
+	SignupStatus  string `json:"signup_status,omitempty"`
+	Attendance    string `json:"my_attendance"`
+	CheckedIn     bool   `json:"checked_in"`
+	CanSignup     bool   `json:"can_signup"`
+	CanCancel     bool   `json:"can_cancel"`
+	CanSelfSignin bool   `json:"can_self_signin"`
+
+	// StartsAt/EndsAt keep the raw schedule for user-facing time derivation.
+	// The JSON contract already exposes formatted start_time/end_time strings.
+	StartsAt *time.Time `json:"-"`
+	EndsAt   *time.Time `json:"-"`
+
+	// observedAt freezes the request time so the derived status and the
+	// capability flags always agree with each other.
+	observedAt time.Time
 }
 
 // ActivitiesPageData is the payload for GET /activities.
@@ -92,12 +102,12 @@ type ActivitySignupsPageData struct {
 	Count    int
 }
 
-func buildActivityView(a db.Activity) ActivityView {
+func buildActivityView(a db.Activity, now time.Time) ActivityView {
 	poster := ""
 	if a.PosterMediaID != nil && strings.TrimSpace(*a.PosterMediaID) != "" {
 		poster = "/activities/" + url.PathEscape(a.ActivityNo) + "/poster"
 	}
-	return ActivityView{
+	view := ActivityView{
 		ID:              a.ID,
 		ActivityNo:      a.ActivityNo,
 		RecordID:        a.ActivityNo,
@@ -126,6 +136,35 @@ func buildActivityView(a db.Activity) ActivityView {
 		SigninEnabled:   a.SigninEnabled,
 		CanSignup: a.Status == db.ActivityStatusOpen &&
 			(a.MaxSignup <= 0 || a.CurrentSignup < a.MaxSignup),
+		StartsAt:   a.StartAt,
+		EndsAt:     a.EndAt,
+		observedAt: now,
+	}
+	applyActivityTimeWindow(&view)
+	return view
+}
+
+// activityView builds the user-facing projection at the request clock. The
+// stored status may lag behind end_at until the hourly close job runs, so the
+// view derives the ended state from the schedule itself.
+func (a *App) activityView(activity db.Activity) ActivityView {
+	return buildActivityView(activity, a.clock.Now())
+}
+
+// applyActivityTimeWindow derives 「已结束」 from end_at for open/full
+// activities. Cancelled, already finished and not-yet-open activities keep
+// their stored status, and an activity without end_at stays unchanged.
+func applyActivityTimeWindow(v *ActivityView) {
+	if v.EndsAt == nil || v.observedAt.Before(*v.EndsAt) {
+		return
+	}
+	switch v.Status {
+	case db.ActivityStatusOpen, db.ActivityStatusFull:
+		v.Status = db.ActivityStatusFinished
+		v.StatusClass = activityStatusClass(v.Status)
+		v.CanSignup = false
+		v.CanCancel = false
+		v.CanSelfSignin = false
 	}
 }
 
@@ -140,6 +179,29 @@ func applySignupToView(v *ActivityView, status string, attendance db.Attendance)
 	v.CanCancel = v.MySignup &&
 		(v.Status == db.ActivityStatusOpen || v.Status == db.ActivityStatusFull) &&
 		!cancelled
+	v.CanSelfSignin = v.selfSigninAllowed()
+}
+
+// selfSigninAllowed mirrors db.SelfSignin: sign-in must be enabled, the viewer
+// must hold an active signup that has no stored attendance yet, the activity
+// must not be finished/cancelled, and now must be at or after start_at (when
+// set) and before end_at (when set). A stored 「未到」 is not self-signable
+// either, matching ErrMarkedAbsent.
+func (v ActivityView) selfSigninAllowed() bool {
+	if !v.SigninEnabled || !v.MySignup || v.CheckedIn ||
+		strings.TrimSpace(v.Attendance) != "" || v.observedAt.IsZero() {
+		return false
+	}
+	if v.Status == db.ActivityStatusFinished || v.Status == db.ActivityStatusCancelled {
+		return false
+	}
+	if v.StartsAt != nil && v.StartsAt.After(v.observedAt) {
+		return false
+	}
+	if v.EndsAt != nil && !v.EndsAt.After(v.observedAt) {
+		return false
+	}
+	return true
 }
 
 func activityStatusClass(status string) string {

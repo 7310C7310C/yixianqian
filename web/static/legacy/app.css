@@ -1,6 +1,11 @@
   /* 统一主题色：Vant 默认主色（蓝）覆盖为品牌粉，保证按钮/标签/单选框/开关等一致 */
 [v-cloak]{display:none !important;}
-  :root { --van-primary-color: #ff6b81; --yxq-brand-ink: #cc304e; }
+  :root { --van-primary-color: #ff6b81; --yxq-brand-ink: #cc304e; --yxq-vh: 100vh; --yxq-vv-bottom: 0px; }
+  /* 移动浏览器地址栏/推荐搜索栏：100vh 是「最大视口」，内容会溢出到可见区外。
+     支持 dvh 时用动态视口；壳内联脚本会再按 visualViewport.height 写成 px（优先级更高）。 */
+  @supports (height: 100dvh) {
+    :root { --yxq-vh: 100dvh; }
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-touch-callout: none; }
   html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #f7f8fa; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; -webkit-touch-callout: none; overflow-x: clip; max-width: 100%; overscroll-behavior-x: none; overscroll-behavior-y: none; }
   img { -webkit-touch-callout: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; -webkit-user-drag: none; user-drag: none; pointer-events: none; }
@@ -8,7 +13,7 @@
   /* 底栏固定：预留 60px 内容区，并覆盖 iPhone 底部安全区。
      overflow-x: clip（而非 hidden）裁掉 tab 左右滑动溢出的 12px，
      同时不建立滚动容器，避免子页 position: sticky 页头失效。 */
-  #app { min-height: 100vh; padding-bottom: calc(60px + env(safe-area-inset-bottom)); width: 100%; max-width: 100vw; overflow-x: clip; overscroll-behavior-x: none; }
+  #app { min-height: var(--yxq-vh, 100vh); padding-bottom: calc(60px + env(safe-area-inset-bottom)); width: 100%; max-width: 100vw; overflow-x: clip; overscroll-behavior-x: none; }
   /* 管理台 iframe 内的原版活动管理：没有底部 tabbar，去掉预留区 */
   #app.native-admin { padding-bottom: 0; }
   /* 旧内核不支持 overflow:clip：回退 hidden 优先保证不横向溢出。
@@ -37,8 +42,9 @@
   .signup-count { font-size: 13px; color: #969799; }
   .signup-count b { color: #ff6b81; font-size: 16px; }
   /* 牵线卡片 */
-  .cards-page { padding: 0; height: calc(100vh - 60px - env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
-  .swipe-card { width: 96%; max-width: 420px; height: 90vh; max-height: 780px; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.12); position: relative; transition: opacity 0.15s ease; display: flex; flex-direction: column; }
+  .cards-page { padding: 0; height: calc(var(--yxq-vh, 100vh) - 60px - env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  /* 卡片高度必须 ≤ 底栏以上可用高度：不要再写 90vh（视觉视口变小时会顶出底栏）。 */
+  .swipe-card { width: 96%; max-width: 420px; height: calc(var(--yxq-vh, 100vh) - 76px - env(safe-area-inset-bottom)); max-height: 780px; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.12); position: relative; transition: opacity 0.15s ease; display: flex; flex-direction: column; }
   @keyframes cardFadeIn { from { opacity: 0; } to { opacity: 1; } }
   .swipe-card.slide-in-right { animation: slideInRight 0.28s ease; }
   .swipe-card.slide-in-left { animation: slideInLeft 0.28s ease; }
@@ -194,7 +200,7 @@
   .multi-option { padding: 8px 14px; border-radius: 16px; background: #f7f8fa; font-size: 14px; color: #323233; }
   .multi-option.active { background: #fff0f3; color: var(--yxq-brand-ink); }
   /* 登录页 */
-  .login-page, .boot-error-page { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 30px; text-align: center; }
+  .login-page, .boot-error-page { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: var(--yxq-vh, 100vh); padding: 30px; text-align: center; }
   .login-logo { font-size: 50px; margin-bottom: 20px; }
   .login-title { font-size: 24px; color: #323233; margin-bottom: 10px; }
   .login-desc { color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 30px; }
@@ -216,7 +222,7 @@
     #boot-skeleton .boot-photo, #boot-skeleton.boot-hero-out { transition: none; }
   }
   /* 已登录启动骨架：刷新/回首页时先出同版 App 轮廓，避免闪「正在登录」 */
-  .app-boot-skeleton { min-height: 100vh; background: #f7f8fa; padding-bottom: calc(60px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+  .app-boot-skeleton { min-height: var(--yxq-vh, 100vh); background: #f7f8fa; padding-bottom: calc(60px + env(safe-area-inset-bottom)); box-sizing: border-box; }
   .boot-brand { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 12px; display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; color: #323233; }
   .boot-logo { font-size: 24px; line-height: 1; }
   .boot-wrap { max-width: 640px; margin: 0 auto; padding: 0 12px; }
@@ -231,7 +237,7 @@
   .boot-avatar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
   .boot-avatar { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; }
   .boot-avatar-meta { flex: 1; min-width: 0; }
-  .boot-tabbar { position: fixed; left: 0; right: 0; bottom: 0; height: calc(50px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: #fff; border-top: 1px solid #f2f3f5; display: flex; align-items: center; box-sizing: border-box; }
+  .boot-tabbar { position: fixed; left: 0; right: 0; bottom: var(--yxq-vv-bottom, 0px); height: calc(50px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: #fff; border-top: 1px solid #f2f3f5; display: flex; align-items: center; box-sizing: border-box; }
   .boot-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
   .boot-tab-icon { width: 22px; height: 22px; border-radius: 50%; background: #f2f3f5; }
   .boot-tab-label { width: 26px; height: 9px; }
@@ -246,7 +252,7 @@
   }
   /* 修改密码子页：与「我的资料」同宽，手机/桌面都全宽（12px 内容边距）。
      relative + 不透明背景 + z-index：page-slide 过场时不能透出「我的」页顶部。 */
-  .password-page { position: relative; z-index: 1; min-height: 100vh; background: #f7f8fa; }
+  .password-page { position: relative; z-index: 1; min-height: var(--yxq-vh, 100vh); background: #f7f8fa; }
   /* 返回列固定：从「我的」滚到下方再进入时，内容不能停在上页滚动位置、也不能被页头遮住 */
   .password-page .back-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 10; padding-top: calc(14px + constant(safe-area-inset-top)); padding-top: calc(14px + env(safe-area-inset-top)); box-sizing: border-box; }
   .password-page .page { padding: 12px; padding-top: calc(68px + constant(safe-area-inset-top)); padding-top: calc(68px + env(safe-area-inset-top)); box-sizing: border-box; }
@@ -334,6 +340,11 @@
   .like-item-meta { font-size: 13px; color: #969799; margin-top: 2px; }
   .like-item-msg { font-size: 13px; color: #646566; margin-top: 4px; background: #f7f8fa; padding: 6px 10px; border-radius: 8px; }
   /* 全屏图片预览（PhotoSwipe）：页码居中 */
+  /* 大图打开遮罩：点击后立即出现（PhotoSwipe 资源/原图加载期间给反馈） */
+  /* 必须高于 PhotoSwipe 根层（--pswp-root-z-index: 100000），否则遮罩 DOM 可见但被 pswp 盖住、不可点。 */
+  .viewer-loading-mask { position: fixed; inset: 0; z-index: 100001; pointer-events: auto; background: rgba(0,0,0,0.55); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff; }
+  .viewer-loading-mask .van-loading, .viewer-loading-mask .van-loading__text { color: #fff; }
+  .viewer-loading-hint { font-size: 12px; color: rgba(255,255,255,0.78); }
   .pswp__counter { left: 50%; right: auto; transform: translateX(-50%); }
   /* 全屏图片保持 pointer-events:none：拦截长按保存菜单；单击关闭由 .pswp__zoom-wrap/.pswp__item 承接（见 bg/tap 配置） */
   .pswp img, .pswp__img { pointer-events: none !important; -webkit-touch-callout: none !important; }
@@ -863,7 +874,9 @@
   .van-theme-dark .ga-confirm-row b.danger { color: #ff7a85; }
   .van-theme-dark .ga-confirm-input { background: #1a1a1c; border-color: #3a3a3e; color: #f5f5f5; }
   /* 四 Tab 间流畅过渡 */
-  .tab-main { position: relative; min-height: calc(100vh - 60px); width: 100%; max-width: 100%; overflow-x: clip; overscroll-behavior-x: none; overflow-anchor: none; }
+  .tab-main { position: relative; min-height: calc(var(--yxq-vh, 100vh) - 60px); width: 100%; max-width: 100%; overflow-x: clip; overscroll-behavior-x: none; overflow-anchor: none; }
+  /* 固定底栏跟可视视口底部走：浏览器工具栏/推荐搜索栏占位时（--yxq-vv-bottom>0）整体上移。 */
+  .van-tabbar--fixed { bottom: var(--yxq-vv-bottom, 0px); }
   /* 内层滚动区（卡片详情、消息流、抽屉/兑换列表等）到底后不再把滚动链传给文档，
      避免「内层滚完 continue 划 → 整页跟着下移」；旧内核不支持时自动忽略。 */
   .card-info, .msg-list, .gs-tray-list, .redeem-list, .redeem-form,

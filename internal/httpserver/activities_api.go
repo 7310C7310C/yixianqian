@@ -34,7 +34,7 @@ func (a *App) apiListActivities(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")
 		return
 	}
-	open, other := activityListViews(activities, activityMapFromSignups(mine))
+	open, other := a.activityListViews(activities, activityMapFromSignups(mine))
 	views := make([]ActivityView, 0, len(open)+len(other))
 	views = append(views, open...)
 	views = append(views, other...)
@@ -59,7 +59,7 @@ func (a *App) apiGetActivity(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")
 		return
 	}
-	view := buildActivityView(activity)
+	view := a.activityView(activity)
 	if signup, err := a.db.GetSignup(r.Context(), activity.ID, user.ID); err == nil {
 		applySignupToView(&view, signup.Status, signup.Attendance)
 	} else if !errors.Is(err, db.ErrNotSignedUp) {
@@ -109,7 +109,7 @@ func (a *App) apiMyActivities(w http.ResponseWriter, r *http.Request) {
 	}
 	views := make([]ActivityView, 0, len(items))
 	for _, item := range items {
-		view := buildActivityView(item.Activity)
+		view := a.activityView(item.Activity)
 		applySignupToView(&view, item.SignupStatus, item.Attendance)
 		views = append(views, view)
 	}

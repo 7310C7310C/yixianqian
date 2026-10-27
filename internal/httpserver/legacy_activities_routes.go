@@ -167,7 +167,7 @@ func (a *App) handleLegacyMineActivities(w http.ResponseWriter, r *http.Request)
 	}
 	out := make([]map[string]any, 0, len(items))
 	for _, item := range items {
-		view := buildActivityView(item.Activity)
+		view := a.activityView(item.Activity)
 		applySignupToView(&view, item.SignupStatus, item.Attendance)
 		payload := legacyActivityMap(view)
 		payload["my_choice_count"] = a.legacyChoiceCount(r.Context(), user.ID, item.ActivityNo)
@@ -192,7 +192,7 @@ func (a *App) handleLegacyMineGroups(w http.ResponseWriter, r *http.Request) {
 		if item.GroupStatus == "" || item.GroupStatus == "未开始" {
 			continue
 		}
-		view := buildActivityView(item.Activity)
+		view := a.activityView(item.Activity)
 		applySignupToView(&view, item.SignupStatus, item.Attendance)
 		payload := legacyActivityMap(view)
 		payload["my_choice_count"] = a.legacyChoiceCount(r.Context(), user.ID, item.ActivityNo)

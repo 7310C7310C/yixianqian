@@ -345,6 +345,8 @@ const yxqApp = createApp({
     // —— 返回拦截（飞书手势/物理返回）——
     let isHandlingPopState = false;
     let ignoreNextPop = false;
+    // dropCurrent 在真实历史模式下的待消费标记：back() 的 popstate 只改写 top state，不切页。
+    let dropCurrentPending = null;
     // 「控制台→签到」历史塌缩的一次性旗标：openCheckinPage 已把当前条目 replaceState 为 checkin，
     // watch(page) 见旗标且 nv==='checkin' 时跳过补 push（仅此一次；其它页面切换不受影响、不误食）
     let suppressPagePushOnce = false;
@@ -412,7 +414,34 @@ const yxqApp = createApp({
         }
         // 主 Tab：交给容器关闭（与旧逻辑一致）；真实哨兵的 popstate 由 handleRealPopState 处理
         try{ realHistory.back(); }catch(e){}
+      },
+      // 丢弃当前条目并把新的 top 设为 state（不触发 UI 切页）。
+      // 用于保存成功后消除当前 edit/password 条目：虚拟栈直接 pop；真实历史 back() 到父条目，
+      // popstate 由 dropCurrentPending 吞掉并 replaceState 成目标 state。
+      dropCurrent(state){
+        if(!useVirtualHistory()){
+          dropCurrentPending = state;
+          try{ realHistory.back(); }catch(e){ dropCurrentPending = null; }
+          return;
+        }
+        if(virtualHistory.stack.length > 1){
+          virtualHistory.stack.pop();
+          virtualHistory.stack[virtualHistory.stack.length - 1] = state;
+        } else {
+          virtualHistory.stack[0] = state;
+        }
       }
+    };
+    // 诊断钩子：浏览器回归断言虚拟栈长度/内容；不参与业务逻辑。
+    window.__YXQ_HIST_DEBUG__ = function(){
+      if(useVirtualHistory()){
+        return {
+          mode: 'virtual',
+          length: virtualHistory.stack.length,
+          stack: virtualHistory.stack.map(function(s){ return s ? Object.assign({}, s) : s; })
+        };
+      }
+      return { mode: 'legacy', length: realHistory.length, state: realHistory.state };
     };
     function pushHistorySentinel(){
       if(!useVirtualHistory() || virtualHistory.sentinel) return;
@@ -549,6 +578,9 @@ const yxqApp = createApp({
     const passwordSubmitting = ref(false);
     // 改密成功回 profile：就地改写 password 历史条目，避免返回又落回已提交的表单。
     let passwordFormDone = false;
+    // 资料保存成功回 profile_detail：page watcher 把它当「前进」会多压一条，
+    // 用一次性旗标改成 hist.replace（与 passwordFormDone 同款），失败不设置。
+    let profileFormDone = false;
     // 从「我的」进入改密页前的滚动位置，返回/改密成功回 profile 时还原
     let passwordReturnScroll = 0;
     // 四 Tab 各自记忆滚动位置：主内容共用一个文档滚动容器，Transition out-in 切换 tab 时
@@ -612,11 +644,30 @@ const yxqApp = createApp({
     const loadingActivityDetail = ref(false);
     // 现场签到三态（用户侧，R3 设计 §3.6）：已到 = 按时/迟到；未到/未签到 = 停用填志愿入口
     function isAttendancePresent(state) { return state === '按时' || state === '迟到'; }
+    // 后端按时间派生「已结束」后，自助签到开关统一看 can_self_signin；
+    // 后端未部署时退回旧字段判断（不含签到状态，签到展示另由 my_attendance 判断）。
+    function isActivityEnded(act) { return !!(act && (act.status === '已结束' || act.status === '已取消')); }
+    function canSelfSignin(act) {
+      if (!act) return false;
+      // status 是硬兜底：即使旧 payload/旧 fallback 仍带 signin_enabled，已结束也不放行。
+      if (isActivityEnded(act)) return false;
+      if (typeof act.can_self_signin === 'boolean') return act.can_self_signin;
+      return !!(act.signin_enabled && act.my_signup);
+    }
+    // 现场签到入口：已签到的人仍显示「已签到」；已结束/已取消不再显示入口。
+    function showSelfSigninFor(act) {
+      if (!act || !act.my_signup || isActivityEnded(act)) return false;
+      return canSelfSignin(act) || isAttendancePresent(act.my_attendance);
+    }
+    // 签到门禁：已签到不拦；活动要求签到但当前还不能签到（未到/已结束）才拦。
+    function signinBeforeFillBlocked(act) {
+      if (!act || !act.signin_enabled) return false;
+      if (isAttendancePresent(act.my_attendance)) return false;
+      if (isActivityEnded(act)) return true;   // 已结束：不再要求/允许现场签到后填志愿
+      return !canSelfSignin(act);
+    }
     const isDetailCheckedIn = computed(() => isAttendancePresent(currentActivity.value && currentActivity.value.my_attendance));
-    const detailSigninBlocked = computed(() => {
-      const a = currentActivity.value;
-      return !!(a && a.signin_enabled && a.my_signup && !isAttendancePresent(a.my_attendance));
-    });
+    const detailSigninBlocked = computed(() => signinBeforeFillBlocked(currentActivity.value));
     // 用户自助现场签到（4 位码，后端校验；已到幂等）
     const signinDialogShow = ref(false);
     const signinTargetAct = ref(null);
@@ -626,6 +677,7 @@ const yxqApp = createApp({
     function openSelfSignin(act) {
       if (!act || signinSubmitting.value) return;
       if (!act.signin_enabled || !act.my_signup || isAttendancePresent(act.my_attendance)) return;
+      if (!canSelfSignin(act)) return;
       signinTargetAct.value = act;
       signinCode.value = '';
       signinDialogShow.value = true;
@@ -689,6 +741,9 @@ const yxqApp = createApp({
     const cardsLoadingMore = ref(false);
     const cardsStart = ref(0);        // 已载窗口在全序中的起始偏移（循环翻页窗口游标）
     const cardsPageCache = new Map(); // offset -> {cards,total,version}：翻页回退时避免重复请求
+    // /legacy/api/home 会在无筛选时把本人卡置顶，而 /legacy/api/cards 不返回本人卡。
+    // 清除筛选后重载走 cards，必须把 home 缓存下来的本人卡放回首位，并保持分页全序一致。
+    const selfCard = ref(null);
 
     // ===== 客户端重载/恢复痕迹（只观测，不改变业务行为）=====
     // boot 必须在页面初始化时先快照：随后 loadHome 会把 cardIndex 归零，再读 localStorage
@@ -937,11 +992,54 @@ const yxqApp = createApp({
           return;
         }
         const pos = computeFaceCrop(f, cw, ch, img.naturalWidth, img.naturalHeight);
-        if (!pos) return;
         const arr = photoPositions.value.slice();
-        arr[i] = pos;
+        const next = pos || '';
+        // 值相等不写 ref：ResizeObserver/resize 会高频触发，避免无意义的渲染。
+        if ((arr[i] || '') === next) return;
+        if (next) arr[i] = next;
+        else delete arr[i];   // 尺寸回到「默认居中即可」时清掉旧像素偏移
         photoPositions.value = arr;
       } catch (_) {}
+    }
+    // —— 人脸裁切重算：容器尺寸变化/工具栏伸缩/横竖屏/切卡动画/faces 晚到 ——
+    let photoCropObserver = null;
+    let photoCropRaf = 0;
+    let photoCropSettleTimer = null;
+    function recalcLoadedPhotoPositions() {
+      try {
+        const imgs = document.querySelectorAll('.swipe-card .card-photo-item');
+        for (let i = 0; i < imgs.length; i++) {
+          const img = imgs[i];
+          if (img && img.complete && img.naturalWidth) recalcPhotoPosition({ target: img }, i);
+        }
+      } catch (_) {}
+    }
+    function schedulePhotoCropRecalc() {
+      if (photoCropRaf) return;
+      const raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 16); };
+      photoCropRaf = raf(() => {
+        photoCropRaf = 0;
+        recalcLoadedPhotoPositions();
+      });
+    }
+    function bindPhotoCropObserver() {
+      try {
+        if (!('ResizeObserver' in window)) return;
+        if (!photoCropObserver) photoCropObserver = new ResizeObserver(schedulePhotoCropRecalc);
+        photoCropObserver.disconnect();
+        const wraps = document.querySelectorAll('.swipe-card .card-photo-wrap');
+        for (let i = 0; i < wraps.length; i++) photoCropObserver.observe(wraps[i]);
+      } catch (_) {}
+    }
+    function onViewportCropChange() {
+      try { if (window.__YXQ_SET_VH__) window.__YXQ_SET_VH__(); } catch (_) {}
+      schedulePhotoCropRecalc();
+      if (photoCropSettleTimer) clearTimeout(photoCropSettleTimer);
+      // 浏览器地址栏/工具栏伸缩是渐进的：rAF 后尺寸仍在变，动画结束后再补一次。
+      photoCropSettleTimer = setTimeout(schedulePhotoCropRecalc, 360);
+    }
+    function onViewportVisibility() {
+      if (!document.hidden) onViewportCropChange();   // 回前台：工具栏/键盘状态可能已变
     }
     function onPhotoLoad(e) {
       try {
@@ -1801,6 +1899,7 @@ const yxqApp = createApp({
         phonePasswordError.value = '';
         try { profileEditSnapshot = _editFingerprint(); } catch(e){}
         profileLoaded.value = false;
+        profileFormDone = true;      // 让 page watcher 用 replace 回 profile_detail，不新增返回层
         await openProfileDetail();   // 成功后重拉资料（手机号等以服务端为准）
       } catch(e) {
         const code = (e && e.code) ? e.code : '';
@@ -1888,6 +1987,10 @@ const yxqApp = createApp({
 
     // 全屏图片
     const showPhotoViewer = ref(false);
+    // 大图打开遮罩：点击后立即出现，PhotoSwipe loadComplete/loadError/close/超时后隐藏。
+    const viewerLoading = ref(false);
+    let viewerLoadingTimer = null;
+    let photoSwipePrefetchStarted = false;
 
     // 进入牵线前的页面（喜欢完最后一人后返回）
     const prevPage = ref('likes');
@@ -2417,7 +2520,10 @@ const yxqApp = createApp({
       if (data.user && data.user.can_admin) setTimeout(()=>{ try{ refreshAdminBadge(); }catch(e){} }, 900);
       if (data.register_form_url) registerFormUrl.value = data.register_form_url;
       if (data.promo_activity_id) promoActivityId.value = data.promo_activity_id;
-      cards.value = data.cards || []; cardIndex.value = 0; photoIndex.value = 0;
+      const homeCards = data.cards || [];
+      const homeSelf = homeCards.find(c => c && c.is_self);
+      if (homeSelf) selfCard.value = homeSelf;
+      cards.value = homeCards; cardIndex.value = 0; photoIndex.value = 0;
       cardsTotal.value = (typeof data.cards_total === 'number' ? data.cards_total : cards.value.length);
       cardsVersion.value = null;
       const homeLikes = data.likes || { liked_me: [], mutual: [] };
@@ -2710,16 +2816,41 @@ const yxqApp = createApp({
       const q = buildFilterQuery();
       return q ? q + '&' : '?';
     }
+    // —— 本人卡与本地全序 ——
+    // 服务端全序只含候选；home 额外把本人卡放在最前并把 total +1。
+    // 本地牌堆统一用「含本人卡」的全序：offset=0 插入本人卡，向服务端取数时 offset-1，
+    // 首屏 limit 少 1，保证窗口条数与 total 不重复、不跳卡。
+    function deckSelfActive() { return !hasActiveFilter.value && !!selfCard.value; }
+    function deckOffsetParam(offset) { return deckSelfActive() ? Math.max(0, offset - 1) : offset; }
+    function deckLimitParam(offset) { return deckSelfActive() && offset === 0 ? 49 : 50; }
+    function deckCardView(c) {
+      return c ? { ...c, liked: !!(c.liked || (c.openid && justLiked.has(c.openid))) } : c;
+    }
+    function deckPage(offset, data) {
+      const self = deckSelfActive() ? deckCardView(selfCard.value) : null;
+      // 服务端若将来也下发本人卡，先剔除，避免本地再插一张造成重复。
+      const raw = ((data && data.cards) || []).map(deckCardView)
+        .filter(c => c && !c.is_self && (!self || c.openid !== self.openid));
+      const cardsOut = (self && offset === 0) ? [self].concat(raw) : raw;
+      const baseTotal = (data && typeof data.total === 'number') ? data.total : raw.length;
+      return {
+        cards: cardsOut,
+        total: baseTotal + (self ? 1 : 0),
+        version: data ? data.version : null
+      };
+    }
     async function loadCards(force) {
       if (cards.value.length && !force) return; // 缓存
       if (force) cardsPageCache.clear();
       loadingCards.value = true;
       try {
-        const data = await api('/api/cards' + cardsQuery() + 'offset=0&limit=50');
-        // 已喜欢的人保留在牌堆（liked=true 置灰），justLiked 覆盖快照刷新窗口
-        cards.value = (data.cards || []).map(c => ({ ...c, liked: !!(c.liked || justLiked.has(c.openid)) }));
-        cardsTotal.value = (typeof data.total === 'number' ? data.total : cards.value.length);
-        cardsVersion.value = (data.version != null ? data.version : null);
+        const data = await api('/api/cards' + cardsQuery() + 'offset=0&limit=' + deckLimitParam(0));
+        // 已喜欢的人保留在牌堆（liked=true 置灰），justLiked 覆盖快照刷新窗口；
+        // 无筛选时 deckPage 会把 home 缓存的本人卡放回首位。
+        const page = deckPage(0, data);
+        cards.value = page.cards;
+        cardsTotal.value = page.total;
+        cardsVersion.value = (page.version != null ? page.version : null);
         cardsStart.value = 0;
         cardIndex.value = 0; photoIndex.value = 0;
         triggerPhotoLoading();
@@ -2754,8 +2885,9 @@ const yxqApp = createApp({
     async function loadMoreCards() {
       if (cardsLoadingMore.value || cardsStart.value + cards.value.length >= cardsTotal.value) return;
       cardsLoadingMore.value = true;
+      const nextOffset = cardsStart.value + cards.value.length;
       try {
-        const data = await api('/api/cards' + cardsQuery() + 'offset=' + (cardsStart.value + cards.value.length) + '&limit=50');
+        const data = await api('/api/cards' + cardsQuery() + 'offset=' + deckOffsetParam(nextOffset) + '&limit=' + deckLimitParam(nextOffset));
         // users 快照版本变化：顺序已变，按当前全序位置重建窗口（不跳回第一张）
         if (data.version != null && cardsVersion.value !== null && data.version !== cardsVersion.value) {
           cardsVersion.value = data.version;
@@ -2767,12 +2899,13 @@ const yxqApp = createApp({
           cardsLoadingMore.value = false;
           return;
         }
-        if (data.version != null) cardsVersion.value = data.version;
-        const more = (data.cards || []).map(c => ({ ...c, liked: !!(c.liked || justLiked.has(c.openid)) }));
-        cardsPageCache.set(cardsStart.value + cards.value.length, { cards: more, total: data.total, version: data.version });
+        const page = deckPage(nextOffset, data);
+        if (page.version != null) cardsVersion.value = page.version;
+        const more = page.cards;
+        cardsPageCache.set(nextOffset, { cards: more, total: page.total, version: page.version });
         const existing = new Set(cards.value.map(c => c.openid));
         const fresh = more.filter(c => !existing.has(c.openid));
-        if (!fresh.length && cardsStart.value + cards.value.length < cardsTotal.value) {
+        if (!fresh.length && nextOffset < cardsTotal.value) {
           // 全部重复（顺序漂移/服务重启换序）：按当前全序位置重建窗口，避免卡死
           const seqCur = cardsStart.value + cardIndex.value;
           const off = Math.floor(seqCur / 50) * 50;
@@ -2782,7 +2915,7 @@ const yxqApp = createApp({
           return;
         }
         cards.value = cards.value.concat(fresh);
-        cardsTotal.value = (typeof data.total === 'number' ? data.total : cardsTotal.value);
+        cardsTotal.value = page.total;
         trimCardsWindow();
       }
       catch(e) { vant.showToast(e.message); }
@@ -2834,19 +2967,18 @@ const yxqApp = createApp({
         cardsStart.value = offset;
         return true;
       }
-      const data = await api('/api/cards' + cardsQuery() + 'offset=' + offset + '&limit=50');
+      const data = await api('/api/cards' + cardsQuery() + 'offset=' + deckOffsetParam(offset) + '&limit=' + deckLimitParam(offset));
       if (data.version != null && cardsVersion.value !== null && data.version !== cardsVersion.value) {
         cardsVersion.value = data.version;
         cardsPageCache.clear();
         return loadPageAt(offset);
       }
-      if (data.version != null) cardsVersion.value = data.version;
-      const page = (data.cards || []).map(c => ({ ...c, liked: !!(c.liked || justLiked.has(c.openid)) }));
-      if (!page.length) return false;  // 空页绝不替换窗口（防 0/0）
-      const total = (typeof data.total === 'number' ? data.total : page.length);
-      cardsPageCache.set(offset, { cards: page, total, version: data.version });
-      cards.value = page;
-      cardsTotal.value = total;
+      const page = deckPage(offset, data);
+      if (!page.cards.length) return false;  // 空页绝不替换窗口（防 0/0）
+      if (page.version != null) cardsVersion.value = page.version;
+      cardsPageCache.set(offset, page);
+      cards.value = page.cards;
+      cardsTotal.value = page.total;
       cardsStart.value = offset;
       return true;
       } catch (e) { return false; }
@@ -2858,7 +2990,7 @@ const yxqApp = createApp({
       cardsLoadingPrev = true;
       try {
       const offset = Math.max(0, cardsStart.value - 50);
-      const data = await api('/api/cards' + cardsQuery() + 'offset=' + offset + '&limit=50');
+      const data = await api('/api/cards' + cardsQuery() + 'offset=' + deckOffsetParam(offset) + '&limit=' + deckLimitParam(offset));
       if (data.version != null && cardsVersion.value !== null && data.version !== cardsVersion.value) {
         cardsVersion.value = data.version;
         cardsPageCache.clear();
@@ -2868,14 +3000,14 @@ const yxqApp = createApp({
         if (ok) cardIndex.value = Math.min(seqCur - off, cards.value.length - 1);
         return 0;
       }
-      if (data.version != null) cardsVersion.value = data.version;
-      const page = (data.cards || []).map(c => ({ ...c, liked: !!(c.liked || justLiked.has(c.openid)) }));
-      if (!page.length) return 0;  // 空页：保持窗口不动
-      cardsPageCache.set(offset, { cards: page, total: data.total, version: data.version });
+      const page = deckPage(offset, data);
+      if (!page.cards.length) return 0;  // 空页：保持窗口不动
+      if (page.version != null) cardsVersion.value = page.version;
+      cardsPageCache.set(offset, page);
       const existing = new Set(cards.value.map(c => c.openid));
-      const prepend = page.filter(c => !existing.has(c.openid));
+      const prepend = page.cards.filter(c => !existing.has(c.openid));
       cards.value = prepend.concat(cards.value);
-      cardsTotal.value = (typeof data.total === 'number' ? data.total : cardsTotal.value);
+      cardsTotal.value = page.total;
       cardsStart.value = offset;
       return prepend.length;
       } finally { cardsLoadingPrev = false; }
@@ -3194,6 +3326,41 @@ const yxqApp = createApp({
       }).catch((err) => { photoSwipePromise = null; throw err; });
       return photoSwipePromise;
     }
+    function clearViewerLoading() {
+      if (viewerLoadingTimer) { clearTimeout(viewerLoadingTimer); viewerLoadingTimer = null; }
+      if (viewerLoading.value) viewerLoading.value = false;
+    }
+    function armViewerLoadingTimeout() {
+      if (viewerLoadingTimer) clearTimeout(viewerLoadingTimer);
+      viewerLoadingTimer = setTimeout(clearViewerLoading, 10000);
+    }
+    function cancelViewerLoading() {
+      viewerOpenSeq++;                 // 让仍在探测尺寸的旧请求失效
+      clearViewerLoading();
+      const pswp = viewerLightbox && viewerLightbox.pswp;
+      if (pswp) {
+        try { pswp.close(); } catch (e) {}
+        // 原图仍在 loading 时 PhotoSwipe 的 close 动画可能挂起；250ms 后强制销毁同一实例。
+        setTimeout(function () {
+          try { if (viewerLightbox && viewerLightbox.pswp === pswp) pswp.destroy(); } catch (e) {}
+        }, 250);
+      }
+      if (showPhotoViewer.value) showPhotoViewer.value = false;
+    }
+    // 卡片页空闲时预加载 PhotoSwipe 资源：首次点大图不再等 JS/CSS 下载。
+    function prefetchPhotoSwipe() {
+      if (photoSwipePrefetchStarted) return;
+      photoSwipePrefetchStarted = true;
+      const run = () => { try { loadPhotoSwipe().catch(() => {}); } catch (e) {} };
+      const later = () => {
+        try {
+          if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 2500 });
+          else setTimeout(run, 1500);
+        } catch (e) { setTimeout(run, 1500); }
+      };
+      if (document.readyState === 'complete') setTimeout(later, 1200);
+      else window.addEventListener('load', () => setTimeout(later, 1200), { once: true });
+    }
     function viewerEnsure() {
       if (viewerLightbox) return;
       viewerLightbox = new PhotoSwipeLightbox({
@@ -3220,6 +3387,8 @@ const yxqApp = createApp({
         }
       });
       viewerLightbox.on('loadComplete', (e) => {
+        // 当前照片已可显示：撤掉大图加载遮罩
+        clearViewerLoading();
         // 兜底：以已加载图片的真实宽高为准修正 slide 尺寸（含加载失败时仅恢复显示）
         const s = e && e.slide;
         const c = s && s.content;
@@ -3239,8 +3408,10 @@ const yxqApp = createApp({
           s.updateContentSize(true);
         } catch (err) {}
       });
+      viewerLightbox.on('loadError', () => { clearViewerLoading(); });
       viewerLightbox.on('close', () => {
         vTapReset();
+        clearViewerLoading();
         if (showPhotoViewer.value) showPhotoViewer.value = false;
       });
       viewerLightbox.init();
@@ -3281,37 +3452,67 @@ const yxqApp = createApp({
         break;
       }
     }
+    // 当前照片若已经在卡片 DOM 里（缩图/原图同宽高比），直接拿 naturalWidth/Height，
+    // 避免点开大图时再发一次探测请求等 whole image。
+    function viewerDimsFromCard(index) {
+      try {
+        if (page.value !== 'cards') return null;
+        const imgs = document.querySelectorAll('.swipe-card .card-photo-item');
+        const img = imgs[index];
+        if (img && img.naturalWidth && img.naturalHeight) {
+          return { w: img.naturalWidth, h: img.naturalHeight };
+        }
+      } catch (_) {}
+      return null;
+    }
     async function viewerOpen(photos, index) {
       if (!photos || !photos.length) return;
+      const idx = Math.min(Math.max(index || 0, 0), photos.length - 1);
+      const seq = ++viewerOpenSeq;
+      // 点击后立即显示遮罩；PhotoSwipe 资源未就绪也先给反馈（≤100ms 可见）。
+      viewerLoading.value = true;
+      armViewerLoadingTimeout();
       try {
         await loadPhotoSwipe();
       } catch (e) {
+        clearViewerLoading();
+        if (seq !== viewerOpenSeq) return;
         try { vant.showToast('图片查看器加载失败，已直接打开原图'); } catch (_) {}
-        window.open(photos[Math.min(Math.max(index || 0, 0), photos.length - 1)], '_blank');
+        window.open(photos[idx], '_blank');
         return;
       }
+      if (seq !== viewerOpenSeq) return;
       viewerEnsure();
       if (viewerLightbox.pswp) { try { viewerLightbox.pswp.destroy(); } catch (e) {} }
       const gallery = document.getElementById('pswp-gallery');
-      if (!gallery) return;
+      if (!gallery) { clearViewerLoading(); return; }
       gallery.innerHTML = photos.map(p => '<a href="' + attrEscape(p) + '"></a>').join('');
       const anchors = gallery.querySelectorAll('a');
-      const idx = Math.min(Math.max(index || 0, 0), photos.length - 1);
-      const seq = ++viewerOpenSeq;
       viewerDims = new Map();
-      photos.forEach((p, i) => {
-        viewerGetDims(p, (d) => {
-          if (d) {
-            viewerDims.set(i, d);
-            anchors[i].dataset.pswpWidth = d.w;
-            anchors[i].dataset.pswpHeight = d.h;
-            applyDimsToLiveSlide(seq, i, d);
-          }
-          if (i !== idx || seq !== viewerOpenSeq) return;
-          showPhotoViewer.value = true;
-          viewerLightbox.loadAndOpen(idx);
-        });
-      });
+      const openAtIndex = (d) => {
+        if (seq !== viewerOpenSeq) return;
+        if (d && anchors[idx]) {
+          viewerDims.set(idx, d);
+          anchors[idx].dataset.pswpWidth = d.w;
+          anchors[idx].dataset.pswpHeight = d.h;
+          applyDimsToLiveSlide(seq, idx, d);
+        }
+        showPhotoViewer.value = true;
+        viewerLightbox.loadAndOpen(idx);
+      };
+      const hint = viewerDimsFromCard(idx);
+      if (hint) { openAtIndex(hint); return; }   // 其余照片交给 PhotoSwipe 懒加载
+      // 无卡片 DOM 兜底（海报/他人资料页）：只探测当前一张，最多等 800ms 就先打开。
+      let settled = false;
+      let capTimer = null;
+      const finish = (d) => {
+        if (settled) return;
+        settled = true;
+        if (capTimer) clearTimeout(capTimer);
+        openAtIndex(d);
+      };
+      capTimer = setTimeout(() => finish(null), 800);
+      viewerGetDims(photos[idx], (d) => finish(d));
     }
     function openPhotoViewerForCurrent() {
       const photos = currentCard.value.photos || (currentCard.value.photo ? [currentCard.value.photo] : []);
@@ -4669,6 +4870,14 @@ const yxqApp = createApp({
     // 页面切换加载数据
     // 拦截 popstate：按 浮层 > 子页 优先级关闭
     function handlePopState(e){
+      if(dropCurrentPending){
+        // 保存/改密成功后的 dropCurrent：back() 已落到父条目，只修正 state，不切页。
+        const state = dropCurrentPending;
+        dropCurrentPending = null;
+        try{ realHistory.replaceState(state, '', navURL()); }catch(err){}
+        isHandlingPopState = false;
+        return;
+      }
       if(consumeIgnorePop > 0){ consumeIgnorePop--; popConsumeBusy = false; popConsumeStep(); return; }
       if(ignoreNextPop){ ignoreNextPop=false; return; }
       isHandlingPopState = true;
@@ -4880,10 +5089,17 @@ const yxqApp = createApp({
         return;
       }
       if(suppressPagePushOnce && nv === 'checkin'){ suppressPagePushOnce = false; return; }   // 塌缩条目已在位，不补 push
+      if(profileFormDone && nv === 'profile_detail'){
+        profileFormDone = false;
+        // 资料保存成功：丢弃当前 edit 条目，top 保持 profile_detail；返回链不会残留 edit。
+        try{ hist.dropCurrent({page: nv}); }catch(e){}
+        return;
+      }
+      profileFormDone = false;   // 非目标页（保存后异常回退等）：清掉一次性旗标，避免污染后续导航
       if(passwordFormDone){
         passwordFormDone = false;
-        // 改密成功：当前条目就是 password，直接改写为 profile，避免多压一条可返回的旧表单。
-        try{ hist.replace({page: nv}, navURL()); }catch(e){}
+        // 改密成功：丢弃当前 password 条目，top 保持 profile。
+        try{ hist.dropCurrent({page: nv}); }catch(e){}
         return;
       }
       // 四个主 tab 之间切换只是视图状态：不新增历史条目、不改 URL。
@@ -5237,6 +5453,7 @@ const yxqApp = createApp({
     }
     watch(cards, () => {
       photoPositions.value = [];
+      nextTick(() => { bindPhotoCropObserver(); schedulePhotoCropRecalc(); });
     });
     // 换卡片时重置留言面板：按当前卡片 openid 判定（而非 cardIndex）——
     // 窗口后台重排（trimCardsWindow/换页重建）会让 index 漂移但人没变，不应误清草稿；
@@ -5248,6 +5465,8 @@ const yxqApp = createApp({
       replyTarget.value = null;
       msgText.value = '';
       photoPositions.value = [];
+      nextTick(() => { bindPhotoCropObserver(); schedulePhotoCropRecalc(); });
+      setTimeout(schedulePhotoCropRecalc, 360);   // 切卡动画结束后再补一次
     });
     watch(photoIndex, () => {
       // 切换照片时布局必已完成：补算当前照片位置（兜底 @load 早于布局的时序）
@@ -5259,7 +5478,22 @@ const yxqApp = createApp({
             recalcPhotoPosition({ target: img }, photoIndex.value);
           }
         } catch (_) {}
+        bindPhotoCropObserver();
+        schedulePhotoCropRecalc();
       });
+      setTimeout(schedulePhotoCropRecalc, 360);   // 照片横滑动画结束后再补一次
+    });
+    // faces 数据晚到（bootstrap 先渲染、接口后补）时也要重算，否则首帧按默认居中。
+    watch(() => (currentCard.value && currentCard.value.faces) || null, () => {
+      nextTick(schedulePhotoCropRecalc);
+      setTimeout(schedulePhotoCropRecalc, 120);
+      setTimeout(schedulePhotoCropRecalc, 420);
+    }, { deep: true });
+    // 进入牵线页/回前台/工具栏伸缩：页面可能刚挂载，wrap 尺寸与 faces 都需重算。
+    watch(page, (v) => {
+      if (v !== 'cards') return;
+      nextTick(() => { bindPhotoCropObserver(); schedulePhotoCropRecalc(); });
+      setTimeout(schedulePhotoCropRecalc, 360);
     });
 
     // ===== 壳内首卡 hero：等 Vue 首卡图真正绘制后再移除 =====
@@ -5387,7 +5621,15 @@ const yxqApp = createApp({
       armBootHeroHardLimit();
       // 首屏 hero 绘制 + 应用挂载后，likes 立即预取，其余 chunk LCP 后 idle；
       // 管理台 iframe 不预取，避免占用原生管理页带宽。
-      if (!nativeAdmin.value) yxqPrefetchPageChunks();
+      if (!nativeAdmin.value) { yxqPrefetchPageChunks(); prefetchPhotoSwipe(); }
+      // 可视区域变化：更新 --yxq-vh（壳内已尽早设过）并重算人脸裁切。
+      try {
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportCropChange);
+        window.addEventListener('orientationchange', onViewportCropChange);
+        window.addEventListener('resize', onViewportCropChange);
+        document.addEventListener('visibilitychange', onViewportVisibility);
+      } catch (e) {}
+      nextTick(() => { bindPhotoCropObserver(); schedulePhotoCropRecalc(); });
       // 入口深链：必须在下方 replaceState 清掉 hash 前留存（机器人「报名活动」按钮 → #/activities 直达活动页）
       const entryHash = window.location.hash;
       bootEntryHash = entryHash;
@@ -5408,7 +5650,17 @@ const yxqApp = createApp({
       });
     });
 
-    onUnmounted(stopNotificationSync);
+    onUnmounted(() => {
+      stopNotificationSync();
+      try {
+        if (window.visualViewport) window.visualViewport.removeEventListener('resize', onViewportCropChange);
+        window.removeEventListener('orientationchange', onViewportCropChange);
+        window.removeEventListener('resize', onViewportCropChange);
+        document.removeEventListener('visibilitychange', onViewportVisibility);
+      } catch (e) {}
+      if (photoCropSettleTimer) { clearTimeout(photoCropSettleTimer); photoCropSettleTimer = null; }
+      if (photoCropObserver) { try { photoCropObserver.disconnect(); } catch (e) {} photoCropObserver = null; }
+    });
 
     // ===== 牌堆位置存档/恢复（刷新后回到原卡片）=====
     function saveDeckState(){
@@ -6636,7 +6888,8 @@ const yxqApp = createApp({
       accountStatusLabel, toggleAccountStatus, legacyLogout, openAdminConsole,
       activities, loadingActivities, currentActivity, actionLoading, activityDetailFrom,
       activityListTime, activityRangeText,
-      isAttendancePresent, isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
+      isAttendancePresent, isActivityEnded, canSelfSignin, showSelfSigninFor, signinBeforeFillBlocked,
+      isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
       cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoSrc, photoLoading,
       showSwipeGuide, closeSwipeGuide, showSelfCardGuide, dismissSelfCardGuide,
@@ -6687,7 +6940,7 @@ const yxqApp = createApp({
       myMessagesList, loadingMyMessages, openMyMessages, deleteMyMessage, refreshMyMessagesCount,
       receivedMessagesList, loadingReceivedMessages, openReceivedMessages, refreshReceivedCount,
       openMessageTab, openMessageAuthor, sendMessage, deleteMessage, replyTo, cancelReply, fmtTimeAgo,
-      showPhotoViewer, viewPoster,
+      showPhotoViewer, viewerLoading, cancelViewerLoading, viewPoster,
       handleBack, showInviteDialog, inviteShareText, copyInviteFull, copyInviteCode,
       pointsBalance, pointsEarned, pointsSpent, pointsPending, pointsPendingCount, pointsEntries,
       loadingPoints, pointsLoaded, loadPoints, openPoints, loadPointsBalance,

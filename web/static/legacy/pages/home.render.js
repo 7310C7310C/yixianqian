@@ -123,7 +123,7 @@ function render(_ctx, _cache) {
                         })
                       ]))
                     : _createCommentVNode("v-if", true),
-                  (act.signin_enabled && act.my_signup)
+                  (_ctx.showSelfSigninFor(act))
                     ? (_openBlock(), _createElementBlock("div", _hoisted_13, [
                         (_ctx.isAttendancePresent(act.my_attendance))
                           ? (_openBlock(), _createBlock(_component_van_button, {
@@ -165,7 +165,7 @@ function render(_ctx, _cache) {
                           size: "small",
                           block: "",
                           class: "btn-44",
-                          disabled: act.signin_enabled && !_ctx.isAttendancePresent(act.my_attendance),
+                          disabled: _ctx.signinBeforeFillBlocked(act),
                           onClick: _withModifiers($event => (_ctx.goGroupSelect(act.record_id)), ["stop"])
                         }, {
                           default: _withCtx(() => [
@@ -205,7 +205,7 @@ function render(_ctx, _cache) {
                               _: 2 /* DYNAMIC */
                             }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["onClick"]))
                           : _createCommentVNode("v-if", true),
-                        (act.signin_enabled && !_ctx.isAttendancePresent(act.my_attendance))
+                        (_ctx.signinBeforeFillBlocked(act) && !_ctx.isActivityEnded(act))
                           ? (_openBlock(), _createElementBlock("div", _hoisted_15, "本活动需现场签到后才能填志愿，请联系管理员"))
                           : _createCommentVNode("v-if", true)
                       ]))
@@ -331,7 +331,7 @@ function render(_ctx, _cache) {
                     _createElementVNode("div", _hoisted_8, "📍 " + _toDisplayString(act.location || '待定'), 1 /* TEXT */)
                   ], 8 /* PROPS */, _hoisted_5),
                   _createElementVNode("div", _hoisted_9, [
-                    (act.signin_enabled && act.my_signup)
+                    (_ctx.showSelfSigninFor(act))
                       ? (_openBlock(), _createElementBlock("div", _hoisted_10, [
                           (_ctx.isAttendancePresent(act.my_attendance))
                             ? (_openBlock(), _createBlock(_component_van_button, {
@@ -373,7 +373,7 @@ function render(_ctx, _cache) {
                             size: "small",
                             block: "",
                             class: "btn-44",
-                            disabled: act.signin_enabled && !_ctx.isAttendancePresent(act.my_attendance),
+                            disabled: _ctx.signinBeforeFillBlocked(act),
                             onClick: $event => (_ctx.goGroupSelect(act.record_id))
                           }, {
                             default: _withCtx(() => [
@@ -413,7 +413,7 @@ function render(_ctx, _cache) {
                                 _: 2 /* DYNAMIC */
                               }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["onClick"]))
                             : _createCommentVNode("v-if", true),
-                          (act.signin_enabled && !_ctx.isAttendancePresent(act.my_attendance))
+                          (_ctx.signinBeforeFillBlocked(act) && !_ctx.isActivityEnded(act))
                             ? (_openBlock(), _createElementBlock("div", _hoisted_12, "本活动需现场签到后才能填志愿，请联系管理员"))
                             : _createCommentVNode("v-if", true)
                         ]))
@@ -513,7 +513,7 @@ function render(_ctx, _cache) {
                             _: 2 /* DYNAMIC */
                           }, 1024 /* DYNAMIC_SLOTS */))
                         : _createCommentVNode("v-if", true),
-                      (act.signin_enabled)
+                      (act.signin_enabled && !_ctx.isActivityEnded(act))
                         ? (_openBlock(), _createBlock(_component_van_tag, {
                             key: 1,
                             type: _ctx.isAttendancePresent(act.my_attendance) ? 'success' : 'warning',
@@ -537,7 +537,7 @@ function render(_ctx, _cache) {
                       size: "small",
                       block: "",
                       class: "btn-44",
-                      disabled: act.signin_enabled && !_ctx.isAttendancePresent(act.my_attendance),
+                      disabled: _ctx.signinBeforeFillBlocked(act),
                       onClick: $event => (_ctx.goGroupSelect(act.record_id))
                     }, {
                       default: _withCtx(() => [
@@ -545,7 +545,7 @@ function render(_ctx, _cache) {
                       ]),
                       _: 2 /* DYNAMIC */
                     }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["disabled", "onClick"]),
-                    (act.signin_enabled && !_ctx.isAttendancePresent(act.my_attendance))
+                    (_ctx.signinBeforeFillBlocked(act) && !_ctx.isActivityEnded(act))
                       ? (_openBlock(), _createElementBlock("div", _hoisted_9, "本活动需现场签到后才能填志愿，请联系管理员"))
                       : _createCommentVNode("v-if", true),
                     (act.group_status==='已完成')

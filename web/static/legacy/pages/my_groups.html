@@ -14,15 +14,15 @@
           <div class="activity-meta">
             <van-tag type="primary" color="var(--yxq-brand-ink)">{{ act.group_status }}</van-tag>
             <van-tag v-if="act.male_per_group" plain type="primary">每组 {{ act.male_per_group }}男{{ act.female_per_group }}女</van-tag>
-            <van-tag v-if="act.signin_enabled" :type="isAttendancePresent(act.my_attendance) ? 'success' : 'warning'" plain>{{ isAttendancePresent(act.my_attendance) ? '已到' : (act.my_attendance==='未到' ? '未到' : '未签到') }}</van-tag>
+            <van-tag v-if="act.signin_enabled && !isActivityEnded(act)" :type="isAttendancePresent(act.my_attendance) ? 'success' : 'warning'" plain>{{ isAttendancePresent(act.my_attendance) ? '已到' : (act.my_attendance==='未到' ? '未到' : '未签到') }}</van-tag>
           </div>
           <div style="font-size:13px; color:#969799;" v-if="act.my_choice_count > 0">已提交 {{ act.my_choice_count }} 个志愿</div>
         </div>
         <div class="activity-body" style="padding-top:0;">
-          <van-button type="primary" color="#ff6b81" size="small" block class="btn-44" :disabled="act.signin_enabled && !isAttendancePresent(act.my_attendance)" @click="goGroupSelect(act.record_id)">
+          <van-button type="primary" color="#ff6b81" size="small" block class="btn-44" :disabled="signinBeforeFillBlocked(act)" @click="goGroupSelect(act.record_id)">
             {{ act.my_choice_count > 0 ? '✏️ 修改志愿' : '🎯 提交志愿' }}
           </van-button>
-          <div v-if="act.signin_enabled && !isAttendancePresent(act.my_attendance)" style="font-size:13px; color:#ee0a24; text-align:center; padding:6px 0;">本活动需现场签到后才能填志愿，请联系管理员</div>
+          <div v-if="signinBeforeFillBlocked(act) && !isActivityEnded(act)" style="font-size:13px; color:#ee0a24; text-align:center; padding:6px 0;">本活动需现场签到后才能填志愿，请联系管理员</div>
           <van-button v-if="act.group_status==='已完成'" type="primary" color="#ff6b81" size="small" block class="btn-44" style="margin-top:8px;" @click="goGroupResult(act.record_id)">
             🎉 查看我的分组
           </van-button>

@@ -116,7 +116,7 @@ func (a *App) loadActivityDetail(ctx context.Context, user db.User, ref string) 
 	if err != nil {
 		return ActivityDetailPageData{}, err
 	}
-	view := buildActivityView(activity)
+	view := a.activityView(activity)
 	if signup, err := a.db.GetSignup(ctx, activity.ID, user.ID); err == nil {
 		applySignupToView(&view, signup.Status, signup.Attendance)
 	} else if !errors.Is(err, db.ErrNotSignedUp) {
@@ -232,16 +232,16 @@ func activityMapFromSignups(items []db.MyActivity) map[int64]db.MyActivity {
 	return out
 }
 
-func activityListViews(items []db.Activity, mine map[int64]db.MyActivity) (open, other []ActivityView) {
+func (a *App) activityListViews(items []db.Activity, mine map[int64]db.MyActivity) (open, other []ActivityView) {
 	for _, item := range items {
-		view := buildActivityView(item)
+		view := a.activityView(item)
 		if my, ok := mine[item.ID]; ok {
 			applySignupToView(&view, my.SignupStatus, my.Attendance)
 		} else {
 			view.CanSignup = view.Status == db.ActivityStatusOpen &&
 				(view.MaxSignup <= 0 || view.CurrentSignup < view.MaxSignup)
 		}
-		switch item.Status {
+		switch view.Status {
 		case db.ActivityStatusOpen, db.ActivityStatusNotStarted, db.ActivityStatusFull:
 			open = append(open, view)
 		default:
