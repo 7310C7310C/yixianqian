@@ -1,19 +1,19 @@
 {{define "content"}}
 <section class="card narrow">
-  <h1>设定密码</h1>
-  <p class="muted">为 {{.Name}}（{{.Phone}}）设定第一组密码。</p>
-  {{template "flash" .}}
+  <h1 data-copy-text="activate.title"></h1>
+  <p class="muted"><span data-copy-text="activate.leadBefore"></span><strong>{{.Data.NameHTML}}</strong><span data-copy-text="activate.leadAfter"></span>{{.Phone}}<span data-copy-text="activate.leadEnd"></span></p>
+  {{if .Error}}<div class="alert alert-error" role="alert">{{.Error}}</div>{{end}}
   <form method="post" action="/activate" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="token" value="{{.Token}}">
-    <label for="password">新密码</label>
+    <label for="password" data-copy-text="activate.newPassword"></label>
     <input id="password" name="password" type="password" autocomplete="new-password"
            minlength="8" maxlength="128" required autofocus>
-    <label for="password_confirm">再次输入新密码</label>
+    <label for="password_confirm" data-copy-text="activate.confirmPassword"></label>
     <input id="password_confirm" name="password_confirm" type="password"
            autocomplete="new-password" minlength="8" maxlength="128" required>
-    <p class="hint">至少 8 个字元。启用链接只能使用一次。</p>
-    <button type="submit" class="button primary">设定并登录</button>
+    <p class="hint" data-copy-text="activate.hint"></p>
+    <button type="submit" class="button primary" data-copy-text="activate.submit"></button>
   </form>
 </section>
 {{end}}

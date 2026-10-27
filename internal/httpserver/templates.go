@@ -19,9 +19,12 @@ import (
 // this whenever web/static content referenced from templates changes; module
 // CSS @import lines carry the same value and must be bumped together.
 // Batch10: 15 invalidates edge/browser immutable caches for the shell assets.
-// Batch11 (landing scan-guard + viewer overlay removal): 28 invalidates the new
+// Batch11 (landing scan-guard + viewer overlay removal): 28 invalidated the new
 // home.css/home.js pair and the regenerated critical CSS / root render.
-const assetVersion = "28"
+// Batch12 (welcome merge + scan-safe login/activate/password/register-done +
+// viewer photos_meta): 29 invalidates the new auth.css/public-copy.js pair and
+// the regenerated app.min.js/app.css.
+const assetVersion = "29"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
@@ -55,6 +58,18 @@ type PageData struct {
 	// renders it without the Chinese shell header / skip link and drops the
 	// 「· 一线牵」 title suffix.
 	PublicLanding bool
+	// ScanSafe marks an anonymous (or scan-sensitive) page that must not ship
+	// Chinese copy in its HTML, CSS or JS. The layout drops the Chinese shell
+	// chrome and loads the ASCII-only home.css/auth.css pair; Chinese copy is
+	// injected by /static/public-copy.js.
+	ScanSafe bool
+	// CopyPage selects the public-copy.js copy table (ASCII value). When set,
+	// the layout loads public-copy.js and exposes the value as
+	// <body data-copy-page>.
+	CopyPage string
+	// NoticeCopyKey renders a JS-injected notice instead of the server-side
+	// Chinese Notice string on scan-safe pages (e.g. /login?logged_out=1).
+	NoticeCopyKey string
 	// FeishuURL 是飞书版入口；render 会为所有页面填入默认值，模板无需区分
 	// GET/POST 渲染路径。
 	FeishuURL string

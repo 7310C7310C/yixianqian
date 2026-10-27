@@ -154,6 +154,15 @@ func legacyProfilePhotoThumbURLs(photos []db.ProfilePhoto) []string {
 	return out
 }
 
+// legacyProfilePhotoMeta 与 photos 索引对齐，只包含原图宽高。
+func legacyProfilePhotoMeta(photos []db.ProfilePhoto) []any {
+	out := make([]any, 0, len(photos))
+	for _, photo := range photos {
+		out = append(out, map[string]int{"w": photo.Width, "h": photo.Height})
+	}
+	return out
+}
+
 // legacyProfileUpdateFromJSON maps the v1 edit-form payload to the whitelisted
 // db.ProfileUpdate. Unknown keys are ignored like the old backend; malformed
 // values are rejected instead of being written blindly.
@@ -451,6 +460,7 @@ func legacyPhotoResponse(photos []db.ProfilePhoto, hasFace bool) map[string]any 
 		"photo_thumb":  photoThumb,
 		"photos":       urls,
 		"photos_thumb": thumbs,
+		"photos_meta":  legacyProfilePhotoMeta(photos),
 		"has_face":     hasFace,
 	}
 }

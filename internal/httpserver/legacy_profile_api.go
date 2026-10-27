@@ -601,9 +601,11 @@ func (a *App) handleLegacyPublicProfile(w http.ResponseWriter, r *http.Request) 
 	}
 	photos := []string{}
 	photosThumb := []string{}
+	photosMeta := []any{}
 	if photosAllowed && len(target.Photos) > 0 {
 		photos = legacyProfilePhotoURLs(target.Photos)
 		photosThumb = legacyProfilePhotoThumbURLs(target.Photos)
+		photosMeta = legacyProfilePhotoMeta(target.Photos)
 		if a.photoGrants != nil {
 			a.photoGrants.Grant(viewer.ID, []int64{target.ID})
 		}
@@ -615,6 +617,7 @@ func (a *App) handleLegacyPublicProfile(w http.ResponseWriter, r *http.Request) 
 		"gender":         target.Gender,
 		"photos":         photos,
 		"photos_thumb":   photosThumb,
+		"photos_meta":    photosMeta,
 		"display_fields": card.DisplayFields,
 		"is_self":        isSelf,
 		"liked":          liked,

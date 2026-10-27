@@ -208,8 +208,9 @@ func TestIntegrationPublicProfileHidesUnauthorizedPhotos(t *testing.T) {
 	_ = stranger
 
 	type publicProfile struct {
-		Photos      []string `json:"photos"`
-		PhotosThumb []string `json:"photos_thumb"`
+		Photos      []string          `json:"photos"`
+		PhotosThumb []string          `json:"photos_thumb"`
+		PhotosMeta  []legacyPhotoMeta `json:"photos_meta"`
 	}
 	read := func(client *wsClient) publicProfile {
 		t.Helper()
@@ -224,8 +225,8 @@ func TestIntegrationPublicProfileHidesUnauthorizedPhotos(t *testing.T) {
 		return out
 	}
 
-	if got := read(strangerClient); len(got.Photos) != 0 || len(got.PhotosThumb) != 0 {
-		t.Fatalf("stranger public profile leaked photo URLs: %+v", got)
+	if got := read(strangerClient); len(got.Photos) != 0 || len(got.PhotosThumb) != 0 || len(got.PhotosMeta) != 0 {
+		t.Fatalf("stranger public profile leaked photo URLs/meta: %+v", got)
 	}
 
 	// 请求牌堆后，候选的公开资料页才返回照片 URL；图片请求也随 grant 放行。
@@ -236,6 +237,9 @@ func TestIntegrationPublicProfileHidesUnauthorizedPhotos(t *testing.T) {
 	got := read(viewerClient)
 	if len(got.Photos) == 0 || len(got.PhotosThumb) == 0 {
 		t.Fatalf("candidate public profile missing photos: %+v", got)
+	}
+	if len(got.PhotosMeta) != len(got.Photos) || got.PhotosMeta[0].W != 600 || got.PhotosMeta[0].H != 800 {
+		t.Fatalf("candidate public profile photos_meta = %+v (photos=%d)", got.PhotosMeta, len(got.Photos))
 	}
 	expectPhotoStatus(t, viewerClient, got.PhotosThumb[0], http.StatusOK)
 
@@ -464,5 +468,32 @@ func TestIntegrationGrantOwner250TargetsPaginated(t *testing.T) {
 	}
 	for _, id := range firstPage {
 		expectPhotoStatus(t, viewerClient, "/cards/photo/"+id+"?size=thumb", http.StatusOK)
+	}
+}
+
+// TestIntegrationLegacyProfilePhotosMeta pins the owner-visible profile payload:
+// photos_meta is aligned with photos and carries the original dimensions so the
+// viewer can size the full-screen frame before downloading the original.
+func TestIntegrationLegacyProfilePhotosMeta(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	owner, ownerClient := authzUser(t, env, "U-META-OWNER", "尺寸用户", "女性", "active", "user")
+	createAuthzPhoto(t, env, owner.ID)
+
+	resp := ownerClient.get("/legacy/api/profile")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("profile status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	var payload struct {
+		Photos     []string          `json:"photos"`
+		PhotosMeta []legacyPhotoMeta `json:"photos_meta"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if len(payload.Photos) != 1 || len(payload.PhotosMeta) != 1 {
+		t.Fatalf("profile photos=%d meta=%d, want 1/1", len(payload.Photos), len(payload.PhotosMeta))
+	}
+	if meta := payload.PhotosMeta[0]; meta.W != 600 || meta.H != 800 {
+		t.Fatalf("profile photos_meta[0] = %+v, want 600x800", meta)
 	}
 }

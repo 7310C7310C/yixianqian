@@ -175,7 +175,7 @@ func loginGroupingUser(t *testing.T, env *profileHTTPEnv, user db.User) (db.User
 		Value: raw,
 		Path:  "/",
 	}})
-	resp := client.get("/welcome")
+	resp := client.get("/register/done")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("prime grouping client: status = %d", resp.StatusCode)
 	}

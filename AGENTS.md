@@ -16,6 +16,8 @@ sources:
   - internal/httpserver/readcache.go
   - internal/httpserver/app.go
   - tools/test_perf_guardrails.py
+  - web/static/public-copy.js
+  - web/static/auth.css
 -->
 
 > **本文件是项目规则的唯一入口。** 开工先读本文件；当前状态看 `docs/STATUS.md`；
@@ -55,7 +57,11 @@ sources:
 公开入口是 server2（香港）TLS relay，回源 server1。匿名访问 `/` 渲染服务端公开首页
 （品牌介绍、注册/登录入口、飞书老用户先设密码指引与飞书入口链接）；该页 HTML 除 `<title>`
 外不得出现汉字，文案由 `/static/home.js`（`\uXXXX` 转义）在浏览器注入，页面引用的 CSS/JS
-必须 0 汉字（扫描防护；见 `docs/DECISIONS.md` 决策 38）；登录后 `/` 才进入用户 SPA。
+必须 0 汉字（扫描防护；见 `docs/DECISIONS.md` 决策 38）。同一契约自 2026-10-27 起覆盖
+`/login`、`/activate`、`/password`、`/register/done` 与 404：源码 0 汉字，文案由
+`/static/public-copy.js` 注入，样式用 `home.css` + `auth.css`（决策 39）；POST 表单错误消息
+与 `renderError` 错误页是明示例外。旧 `/welcome` 已并入首页，`GET /welcome` 301 → `/`，
+`/register?from=welcome` 仍记录 `join_click`。登录后 `/` 才进入用户 SPA。
 用户端复用 v1 Vue 3 + Vant SPA；
 管理台使用 Go 服务端渲染（SSR），只经用户 SPA 的同源 iframe（`/admin?embed=1`）使用；
 浏览器顶层 document 访问 `/admin` 页面一律 303 到 `/?admin=1`，由 SPA 载入后自动打开管理台 overlay

@@ -1652,9 +1652,10 @@ func (a *App) handlePasswordPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, http.StatusOK, "password", PageData{
-		Title: "修改密码",
-		User:  &user,
-		Data:  passwordPageData{Required: mustChange || r.URL.Query().Get("required") == "1"},
+		Title:    "修改密码",
+		ScanSafe: true,
+		CopyPage: "password",
+		Data:     passwordPageData{Required: mustChange || r.URL.Query().Get("required") == "1"},
 	})
 }
 
@@ -1675,10 +1676,11 @@ func (a *App) handlePasswordSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	renderPassword := func(status int, message string) {
 		a.render(w, r, status, "password", PageData{
-			Title: "修改密码",
-			User:  &user,
-			Error: message,
-			Data:  passwordPageData{Required: mustChange},
+			Title:    "修改密码",
+			ScanSafe: true,
+			CopyPage: "password",
+			Error:    message,
+			Data:     passwordPageData{Required: mustChange},
 		})
 	}
 

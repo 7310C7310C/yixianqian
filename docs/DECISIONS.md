@@ -482,3 +482,49 @@ sources: []
   `TestPublicLandingTextKeysCoveredByHomeJS`、`TestLoadTemplatesAndRenderPages` home 契约；
   `tools/browser/public_home_smoke.py`（原始 body + 同源 CSS/JS 0 Han、双视口、无横向滚动）；
   `tools/browser/user_reported_bugs_20261027.py` 第 5 项（无加载指示、10s 取消、重开）。
+
+## 39. /welcome 合并、公开页扫描防护扩展、大图全屏缩图契约（2026-10-27）
+
+- 背景：PM 要求删除与首页重复的 `/welcome`；把决策 38 的匿名首页扫描防护扩展到其余公开匿名页；
+  修复大图查看器「缩图先小、原图加载后变大」的跳变。
+- 决策（welcome）：删除 `web/templates/pages/welcome.tmpl`、`handleWelcome` 与页面埋点；
+  `GET /welcome` 保留为 **301 → `/`**（旧书签/机器人链接仍可用），`/register?from=welcome` 仍 200
+  并继续记录 `join_click` 来源 `welcome`。`registrationGate` 仍豁免 `/welcome`（先 301，再按落地页判定）。
+- 决策（公开页扫描防护范围）：`/login`、`/activate`、`/password`、`/register/done`、404（未知路径）纳入契约：
+  - 响应体除 `<title>` 外 **0 汉字**；引用的同源 CSS/JS 0 汉字；`<html lang="zh-CN">` 为 ASCII 值。
+  - 页面不使用含中文注释的 `app.css`/`shell.css`，改用 0 汉字的 `home.css`（token/base/按钮）
+    + 新增 `auth.css`（卡片/表单/提示；从 shell.css 逐字复制，ASCII 注释）。`/register/done` 额外用
+    `register.css`（已 0 汉字）。
+  - 文案由新增 `/static/public-copy.js` 的 `\uXXXX` 表按 `<body data-copy-page>` 注入；空节点 +
+    `body.copy-pending`（`visibility:hidden`）防空白闪；`data-copy-text/-aria/-html/-placeholder` 仍走同一引擎。
+    `home.js` 保持决策 38 的独立实现不动（已验证路径），下一步可并入 public-copy.js。
+  - 动态用户数据：`/activate` 的姓名以 HTML 数字实体输出（ASCII 字节，浏览器正常显示），
+    避免把用户名写进源码文案表；手机号仍走服务端 ASCII 掩码。
+  - 扫描页不渲染中文 shell 头部（含用户名）；登录后 `/password` 仅保留表单本身，改密成功后的
+    跳转（`/` 或 `/admin`）、CSRF、错误码、限流与锁定全部不变。
+  - **契约例外（明示）**：POST 后重渲染的表单错误消息仍为服务端中文（同一响应可含 `data-copy-*` 空节点）；
+    `renderError` 错误页（含启用链接无效/过期、`/password` 未设密码等 GET 错误响应）本批未改造，
+    仍可能含中文；`/register` 表单页本批不做（字段选项值是中文），留下一批用生成式文案层。
+    这些例外属于服务端生成的状态/错误响应，不是可被扫描的静态页面文案；GFW 扫描目标是 GET 页面源码。
+- 决策（大图全屏缩图）：新增 `/legacy/api/{cards,home,profile,users/{id}/public}` 的
+  `photos_meta: [{w,h}]`（与 `photos` 索引对齐，只含原图宽高，不含 R2 key/URL 以外的存储信息；
+  未授权照片不返回 meta）。`db.SocialProfile.PhotoWidths/PhotoHeights` 与 `photos` 在同一个
+  `profile_photos` 聚合里按同一 `ORDER BY is_cover DESC, sort_order` 生成（sort_order 每用户唯一，顺序确定）。
+  - SPA：`viewerOpen(photos, index, thumbs, meta)` 优先用 meta 作为 PhotoSwipe slide 尺寸，
+    第一帧缩图与最终原图共用同一显示框；`loadComplete`/原图升级只在「框未知」或「框与原图宽高比
+    差异 >0.5%」时重算，正常路径零跳变。缩图阶段 `.pswp__img { object-fit: cover; }`：
+    缩图比例若与原图不同只裁边、不拉伸；原图到达后比例一致，不再改尺寸。
+  - 兜底：无 meta（海报、旧接口）沿用缩图探测/卡片 natural size；原图升级失败保留缩图；
+    10s timeout/cancel、左右滑下一张、关闭重开行为不变。
+- 备选与不采纳：①仅前端 CSS 方案（aspect-ratio + cover）——旧缩图可能被裁切，无法保证与原图
+  同框，且海报/横图/方图比例未知；②打开时下载原图量尺寸——违背「不为量尺寸下原图」；③把
+  shell.css/app.css 去注释——影响面大且与决策 38 已否方案重复。
+- 风险：`auth.css` 是 shell.css 子集副本，shell 基础样式变更需同步；无 JS 时扫描页文案为空
+  （与首页同取舍，已记录接受）；`/register/done` 的状态文案改为 JS 注入后，禁用 JS 的用户只看到
+  标题；`photos_meta` 让 home/cards JSON 增大（50 卡 × 9 张 ≈ +9KB，仍远低于读缓存 256KiB/条上限）。
+- 证据：`TestPublicScanPagesAreHanFree`、`TestPublicCopyCoversEveryNoticeKey`、
+  `TestLoadTemplatesAndRenderPages`（login/password/register_done/not_found 契约）、
+  `TestIntegrationHTTPRegisterFlow`（welcome 301 + join_click）、
+  `TestIntegrationLegacyHomeSelfCard` / `TestIntegrationLegacyProfilePhotosMeta` /
+  `TestIntegrationPublicProfileHidesUnauthorizedPhotos`（photos_meta 对齐/尺寸/未授权不泄露）、
+  Playwright `public_scan_pages_smoke.py` + `user_reported_bugs_20261027.py` viewer 段（双视口 rect 差）。

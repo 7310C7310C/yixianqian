@@ -1,26 +1,27 @@
 {{define "content"}}
 <section class="card narrow">
-  <h1>登录</h1>
-  <p class="muted">使用手机号码与密码登录。</p>
-  {{template "flash" .}}
+  <h1 data-copy-text="login.title"></h1>
+  <p class="muted" data-copy-text="login.lead"></p>
+  {{if .Error}}<div class="alert alert-error" role="alert">{{.Error}}</div>{{end}}
+  {{if .NoticeCopyKey}}<div class="alert alert-ok" role="status" data-copy-text="{{.NoticeCopyKey}}"></div>{{end}}
   <form method="post" action="/login" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="next" value="{{.Next}}">
-    <label for="phone">手机号码</label>
+    <label for="phone" data-copy-text="login.phoneLabel"></label>
     <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="username"
            value="{{.Phone}}" required autofocus>
-    <label for="password">密码</label>
+    <label for="password" data-copy-text="login.passwordLabel"></label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button type="submit" class="button primary">登录</button>
+    <button type="submit" class="button primary" data-copy-text="login.submit"></button>
   </form>
   <div class="auth-alt">
-    <p class="hint">还没有账号？</p>
-    <a class="button primary block" href="/register">注册新账号</a>
+    <p class="hint" data-copy-text="login.altHint"></p>
+    <a class="button primary block" href="/register" data-copy-text="login.altCta"></a>
   </div>
   <div class="auth-feishu">
-    <p><strong>已在飞书版使用过？</strong></p>
-    <p class="hint">请先在飞书版设置好密码，再用手机号码＋密码登录网页版。<a href="{{.FeishuURL}}" target="_blank" rel="noopener noreferrer">打开飞书版</a></p>
+    <p><strong data-copy-text="login.feishuTitle"></strong></p>
+    <p class="hint"><span data-copy-text="login.feishuLead"></span><a href="{{.FeishuURL}}" target="_blank" rel="noopener noreferrer" data-copy-text="login.feishuCta"></a></p>
   </div>
-  <p class="hint">首次使用？请使用管理员提供的启用链接设定密码。</p>
+  <p class="hint" data-copy-text="login.firstHint"></p>
 </section>
 {{end}}

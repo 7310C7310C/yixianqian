@@ -648,6 +648,7 @@ func legacyCardMap(card CardView, faces []db.ProfilePhotoFace) map[string]any {
 		"photo":             card.Photo,
 		"photos":            card.PhotoURLs,
 		"photos_thumb":      card.PhotoThumbs,
+		"photos_meta":       legacyCardPhotoMeta(card.Photos),
 		"liked":             card.Liked,
 		"praised":           card.Praised,
 		"msg_count":         card.MsgCount,
@@ -656,6 +657,17 @@ func legacyCardMap(card CardView, faces []db.ProfilePhotoFace) map[string]any {
 		"record_id":         strconv.FormatInt(card.ID, 10),
 		"faces":             legacyCardFaces(card, faces),
 	}
+}
+
+// legacyCardPhotoMeta 按 photos 顺序返回原图尺寸 {w,h}，供 SPA 大图查看器
+// 在下载原图之前确定全屏显示区域（同位置同大小，避免缩图先小后大跳变）。
+// 只暴露宽高，不包含对象键/URL 之外的任何存储信息。
+func legacyCardPhotoMeta(photos []PhotoView) []any {
+	out := make([]any, 0, len(photos))
+	for _, photo := range photos {
+		out = append(out, map[string]int{"w": photo.Width, "h": photo.Height})
+	}
+	return out
 }
 
 // legacyCardFaces 按 photos 顺序返回每张照片的人脸数据，格式与 v1 一致：
@@ -866,6 +878,7 @@ func legacyProfileMap(p db.Profile, quota db.LikeQuota, hasFace bool, faces []db
 		"birthday":          profileBirthdayShort(p.Birthday),
 		"photos":            photos,
 		"photos_thumb":      photoThumbs,
+		"photos_meta":       legacyProfilePhotoMeta(p.Photos),
 		"faces":             legacyProfileFaces(p.Photos, faces),
 		"real_name":         p.Name,
 		"wechat":            p.Wechat,

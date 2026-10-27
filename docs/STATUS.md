@@ -17,6 +17,8 @@ sources:
   - web/templates/pages/home.tmpl
   - web/static/home.css
   - web/static/home.js
+  - web/static/auth.css
+  - web/static/public-copy.js
   - web/static/legacy/index.html
   - internal/httpserver/social_pages.go
   - internal/db/activities.go
@@ -28,8 +30,28 @@ sources:
 - 更新日期：2026-10-27
 - 维护者：项目维护者
 - 下一更新点：PM 在 Android Via/Kiwi/荣耀真机复验虚拟历史栈与可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-a68063e`（代码 `a68063e`：大图缩图秒开 + 匿名首页英文 + 活动结束用户侧关卡 + 脱单 gate，assetVersion 27，migration 10 不变）；
-  生产 `app.nantou.love` 未切换。
+- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-9210ee2`（代码 `9210ee2`：匿名首页中文化 + 大图移除加载指示，assetVersion 28，migration 10 不变）；
+  生产 `app.nantou.love` 未切换。本地批次 2026-10-27c（welcome 合并 + 公开页扫描防护 + 大图全屏缩图）已实现，**未 push、未部署**。
+
+## 2026-10-27c welcome 合并 + 公开页扫描防护 + 大图全屏缩图（本地实现，待部署）
+
+- `/welcome` 删除独立页面：`GET /welcome` → **301 /**，`/register?from=welcome` 仍 200 并记录 `join_click`；
+  `welcome.tmpl`、`handleWelcome` 与页面埋点删除，REFERENCE/DECISIONS 同步。
+- 扫描防护扩展到 `/login`、`/activate`、`/password`、`/register/done`、404：响应体除 `<title>` 外 0 汉字；
+  引用同源 CSS/JS 0 汉字；文案由新 `public-copy.js`（`\uXXXX`）按 `data-copy-page` 注入；
+  新 `auth.css`（ASCII 注释的 shell 子集）替代含中文注释的 app.css/shell.css；扫描页不渲染中文 shell 头部。
+- 契约例外（DECISIONS 39 明示）：POST 表单错误消息仍中文；`renderError` 错误页（含启用链接无效等 GET）
+  本批未改造；`/register` 表单页留下一批。
+- 大图查看器：`/legacy/api/{cards,home,profile,users/{id}/public}` 新增 `photos_meta: [{w,h}]`（对齐 photos、
+  不含 R2 key、未授权不返回）；SPA 第一帧即按原图尺寸定框，缩图 `object-fit: cover`，原图加载后不再改尺寸；
+  海报/旧接口无 meta 时保留原兜底路径，10s timeout/cancel/左右滑/失败保留缩图不变。
+- 生成物：`app.min.js`（源 app.js +1.5KB）与 `app.css`（+1 条 viewer 规则）重建；`assetVersion` 28→29，
+  admin CSS `@import` 同步；`auth.css`/`public-copy.js` 新增 `.gz`。
+- 证据（本地）：`make fast`、`make ci`、`make perf-budget`、`make static-gzip`、`make spa-check`、
+  `make asset-version-check` 全绿；`go test ./...` 与 `TEST_DATABASE_URL` 下 `-run Integration` 全 PASS；
+  Playwright 双视口（390x844/1280x900）缩图期/原图期 rect 差 ≤2px、公开页 0 汉字源码 + 渲染中文齐全 +
+  无 console error。详见 `.team/` 本批记录与 `.team/reviews/`。
+- 状态：未 push、未部署；staging 仍 `staging-9210ee2`，生产未动。
 
 ## 2026-10-27b 匿名首页扫描防护 + 大图移除加载指示（本地实现，待部署）
 

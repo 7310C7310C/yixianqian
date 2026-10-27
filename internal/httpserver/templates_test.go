@@ -33,15 +33,20 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 			page: "login",
 			data: PageData{
 				Title: "登录", CSRFToken: "csrf-value", Next: "/x", Phone: "138",
-				FeishuURL: publicFeishuAppURL,
+				FeishuURL: publicFeishuAppURL, ScanSafe: true, CopyPage: "login",
 			},
 			want: []string{
-				"<!doctype html>", "登录", `name="csrf_token" value="csrf-value"`,
+				"<!doctype html>", "<title>登录 · 一线牵</title>", `name="csrf_token" value="csrf-value"`,
 				`name="next" value="/x"`, `value="138" required autofocus`,
-				`href="/register"`, "注册新账号", `class="button primary block"`,
-				"已在飞书版使用过", publicFeishuAppURL,
+				`href="/register"`, `class="button primary block"`,
+				`data-copy-text="login.title"`, `data-copy-text="login.altCta"`,
+				`data-copy-page="login"`, `/static/auth.css`, `/static/public-copy.js`,
+				publicFeishuAppURL,
 			},
-			notWant: []string{`value="138" placeholder=`},
+			notWant: []string{
+				`value="138" placeholder=`, "注册新账号", "已在飞书版使用过",
+				`class="shell-header"`, `/static/app.css`, `/static/shell.css`,
+			},
 		},
 		{
 			name: "home",
@@ -70,8 +75,54 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 		{
 			name: "activate",
 			page: "activate",
-			data: PageData{Title: "设定密码", CSRFToken: "csrf-value", Token: "tok", Name: "测试用户", Phone: "138****06"},
-			want: []string{"设定密码", `name="token" value="tok"`, "138****06", "测试用户"},
+			data: PageData{
+				Title: "设定密码", CSRFToken: "csrf-value", Token: "tok", Phone: "138****06",
+				ScanSafe: true, CopyPage: "activate",
+				Data: activatePageData{NameHTML: asciiEntityText("测试用户")},
+			},
+			want: []string{
+				`name="token" value="tok"`, "138****06",
+				`data-copy-page="activate"`, `data-copy-text="activate.title"`,
+				"&#27979;&#35797;&#29992;&#25143;",
+			},
+			notWant: []string{"测试用户", `/static/app.css`, `/static/shell.css`},
+		},
+		{
+			name: "password",
+			page: "password",
+			data: PageData{
+				Title: "修改密码", CSRFToken: "csrf-value", ScanSafe: true, CopyPage: "password",
+				Data: passwordPageData{Required: true},
+			},
+			want: []string{
+				`data-copy-page="password"`, `data-copy-text="password.required"`,
+				`action="/password"`, `name="current_password"`,
+			},
+			notWant: []string{"账号安全", `/static/app.css`, `/static/shell.css`},
+		},
+		{
+			name: "register_done",
+			page: "register_done",
+			data: PageData{
+				Title: "资料审核中", CSRFToken: "csrf-value", PageCSS: "register.css",
+				ScanSafe: true, CopyPage: "register_done",
+				Data: registerDoneData{CopyKey: "register_done.pending", LoggedIn: true, PhoneMasked: "138****00"},
+			},
+			want: []string{
+				`data-copy-page="register_done"`, `data-copy-text="register_done.pending.heading"`,
+				`data-copy-text="register_done.pending.message"`, "138****00", `action="/logout"`,
+			},
+			notWant: []string{"查看我的资料", `/static/app.css`, `/static/shell.css`},
+		},
+		{
+			name: "not_found",
+			page: "not_found",
+			data: PageData{Title: "找不到页面", ScanSafe: true, CopyPage: "not_found"},
+			want: []string{
+				`data-copy-page="not_found"`, `data-copy-text="not_found.title"`,
+				`href="/"`, `/static/public-copy.js`,
+			},
+			notWant: []string{`/static/app.css`, `/static/shell.css`},
 		},
 		{
 			name: "error",

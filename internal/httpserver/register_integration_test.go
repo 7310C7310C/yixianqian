@@ -60,12 +60,8 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	anon := newWSClient(t, env.server.URL)
 	resp := anon.get("/welcome")
 	body := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "一线牵") ||
-		!strings.Contains(body, "/register?from=welcome") || !strings.Contains(body, "/login") {
-		t.Fatalf("welcome status=%d body=%s", resp.StatusCode, body)
-	}
-	if strings.Contains(body, "飞书") || strings.Contains(body, "飞书") {
-		t.Fatal("public page depends on Feishu copy")
+	if resp.StatusCode != http.StatusMovedPermanently || resp.Header.Get("Location") != "/" {
+		t.Fatalf("welcome status=%d location=%q, want 301 /", resp.StatusCode, resp.Header.Get("Location"))
 	}
 
 	resp = anon.get("/register?from=welcome")
@@ -228,10 +224,12 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	}
 	resp = anon.get("/register/done?submitted=1")
 	body = readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "资料审核中") ||
+	if resp.StatusCode != http.StatusOK ||
+		!strings.Contains(body, `data-copy-text="register_done.pending.heading"`) ||
 		!strings.Contains(body, auth.MaskPhone(phone)) {
 		t.Fatalf("done page status=%d body=%s", resp.StatusCode, body)
 	}
+	assertHanFreePublicBody(t, body)
 	if strings.Contains(body, idCard) {
 		t.Fatal("done page leaked the full id card")
 	}

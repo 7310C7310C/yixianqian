@@ -345,6 +345,9 @@
   .pswp__counter { left: 50%; right: auto; transform: translateX(-50%); }
   /* 全屏图片保持 pointer-events:none：拦截长按保存菜单；单击关闭由 .pswp__zoom-wrap/.pswp__item 承接（见 bg/tap 配置） */
   .pswp img, .pswp__img { pointer-events: none !important; -webkit-touch-callout: none !important; }
+  /* 大图框由原图尺寸决定；缩图阶段用 cover 填满同一框（不拉伸、只裁边），
+     原图到达后比例一致，画面不跳变。 */
+  .pswp__img { object-fit: cover; }
   /* 尺寸未知前的加载态：隐藏容器防 0 尺寸回退视口导致加载期拉伸 */
   .yxq-dim-wait { visibility: hidden !important; }
   /* 送爱心弹窗 */

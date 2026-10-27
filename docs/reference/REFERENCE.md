@@ -352,11 +352,11 @@ sources: []
 
 | 文档 | sources |
 |---|---|
-| `AGENTS.md` | `Makefile`, `.github/workflows/**`, `tools/perf/**`, `deploy/nginx/**`, `internal/httpserver/middleware.go`, `internal/httpserver/handlers_media.go`, `internal/httpserver/media_serve.go`, `internal/httpserver/legacy_ui.go`, `internal/httpserver/readcache.go`, `internal/httpserver/app.go`, `tools/test_perf_guardrails.py` |
+| `AGENTS.md` | `Makefile`, `.github/workflows/**`, `tools/perf/**`, `deploy/nginx/**`, `internal/httpserver/middleware.go`, `internal/httpserver/handlers_media.go`, `internal/httpserver/media_serve.go`, `internal/httpserver/legacy_ui.go`, `internal/httpserver/readcache.go`, `internal/httpserver/app.go`, `tools/test_perf_guardrails.py`, `web/static/public-copy.js`, `web/static/auth.css` |
 | `README.md` | `go.mod` |
 | `docs/DECISIONS.md` | — |
 | `docs/MIGRATION.md` | `migrations/**`, `tools/migrate_testapp.py` |
 | `docs/PROJECT_CHARTER.md` | — |
-| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/activities_view.go`, `internal/httpserver/activities_routes.go`, `internal/httpserver/handlers_home.go`, `web/templates/layout.tmpl`, `web/templates/pages/home.tmpl`, `web/static/home.css`, `web/static/home.js`, `web/static/legacy/index.html`, `internal/httpserver/social_pages.go`, `internal/db/activities.go`, `internal/db/grouping.go`, `internal/db/profile.go`, `.env.example` |
+| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/activities_view.go`, `internal/httpserver/activities_routes.go`, `internal/httpserver/handlers_home.go`, `web/templates/layout.tmpl`, `web/templates/pages/home.tmpl`, `web/static/home.css`, `web/static/home.js`, `web/static/auth.css`, `web/static/public-copy.js`, `web/static/legacy/index.html`, `internal/httpserver/social_pages.go`, `internal/db/activities.go`, `internal/db/grouping.go`, `internal/db/profile.go`, `.env.example` |
 | `docs/product-spec.md` | — |
 | `docs/runbooks/staging.md` | `deploy/**`, `.env.example`, `migrations/**`, `.github/workflows/ci.yml` |

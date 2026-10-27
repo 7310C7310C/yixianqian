@@ -55,7 +55,19 @@ func (a *App) handleNotFound(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	a.renderError(w, r, http.StatusNotFound, "找不到页面", "你造访的页面不存在。")
+	if isAdminPagePath(r.URL.Path) {
+		// Admin 404s keep the admin shell so iframe users get
+		// 「返回管理台 / 重新登录」 instead of a user-facing page.
+		a.renderError(w, r, http.StatusNotFound, "找不到页面", "你造访的页面不存在。")
+		return
+	}
+	// Unknown anonymous paths land on a scan-safe 404 page: title keeps the
+	// Chinese label, body copy is injected by public-copy.js.
+	a.render(w, r, http.StatusNotFound, "not_found", PageData{
+		Title:    "找不到页面",
+		ScanSafe: true,
+		CopyPage: "not_found",
+	})
 }
 
 // apiError is the single JSON error shape.

@@ -3487,7 +3487,9 @@ const yxqApp = createApp({
         if (s.container) s.container.classList.remove('yxq-dim-wait');
         const nw = c.element && c.element.naturalWidth;
         const nh = c.element && c.element.naturalHeight;
-        if (nw && nh) applyViewerSlideSize(s, nw, nh);
+        // 已经按原图尺寸（或同宽高比）定过框：不要再按缩图的 natural size 重算。
+        // 缩图与原图宽高比不同时（旧缩图裁切），重算会先小后大跳一下。
+        if (nw && nh && !viewerDims.has(s.index)) applyViewerSlideSize(s, nw, nh);
         upgradeViewerSlide(s, viewerOpenSeq);
       });
       viewerLightbox.on('loadError', () => {
@@ -3538,6 +3540,16 @@ const yxqApp = createApp({
         s.updateContentSize(true);
       } catch (e) {}
     }
+    // viewerFrameMatches 判断已确定的显示框是否与原图宽高比一致。宽高比一致时
+    // 绝不重算布局（缩图与原图共用同一个框，零跳变）；只有缺尺寸或缩图被裁切
+    // 导致比例不同才重算，避免原图被 cover 裁掉。
+    function viewerFrameMatches(index, nw, nh) {
+      const d = viewerDims.get(index);
+      if (!d || !d.w || !d.h || !nw || !nh) return false;
+      const known = d.w / d.h;
+      const real = nw / nh;
+      return Math.abs(known - real) <= 0.005 * Math.max(known, real);
+    }
     // 原图后台升级：缩图已经显示，原图加载完成后替换当前 slide 的 img src。
     // 同一 index 只发起一次；失败保留缩图，不弹错误。
     function upgradeViewerSlide(slide, seq) {
@@ -3569,7 +3581,9 @@ const yxqApp = createApp({
             content.element.dataset.yxqFull = '1';
           } catch (e) {}
         }
-        applyViewerSlideSize(slide, im.naturalWidth, im.naturalHeight);
+        if (!viewerFrameMatches(slide.index, im.naturalWidth, im.naturalHeight)) {
+          applyViewerSlideSize(slide, im.naturalWidth, im.naturalHeight);
+        }
       };
       im.onerror = function () {
         if (seq === viewerOpenSeq) viewerFullState[i] = 'error';
@@ -3615,9 +3629,16 @@ const yxqApp = createApp({
       } catch (_) {}
       return null;
     }
-    async function viewerOpen(photos, index, thumbs) {
+    async function viewerOpen(photos, index, thumbs, meta) {
       if (!photos || !photos.length) return;
       const idx = Math.min(Math.max(index || 0, 0), photos.length - 1);
+      // 原图尺寸（API photos_meta，与 photos 索引对齐）：第一帧就用最终显示框，
+      // 不下载原图、不探测缩图即确定全屏区域。
+      const metaDim = function (i) {
+        const m = meta && meta[i];
+        if (!m || !(m.w > 0) || !(m.h > 0)) return null;
+        return { w: m.w, h: m.h };
+      };
       // 缩图与 photos 对齐；没有缩图的项回退原图（海报等）。
       const displayPhotos = photos.map(function (p, i) {
         return (thumbs && thumbs[i]) ? thumbs[i] : p;
@@ -3676,12 +3697,15 @@ const yxqApp = createApp({
         // 只预探当前+前后各一张缩图，避免一次探测整组原图。
         [idx - 1, idx + 1].forEach(function (j) {
           if (j < 0 || j >= displayPhotos.length) return;
+          const md = metaDim(j);
+          if (md) { setDim(j, md); return; }
           viewerGetDims(displayPhotos[j], function (dj) {
             if (seq === viewerOpenSeq) setDim(j, dj);
           });
         });
       };
-      const hint = viewerDimsFromCard(idx);
+      // 优先 API 的原图尺寸；没有时退回卡片缩图 natural size（仅海报/旧接口）。
+      const hint = metaDim(idx) || viewerDimsFromCard(idx);
       if (hint) { openAtIndex(hint); return; }
       // 无卡片 DOM（他人资料页/海报）：只探测当前一张。缩图很小；无缩图时是原图 fallback。
       let settled = false;
@@ -3697,14 +3721,14 @@ const yxqApp = createApp({
     }
     function openPhotoViewerForCurrent() {
       const photos = currentCard.value.photos || (currentCard.value.photo ? [currentCard.value.photo] : []);
-      viewerOpen(photos, photoIndex.value, cardDisplayPhotos(currentCard.value));
+      viewerOpen(photos, photoIndex.value, cardDisplayPhotos(currentCard.value), currentCard.value.photos_meta);
     }
     function viewPoster() {
       if (currentActivity.value && currentActivity.value.poster) viewerOpen([currentActivity.value.poster], 0);
     }
     function openPhotoViewerForUser(u) {
       const photos = u.photos || (u.photo ? [u.photo] : []);
-      viewerOpen(photos, 0, u.photos_thumb || []);
+      viewerOpen(photos, 0, u.photos_thumb || [], u.photos_meta);
     }
     function gotoCards(from) {
       prevPage.value = from || 'likes';

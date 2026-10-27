@@ -262,7 +262,7 @@ func (d *DB) GetSocialProfilesWithMessageCounts(ctx context.Context, ids []int64
 			&p.LiveWithParents, &p.Personality, &selfTraits, &selfHobbies, &selfSports, &mbti,
 			&p.PartnerCriteria, &partnerTraits, &partnerHobbies, &partnerSports,
 			&p.Wechat, &p.ContactConsent, &p.AccountKind, &p.AccountStatus, &p.LoginStatus,
-			&p.Photos, &messageCount); err != nil {
+			&p.Photos, &p.PhotoWidths, &p.PhotoHeights, &messageCount); err != nil {
 			return nil, nil, fmt.Errorf("db: scan social profile with message count: %w", err)
 		}
 		p.SelfTraits = decodeSocialStringList(selfTraits)

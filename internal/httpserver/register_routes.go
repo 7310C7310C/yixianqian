@@ -26,18 +26,17 @@ var (
 func init() { registerModule(registerRegistration) }
 
 func registerRegistration(a *App, mux *http.ServeMux) {
-	mux.HandleFunc("GET /welcome", a.handleWelcome)
+	// /welcome was merged into the landing page. Keep the old URL alive for
+	// bookmarks and bot links with a permanent redirect; /register?from=welcome
+	// still records the join_click source.
+	mux.HandleFunc("GET /welcome", handleWelcomeRedirect)
 	mux.HandleFunc("GET /register", a.handleRegisterPage)
 	mux.HandleFunc("POST /register", a.handleRegisterSubmit)
 	mux.HandleFunc("GET /register/done", a.handleRegisterDone)
 }
 
-func (a *App) handleWelcome(w http.ResponseWriter, r *http.Request) {
-	a.trackPublicEvent(r, "page_view", "welcome")
-	a.render(w, r, http.StatusOK, "welcome", PageData{
-		Title:   "遇见对的人",
-		PageCSS: "register.css",
-	})
+func handleWelcomeRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/", http.StatusMovedPermanently)
 }
 
 func (a *App) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
@@ -441,10 +440,32 @@ type registerDoneData struct {
 	Heading     string
 	Message     string
 	Status      string
+	CopyKey     string
 	PhoneMasked string
 	LoggedIn    bool
 	CanEnter    bool
 	Submitted   bool
+}
+
+// registerDoneCopyKey maps the account state to the public-copy.js table key.
+// The Chinese heading/message stay server-side for <title> only; the body copy
+// is injected at runtime so the HTML remains Han-free.
+func registerDoneCopyKey(status string, submitted bool) string {
+	if submitted {
+		if status == "pending" {
+			return "register_done.pending"
+		}
+		return "register_done.submitted"
+	}
+	switch status {
+	case "pending", "rejected", "left", "active", "matched", "observer", "disabled":
+		if status == "active" || status == "matched" || status == "observer" {
+			return "register_done.active"
+		}
+		return "register_done." + status
+	default:
+		return "register_done.default"
+	}
 }
 
 func (a *App) handleRegisterDone(w http.ResponseWriter, r *http.Request) {
@@ -482,19 +503,14 @@ func (a *App) handleRegisterDone(w http.ResponseWriter, r *http.Request) {
 		data.Heading = "注册与审核"
 		data.Message = "一线牵采人工审核，确认资料真实后才会开通使用。"
 	}
+	data.CopyKey = registerDoneCopyKey(data.Status, submitted)
 	a.render(w, r, http.StatusOK, "register_done", PageData{
-		Title:   data.Heading,
-		User:    userPtr(r),
-		Data:    data,
-		PageCSS: "register.css",
+		Title:    data.Heading,
+		ScanSafe: true,
+		CopyPage: "register_done",
+		Data:     data,
+		PageCSS:  "register.css",
 	})
-}
-
-func userPtr(r *http.Request) *db.User {
-	if user, ok := currentUser(r); ok {
-		return &user
-	}
-	return nil
 }
 
 // registrationGatePath reports whether an authenticated registered user must

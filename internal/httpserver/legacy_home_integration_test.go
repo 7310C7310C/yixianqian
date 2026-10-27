@@ -39,14 +39,21 @@ func attachTestPhoto(t *testing.T, env *profileHTTPEnv, userID int64) string {
 	return mediaID
 }
 
+type legacyPhotoMeta struct {
+	W int `json:"w"`
+	H int `json:"h"`
+}
+
 type legacyHomeCard struct {
-	OpenID   string            `json:"openid"`
-	Nickname string            `json:"nickname"`
-	IsSelf   bool              `json:"is_self"`
-	Liked    bool              `json:"liked"`
-	Praised  bool              `json:"praised"`
-	MsgCount int               `json:"msg_count"`
-	Faces    []*legacyFaceView `json:"faces"`
+	OpenID     string            `json:"openid"`
+	Nickname   string            `json:"nickname"`
+	IsSelf     bool              `json:"is_self"`
+	Liked      bool              `json:"liked"`
+	Praised    bool              `json:"praised"`
+	MsgCount   int               `json:"msg_count"`
+	Faces      []*legacyFaceView `json:"faces"`
+	Photos     []string          `json:"photos"`
+	PhotosMeta []legacyPhotoMeta `json:"photos_meta"`
 }
 
 type legacyHomePayload struct {
@@ -146,6 +153,14 @@ func TestIntegrationLegacyHomeSelfCard(t *testing.T) {
 	}
 	if len(home.Cards[1].Faces) != 1 || home.Cards[1].Faces[0] == nil {
 		t.Fatalf("candidate card faces = %+v", home.Cards[1].Faces)
+	}
+	// 大图查看器需要的原图尺寸：与 photos 索引对齐，且只含宽高。
+	if len(home.Cards[1].PhotosMeta) != len(home.Cards[1].Photos) || len(home.Cards[1].PhotosMeta) == 0 {
+		t.Fatalf("photos_meta not aligned: photos=%d meta=%d",
+			len(home.Cards[1].Photos), len(home.Cards[1].PhotosMeta))
+	}
+	if meta := home.Cards[1].PhotosMeta[0]; meta.W != 600 || meta.H != 800 {
+		t.Fatalf("photos_meta[0] = %+v, want 600x800", meta)
 	}
 	if math.Abs(home.Cards[1].Faces[0].C[0]-0.45) > 0.001 ||
 		math.Abs(home.Cards[1].Faces[0].Box[1]-0.24) > 0.001 {

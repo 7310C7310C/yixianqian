@@ -128,7 +128,7 @@ func (e *profileHTTPEnv) createUser(t *testing.T, legacyPrefix, name, accountSta
 		Value: raw,
 		Path:  "/",
 	}})
-	resp := client.get("/welcome")
+	resp := client.get("/register/done")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("prime csrf: status = %d body=%s", resp.StatusCode, readBody(t, resp))
 	}
@@ -294,9 +294,9 @@ func loginMessageClient(t *testing.T, database *db.DB, server *httptest.Server, 
 		Value: raw,
 		Path:  "/",
 	}})
-	resp := client.get("/welcome")
+	resp := client.get("/register/done")
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("welcome for %s status = %d", user.Name, resp.StatusCode)
+		t.Fatalf("login for %s status = %d", user.Name, resp.StatusCode)
 	}
 	if client.csrfCookie() == "" {
 		t.Fatalf("csrf cookie missing for %s", user.Name)

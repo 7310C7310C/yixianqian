@@ -30,6 +30,11 @@ type PhotoView struct {
 	ID       string `json:"id"`
 	URL      string `json:"url"`
 	ThumbURL string `json:"thumb_url"`
+	// Width/Height are the original image dimensions. The SPA viewer sizes the
+	// full-screen frame from them before the original is downloaded, so the
+	// thumbnail -> original swap never changes the displayed rectangle.
+	Width  int `json:"width"`
+	Height int `json:"height"`
 }
 
 // CardView is the template/JSON representation of one card.
@@ -117,6 +122,12 @@ func buildCardView(p db.SocialProfile, liked, praised bool, msgCount int, now ti
 	photo := ""
 	for i, id := range p.Photos {
 		pv := socialPhotoView(id)
+		if i < len(p.PhotoWidths) {
+			pv.Width = p.PhotoWidths[i]
+		}
+		if i < len(p.PhotoHeights) {
+			pv.Height = p.PhotoHeights[i]
+		}
 		photos = append(photos, pv)
 		urls = append(urls, pv.URL)
 		thumbs = append(thumbs, pv.ThumbURL)

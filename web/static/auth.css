@@ -1,0 +1,196 @@
+/* YIXIANQIAN scan-safe anonymous pages (/login, /activate, /password,
+   /register/done, 404). Loaded after home.css, which provides the token set,
+   page base and button styles. Values are copied from shell.css/app.css so the
+   pages keep the same look; keep them in sync when those files change.
+   ASCII-only on purpose: the pages must not ship Han in CSS (scan guard). */
+
+/* Copy is injected by public-copy.js; hide the container until it runs. */
+body.copy-pending .shell-main {
+  visibility: hidden;
+}
+
+.card {
+  padding: 14px 16px;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 12px;
+  border-radius: var(--shell-radius, 12px);
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shell-shadow-card, 0 2px 12px rgba(0, 0, 0, 0.05));
+}
+
+.card > :first-child {
+  margin-top: 0;
+}
+
+.card > :last-child {
+  margin-bottom: 0;
+}
+
+.card.narrow,
+.narrow {
+  width: 100%;
+  max-width: 440px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.center {
+  text-align: center;
+}
+
+@media (min-width: 700px) {
+  .card {
+    padding: 16px 18px;
+  }
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #ad2139;
+  color: var(--shell-brand-deep, #ad2139);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+}
+
+.hint {
+  margin: 0;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   Forms
+   -------------------------------------------------------------------------- */
+
+.card label {
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+input[type="text"],
+input[type="tel"],
+input[type="password"] {
+  width: 100%;
+  min-height: 44px;
+  min-height: var(--shell-tap, 44px);
+  padding: 10px 12px;
+  border: 1px solid #8a8a8e;
+  border-color: var(--shell-border-strong, #8a8a8e);
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+  background: #ffffff;
+  background: var(--shell-input-bg, #ffffff);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+input[type="text"]:focus,
+input[type="tel"]:focus,
+input[type="password"]:focus {
+  border-color: #cc304e;
+  border-color: var(--shell-focus, #cc304e);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 107, 129, 0.24);
+  box-shadow: 0 0 0 3px var(--shell-focus-ring, rgba(255, 107, 129, 0.24));
+}
+
+.stack {
+  display: block;
+  margin-top: 12px;
+}
+
+.stack > * + * {
+  margin-top: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   Alerts
+   -------------------------------------------------------------------------- */
+
+.alert {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  border-radius: var(--shell-radius-sm, 10px);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.alert-error {
+  border-color: #f0c9c9;
+  border-color: var(--shell-danger-line, #f0c9c9);
+  background: #fdecec;
+  background: var(--shell-danger-soft, #fdecec);
+  color: #9b2c2c;
+  color: var(--shell-danger, #9b2c2c);
+}
+
+.alert-ok {
+  border-color: #bfe8cf;
+  border-color: var(--shell-success-line, #bfe8cf);
+  background: #e8f8ee;
+  background: var(--shell-success-soft, #e8f8ee);
+  color: #0a6b3d;
+  color: var(--shell-success, #0a6b3d);
+}
+
+.card > .alert:first-child {
+  margin-top: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Login extras (same values as app.css, shell tokens)
+   -------------------------------------------------------------------------- */
+
+.auth-alt {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #ebedf0;
+  border-top-color: var(--shell-border, #ebedf0);
+}
+
+.auth-alt .hint {
+  margin: 0 0 8px;
+  text-align: center;
+}
+
+.auth-alt .button + .button {
+  margin-top: 8px;
+}
+
+.auth-feishu {
+  margin-top: 14px;
+  padding: 13px 14px;
+  border: 1px solid #ebedf0;
+  border-color: var(--shell-border, #ebedf0);
+  border-radius: 12px;
+  border-radius: var(--shell-radius, 12px);
+  background: #f7f8fa;
+  background: var(--shell-bg, #f7f8fa);
+}
+
+.auth-feishu p {
+  margin: 0;
+}
+
+.auth-feishu .hint {
+  margin-top: 6px;
+}

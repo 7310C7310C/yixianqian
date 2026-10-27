@@ -1,6 +1,8 @@
 package httpserver
 
 import (
+	"fmt"
+	"html/template"
 	"net/url"
 	"path"
 	"strconv"
@@ -69,4 +71,33 @@ func retryAfterSeconds(d int) string {
 		d = 0
 	}
 	return strconv.Itoa(d)
+}
+
+// asciiEntityText renders user-visible text with HTML numeric references for
+// every non-ASCII rune so the response body stays ASCII (scan-safe public
+// pages: no Han outside <title>) while the browser displays the original
+// characters. ASCII is HTML-escaped normally; markup can never pass through.
+func asciiEntityText(text string) template.HTML {
+	var b strings.Builder
+	for _, r := range text {
+		switch r {
+		case '&':
+			b.WriteString("&amp;")
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		case '"':
+			b.WriteString("&#34;")
+		case '\'':
+			b.WriteString("&#39;")
+		default:
+			if r < 0x80 {
+				b.WriteRune(r)
+			} else {
+				fmt.Fprintf(&b, "&#%d;", r)
+			}
+		}
+	}
+	return template.HTML(b.String())
 }

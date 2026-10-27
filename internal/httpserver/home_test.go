@@ -170,10 +170,9 @@ func TestLoginPageShowsRegisterCTA(t *testing.T) {
 	for _, want := range []string{
 		`name="csrf_token"`,
 		`href="/register"`,
-		"注册新账号",
 		`class="button primary block"`,
-		"已在飞书版使用过",
-		"请先在飞书版设置好密码",
+		`data-copy-page="login"`,
+		`data-copy-text="login.altCta"`,
 		publicFeishuAppURL,
 		"<title>登录 · 一线牵</title>",
 	} {
@@ -181,18 +180,18 @@ func TestLoginPageShowsRegisterCTA(t *testing.T) {
 			t.Fatalf("missing %q in login page", want)
 		}
 	}
-	// The login page stays Chinese and keeps the regular site shell: only the
-	// anonymous landing page is scan-resistant.
-	if !hanPattern.MatchString(body) {
-		t.Fatal("login page should remain Chinese")
-	}
-	for _, want := range []string{`/static/app.css`, `/static/shell.css`} {
+	// Scan contract: the login page is Han-free outside <title>; the visible
+	// Chinese copy is injected by /static/public-copy.js.
+	assertHanFreePublicBody(t, body)
+	for _, want := range []string{`/static/home.css`, `/static/auth.css`, `/static/public-copy.js`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("login page should load %q", want)
 		}
 	}
-	if strings.Contains(body, `/static/home.css`) || strings.Contains(body, `/static/home.js`) {
-		t.Fatal("login page must not load the landing-only assets")
+	for _, unwanted := range []string{`/static/app.css`, `/static/shell.css`, `/static/home.js`} {
+		if strings.Contains(body, unwanted) {
+			t.Fatalf("login page must not load %q", unwanted)
+		}
 	}
 }
 

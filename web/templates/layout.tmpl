@@ -12,14 +12,19 @@
   <!-- Public landing: dedicated ASCII-only stylesheet (no app.css/shell.css,
        whose comments contain Chinese); the copy itself comes from home.js. -->
   <link rel="stylesheet" href="/static/home.css?v={{assetVersion}}">
+  {{else if .ScanSafe}}
+  <!-- Scan-safe anonymous pages: same ASCII-only base as the landing page plus
+       auth form styles; every copy string is injected by public-copy.js. -->
+  <link rel="stylesheet" href="/static/home.css?v={{assetVersion}}">
+  <link rel="stylesheet" href="/static/auth.css?v={{assetVersion}}">
   {{else}}
   <link rel="stylesheet" href="/static/app.css?v={{assetVersion}}">
   <link rel="stylesheet" href="/static/shell.css?v={{assetVersion}}">
   {{end}}
   {{if .PageCSS}}<link rel="stylesheet" href="/static/{{.PageCSS}}?v={{assetVersion}}">{{end}}
 </head>
-<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}{{if .PublicLanding}} public-landing home-pending{{end}}">
-  {{if not .PublicLanding}}<a class="shell-skip" href="#main">跳至主要内容</a>
+<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}{{if .PublicLanding}} public-landing home-pending{{end}}{{if .ScanSafe}} scan-safe copy-pending{{end}}"{{if .CopyPage}} data-copy-page="{{.CopyPage}}"{{end}}>
+  {{if and (not .PublicLanding) (not .ScanSafe)}}<a class="shell-skip" href="#main">跳至主要内容</a>
 
   <header class="shell-header">
     <div class="shell-header-inner">
@@ -49,6 +54,7 @@
   </main>
   {{if .ActiveNav}}<script src="/static/admin.js?v={{assetVersion}}" defer></script>{{end}}
   {{if .PublicLanding}}<script src="/static/home.js?v={{assetVersion}}" defer></script>{{end}}
+  {{if .CopyPage}}<script src="/static/public-copy.js?v={{assetVersion}}" defer></script>{{end}}
 </body>
 </html>
 {{end}}

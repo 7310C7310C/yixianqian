@@ -246,23 +246,13 @@ func TestRegisterTemplatesRender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, page := range []string{"welcome", "register", "register_done"} {
+	for _, page := range []string{"register", "register_done"} {
 		if !tpl.HasPage(page) {
 			t.Fatalf("missing page %q", page)
 		}
 	}
-
-	var welcome bytes.Buffer
-	if err := tpl.Render(&welcome, "welcome", PageData{Title: "一线牵", PageCSS: "register.css"}); err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"一线牵", "/register?from=welcome", "/login", "人工审核"} {
-		if !strings.Contains(welcome.String(), want) {
-			t.Fatalf("welcome missing %q", want)
-		}
-	}
-	if strings.Contains(welcome.String(), "飞书") || strings.Contains(welcome.String(), "飞书") {
-		t.Fatal("welcome still mentions Feishu")
+	if tpl.HasPage("welcome") {
+		t.Fatal("welcome page template should be deleted (merged into the landing page)")
 	}
 
 	id := makeTestIDCard(t, "19900101", "002")
@@ -297,11 +287,12 @@ func TestRegisterTemplatesRender(t *testing.T) {
 	var done bytes.Buffer
 	if err := tpl.Render(&done, "register_done", PageData{
 		Title: "待审核", CSRFToken: "csrf-value", PageCSS: "register.css",
-		Data: registerDoneData{Heading: "资料审核中", Message: "等待审核", LoggedIn: true, PhoneMasked: "138****00"},
+		ScanSafe: true, CopyPage: "register_done",
+		Data: registerDoneData{CopyKey: "register_done.pending", LoggedIn: true, PhoneMasked: "138****00"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"资料审核中", "138****00", "/logout"} {
+	for _, want := range []string{`data-copy-text="register_done.pending.heading"`, "138****00", "/logout"} {
 		if !strings.Contains(done.String(), want) {
 			t.Fatalf("done missing %q", want)
 		}

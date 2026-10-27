@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -27,13 +28,13 @@ func (a *App) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	notice := ""
+	noticeKey := ""
 	switch r.URL.Query().Get("logged_out") {
 	case "1":
-		notice = "已退出登录。"
+		noticeKey = "login.notice.logged_out"
 	case "":
 		if r.URL.Query().Get("activated") == "1" {
-			notice = "账号已启用，请使用新密码登录。"
+			noticeKey = "login.notice.activated"
 		}
 	}
 	next := safeNext(r.URL.Query().Get("next"))
@@ -41,18 +42,22 @@ func (a *App) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 		next = ""
 	}
 	a.render(w, r, http.StatusOK, "login", PageData{
-		Title:  "登录",
-		Notice: notice,
-		Next:   next,
+		Title:         "登录",
+		NoticeCopyKey: noticeKey,
+		Next:          next,
+		ScanSafe:      true,
+		CopyPage:      "login",
 	})
 }
 
 func (a *App) renderLogin(w http.ResponseWriter, r *http.Request, status int, message, phone, next string) {
 	a.render(w, r, status, "login", PageData{
-		Title: "登录",
-		Error: message,
-		Phone: phone,
-		Next:  next,
+		Title:    "登录",
+		Error:    message,
+		Phone:    phone,
+		Next:     next,
+		ScanSafe: true,
+		CopyPage: "login",
 	})
 }
 
@@ -297,12 +302,22 @@ func (a *App) renderActivate(w http.ResponseWriter, r *http.Request, status int,
 		}
 	}
 	a.render(w, r, status, "activate", PageData{
-		Title: "设定密码",
-		Token: token,
-		Name:  at.Name,
-		Phone: auth.MaskPhone(at.Phone),
-		Error: message,
+		Title:    "设定密码",
+		Token:    token,
+		Phone:    auth.MaskPhone(at.Phone),
+		Error:    message,
+		ScanSafe: true,
+		CopyPage: "activate",
+		Data:     activatePageData{NameHTML: asciiEntityText(at.Name)},
 	})
+}
+
+// activatePageData carries the activation page copy inputs. NameHTML is the
+// account name rendered with ASCII-only HTML numeric references (see
+// asciiEntityText): the page body must stay Han-free while still showing the
+// name to the token holder.
+type activatePageData struct {
+	NameHTML template.HTML
 }
 
 func (a *App) handleActivate(w http.ResponseWriter, r *http.Request) {

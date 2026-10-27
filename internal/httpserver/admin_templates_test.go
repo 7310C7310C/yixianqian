@@ -101,9 +101,9 @@ func TestAdminTemplatesRender(t *testing.T) {
 		{
 			name: "password",
 			page: "password",
-			data: PageData{Title: "修改密码", User: user, CSRFToken: "csrf-value",
+			data: PageData{Title: "修改密码", CSRFToken: "csrf-value", ScanSafe: true, CopyPage: "password",
 				Data: passwordPageData{Required: true}},
-			want: []string{"修改密码", "临时密码", `action="/password"`},
+			want: []string{"修改密码", `data-copy-text="password.required"`, `action="/password"`},
 		},
 		{
 			name: "admin error",

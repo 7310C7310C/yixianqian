@@ -71,6 +71,12 @@ type SocialProfile struct {
 	AccountStatus  string
 	LoginStatus    string
 	Photos         []string
+	// PhotoWidths/PhotoHeights are the original image dimensions per photo,
+	// aligned with Photos. They come from the same profile_photos aggregate so
+	// the viewer can size the full-screen frame before downloading the
+	// original (no visible thumb -> original resize jump).
+	PhotoWidths  []int
+	PhotoHeights []int
 }
 
 // DisplayName is the safe public name: nickname, or a neutral placeholder. The
@@ -650,11 +656,20 @@ const socialProfileColumns = `u.id, COALESCE(u.legacy_user_id, ''), COALESCE(u.l
 	COALESCE(u.partner_criteria, ''), u.partner_traits, u.partner_hobbies, u.partner_sports,
 	COALESCE(u.wechat, ''), u.contact_consent,
 	u.account_kind, u.account_status, u.status,
-	COALESCE(ph.photos, '{}'::text[])`
+	COALESCE(ph.photos, '{}'::text[]),
+	COALESCE(ph.photo_widths, '{}'::int[]),
+	COALESCE(ph.photo_heights, '{}'::int[])`
 
+// socialPhotoJoin aggregates the ordered media ids and their original pixel
+// dimensions in one pass. sort_order is unique per user, so every array uses
+// the same deterministic order and stays aligned with Photos.
 const socialPhotoJoin = `LEFT JOIN LATERAL (
-	SELECT array_agg(pp.media_id ORDER BY pp.is_cover DESC, pp.sort_order) AS photos
-	FROM profile_photos pp WHERE pp.user_id = u.id
+	SELECT array_agg(pp.media_id ORDER BY pp.is_cover DESC, pp.sort_order) AS photos,
+	       array_agg(m.width ORDER BY pp.is_cover DESC, pp.sort_order) AS photo_widths,
+	       array_agg(m.height ORDER BY pp.is_cover DESC, pp.sort_order) AS photo_heights
+	FROM profile_photos pp
+	JOIN media m ON m.id = pp.media_id
+	WHERE pp.user_id = u.id
 ) ph ON true`
 
 func scanSocialProfile(row rowScanner) (SocialProfile, error) {
@@ -676,7 +691,7 @@ func scanSocialProfile(row rowScanner) (SocialProfile, error) {
 		&p.LiveWithParents, &p.Personality, &selfTraits, &selfHobbies, &selfSports, &mbti,
 		&p.PartnerCriteria, &partnerTraits, &partnerHobbies, &partnerSports,
 		&p.Wechat, &p.ContactConsent, &p.AccountKind, &p.AccountStatus, &p.LoginStatus,
-		&p.Photos)
+		&p.Photos, &p.PhotoWidths, &p.PhotoHeights)
 	if err != nil {
 		return SocialProfile{}, err
 	}
