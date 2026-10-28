@@ -55,7 +55,8 @@ import (
 // a 3-card static deck and earlier login prefetch.
 // 2026-10-28 (20-card fast deck): 47 invalidated data/asset version after bootstrap 20 cards,
 // static island cloning and fast-swipe queue.
-const assetVersion = "47"
+// 2026-10-28 (LCP-safe warmup): 48 delays page/image prefetch until the boot card hands off.
+const assetVersion = "48"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

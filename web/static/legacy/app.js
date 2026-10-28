@@ -740,6 +740,7 @@ const yxqApp = createApp({
     let pendingNextSwipes = 0; // 快速滑到数据窗口尾时先入队，分页回来按顺序补放
     let deckLoadFailures = 0;
     let deckRetryTimer = null;
+    let deckWarmupScheduled = false;
     try { window.__YXQ_PENDING_SWIPES__ = 0; } catch (e) {}
     const cardsStart = ref(0);        // 已载窗口在全序中的起始偏移（循环翻页窗口游标）
     const cardsPageCache = new Map(); // offset -> {cards,total,version}：翻页回退时避免重复请求
@@ -2541,8 +2542,7 @@ const yxqApp = createApp({
       };
       activities.value = data.activities || [];
       triggerPhotoLoading();
-      schedulePreloadAround();
-      scheduleDeckPrefetch();
+      if (!document.getElementById('boot-card')) scheduleDeckWarmup();
       maybeShowSwipeGuide();
       maybeShowActivityPromo();
       maybeShowUpdateNotes();
@@ -2819,6 +2819,12 @@ const yxqApp = createApp({
         if (p[0]) preloadImage(p[0]);
       }
     }
+    function scheduleDeckWarmup() {
+      if (deckWarmupScheduled || !prefetchAllowed()) return;
+      deckWarmupScheduled = true;
+      schedulePreloadAround();
+      scheduleDeckPrefetch();
+    }
     function scheduleDeckPrefetch() {
       // 挂载后立即把下一页资料取进内存/缓存，不等用户滑到窗口尾。
       if (!prefetchAllowed()) return;
@@ -2856,7 +2862,7 @@ const yxqApp = createApp({
     }
     async function loadCards(force) {
       if (cards.value.length && !force) {
-        scheduleDeckPrefetch(); // 深链回来时牌堆已存在，也要补跑挂载预取
+        if (!document.getElementById('boot-card')) scheduleDeckWarmup();
         return;
       }
       resetDeckQueue();
@@ -2873,8 +2879,7 @@ const yxqApp = createApp({
         cardsStart.value = 0;
         cardIndex.value = 0; photoIndex.value = 0;
         triggerPhotoLoading();
-        preloadAround();
-        scheduleDeckPrefetch();
+        if (!document.getElementById('boot-card')) scheduleDeckWarmup();
         maybeShowSwipeGuide();
       }
       catch(e) { vant.showToast(e.message); }
@@ -2908,6 +2913,7 @@ const yxqApp = createApp({
     function resetDeckQueue() {
       setPendingNextSwipes(0);
       deckLoadFailures = 0;
+      deckWarmupScheduled = false;
       if (deckRetryTimer) { clearTimeout(deckRetryTimer); deckRetryTimer = null; }
     }
     function flushPendingNextSwipes() {
@@ -5898,6 +5904,7 @@ const yxqApp = createApp({
     function dismissBootCard(reason) {
       syncBootCardScroll();
       try { const api = bootCardApi(); if (api) api.dismiss(reason); } catch (_) {}
+      scheduleDeckWarmup();
     }
     // 硬上限从 navigationStart 起算 4s：无论 loadHome 是否挂起，都不能让静态岛无限覆盖。
     function armBootCardHardLimit() {
@@ -5974,7 +5981,7 @@ const yxqApp = createApp({
     watch(page, (v) => {
       if (v === 'cards') {
         try { document.documentElement.classList.remove('boot-skip'); } catch (e) {}
-        nextTick(() => scheduleDeckPrefetch());
+        if (!document.getElementById('boot-card')) nextTick(() => scheduleDeckWarmup());
       } else {
         dismissBootCard('tab');
       }
