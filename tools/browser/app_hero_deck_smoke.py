@@ -827,10 +827,13 @@ def run_touch_scroll(browser, base_url: str, cookie: str, out_dir: Path) -> list
         context.route(base_url.rstrip("/") + "/app", patch_bootstrap_touch)
         context.route("**/cards/photo/44444444-4444-4444-4444-444444444444**", hold_real_image_touch)
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        # 触摸滚动只需要 app 已挂载（tap 监听已装上），不要求 loadHome 完成；
+        # staging 冷启动下等 home_done 可能撞上 4s 硬上限，boot card 先被移除。
         page.wait_for_function(
-            "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
+            "() => window.__YXQ_APP_MOUNTED__ && !!document.getElementById('boot-card')",
             timeout=15000,
         )
+        page.locator("#boot-card .card-info").wait_for(state="visible", timeout=5000)
         box = page.locator("#boot-card .card-info").bounding_box()
         if not box:
             raise SmokeFailure("静态岛资料区没有 bounding box")

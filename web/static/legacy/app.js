@@ -5796,6 +5796,9 @@ const yxqApp = createApp({
       const remain = Math.max(0, 4000 - performance.now());
       bootCardHardTimer = setTimeout(() => {
         bootCardHardTimer = null;
+        // 只在 loadHome 仍挂起时硬切到 Vue 骨架；数据已就绪时由 settleBootCard
+        // 等真实卡图片，完整静态卡不应被 4s 定时器提前移除（用户可能正在读/滚动）。
+        if (!bootLoading.value) return;
         const api = bootCardApi();
         if (!api || !api.dismissed()) dismissBootCard('hard-timeout');
       }, remain);

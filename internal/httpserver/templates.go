@@ -49,7 +49,9 @@ import (
 // 2026-10-28 (boot card touch fallback): 43 invalidated app.js after touchmove movement
 // fallback for mobile WebViews without pointermove.
 // 2026-10-28 (boot card touchend): 44 invalidated app.js after touch-only touchend tap.
-const assetVersion = "44"
+// 2026-10-28 (boot card hard cap): 45 invalidated app.js after only hard-cutting when
+// loadHome is still pending (not while a complete static card is being read).
+const assetVersion = "45"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
