@@ -117,25 +117,6 @@
   margin-top: 6px;
 }
 
-.welcome-footer-note {
-  margin-top: 16px;
-  text-align: center;
-}
-
-.welcome-footer-note p {
-  margin: 0 0 4px;
-  color: #ad2139;
-  color: var(--shell-brand-deep, #ad2139);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.welcome-footer-note .hint {
-  color: #6b7280;
-  color: var(--shell-muted, #6b7280);
-  font-weight: 400;
-}
-
 /* --------------------------------------------------------------------------
    Registration form
    -------------------------------------------------------------------------- */

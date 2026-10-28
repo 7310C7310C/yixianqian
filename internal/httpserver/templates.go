@@ -28,7 +28,7 @@ import (
 // Batch13 (scan-safe /register form: server-generated ASCII copy catalog +
 // register.js): 31.
 // Batch14 (viewer arrows + loop): 32 invalidated app.css / app.min.js.
-const assetVersion = "32"
+const assetVersion = "33"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

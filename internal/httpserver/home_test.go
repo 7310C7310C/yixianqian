@@ -118,6 +118,10 @@ func TestHomeRendersPublicLandingForAnonymous(t *testing.T) {
 	if strings.Contains(body, `id="app"`) {
 		t.Fatal("anonymous landing page should not serve the SPA")
 	}
+	// PM 2026-10-28: the "一线牵 · 遇见对的人" footer note is removed.
+	if strings.Contains(body, "welcome-footer-note") {
+		t.Fatal("anonymous landing page should not render the footer note")
+	}
 }
 
 func TestHomeAdminQueryRedirectsAnonymousToLogin(t *testing.T) {
