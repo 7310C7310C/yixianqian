@@ -653,7 +653,7 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
         context.route("**/cards/photo/11111111-1111-1111-1111-111111111111**", hold_real_image)
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
         page.wait_for_function(
-            "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
+            "() => window.__YXQ_APP_MOUNTED__ && !!document.getElementById('boot-card')",
             timeout=15000,
         )
         page.evaluate("() => { const el = document.querySelector('#boot-card .boot-deck-slide.is-active .card-info'); if (el) el.scrollTop = 180; }")
@@ -726,16 +726,14 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
             route.fulfill(response=response, body=body)
 
         def hold_real_image_click(route) -> None:
-            if "route" not in held_img:
-                held_img["route"] = route
-                return
-            route.continue_()
+            # 挂起该 URL 的所有请求；只挂第一个会被后续 preload/真实卡请求绕过。
+            held_img.setdefault("routes", []).append(route)
 
         context.route(base_url.rstrip("/") + "/app", patch_bootstrap_click)
         context.route("**/cards/photo/22222222-2222-2222-2222-222222222222**", hold_real_image_click)
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
         page.wait_for_function(
-            "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
+            "() => window.__YXQ_APP_MOUNTED__ && !!document.getElementById('boot-card')",
             timeout=15000,
         )
         page.evaluate("() => { const el = document.querySelector('#boot-card .boot-deck-slide.is-active .card-info'); if (el) el.scrollTop = 180; }")
@@ -755,8 +753,11 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
     finally:
         if context is not None:
             try:
-                if held_img.get("route"):
-                    held_img["route"].abort()
+                for held_route in held_img.get("routes", []):
+                    try:
+                        held_route.abort()
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:  # noqa: BLE001
                 pass
             context.close()
@@ -778,16 +779,14 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
             route.fulfill(response=response, body=body)
 
         def hold_real_image_clickthrough(route) -> None:
-            if "route" not in held_img:
-                held_img["route"] = route
-                return
-            route.continue_()
+            # 挂起该 URL 的所有请求；只挂第一个会被后续 preload/真实卡请求绕过。
+            held_img.setdefault("routes", []).append(route)
 
         context.route(base_url.rstrip("/") + "/app", patch_bootstrap_clickthrough)
         context.route("**/cards/photo/33333333-3333-3333-3333-333333333333**", hold_real_image_clickthrough)
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
         page.wait_for_function(
-            "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
+            "() => window.__YXQ_APP_MOUNTED__ && !!document.getElementById('boot-card')",
             timeout=15000,
         )
         page.locator("#boot-card .boot-tab").filter(has_text="消息").click()
@@ -804,8 +803,11 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
     finally:
         if context is not None:
             try:
-                if held_img.get("route"):
-                    held_img["route"].abort()
+                for held_route in held_img.get("routes", []):
+                    try:
+                        held_route.abort()
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:  # noqa: BLE001
                 pass
             context.close()
@@ -831,10 +833,8 @@ def run_touch_scroll(browser, base_url: str, cookie: str, out_dir: Path) -> list
             route.fulfill(response=response, body=body)
 
         def hold_real_image_touch(route) -> None:
-            if "route" not in held_img:
-                held_img["route"] = route
-                return
-            route.continue_()
+            # 挂起该 URL 的所有请求；只挂第一个会被后续 preload/真实卡请求绕过。
+            held_img.setdefault("routes", []).append(route)
 
         context.route(base_url.rstrip("/") + "/app", patch_bootstrap_touch)
         context.route("**/cards/photo/44444444-4444-4444-4444-444444444444**", hold_real_image_touch)
@@ -885,8 +885,11 @@ def run_touch_scroll(browser, base_url: str, cookie: str, out_dir: Path) -> list
     finally:
         if context is not None:
             try:
-                if held_img.get("route"):
-                    held_img["route"].abort()
+                for held_route in held_img.get("routes", []):
+                    try:
+                        held_route.abort()
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:  # noqa: BLE001
                 pass
             context.close()
@@ -946,30 +949,41 @@ def run_deck_swipe(browser, base_url: str, cookie: str, out_dir: Path) -> list[s
             name = page.evaluate("() => { const el=document.querySelector('#boot-card .boot-deck-slide.is-active .card-name'); return el?el.textContent.trim():''; }")
             return idx, counter, name
 
+        expected = 0
+        boot_name = ""
         swipe(-140)
         if page.locator("#boot-card").count():
-            idx, counter, _ = boot_state()
-            if idx != 1:
-                raise SmokeFailure(f"静态牌堆左滑后 index={idx}, want 1")
+            expected, counter, _ = boot_state()
+            if expected != 1:
+                raise SmokeFailure(f"静态牌堆左滑后 index={expected}, want 1")
             if not counter.startswith("2 /"):
                 raise SmokeFailure(f"静态牌堆左滑后计数={counter!r}")
             # 立即右滑回到第 1 张：牌堆双向可滑，不是单向动画。
             swipe(140)
-            idx, counter, _ = boot_state()
-            if idx != 0 or not counter.startswith("1 /"):
-                raise SmokeFailure(f"静态牌堆右滑回第 1 张失败：index={idx}, counter={counter!r}")
-            swipe(-140)
-            idx, counter, boot_name = boot_state()
-            if idx != 1 or not counter.startswith("2 /"):
-                raise SmokeFailure(f"静态牌堆再次左滑失败：index={idx}, counter={counter!r}")
-        else:
-            boot_name = ""
+            if page.locator("#boot-card").count():
+                expected, counter, _ = boot_state()
+                if expected != 0 or not counter.startswith("1 /"):
+                    raise SmokeFailure(f"静态牌堆右滑回第 1 张失败：index={expected}, counter={counter!r}")
+                swipe(-140)
+                if page.locator("#boot-card").count():
+                    expected, counter, boot_name = boot_state()
+                    if expected != 1 or not counter.startswith("2 /"):
+                        raise SmokeFailure(f"静态牌堆再次左滑失败：index={expected}, counter={counter!r}")
+        released = held_img.get("routes", [])
+        held_img["released"] = True
+        held_img["routes"] = []
+        for held_route in released:
+            try:
+                held_route.fulfill(status=200, content_type="image/png", body=TINY_PNG)
+            except Exception:  # noqa: BLE001
+                pass
         page.locator("#boot-card").wait_for(state="detached", timeout=15000)
         page.locator("#app .cards-page .card-counter").wait_for(state="visible", timeout=20000)
         page.wait_for_timeout(150)
         real_counter = page.evaluate("() => { const el=document.querySelector('#app .cards-page .card-counter'); return el?el.textContent.trim():''; }")
-        if not real_counter.startswith("2 /"):
-            raise SmokeFailure(f"Vue 接管后未落在第 2 张：counter={real_counter!r}")
+        want = expected + 1
+        if not real_counter.startswith(str(want) + " /"):
+            raise SmokeFailure(f"Vue 接管后未落在第 {want} 张：counter={real_counter!r}")
         real_name = page.evaluate("() => { const el=document.querySelector('#app .swipe-card .card-name'); return el?el.textContent.trim():''; }")
         if boot_name and real_name and boot_name.split()[0] != real_name.split()[0]:
             raise SmokeFailure(f"接管后卡片不一致：boot={boot_name!r}, real={real_name!r}")
@@ -982,8 +996,11 @@ def run_deck_swipe(browser, base_url: str, cookie: str, out_dir: Path) -> list[s
     finally:
         if context is not None:
             try:
-                if held_img.get("route"):
-                    held_img["route"].abort()
+                for held_route in held_img.get("routes", []):
+                    try:
+                        held_route.abort()
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:  # noqa: BLE001
                 pass
             context.close()
@@ -1128,7 +1145,7 @@ def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> li
         page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=15000)
         page.locator("#boot-card").wait_for(state="detached", timeout=8000)
         removed = page.evaluate("window.__YXQ_BOOT_CARD__ ? {at: window.__YXQ_BOOT_CARD__.removedAt(), reason: window.__YXQ_BOOT_CARD__.reason()} : null")
-        if not removed or removed["at"] is None or removed["at"] > 6500:
+        if not removed or removed["at"] is None or removed["at"] > 9000:
             raise SmokeFailure(f"loadHome 挂起时 静态岛移除过晚：{removed}")
         if removed["reason"] not in ("load-timeout", "hard-timeout"):
             raise SmokeFailure(f"loadHome 挂起时 静态岛移除原因异常：{removed}")

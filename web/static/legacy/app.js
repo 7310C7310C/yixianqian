@@ -5906,14 +5906,14 @@ const yxqApp = createApp({
       try { const api = bootCardApi(); if (api) api.dismiss(reason); } catch (_) {}
       scheduleDeckWarmup();
     }
-    // 硬上限从 navigationStart 起算 4s：无论 loadHome 是否挂起，都不能让静态岛无限覆盖。
+    // 硬上限从 navigationStart 起算 5s：无论 loadHome 是否挂起，都不能让静态岛无限覆盖。
     function armBootCardHardLimit() {
       if (bootCardHardTimer) return;
-      const remain = Math.max(0, 4000 - performance.now());
+      const remain = Math.max(1500, 5000 - performance.now()); // 挂载晚于 5s 也至少留 1.5s 窗口
       bootCardHardTimer = setTimeout(() => {
         bootCardHardTimer = null;
         // 只在 loadHome 仍挂起时硬切到 Vue 骨架；数据已就绪时由 settleBootCard
-        // 等真实卡图片，完整静态卡不应被 4s 定时器提前移除（用户可能正在读/滚动）。
+        // 等真实卡图片，完整静态卡不应被 5s 定时器提前移除（用户可能正在读/滚动）。
         if (!bootLoading.value) return;
         const api = bootCardApi();
         if (!api || !api.dismissed()) dismissBootCard('hard-timeout');

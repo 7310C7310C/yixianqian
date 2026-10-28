@@ -56,7 +56,8 @@ import (
 // 2026-10-28 (20-card fast deck): 47 invalidated data/asset version after bootstrap 20 cards,
 // static island cloning and fast-swipe queue.
 // 2026-10-28 (LCP-safe warmup): 48 delays page/image prefetch until the boot card hands off.
-const assetVersion = "48"
+// 2026-10-28 (slower boot): 49 extends the static-card hard cap 4s→5s after 20-card bootstrap.
+const assetVersion = "49"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
