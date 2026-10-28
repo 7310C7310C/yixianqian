@@ -30,7 +30,9 @@ import (
 // Batch14 (viewer arrows + loop): 32 invalidated app.css / app.min.js.
 // 2026-10-28 (brand favicon): 34 invalidated the placeholder favicon.svg and
 // added the v1 heart icon set (svg/png/ico) to the template links.
-const assetVersion = "34"
+// 2026-10-28 (remove self-card hint): 35 invalidated app.css / app.min.js /
+// app.render.js after dropping the redundant first-card bubble.
+const assetVersion = "35"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

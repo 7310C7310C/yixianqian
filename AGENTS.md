@@ -30,7 +30,7 @@ sources:
 
 - 不写密钥；密码、token、cookie、`.env`、R2 key 不得进入 repo、日志、报告或文档。
 - 用户端复用 v1 Vue 3 + Vant SPA；管理台只经同源 iframe，顶层 `/admin` 一律 303 到 `/?admin=1`。
-- 不恢复已废弃方案：`/welcome` 页面、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、Redis、飞书 runtime、第二套用户 UI。
+- 不恢复已废弃方案：`/welcome` 页面、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、Redis、飞书 runtime、第二套用户 UI、首卡自我引导气泡（`self-guide-tip`；首卡已自带「这是你 · 他人视角」标签）。
 - PostgreSQL 是唯一权威；R2 只存私有媒体，浏览器只经 `/media/{id}`；不把对象存储 URL 给前端。
 - 不新增 Redis 或消息队列；当前正确性不依赖缓存或队列。
 - migration 只增不改；回滚 binary 不等于回滚 schema；生产大表索引需另行走手工窗口。

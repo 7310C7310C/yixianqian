@@ -726,8 +726,6 @@ const yxqApp = createApp({
     const cardIndex = ref(0);
     const showSwipeGuide = ref(false); // 牵线左右滑动新手引导，仅首次显示一次
     const SWIPE_GUIDE_KEY = 'yxq_swipe_guide_v1';
-    const showSelfCardGuide = ref(false); // 首卡=自己：一次性引导气泡（F-11）
-    const SELF_CARD_GUIDE_KEY = 'yxq_self_card_guide_v1';
     const showActivityPromo = ref(false);               // 牵线页活动报名引导弹窗
     const ACTIVITY_PROMO_KEY = 'yxq_activity_promo_v1'; // sessionStorage：本会话已弹过
     // 引导报名的活动ID：由 /api/home 按环境下发（活动ID是自动编号，测试库与生产库编号不同），
@@ -2540,7 +2538,6 @@ const yxqApp = createApp({
       triggerPhotoLoading();
       schedulePreloadAround();
       maybeShowSwipeGuide();
-      maybeShowSelfCardGuide();
       maybeShowActivityPromo();
       maybeShowUpdateNotes();
     }
@@ -2654,22 +2651,6 @@ const yxqApp = createApp({
       try { localStorage.setItem(SWIPE_GUIDE_KEY, '1'); } catch(e) {}
       maybeShowActivityPromo(); // 新手引导让位后再补弹活动引导
       maybeShowUpdateNotes();
-      maybeShowSelfCardGuide();
-    }
-    // 首卡=自己卡时的一次性引导气泡（F-11）：只弹一次，点「知道了」或翻页后记忆
-    function maybeShowSelfCardGuide() {
-      try { if (localStorage.getItem(SELF_CARD_GUIDE_KEY)) return; } catch(e) {}
-      setTimeout(() => {
-        try { if (localStorage.getItem(SELF_CARD_GUIDE_KEY)) return; } catch(e) {}
-        if (page.value !== 'cards' || cardIndex.value !== 0) return;
-        if (showSwipeGuide.value || showActivityPromo.value || showUpdateNotes.value || showSelfCardGuide.value) return;
-        const c = cards.value[0];
-        if (c && c.is_self) showSelfCardGuide.value = true;
-      }, 900);
-    }
-    function dismissSelfCardGuide() {
-      showSelfCardGuide.value = false;
-      try { localStorage.setItem(SELF_CARD_GUIDE_KEY, '1'); } catch(e) {}
     }
 
     // 牵线页活动报名引导：每个会话弹一次，且只对「未报名目标活动」的用户弹。
@@ -2861,7 +2842,6 @@ const yxqApp = createApp({
         triggerPhotoLoading();
         preloadAround();
         maybeShowSwipeGuide();
-        maybeShowSelfCardGuide();
       }
       catch(e) { vant.showToast(e.message); }
       loadingCards.value = false;
@@ -5384,7 +5364,6 @@ const yxqApp = createApp({
         try { sessionStorage.setItem(ACTIVITY_PROMO_KEY, '1'); } catch(e) {}
         if(!isHandlingPopState && hist.state && hist.state.overlay==='activityPromo'){ ignoreNextPop=true; hist.back(); }
         maybeShowUpdateNotes(); // 活动引导让位后，更新说明仍有机会在首页弹一次
-        maybeShowSelfCardGuide(); // 首卡自我提示排在最后（只对首卡是自己的用户）
       }
     });
     // 更新说明弹窗：关闭动作统一记入 localStorage（每版本一次），历史回退与活动引导同款
@@ -5393,12 +5372,11 @@ const yxqApp = createApp({
       else if(!v){
         try { localStorage.setItem(UPDATE_NOTES_KEY, '1'); } catch(e) {}
         if(!isHandlingPopState && hist.state && hist.state.overlay==='updateNotes'){ ignoreNextPop=true; hist.back(); }
-        maybeShowSelfCardGuide(); // 更新说明让位后，首卡自我提示仍有机会弹一次
       }
     });
 
-    // 用户成功左右翻页，说明已学会滑动，自动关闭新手引导；首卡自我提示同理（翻页即已看到后面的人）
-    watch(cardIndex, () => { if (showSwipeGuide.value) closeSwipeGuide(); if (showSelfCardGuide.value) dismissSelfCardGuide(); });
+    // 用户成功左右翻页，说明已学会滑动，自动关闭新手引导
+    watch(cardIndex, () => { if (showSwipeGuide.value) closeSwipeGuide(); });
 
     // 切换卡片/照片时显示图片加载占位
     watch([cardIndex, photoIndex], () => {
@@ -7135,7 +7113,7 @@ const yxqApp = createApp({
       isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
       cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoSrc, photoLoading,
-      showSwipeGuide, closeSwipeGuide, showSelfCardGuide, dismissSelfCardGuide,
+      showSwipeGuide, closeSwipeGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
       filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,
       showIdInvalidDialog, idInvalidCountdown, goIdInvalidNow, guardTabChange,

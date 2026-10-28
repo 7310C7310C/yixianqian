@@ -5,8 +5,8 @@
     "file": "app.render.js",
     "templateSha256": "40228fcfd82716743cc8ec2fd2a70b11e8f7fe93bb6421737ffb1844edc54a9d",
     "templateSize": 51573,
-    "bytes": 182449,
-    "sha256": "51bc231fb0b6819552fe14cad1b4f2bf01dccd816d7eb8869c34e834eef61dc7"
+    "bytes": 181710,
+    "sha256": "626351efe5dfa4744d3a7a9cfeca1db71e79808f76588226cba856abac55a3ba"
   },
   "initial": [
     "cards"
@@ -77,8 +77,8 @@
     "cards": {
       "group": "initial",
       "file": "app.render.js",
-      "templateSha256": "63ef9a5323352490b228bf5d27ca7313df61ccff27deb68a039811e25194755e",
-      "templateSize": 10111
+      "templateSha256": "b0f6a72c8882577cb0eef2693517c4fc2caab79602f57adba4191ba280c410f3",
+      "templateSize": 9818
     },
     "likes": {
       "group": "likes",

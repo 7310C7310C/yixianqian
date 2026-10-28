@@ -771,11 +771,6 @@
   .tap-44::after { content: ''; position: absolute; inset: -6px 0; }
   /* F-08 补漏：用户主流程块状小按钮（32px）高度提到 ≥44 */
   .btn-44 { min-height: var(--yxq-tap-min); }
-  /* 首卡是自己：一次性引导气泡（F-11） */
-  .self-guide-tip { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 3000; width: min(86%, 340px); background: rgba(0,0,0,0.78); color: #fff; border-radius: 12px; padding: 12px 14px 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
-  .self-guide-text { font-size: 13px; line-height: 1.6; text-align: center; }
-  .self-guide-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; background: var(--yxq-brand-ink); color: #fff; border: none; border-radius: 999px; padding: 0 30px; font-size: 14px; }
-  .self-guide-btn:active { transform: scale(0.97); }
   /* 夜间模式 */
   .van-theme-dark { --van-background: #1a1a1c; --van-background-2: #222226; --van-background-3: #2c2c30; --van-border-color: #3a3a3e; --van-active-color: #3a3a3e; --van-field-placeholder-text-color: #8a8a8e; }
   .van-theme-dark html, .van-theme-dark body, html.van-theme-dark, html.van-theme-dark body { background: #1a1a1c; color: #f5f5f5; }
