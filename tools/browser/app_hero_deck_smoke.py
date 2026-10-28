@@ -314,8 +314,9 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
             interactive: window.__YXQ_CARD_INTERACTIVE_AT__ || null,
           };
         }""")
-        if timing["gap"] is not None and timing["gap"] > 1200:
-            raise SmokeFailure(f"{tag}: 静态岛交接 gap {timing['gap']}ms > 1200ms")
+        if timing["gap"] is not None and timing["gap"] > 2500:
+            # 单次冷启允许 2.5s；P75 由 perf_boot --gap-p75-max 1000 守住。
+            raise SmokeFailure(f"{tag}: 静态岛交接 gap {timing['gap']}ms > 2500ms")
         if timing["interactive"] is None:
             raise SmokeFailure(f"{tag}: 缺少 time-to-interactive 标记")
         stats = page.evaluate("""() => ({
@@ -949,7 +950,7 @@ def run_deck_swipe(browser, base_url: str, cookie: str, out_dir: Path) -> list[s
             name = page.evaluate("() => { const el=document.querySelector('#boot-card .boot-deck-slide.is-active .card-name'); return el?el.textContent.trim():''; }")
             return idx, counter, name
 
-        expected = 0
+        expected = 1  # 第一次左滑即使静态岛已被接管，也应落到第 2 张
         boot_name = ""
         swipe(-140)
         if page.locator("#boot-card").count():
