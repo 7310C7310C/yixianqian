@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import statistics
 import time
@@ -71,13 +70,6 @@ def median(values: list[float]):
     return round(statistics.median(values), 1) if values else None
 
 
-def p75(values: list[float]):
-    if not values:
-        return None
-    ordered = sorted(values)
-    return ordered[max(0, math.ceil(len(ordered) * 0.75) - 1)]
-
-
 def collect(page) -> dict:
     return page.evaluate(
         """() => {
@@ -117,17 +109,9 @@ def collect(page) -> dict:
             app_start_ms: window.__YXQ_APP_START_AT__ || (appStart ? Math.round(appStart.startTime) : null),
             app_start_reason: window.__YXQ_APP_START_REASON__ || '',
             hero_ready_ms: window.__YXQ_HERO_READY_AT__ || (heroReady ? Math.round(heroReady.startTime) : null),
-            home_done_ms: window.__YXQ_LOAD_HOME_DONE_AT__ || null,
-            boot_card_removed_ms: window.__YXQ_BOOT_CARD_DETACHED_AT__ || null,
-            boot_gap_ms: (function () {
-              const removed = window.__YXQ_BOOT_CARD_DETACHED_AT__;
-              const home = window.__YXQ_LOAD_HOME_DONE_AT__;
-              return (removed != null && home != null) ? Math.round(removed - home) : null;
-            })(),
-            interactive_ms: window.__YXQ_CARD_INTERACTIVE_AT__ || null,
             dom: document.querySelectorAll('*').length,
             cards: document.querySelectorAll('.swipe-card').length,
-            hero_present: !!document.getElementById('boot-card'),
+            hero_present: !!document.getElementById('boot-splash'),
             counter: (document.querySelector('.card-counter') || {}).textContent || '',
             url: location.href
           };
@@ -141,7 +125,7 @@ def run_once(context, page, base_url: str, suffix: str = "", reload: bool = Fals
     else:
         page.goto(base_url.rstrip("/") + "/app" + suffix, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_selector(".van-tabbar", timeout=30000)
-    page.wait_for_selector("#boot-card", state="detached", timeout=20000)
+    page.wait_for_selector("#boot-splash", state="detached", timeout=20000)
     page.wait_for_timeout(1200)  # LCP/长任务收尾
     return collect(page)
 
@@ -155,8 +139,6 @@ def main() -> int:
     ap.add_argument("--latency", type=float, default=150)
     ap.add_argument("--down-mbps", type=float, default=1.6)
     ap.add_argument("--cpu", type=float, default=4)
-    ap.add_argument("--gap-p75-max", type=float, default=1000,
-                    help="fail when boot card detach - home_done P75 exceeds this many ms (default 1000)")
     args = ap.parse_args()
 
     base_url = os.environ.get("BASE_URL", "").strip().rstrip("/")
@@ -205,8 +187,7 @@ def main() -> int:
                     runs.append(run_once(context, page, base_url, suffix, reload=(mode == "warm")))
                 context.close()
                 keys = ("fcp", "lcp", "longest_task", "longtask_total", "bytes", "requests",
-                        "mount_ms", "boot_ms", "app_start_ms", "hero_ready_ms",
-                        "home_done_ms", "boot_card_removed_ms", "boot_gap_ms", "interactive_ms")
+                        "mount_ms", "boot_ms", "app_start_ms", "hero_ready_ms")
                 med = {}
                 for key in keys:
                     vals = [r[key] for r in runs if r.get(key) is not None]
@@ -221,20 +202,6 @@ def main() -> int:
 
         browser.close()
 
-    gap_fail = False
-    for tag, modes in result.items():
-        for mode, data in modes.items():
-            gaps = [r.get("boot_gap_ms") for r in data["runs"] if r.get("boot_gap_ms") is not None]
-            gap_p75 = p75(gaps)
-            data["median"]["boot_gap_p75"] = gap_p75
-            if gap_p75 is not None and gap_p75 > args.gap_p75_max:
-                gap_fail = True
-                print(
-                    f"FAIL {tag} {mode}: boot_gap_p75={gap_p75}ms > {args.gap_p75_max}ms "
-                    "(card_removed - home_done)",
-                    file=sys.stderr,
-                )
-
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     for tag, modes in result.items():
@@ -244,15 +211,12 @@ def main() -> int:
             print(
                 f"  {mode}: FCP {m['fcp']}ms LCP {m['lcp']}ms longest {m['longest_task']}ms "
                 f"mount {m['mount_ms']}ms boot {m['boot_ms']}ms "
-                f"app_start {m['app_start_ms']}ms hero_ready {m['hero_ready_ms']}ms "
-                f"home_done {m['home_done_ms']}ms card_removed {m['boot_card_removed_ms']}ms "
-                f"gap {m.get('boot_gap_p75')}ms(touch) interactive {m['interactive_ms']}ms "
-                f"({m.get('app_start_reason', '')}) "
+                f"app_start {m['app_start_ms']}ms hero_ready {m['hero_ready_ms']}ms ({m.get('app_start_reason', '')}) "
                 f"bytes {m['bytes']} req {m['requests']} "
                 f"CLS {m['cls']} DOM {m['dom']} cards {m['cards']} | {m['lcp_el']}"
             )
     print(f"JSON: {args.out}")
-    return 1 if gap_fail else 0
+    return 0
 
 
 if __name__ == "__main__":

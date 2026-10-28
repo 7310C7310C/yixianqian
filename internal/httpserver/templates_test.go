@@ -33,7 +33,7 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 			page: "login",
 			data: PageData{
 				Title: "登录", CSRFToken: "csrf-value", Next: "/x", Phone: "138",
-				FeishuURL: publicFeishuAppURL, ScanSafe: true, PrefetchSPA: true, CopyPage: "login",
+				FeishuURL: publicFeishuAppURL, ScanSafe: true, CopyPage: "login",
 			},
 			want: []string{
 				"<!doctype html>", "<title>登录 · 一线牵</title>", `name="csrf_token" value="csrf-value"`,
@@ -41,7 +41,6 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 				`href="/register"`, `class="button primary block"`,
 				`data-copy-text="login.title"`, `data-copy-text="login.altCta"`,
 				`data-copy-page="login"`, `/static/auth.css`, `/static/public-copy.js`,
-				`data-prefetch-spa="1"`, `/static/prefetch.js`, `data-asset-version="`,
 				publicFeishuAppURL,
 			},
 			notWant: []string{
@@ -69,7 +68,7 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 			notWant: []string{
 				`id="app"`, `feishu-qr`, "跳至主要内容", "shell-header",
 				"shell-account", "立即注册", "人工审核", "二维码",
-				`/static/app.css`, `/static/shell.css`, `lang="en"`, `/static/prefetch.js`,
+				`/static/app.css`, `/static/shell.css`, `lang="en"`,
 				"A trusted place", "Create account", "Used the Feishu version before?",
 			},
 		},

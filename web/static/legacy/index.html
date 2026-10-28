@@ -39,7 +39,7 @@
 })();
 </script>
 <script>try{if(localStorage.getItem('yxq_dark')==='1')document.documentElement.classList.add('van-theme-dark');}catch(e){}</script>
-<script>try{if(/^#\/(likes|activities)(\/|$)/.test(location.hash)||sessionStorage.getItem('yxq_deck_restore'))document.documentElement.classList.add('boot-skip');}catch(e){}</script>
+<script>try{if(/^#\/(likes|activities)(\/|$)/.test(location.hash)||/[?&]native_admin=1(?:&|$)/.test(location.search))document.documentElement.classList.add('boot-skip');}catch(e){}</script>
 <title>一线牵</title>
 <link rel="icon" href="favicon.ico?v=__ASSET_URL_VERSION__" sizes="any">
 <link rel="icon" href="favicon.svg?v=__ASSET_URL_VERSION__" type="image/svg+xml">
@@ -51,11 +51,61 @@
 <link rel="stylesheet" href="app.css?v=__ASSET_URL_VERSION__" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="app.css?v=__ASSET_URL_VERSION__"></noscript>
 <!--YXQ_BOOTSTRAP_PRELOAD-->
-<script src="boot-card.js?v=__ASSET_URL_VERSION__" defer></script>
 
 </head>
 <body>
-<!--YXQ_BOOT_CARD-->
+<div id="boot-splash" aria-hidden="true">
+  <div class="boot-splash-inner">
+    <div class="boot-splash-heart">💗</div>
+    <div class="boot-splash-brand">一线牵</div>
+  </div>
+</div>
+<style>
+  #boot-splash { position: fixed; inset: 0; z-index: 2000; background: #f7f8fa; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 1; transition: opacity .15s ease; }
+  #boot-splash .boot-splash-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; transform: translateY(-2vh); }
+  #boot-splash .boot-splash-heart { font-size: 68px; line-height: 1; filter: drop-shadow(0 8px 22px rgba(255,107,129,.24)); animation: boot-splash-beat 1.6s ease-in-out infinite; }
+  #boot-splash .boot-splash-brand { font-size: 25px; line-height: 1.2; font-weight: 600; letter-spacing: .12em; color: #ff6b81; }
+  #boot-splash.boot-splash-out { opacity: 0; }
+  .van-theme-dark #boot-splash { background: #111; }
+  .van-theme-dark #boot-splash .boot-splash-brand { color: #ff9aa8; }
+  @keyframes boot-splash-beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  @media (prefers-reduced-motion: reduce) {
+    #boot-splash, #boot-splash .boot-splash-heart { animation: none; transition: none; }
+  }
+</style>
+<script>
+// 纯品牌启动页：爱心 + 一线牵；真实卡首图 decode 后由 app.js 的 __YXQ_HERO__ 移除。
+(function(){
+  var root = document.getElementById('boot-splash');
+  if (!root) return;
+  var state = {dismissed:false, removedAt:null, reason:''};
+  function dismiss(reason){
+    if (state.dismissed) return;
+    state.dismissed = true;
+    state.reason = reason || '';
+    state.removedAt = Math.round(performance.now());
+    root.classList.add('boot-splash-out');
+    setTimeout(function(){
+      if (root.parentNode) root.parentNode.removeChild(root);
+      window.__YXQ_SPLASH_DETACHED_AT__ = Math.round(performance.now());
+    }, 160);
+  }
+  window.__YXQ_HERO__ = {
+    dismiss: dismiss,
+    dismissed: function(){ return state.dismissed; },
+    reason: function(){ return state.reason || ''; },
+    removedAt: function(){ return state.removedAt || null; },
+    setObjectPosition: function(){}
+  };
+  try {
+    if (document.documentElement.classList.contains('boot-skip')) {
+      state.dismissed = true;
+      state.reason = 'deep-link';
+      if (root.parentNode) root.parentNode.removeChild(root);
+    }
+  } catch (e) {}
+})();
+</script>
 <div id="app" v-cloak>
 <!-- 新版本提示：只提示不自动刷新，用户点击才更新（避免操作中闪整页进度条） -->
 <div v-if="updateReady && !nativeAdmin" class="update-bar" role="status" aria-live="polite">
@@ -845,7 +895,7 @@
 </div>
 <script>window.__YXQ_BOOTSTRAP__=null;</script>
 <script>
-// 首卡由服务端静态岛直接渲染；这里只准备 home 数据 Promise，供 app.js 启动时消费。
+// 优先消费服务端 bootstrap；缺失时回退原 API。启动页不依赖首卡图。
 (function(){
   try {
     var boot = window.__YXQ_BOOTSTRAP__;
@@ -860,9 +910,9 @@
 })();
 </script>
 <script>
-// 主脚本缺失时的最小可见错误页：不依赖 Vue/app.js，静态岛先让位。
+// 主脚本缺失时的最小可见错误页：不依赖 Vue/app.js，hero 先让位。
 window.__YXQ_BOOT_FAIL__ = function(detail){
-  try { if (window.__YXQ_BOOT_CARD__) window.__YXQ_BOOT_CARD__.dismiss('boot-fail'); } catch (e) {}
+  try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss('boot-fail'); } catch (e) {}
   try {
     var root = document.getElementById('app');
     if (!root) return;
@@ -880,9 +930,9 @@ window.__YXQ_BOOT_FAIL__ = function(detail){
 };
 </script>
 <script>
-// 批次10（1B）渐进启动：三个主脚本只预下载，等壳内首卡静态岛照片绘制后再按序执行。
-// 根因：慢机 CPU×4 时 app.min.js 解析/执行 + Vue 挂载是 1.6–2.1s 长任务；若它在静态岛
-// 绘制前跑，LCP 会被推到任务结束（批次9 基线冷 3.74s / 热 1.91s）。这里先让静态岛提交
+// 批次10（1B）渐进启动：三个主脚本只预下载，等壳内首卡 hero 真正绘制后再按序执行。
+// 根因：慢机 CPU×4 时 app.min.js 解析/执行 + Vue 挂载是 1.6–2.1s 长任务；若它在 hero
+// 绘制前跑，LCP 会被推到任务结束（批次9 基线冷 3.74s / 热 1.91s）。这里先让 hero 提交
 // 一帧，再启动 Vue。启动前的点击/返回不绑定业务逻辑、不重放事件，只记录 pending 标记。
 (function(){
   var ASSETS = [
@@ -955,26 +1005,8 @@ window.__YXQ_BOOT_FAIL__ = function(detail){
     img.addEventListener('error', function(){ clearTimeout(cap); finish('hero-error'); }, { once: true });
   }
   function begin(){
-    var root = document.getElementById('boot-card');
-    if (!root || document.documentElement.classList.contains('boot-skip')) {
-      afterPaint(function(){ start(root ? 'deep-link' : 'no-boot-card'); });
-      return;
-    }
-    var img = root && root.querySelector('.boot-photo');
-    var waited = 0;
-    function poll(){
-      if (img && img.getAttribute('src')) {
-        waitForHeroPhoto(img, function(reason){ afterPaint(function(){ start(reason); }); });
-        return;
-      }
-      waited += 50;
-      if (waited >= HERO_SRC_POLL_MS) {
-        afterPaint(function(){ start('no-hero-photo'); });
-        return;
-      }
-      setTimeout(poll, 50);
-    }
-    poll();
+    // 纯品牌启动页不再等待图片；app 脚本尽早启动，splash 由 app.js 在真实卡就绪后移除。
+    afterPaint(function(){ start('splash'); });
   }
   function recordPendingInteract(){
     if (!window.__YXQ_APP_MOUNTED__) window.__YXQ_BOOT_PENDING_INTERACT__ = true;

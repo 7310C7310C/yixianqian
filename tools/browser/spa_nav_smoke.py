@@ -60,7 +60,7 @@ def dismiss_guides(page) -> None:
     """关掉首次进入的滑动引导/活动/更新说明等一次性弹层。"""
     page.wait_for_timeout(600)
     try:
-        page.locator("#boot-card").wait_for(state="detached", timeout=15000)
+        page.locator("#boot-splash").wait_for(state="detached", timeout=15000)
     except PlaywrightTimeoutError:
         pass
     for _ in range(6):

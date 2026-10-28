@@ -39,7 +39,7 @@ try {
 // runtime-only Vue（3.4.27 无编译器构建）不能再把 template 当兜底：渲染器或运行库缺失时
 // 必须给出可诊断的可见错误，而不是静默白屏。这里只依赖 DOM，不依赖 Vue。
 function yxqBootFailure(detail){
-  try{ if (window.__YXQ_BOOT_CARD__) window.__YXQ_BOOT_CARD__.dismiss('boot-fail'); }catch(e){}
+  try{ if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss('boot-fail'); }catch(e){}
   try{
     var root = document.getElementById('app');
     if (root){
@@ -737,11 +737,6 @@ const yxqApp = createApp({
     const cardsTotal = ref(0);
     const cardsVersion = ref(null);   // 服务端快照版本：变化则翻页序列失效需重拉
     const cardsLoadingMore = ref(false);
-    let pendingNextSwipes = 0; // 快速滑到数据窗口尾时先入队，分页回来按顺序补放
-    let deckLoadFailures = 0;
-    let deckRetryTimer = null;
-    let deckWarmupScheduled = false;
-    try { window.__YXQ_PENDING_SWIPES__ = 0; } catch (e) {}
     const cardsStart = ref(0);        // 已载窗口在全序中的起始偏移（循环翻页窗口游标）
     const cardsPageCache = new Map(); // offset -> {cards,total,version}：翻页回退时避免重复请求
     // /legacy/api/home 会在无筛选时把本人卡置顶，而 /legacy/api/cards 不返回本人卡。
@@ -2531,7 +2526,6 @@ const yxqApp = createApp({
       const homeCards = data.cards || [];
       const homeSelf = homeCards.find(c => c && c.is_self);
       if (homeSelf) selfCard.value = homeSelf;
-      resetDeckQueue();
       cards.value = homeCards; cardIndex.value = 0; photoIndex.value = 0;
       cardsTotal.value = (typeof data.cards_total === 'number' ? data.cards_total : cards.value.length);
       cardsVersion.value = null;
@@ -2542,7 +2536,7 @@ const yxqApp = createApp({
       };
       activities.value = data.activities || [];
       triggerPhotoLoading();
-      if (!document.getElementById('boot-card')) scheduleDeckWarmup();
+      schedulePreloadAround();
       maybeShowSwipeGuide();
       maybeShowActivityPromo();
       maybeShowUpdateNotes();
@@ -2774,12 +2768,9 @@ const yxqApp = createApp({
       if(guardOverlay('filter', () => { showFilter.value = false; })) return;
       showFilter.value = false;
     }
-    const preloadedImageURLs = new Set();
     function preloadImage(url) {
-      if (!url || preloadedImageURLs.has(url)) return;
-      preloadedImageURLs.add(url);
+      if (!url) return;
       const img = new Image();
-      try { img.fetchPriority = 'low'; } catch (e) {}
       img.src = url;
     }
     function cardPhotosOf(c) {
@@ -2790,48 +2781,22 @@ const yxqApp = createApp({
       if (c.photos_thumb && c.photos_thumb.length) return c.photos_thumb;
       return cardPhotosOf(c);
     }
-    function prefetchAllowed() {
-      if (nativeAdmin.value) return false;
-      if (page.value !== 'cards') return false;
-      if (document.documentElement.classList.contains('boot-skip')) return false;
-      const conn = navigator.connection || {};
-      if (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || '')) return false;
-      return true;
-    }
     function schedulePreloadAround() {
-      // 首卡已绘制后再预取，但不再固定等 5 秒；idle 超时 800ms 兜底。
-      if (!prefetchAllowed()) return;
+      // 首屏不抢带宽：下一张卡的首图等 load 后空闲再预取；切卡仍走 preloadAround()。
       var run = function(){ try { preloadAround(); } catch (e) {} };
       var start = function(){
-        if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 800 });
-        else setTimeout(run, 200);
+        if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 3000 });
+        else setTimeout(run, 1500);
       };
-      if (document.readyState === 'loading') setTimeout(start, 0);
-      else start();
+      if (document.readyState === 'complete') setTimeout(start, 5000);
+      else window.addEventListener('load', function(){ setTimeout(start, 5000); }, { once: true });
     }
     function preloadAround() {
-      // 预取后续两张的首图；再往后由分页/切卡时的 idle 预取补。
-      if (!prefetchAllowed()) return;
-      for (var i = 1; i <= 2; i++) {
-        const next = cards.value[cardIndex.value + i];
-        if (!next) continue;
-        const p = cardDisplayPhotos(next);
-        if (p[0]) preloadImage(p[0]);
-      }
-    }
-    function scheduleDeckWarmup() {
-      if (deckWarmupScheduled || !prefetchAllowed()) return;
-      deckWarmupScheduled = true;
-      schedulePreloadAround();
-      scheduleDeckPrefetch();
-    }
-    function scheduleDeckPrefetch() {
-      // 挂载后立即把下一页资料取进内存/缓存，不等用户滑到窗口尾。
-      if (!prefetchAllowed()) return;
-      if (cards.value.length >= 70) return; // 每 tab 回来不重复拉页
-      var run = function(){ try { loadMoreCards(); } catch (e) {} };
-      if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 1000 });
-      else setTimeout(run, 300);
+      // 只预取下一张卡片的首图；当前卡片的相邻照片由 deck 自身按需加载。
+      const next = cards.value[cardIndex.value + 1];
+      if (!next) return;
+      const p = cardDisplayPhotos(next);
+      if (p[0]) preloadImage(p[0]);
     }
     function cardsQuery() {
       const q = buildFilterQuery();
@@ -2861,11 +2826,7 @@ const yxqApp = createApp({
       };
     }
     async function loadCards(force) {
-      if (cards.value.length && !force) {
-        if (!document.getElementById('boot-card')) scheduleDeckWarmup();
-        return;
-      }
-      resetDeckQueue();
+      if (cards.value.length && !force) return; // 缓存
       if (force) cardsPageCache.clear();
       loadingCards.value = true;
       try {
@@ -2879,7 +2840,7 @@ const yxqApp = createApp({
         cardsStart.value = 0;
         cardIndex.value = 0; photoIndex.value = 0;
         triggerPhotoLoading();
-        if (!document.getElementById('boot-card')) scheduleDeckWarmup();
+        preloadAround();
         maybeShowSwipeGuide();
       }
       catch(e) { vant.showToast(e.message); }
@@ -2906,61 +2867,16 @@ const yxqApp = createApp({
         cardIndex.value = seqCur - headCap;
       }
     }
-    function setPendingNextSwipes(n) {
-      pendingNextSwipes = Math.max(0, n);
-      try { window.__YXQ_PENDING_SWIPES__ = pendingNextSwipes; } catch (e) {}
-    }
-    function resetDeckQueue() {
-      setPendingNextSwipes(0);
-      deckLoadFailures = 0;
-      deckWarmupScheduled = false;
-      if (deckRetryTimer) { clearTimeout(deckRetryTimer); deckRetryTimer = null; }
-    }
-    function flushPendingNextSwipes() {
-      const remaining = Math.max(0, cardsTotal.value - (cardsStart.value + cardIndex.value) - 1);
-      if (pendingNextSwipes > remaining) setPendingNextSwipes(remaining);
-      while (pendingNextSwipes > 0) {
-        if (cardIndex.value < cards.value.length - 1) {
-          slideDir.value = 'right';
-          cardIndex.value += 1;
-          photoIndex.value = 0;
-          photoSlideDir.value = '';
-          setPendingNextSwipes(pendingNextSwipes - 1);
-          continue;
-        }
-        if (cardsStart.value + cards.value.length < cardsTotal.value) {
-          if (!cardsLoadingMore.value) loadMoreCards();
-          return;
-        }
-        setPendingNextSwipes(0);
-        return;
-      }
-    }
     async function loadMoreCards() {
       if (cardsLoadingMore.value || cardsStart.value + cards.value.length >= cardsTotal.value) return;
       cardsLoadingMore.value = true;
       const nextOffset = cardsStart.value + cards.value.length;
-      const cachedPage = cardsPageCache.get(nextOffset);
-      if (cachedPage && (cachedPage.version == null || cardsVersion.value == null || cachedPage.version === cardsVersion.value)) {
-        const cachedExisting = new Set(cards.value.map(c => c.openid));
-        const cachedFresh = cachedPage.cards.filter(c => !cachedExisting.has(c.openid));
-        if (cachedFresh.length) {
-          cards.value = cards.value.concat(cachedFresh);
-          cardsTotal.value = cachedPage.total;
-          deckLoadFailures = 0;
-          trimCardsWindow();
-          cardsLoadingMore.value = false;
-          flushPendingNextSwipes();
-          return;
-        }
-      }
       try {
         const data = await api('/api/cards' + cardsQuery() + 'offset=' + deckOffsetParam(nextOffset) + '&limit=' + deckLimitParam(nextOffset));
         // users 快照版本变化：顺序已变，按当前全序位置重建窗口（不跳回第一张）
         if (data.version != null && cardsVersion.value !== null && data.version !== cardsVersion.value) {
           cardsVersion.value = data.version;
           cardsPageCache.clear();
-          resetDeckQueue();
           const seqCur = cardsStart.value + cardIndex.value;
           const off = Math.floor(seqCur / 50) * 50;
           const ok = await loadPageAt(off);
@@ -2985,30 +2901,10 @@ const yxqApp = createApp({
         }
         cards.value = cards.value.concat(fresh);
         cardsTotal.value = page.total;
-        deckLoadFailures = 0;
         trimCardsWindow();
-        flushPendingNextSwipes();
       }
-      catch(e) {
-        if (pendingNextSwipes > 0) {
-          deckLoadFailures += 1;
-          if (deckLoadFailures >= 2) {
-            resetDeckQueue();
-            vant.showToast('加载下一张失败，请稍后重试');
-          } else {
-            if (deckRetryTimer) clearTimeout(deckRetryTimer);
-            deckRetryTimer = setTimeout(() => {
-              deckRetryTimer = null;
-              if (!cardsLoadingMore.value && pendingNextSwipes > 0) loadMoreCards();
-            }, 700);
-          }
-        } else {
-          vant.showToast(e.message);
-        }
-      }
+      catch(e) { vant.showToast(e.message); }
       cardsLoadingMore.value = false;
-      // 队列可能跨页（>50 连滑）：本页 append 后继续 drain，必要时再发下一页。
-      if (pendingNextSwipes > 0) flushPendingNextSwipes();
     }
     function onPhotoError() { clearTimeout(photoLoadingTimer); photoLoading.value = false; }
     // 弱网图片自愈：加载失败自动重试（逐次加 _r 穿透坏缓存），仍失败才执行 done（如清空占位）
@@ -3048,7 +2944,6 @@ const yxqApp = createApp({
     function onCardTouchMove(e) {}
     async function loadPageAt(offset) {
       // 整窗替换：版本变化时按全序位置重建窗口；失败返回 false 不抛异常
-      resetDeckQueue();
       try {
       const cached = cardsPageCache.get(offset);
       if (cached && (cached.version == null || cardsVersion.value == null || cached.version === cardsVersion.value)) {
@@ -3112,7 +3007,6 @@ const yxqApp = createApp({
     function switchCard(dir) {
       const total = cardsTotal.value;
       if (total <= 1) return;
-      if (dir > 0) setPendingNextSwipes(0);
       const n = cards.value.length;
       const seq = cardsStart.value + cardIndex.value;  // 当前全序位置
       const canMove = dir < 0 ? (cardIndex.value < n - 1 || seq < total - 1) : (cardIndex.value > 0 || seq > 0);
@@ -3130,10 +3024,15 @@ const yxqApp = createApp({
           }
           return;
         } else if (seq < total - 1) {
-          // 窗口尾且后面还有：手势先入队，分页回来按顺序补放；不吞掉快速连滑。
-          const remaining = Math.max(0, total - seq - 1);
-          setPendingNextSwipes(Math.min(remaining, pendingNextSwipes + 1));
-          if (!cardsLoadingMore.value) loadMoreCards();
+          // 窗口尾且后面还有：加载下一页后前进
+          if (!cardsLoadingMore.value) {
+            loadMoreCards().then(() => {
+              if (cardIndex.value < cards.value.length - 1) {
+                cardIndex.value += 1;
+                slideDir.value = 'right';
+              }
+            }).catch(() => {});
+          }
           photoIndex.value = 0;
           photoSlideDir.value = '';
           return;
@@ -5818,262 +5717,87 @@ const yxqApp = createApp({
       setTimeout(schedulePhotoCropRecalc, 360);
     });
 
-    // ===== 壳内首卡静态岛：真实卡绘制后原子交接 =====
-    // 静态岛的 DOM/几何由 Go 服务端渲染（与 .swipe-card 同一套 CSS）；这里只决定
-    // 何时交接：真实卡首图 decode + 双 rAF 后同一帧移除，不固定等待、不为 LCP 压 UI。
-    let bootCardAnchor = null;
-    let bootCardSettled = false;
-    let bootCardHardTimer = null;
-    function bootCardApi() { return window.__YXQ_BOOT_CARD__; }
-    function bootCardActive(sel) {
-      const slide = document.querySelector('#boot-card .boot-deck-slide.is-active');
-      return slide ? slide.querySelector(sel) : document.querySelector('#boot-card ' + sel);
-    }
-    function syncBootDeckIndex() {
-      const deck = window.__YXQ_BOOT_DECK__;
-      if (!deck || !deck.openid) return;
-      const at = cards.value.findIndex((c) => (c.openid || '') === deck.openid);
-      if (at >= 0 && at !== cardIndex.value) {
-        cardIndex.value = at;
-        photoIndex.value = 0;
-        triggerPhotoLoading();
-      }
-    }
-    let bootCardHandoff = null;
-    let bootCardProgrammaticScroll = false;
-    let bootCardHandoffTimer = null;
-    function bootCardKey() {
-      const c = currentCard.value;
-      if (!c) return '';
-      return c.openid || (c.id != null ? String(c.id) : '');
-    }
-    function applyBootCardScroll(el, top) {
-      if (!el) return;
-      bootCardProgrammaticScroll = true;
-      el.scrollTop = top;
-      setTimeout(() => { bootCardProgrammaticScroll = false; }, 100);
-    }
-    function attachBootCardScrollCancel(el) {
-      if (!el || el.__yxqBootCardScroll) return;
-      el.__yxqBootCardScroll = true;
-      el.addEventListener('scroll', () => {
-        if (bootCardProgrammaticScroll) return;
-        if (bootCardHandoff) bootCardHandoff.cancelled = true;
-      }, { passive: true });
-    }
-    function restoreBootCardScroll() {
-      if (!bootCardHandoff || bootCardHandoff.cancelled) { bootCardHandoff = null; return; }
-      if (Date.now() > bootCardHandoff.until || page.value !== 'cards') return;
-      if (bootCardKey() !== bootCardHandoff.key) { bootCardHandoff = null; return; }
-      const el = document.querySelector('#app .swipe-card .card-info');
-      if (!el) return;
-      // tab 返回/重渲染会换新元素；必须给新元素补挂取消监听，否则会抢用户滚动。
-      attachBootCardScrollCancel(el);
-      if (Math.abs(el.scrollTop - bootCardHandoff.top) > 2) {
-        applyBootCardScroll(el, bootCardHandoff.top);
-      }
-    }
-    function armBootCardHandoffGuard() {
-      if (bootCardHandoffTimer) return;
-      let ticks = 0;
-      bootCardHandoffTimer = setInterval(() => {
-        if (!bootCardHandoff || bootCardHandoff.cancelled || ++ticks > 36) {
-          clearInterval(bootCardHandoffTimer);
-          bootCardHandoffTimer = null;
-          return;
+    // ===== 壳内首卡 hero：等 Vue 首卡图真正绘制后再移除 =====
+    // hero 的 DOM/几何由 index.html 静态渲染（与 .swipe-card 同一套 CSS），
+    // 这里只决定何时淡出：首卡图 decode+paint 后；无卡/无图/切页/换卡/门禁/失败立即移除。
+    let bootHeroAnchor = null;
+    let bootHeroSettled = false;
+    let bootHeroHardTimer = null;
+    let bootHeroLastLongTaskEnd = 0;
+    try {
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) {
+          bootHeroLastLongTaskEnd = Math.max(bootHeroLastLongTaskEnd, e.startTime + e.duration);
         }
-        restoreBootCardScroll();
-      }, 50);
+      }).observe({type: 'longtask', buffered: true});
+    } catch (_) {}
+    function dismissBootHero(reason) {
+      try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss(reason); } catch (_) {}
     }
-    // 任何交接/硬上限/切页移除前都当场把静态岛滚动位置交给真实卡（目标必须限定 #app）。
-    // 首屏期间的 deck 刷新/重渲染可能把 scrollTop 归零，因此保留一个短时守卫；
-    // 用户手动滚动真实卡时立即取消，避免抢用户操作。
-    function syncBootCardScroll() {
-      try {
-        const bootInfo = bootCardActive('.card-info');
-        const realInfo = document.querySelector('#app .swipe-card .card-info');
-        if (!bootInfo || !realInfo || bootInfo.scrollTop <= 0) return;
-        const key = bootCardKey();
-        const top = bootInfo.scrollTop;
-        applyBootCardScroll(realInfo, top);
-        bootCardHandoff = { key: key, top: top, until: Date.now() + 1800, cancelled: false };
-        attachBootCardScrollCancel(realInfo);
-        armBootCardHandoffGuard();
-      } catch (_) {}
-    }
-    function dismissBootCard(reason) {
-      syncBootCardScroll();
-      try { const api = bootCardApi(); if (api) api.dismiss(reason); } catch (_) {}
-      scheduleDeckWarmup();
-    }
-    // 硬上限从 navigationStart 起算 5s：无论 loadHome 是否挂起，都不能让静态岛无限覆盖。
-    function armBootCardHardLimit() {
-      if (bootCardHardTimer) return;
-      const remain = Math.max(1500, 5000 - performance.now()); // 挂载晚于 5s 也至少留 1.5s 窗口
-      bootCardHardTimer = setTimeout(() => {
-        bootCardHardTimer = null;
-        // 只在 loadHome 仍挂起时硬切到 Vue 骨架；数据已就绪时由 settleBootCard
-        // 等真实卡图片，完整静态卡不应被 5s 定时器提前移除（用户可能正在读/滚动）。
-        if (!bootLoading.value) return;
-        const api = bootCardApi();
-        if (!api || !api.dismissed()) dismissBootCard('hard-timeout');
+    // 硬上限从 navigationStart 起算 6s：loadHome 卡住时 settleBootHero 不会启动，
+    // 这里确保 hero 不会无限覆盖；移除后露出 Vue 启动骨架（bootLoading 仍为 true）。
+    function armBootHeroHardLimit() {
+      if (bootHeroHardTimer) return;
+      const remain = Math.max(1500, 6000 - performance.now());
+      bootHeroHardTimer = setTimeout(() => {
+        bootHeroHardTimer = null;
+        // 只在 loadHome 仍挂起时强制移除；正常慢图由 settleBootHero 的绘制/超时路径处理，
+        // 避免把已经下载中的首卡图在 6s 前误删。
+        if (bootLoading.value && window.__YXQ_LOAD_HOME_STARTED__) dismissBootHero('load-timeout');
       }, remain);
     }
-    // 把静态岛的人脸裁切同步到真实卡算法，交接瞬间不垂直跳。
-    function syncBootCardCrop() {
-      try {
-        const api = bootCardApi();
-        const heroImg = bootCardActive('.boot-photo');
-        const heroWrap = heroImg && heroImg.closest('.card-photo-wrap');
-        const faces = (currentCard.value && currentCard.value.faces) || [];
-        if (!api || !heroImg || !heroWrap) return;
-        const pos = computeFaceCrop(faces[0], heroWrap.clientWidth, heroWrap.clientHeight,
-          heroImg.naturalWidth, heroImg.naturalHeight);
-        if (pos) api.setObjectPosition(pos);
-      } catch (_) {}
+    // 等首屏长任务（Vant 执行/mount/数据渲染）结束并完成一帧绘制后再移除 hero。
+    // 只等 complete 会让 hero 在长任务开始前被移除，真实卡成为新的 LCP 候选（实测 6.5s）。
+    function dismissHeroAfterPaint() {
+      // 品牌启动页不再等待 2s/长任务静默；真实卡首图 decode 后双 rAF 即撤。
+      window.__YXQ_CARD_READY_AT__ = Math.round(performance.now());
+      requestAnimationFrame(() => requestAnimationFrame(() => dismissBootHero('painted')));
     }
-    function dismissBootCardAfterPaint() {
-      requestAnimationFrame(() => requestAnimationFrame(() => dismissBootCard('painted')));
-    }
-    function settleBootCard() {
-      if (bootCardSettled) return;
-      bootCardSettled = true;
-      const api = bootCardApi();
-      if (!api || api.dismissed()) return;
-      if (page.value !== 'cards' || !currentCard.value) { dismissBootCard('not-deck'); return; }
-      bootCardAnchor = {
+    function settleBootHero() {
+      if (bootHeroSettled) return;
+      bootHeroSettled = true;
+      if (!window.__YXQ_HERO__ || window.__YXQ_HERO__.dismissed()) return;
+      if (page.value !== 'cards' || !currentCard.value) { dismissBootHero('not-deck'); return; }
+      bootHeroAnchor = {
         start: cardsStart.value,
         index: cardIndex.value,
         oid: currentCard.value.openid || '',
       };
-      if (!currentPhotoList.value[0]) { dismissBootCard('no-photo'); return; }
-      // 真实卡首图通常与静态岛同 URL（已 preload/缓存）；最多等 2.5s，避免慢图锁住交接。
-      const deadline = Date.now() + 2500;
+      if (!currentPhotoList.value[0]) { dismissBootHero('no-photo'); return; }
+      const deadline = Date.now() + 8000;
       const step = () => {
-        if (api.dismissed()) return;
+        if (window.__YXQ_HERO__.dismissed()) return;
         if (page.value !== 'cards' || !currentCard.value ||
-            (currentCard.value.openid || '') !== bootCardAnchor.oid) {
-          dismissBootCard('card-changed');
+            (currentCard.value.openid || '') !== bootHeroAnchor.oid) {
+          dismissBootHero('card-changed');
           return;
         }
-        const img = document.querySelector('#app .swipe-card .card-photo-item');
+        const img = document.querySelector('.swipe-card .card-photo-item');
         if (img && img.complete && img.naturalWidth) {
-          syncBootCardCrop();
-          // 滚动位置由 dismissBootCard 在移除前统一交接（硬上限/切页等路径也覆盖）。
-          const done = () => dismissBootCardAfterPaint();
-          if (img.decode) img.decode().then(done, done); else done();
+          dismissHeroAfterPaint();
           return;
         }
-        if (Date.now() > deadline) { dismissBootCard('image-timeout'); return; }
+        if (Date.now() > deadline) { dismissBootHero('timeout'); return; }
         setTimeout(step, 60);
       };
       step();
     }
     watch(bootLoading, (v) => {
       window.__YXQ_LOAD_HOME_DONE__ = !v;
-      if (!v) {
-        window.__YXQ_LOAD_HOME_DONE_AT__ = Math.round(performance.now());
-        // 静态迷你牌堆可能已滑到第 2/3 张；按 openid 把真实卡同步到同一张。
-        syncBootDeckIndex();
-        nextTick(settleBootCard);
-      }
+      if (!v) nextTick(settleBootHero);
     });
-    watch(page, (v) => {
-      if (v === 'cards') {
-        try { document.documentElement.classList.remove('boot-skip'); } catch (e) {}
-        if (!document.getElementById('boot-card')) nextTick(() => scheduleDeckWarmup());
-      } else {
-        dismissBootCard('tab');
-      }
-    });
+    watch(page, (v) => { if (v !== 'cards') dismissBootHero('tab'); });
     watch([cardIndex, cardsStart], ([idx, start]) => {
-      if (!bootCardAnchor) return;
-      if (idx !== bootCardAnchor.index || start !== bootCardAnchor.start) nextTick(() => dismissBootCard('card-changed'));
+      if (!bootHeroAnchor) return;
+      if (idx !== bootHeroAnchor.index || start !== bootHeroAnchor.start) dismissBootHero('card-changed');
     });
-    watch([bootError, gateMessage], ([err, gate]) => { if (err || gate) dismissBootCard('gate'); });
-    // 首卡人脸裁切（photoPositions[0]）可能在首图 @load 之后才算出；持续同步给静态岛，
-    // 保证交接前后裁切一致（dismissed 后 setObjectPosition 自动 no-op）。
-    watch(photoPositions, (arr) => {
-      if (page.value !== 'cards') return;
-      const pos = arr && arr[0];
-      if (!pos) return;
-      try {
-        const api = bootCardApi();
-        if (api) api.setObjectPosition(pos);
-      } catch (_) {}
-    }, { deep: true });
-    // 切回牵线页时补一次滚动守卫（deck 重渲染可能已把资料区拉回顶部）。
-    watch(page, (v) => { if (v === 'cards' && bootCardHandoff) nextTick(restoreBootCardScroll); });
-
+    watch([bootError, gateMessage], ([err, gate]) => { if (err || gate) dismissBootHero('gate'); });
     onMounted(() => {
       window.__YXQ_APP_MOUNTED__ = true;
-      // inline pointerdown 的交互 dismiss 必须走这里，才能先 syncBootCardScroll 再移除。
-      window.__YXQ_BOOT_CARD_HANDOFF__ = dismissBootCard;
-      // 静态迷你牌堆滑动后（app 已挂载）同步真实卡索引；boot 未完成时等 watch(bootLoading)。
-      window.__YXQ_BOOT_DECK_ON_CHANGE__ = () => {
-        if (!bootLoading.value) nextTick(syncBootDeckIndex);
-      };
-      // 数据/快速滑动验收使用的探针；不影响正常交互。
-      window.__YXQ_SWITCH_CARD__ = switchCard;
-      window.__YXQ_DECK_DEBUG__ = () => ({
-        len: cards.value.length,
-        start: cardsStart.value,
-        index: cardIndex.value,
-        total: cardsTotal.value,
-        pending: pendingNextSwipes,
-      });
-      // 点击/触摸判定放在 app.js：触摸滑动 >10px 或长按不 dismiss，保证 .card-info 可滚动。
-      try {
-        const bootEl = document.getElementById('boot-card');
-        if (bootEl) {
-          let tap = null;
-          const resetTap = () => { tap = null; };
-          bootEl.addEventListener('pointerdown', (e) => {
-            if (!e.target || !e.target.closest || !e.target.closest('#boot-card')) return;
-            tap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), moved: false };
-          }, { passive: true });
-          bootEl.addEventListener('pointermove', (e) => {
-            if (!tap || tap.id !== e.pointerId) return;
-            if (Math.abs(e.clientX - tap.x) > 10 || Math.abs(e.clientY - tap.y) > 10) tap.moved = true;
-          }, { passive: true });
-          bootEl.addEventListener('pointercancel', resetTap, { passive: true });
-          // 某些移动 WebView/触摸序列只给 touch 事件，补一层 movement 判定。
-          bootEl.addEventListener('touchstart', (e) => {
-            if (tap || !e.touches || !e.touches[0]) return;
-            const t = e.touches[0];
-            tap = { id: null, x: t.clientX, y: t.clientY, t: Date.now(), moved: false };
-          }, { passive: true });
-          bootEl.addEventListener('touchmove', (e) => {
-            if (!tap || !e.touches || !e.touches[0]) return;
-            const t = e.touches[0];
-            if (Math.abs(t.clientX - tap.x) > 10 || Math.abs(t.clientY - tap.y) > 10) tap.moved = true;
-          }, { passive: true });
-          function finishTap(x, y, target) {
-            if (!tap) return;
-            const moved = tap.moved || Math.abs(x - tap.x) > 10 || Math.abs(y - tap.y) > 10;
-            const longPress = Date.now() - tap.t > 700;
-            const inside = target && target.closest && target.closest('#boot-card');
-            resetTap();
-            if (moved || longPress || !inside || !window.__YXQ_APP_MOUNTED__) return;
-            dismissBootCard('interact');
-          }
-          bootEl.addEventListener('pointerup', (e) => {
-            if (!tap || tap.id !== e.pointerId) return;
-            finishTap(e.clientX, e.clientY, e.target);
-          }, { passive: true });
-          // touch-only WebView（无 pointer 事件）：touchend 也必须完成 tap 判定。
-          bootEl.addEventListener('touchend', (e) => {
-            const t = e.changedTouches && e.changedTouches[0];
-            if (!t) return;
-            finishTap(t.clientX, t.clientY, t.target || e.target);
-          }, { passive: true });
-          bootEl.addEventListener('touchcancel', resetTap, { passive: true });
-        }
-      } catch (_) {}
       window.__YXQ_LOAD_HOME_STARTED__ = false;
       window.__YXQ_LOAD_HOME_DONE__ = false;
-      armBootCardHardLimit();
-      // 首卡静态岛绘制 + 应用挂载后，likes 立即预取，其余 chunk LCP 后 idle；
+      armBootHeroHardLimit();
+      // 首屏 hero 绘制 + 应用挂载后，likes 立即预取，其余 chunk LCP 后 idle；
       // 管理台 iframe 不预取，避免占用原生管理页带宽。
       if (!nativeAdmin.value) { yxqPrefetchPageChunks(); prefetchPhotoSwipe(); }
       // 可视区域变化：更新 --yxq-vh（壳内已尽早设过）并重算人脸裁切。

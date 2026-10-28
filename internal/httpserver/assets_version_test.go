@@ -58,8 +58,8 @@ func TestLegacyShellHasNoLargeInlineAssets(t *testing.T) {
 			t.Fatalf("shell still loads %s synchronously", banned)
 		}
 	}
-	if !strings.Contains(html, "YXQ_BOOT_CARD") {
-		t.Fatal("shell is missing the boot card placeholder")
+	if !strings.Contains(html, "boot-splash") {
+		t.Fatal("shell is missing the boot splash")
 	}
 }
 
@@ -98,77 +98,28 @@ func TestRootRenderIsPrecompiled(t *testing.T) {
 	}
 }
 
-func TestLegacyShellBootCard(t *testing.T) {
+func TestLegacyShellRendersSplash(t *testing.T) {
 	html := readEmbedded(t, "static/legacy/index.html")
 	for _, want := range []string{
-		`<!--YXQ_BOOT_CARD-->`,
-		`boot-card.js?v=__ASSET_URL_VERSION__`,
-		`boot-skip`,
+		`id="boot-splash"`,
+		`boot-splash-heart`,
+		`boot-splash-brand`,
+		`一线牵`,
+		`__YXQ_HERO__`,
 	} {
 		if !strings.Contains(html, want) {
-			t.Fatalf("shell is missing boot card marker %q", want)
-		}
-	}
-	bootCardJS := readEmbedded(t, "static/legacy/boot-card.js")
-	for _, want := range []string{
-		`__YXQ_BOOT_CARD__`,
-		`data-faces`,
-		`boot-deck-track`,
-		`setIndex`,
-		`__YXQ_BOOT_DECK__`,
-		`appendSlide`,
-		`fillCompactSlide`,
-		`ensureSlides`,
-	} {
-		if !strings.Contains(bootCardJS, want) {
-			t.Fatalf("boot-card.js is missing %q", want)
-		}
-	}
-	if strings.Contains(html, `id="boot-skeleton"`) {
-		t.Fatal("shell still contains the old boot-skeleton hero")
-	}
-	bootCard := readEmbedded(t, "templates/partials/boot_card.tmpl")
-	for _, want := range []string{`id="boot-card"`, `class="boot-tabbar"`, `card-photo-overlay`, `card-info`, `profile-section-title`, `boot-deck-track`, `boot-deck-slide`, `data-src`} {
-		if !strings.Contains(bootCard, want) {
-			t.Fatalf("boot_card.tmpl is missing %q", want)
+			t.Fatalf("shell is missing splash marker %q", want)
 		}
 	}
 	css := readEmbedded(t, "static/legacy/app.css")
 	for _, want := range []string{
-		"#boot-card",
-		"#boot-card.boot-card-out",
-		"#boot-card.boot-card-slow",
-		"#boot-card .boot-tab-text",
-		"#boot-card .boot-deck-track",
-		"#boot-card .boot-deck-slide",
-		"object-fit: cover",
-		"height: calc(50px + env(safe-area-inset-bottom))",
+		"#boot-splash",
+		"#boot-splash.boot-splash-out",
+		"#boot-splash .boot-splash-brand",
 		"prefers-reduced-motion",
 	} {
 		if !strings.Contains(css, want) {
-			t.Fatalf("app.css is missing boot card rule %q", want)
-		}
-	}
-	// 批次10（1B）：主脚本不得以静态 defer 标签在首卡绘制前执行；壳必须用
-	// 预下载 + 首卡绘制后按序注入，并保留启动前交互/错误兜底标记。
-	for _, forbidden := range []string{
-		`<script src="lib/vue.global.prod.js`,
-		`<script src="app.render.js`,
-		`<script src="app.min.js`,
-	} {
-		if strings.Contains(html, forbidden) {
-			t.Fatalf("shell still executes %q before the first card paints", forbidden)
-		}
-	}
-	for _, want := range []string{
-		`window.__YXQ_APP_START_AT__`,
-		`window.__YXQ_APP_START_REASON__`,
-		`yxq-hero-ready`,
-		`window.__YXQ_BOOT_PENDING_INTERACT__`,
-		`window.__YXQ_BOOT_FAIL__`,
-	} {
-		if !strings.Contains(html, want) {
-			t.Fatalf("shell is missing progressive-boot marker %q", want)
+			t.Fatalf("app.css is missing splash rule %q", want)
 		}
 	}
 }
@@ -184,7 +135,7 @@ func TestDeckRendersOnlyCurrentCard(t *testing.T) {
 	js := readEmbedded(t, "static/legacy/app.js")
 	for _, want := range []string{
 		"const currentCard = computed",
-		"cards.value[cardIndex.value + i]",
+		"cards.value[cardIndex.value + 1]",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("app.js is missing single-card window marker %q", want)
@@ -216,10 +167,8 @@ func TestDeckLoadsOnlyAdjacentPhotos(t *testing.T) {
 	if !strings.Contains(js, "function photoSrc(i)") {
 		t.Fatal("app.js is missing photoSrc")
 	}
-	for _, want := range []string{"for (var i = 1; i <= 2; i++)", "preloadedImageURLs"} {
-		if !strings.Contains(js, want) {
-			t.Fatalf("preloadAround should prefetch the next two cards and dedupe (%q missing)", want)
-		}
+	if !strings.Contains(js, "cards.value[cardIndex.value + 1]") {
+		t.Fatal("preloadAround should only prefetch the next card")
 	}
 }
 

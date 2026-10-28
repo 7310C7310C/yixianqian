@@ -144,7 +144,7 @@ def dismiss_guides(page) -> None:
     """
     page.wait_for_timeout(800)
     try:
-        page.locator("#boot-card").wait_for(state="detached", timeout=15000)
+        page.locator("#boot-splash").wait_for(state="detached", timeout=15000)
     except PlaywrightTimeoutError:
         pass
     for _ in range(6):

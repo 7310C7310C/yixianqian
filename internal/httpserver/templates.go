@@ -32,32 +32,9 @@ import (
 // added the v1 heart icon set (svg/png/ico) to the template links.
 // 2026-10-28 (remove self-card hint): 35 invalidated app.css / app.min.js /
 // app.render.js after dropping the redundant first-card bubble.
-// 2026-10-28 (boot card island): 36 invalidated index.html / app.css / app.min.js
-// after replacing the bare hero with the server-rendered complete first card.
-// 2026-10-28 (boot card takeover fix): 37 invalidated index.html / app.min.js after
-// scoping the real-card selector/scroll transfer to #app and skipping restore.
-// 2026-10-28 (boot card staging fixes): 38 invalidated index.html / app.min.js after
-// early face-crop retries and scroll handoff on every dismissal path.
-// 2026-10-28 (boot card interaction handoff): 39 invalidated index.html / app.min.js
-// after routing inline pointerdown through the app scroll-handoff hook.
-// 2026-10-28 (boot badge height): 40 invalidated app.css / critical CSS after matching
-// the static island badge line box to the real card badge.
-// 2026-10-28 (boot card polish): 41 invalidated app.css/app.js after blocking click-through,
-// card actions, conditional preload and scroll handoff guard.
-// 2026-10-28 (boot card touch/deeplink): 42 invalidated index.html/app.css/app.js after
-// touch tap-vs-scroll, data-src image and new-element scroll cancel.
-// 2026-10-28 (boot card touch fallback): 43 invalidated app.js after touchmove movement
-// fallback for mobile WebViews without pointermove.
-// 2026-10-28 (boot card touchend): 44 invalidated app.js after touch-only touchend tap.
-// 2026-10-28 (boot card hard cap): 45 invalidated app.js after only hard-cutting when
-// loadHome is still pending (not while a complete static card is being read).
-// 2026-10-28 (boot mini deck): 46 invalidated index.html/app.css/app.js/boot-card.js after
-// a 3-card static deck and earlier login prefetch.
-// 2026-10-28 (20-card fast deck): 47 invalidated data/asset version after bootstrap 20 cards,
-// static island cloning and fast-swipe queue.
-// 2026-10-28 (LCP-safe warmup): 48 delays page/image prefetch until the boot card hands off.
-// 2026-10-28 (slower boot): 49 extends the static-card hard cap 4s→5s after 20-card bootstrap.
-const assetVersion = "49"
+// 2026-10-29 (brand splash): 50 invalidated index/app.css/app.min.js after reverting
+// the static island and adding the pure heart + 一线牵 splash.
+const assetVersion = "50"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
@@ -96,10 +73,6 @@ type PageData struct {
 	// chrome and loads the ASCII-only home.css/auth.css pair; Chinese copy is
 	// injected by /static/public-copy.js.
 	ScanSafe bool
-	// PrefetchSPA warms the SPA shell assets after a login/activate/register
-	// page loads, so the first authenticated `/` visit is not a cold bundle
-	// download. The layout skips it on Save-Data/2G connections.
-	PrefetchSPA bool
 	// CopyPage selects the public-copy.js copy table (ASCII value). When set,
 	// the layout loads public-copy.js and exposes the value as
 	// <body data-copy-page>.
@@ -128,9 +101,6 @@ type PageData struct {
 // own "content" block while sharing the layout.
 type Templates struct {
 	pages map[string]*template.Template
-	// base holds the shared layout + partials. It is used to render the
-	// server-side first-card island (boot_card) outside the SPA root.
-	base *template.Template
 }
 
 // LoadTemplates parses embedded templates once at startup.
@@ -153,7 +123,7 @@ func LoadTemplates() (*Templates, error) {
 		return nil, fmt.Errorf("httpserver: no page templates found")
 	}
 
-	out := &Templates{pages: make(map[string]*template.Template, len(pageFiles)), base: base}
+	out := &Templates{pages: make(map[string]*template.Template, len(pageFiles))}
 	for _, file := range pageFiles {
 		name := strings.TrimSuffix(path.Base(file), ".tmpl")
 		clone, err := base.Clone()
@@ -181,19 +151,6 @@ func (t *Templates) Render(w io.Writer, page string, data PageData) error {
 func (t *Templates) HasPage(page string) bool {
 	_, ok := t.pages[page]
 	return ok
-}
-
-// RenderBootCard renders the server-side first-card island into the SPA shell.
-// The template lives in templates/partials/boot_card.tmpl and is parsed with the
-// shared base set so it cannot drift into a second template engine.
-func (t *Templates) RenderBootCard(w io.Writer, data any) error {
-	if t == nil || t.base == nil {
-		return fmt.Errorf("httpserver: templates not loaded")
-	}
-	if t.base.Lookup("boot_card") == nil {
-		return fmt.Errorf("httpserver: boot_card template missing")
-	}
-	return t.base.ExecuteTemplate(w, "boot_card", data)
 }
 
 // renderPage buffers output so a template failure cannot emit a half page.

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -18,8 +19,6 @@ import (
 
 // legacyIndexPath is the v1 Vue SPA entrypoint bundled with the binary.
 const legacyIndexPath = "static/legacy/index.html"
-
-const bootstrapPreloadScript = `<script>(function(){try{if(document.documentElement.classList.contains("boot-skip"))return;var u=window.__YXQ_PRELOAD__;if(!u)return;var l=document.createElement("link");l.rel="preload";l.as="image";l.href=u;l.setAttribute("fetchpriority","high");document.head.appendChild(l);}catch(e){}})();</script>`
 
 // SPA 外壳带一个固定的启动旗标，供内嵌的 Vue 应用判断页面是否由已登录
 // 用户请求。旗标本身不含账号资料；登录用户的首页数据由 bootstrap 注入，
@@ -108,58 +107,29 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	// shortcut; the shell must render and the client falls back to the API.
 	boot := []byte("null")
 	preload := ""
-	bootCardHTML := ""
 	if a.db != nil {
 		bootCtx, cancel := context.WithTimeout(r.Context(), 800*time.Millisecond)
-		// 牌堆页需要 20 张给快速滑动；native_admin 不是牌堆，只保留最小 bootstrap。
-		bootstrapLimit := 20
-		if r.URL.Query().Get("native_admin") == "1" {
-			bootstrapLimit = 3
-		}
-		payload, bootErr := a.buildLegacyHomePayloadLimit(bootCtx, r, user, a.clock.Now(), bootstrapLimit)
+		payload, bootErr := a.buildLegacyHomePayloadLimit(bootCtx, r, user, a.clock.Now(), 3)
 		cancel()
 		if bootErr != nil {
 			a.logger(r).Warn("legacy shell bootstrap skipped", "error", bootErr, "user_id", user.ID)
+		} else if raw, mErr := json.Marshal(sanitizeBootstrap(payload)); mErr != nil {
+			a.logger(r).Warn("legacy shell bootstrap marshal failed", "error", mErr, "user_id", user.ID)
 		} else {
-			sanitized, _ := sanitizeBootstrap(payload).(map[string]any)
-			raw, mErr := json.Marshal(sanitized)
-			if mErr != nil {
-				a.logger(r).Warn("legacy shell bootstrap marshal failed", "error", mErr, "user_id", user.ID)
-			} else {
-				// json.Marshal escapes HTML; also neutralise the script terminator.
-				boot = bytes.ReplaceAll(raw, []byte("</"), []byte("<\\/"))
-				// native_admin 的 SPA 页不是牌堆：不 preload 首卡图，也不渲染静态岛。
-				if r.URL.Query().Get("native_admin") != "1" {
-					if src := bootstrapPreloadURL(sanitized); src != "" {
-						if raw, pErr := json.Marshal(src); pErr == nil {
-							// 深链 #/likes、#/activities 会先由 head script 加 boot-skip；
-							// preload 改由客户端按需创建，避免深链白拉首卡缩图。
-							preload = "<script>window.__YXQ_PRELOAD__=" + string(raw) + ";</script>" + bootstrapPreloadScript
-						}
-					}
-					// 首卡静态岛：首屏直接是最终卡片，而不是裸图 + 灰条。
-					// 无卡/门禁时 bootCardFromPayload 返回 false。
-					if a.tpl != nil {
-						if data, ok := bootCardFromPayloadLimit(sanitized, 3); ok {
-							var card bytes.Buffer
-							if err := a.tpl.RenderBootCard(&card, data); err != nil {
-								a.logger(r).Warn("legacy boot card render skipped", "error", err, "user_id", user.ID)
-							} else {
-								bootCardHTML = card.String()
-							}
-						}
-					}
-				}
+			// json.Marshal escapes HTML; also neutralise the script terminator.
+			boot = bytes.ReplaceAll(raw, []byte("</"), []byte("<\\/"))
+			if src := bootstrapPreloadURL(payload); src != "" {
+				preload = `<link rel="preload" as="image" href="` + html.EscapeString(src) + `" fetchpriority="high">`
 			}
 		}
 	}
 	body = bytes.Replace(body, []byte("window.__YXQ_BOOTSTRAP__=null;"),
 		append(append([]byte("window.__YXQ_BOOTSTRAP__="), boot...), ';'), 1)
 	body = bytes.Replace(body, []byte("<!--YXQ_BOOTSTRAP_PRELOAD-->"), []byte(preload), 1)
-	body = bytes.Replace(body, []byte("<!--YXQ_BOOT_CARD-->"), []byte(bootCardHTML), 1)
-	// The ETag covers the rendered shell, bootstrap bytes and boot card, so a
-	// 304 only reuses a body whose first-screen content is byte-identical.
-	bootSum := sha256.Sum256(append(append([]byte{}, boot...), bootCardHTML...))
+	// The ETag covers the rendered shell *and* the bootstrap bytes, so a 304
+	// only ever reuses a body whose embedded personal data is byte-identical.
+	// 64 bits of the payload hash keeps accidental collisions negligible.
+	bootSum := sha256.Sum256(boot)
 	etag := fmt.Sprintf(`"shell-%s-auth-a%s-u%d-%x"`, platform.Version, assetVersion, user.ID, bootSum[:8])
 	w.Header().Add("Vary", "Cookie")
 	w.Header().Set("ETag", etag)
@@ -182,7 +152,8 @@ func bootstrapPreloadURL(payload map[string]any) string {
 	if !ok || len(cards) == 0 {
 		return ""
 	}
-	return firstCardPhoto(cards[0])
+	photo, _ := cards[0]["photo"].(string)
+	return photo
 }
 
 // sensitiveBootstrapKey matches by pattern rather than by an exact list: the
