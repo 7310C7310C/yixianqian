@@ -585,13 +585,20 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
         def bad_boot_photo(route) -> None:
             response = route.fetch()
             body = re.sub(
-                r'(class="card-photo-item boot-photo" src=")[^"]*(")',
+                r'(class="card-photo-item boot-photo" data-src=")[^"]*(")',
                 r'\1/cards/photo/00000000-0000-0000-0000-000000000000?size=thumb\2',
                 response.text(), count=1, flags=re.S,
             )
             route.fulfill(response=response, body=body)
 
         context.route(base_url.rstrip("/") + "/app", bad_boot_photo)
+        # 静态岛首图 404，真实卡图片立即返回，确保“等真实卡”可证伪。
+        context.route("**/cards/photo/00000000-0000-0000-0000-000000000000**",
+                      lambda route: route.fulfill(status=404, content_type="text/plain", body="missing"))
+        context.route("**/cards/photo/**",
+                      lambda route: route.fulfill(status=200, content_type="image/png", body=TINY_PNG))
+        context.route("**/profile/photo/**",
+                      lambda route: route.fulfill(status=200, content_type="image/png", body=TINY_PNG))
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
         page.wait_for_function(
             "() => window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt()",

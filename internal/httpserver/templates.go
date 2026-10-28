@@ -46,7 +46,9 @@ import (
 // card actions, conditional preload and scroll handoff guard.
 // 2026-10-28 (boot card touch/deeplink): 42 invalidated index.html/app.css/app.js after
 // touch tap-vs-scroll, data-src image and new-element scroll cancel.
-const assetVersion = "42"
+// 2026-10-28 (boot card touch fallback): 43 invalidated app.js after touchmove movement
+// fallback for mobile WebViews without pointermove.
+const assetVersion = "43"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

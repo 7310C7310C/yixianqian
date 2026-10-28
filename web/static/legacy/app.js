@@ -5896,6 +5896,17 @@ const yxqApp = createApp({
             if (Math.abs(e.clientX - tap.x) > 10 || Math.abs(e.clientY - tap.y) > 10) tap.moved = true;
           }, { passive: true });
           bootEl.addEventListener('pointercancel', resetTap, { passive: true });
+          // 某些移动 WebView/触摸序列只给 touch 事件，补一层 movement 判定。
+          bootEl.addEventListener('touchstart', (e) => {
+            if (tap || !e.touches || !e.touches[0]) return;
+            const t = e.touches[0];
+            tap = { id: null, x: t.clientX, y: t.clientY, t: Date.now(), moved: false };
+          }, { passive: true });
+          bootEl.addEventListener('touchmove', (e) => {
+            if (!tap || !e.touches || !e.touches[0]) return;
+            const t = e.touches[0];
+            if (Math.abs(t.clientX - tap.x) > 10 || Math.abs(t.clientY - tap.y) > 10) tap.moved = true;
+          }, { passive: true });
           bootEl.addEventListener('pointerup', (e) => {
             if (!tap || tap.id !== e.pointerId) return;
             const moved = tap.moved || Math.abs(e.clientX - tap.x) > 10 || Math.abs(e.clientY - tap.y) > 10;
