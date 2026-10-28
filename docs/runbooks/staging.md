@@ -19,7 +19,7 @@ sources:
 > v2 专用；旧 `yixianqian-deploy` skill 只适用 v1。当前 staging 已越过 0005
 > （人脸 migration；当前最大版本见 `docs/STATUS.md`），`unchecked=0`；
 > 人脸首次上线已于 2026-10-22 完成，**不要回滚 pre-0005**。
-> 当前版本、P0 与缺口只看 `docs/STATUS.md`；本文件只写操作步骤与陷阱。
+> 当前阶段、P0 与缺口看 `docs/STATUS.md`；运行版本用 `/healthz` 查；本文件只写操作步骤与陷阱。
 
 ## 1. 拓扑与路径
 

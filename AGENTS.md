@@ -24,6 +24,7 @@ sources:
 - 不在 docs 复制路由表、env 表、目录结构、逐批测试证据、部署日志或旧版本快照。
 - 同一事实只允许一个 owner 文档；其他文档只链接，不复制。
 - `STATUS` 与 `runbook` 只写当前状态；历史批次、日期标题、旧快照一律不进 docs。
+- 不在 `STATUS` 写死运行版本/SHA；版本以 `/healthz` 与 `deployed.sha` 为准，避免每次部署后补 docs-only commit。
 - 行数预算与「禁止历史标题」由 `tools/check_docs.py` 检查；预算在 `tools/docs_budget.json`，超限即 CI 红。
 
 ## 不可违反的硬约束
@@ -78,7 +79,7 @@ sources:
 | `AGENTS.md` | maintainer | 本文件；唯一规则入口 |
 | `README.md` | maintainer | 稳定概览、架构、本地开发 |
 | `docs/PRODUCT.md` | pm | 使命、非目标、硬约束、验收清单 |
-| `docs/STATUS.md` | maintainer | 当前部署、阶段、已实现 vs 已验收、P0/缺口 |
+| `docs/STATUS.md` | maintainer | 阶段、已实现 vs 已验收、P0/缺口；运行版本查 `/healthz` |
 | `docs/DECISIONS.md` | maintainer | 现行决策、理由、不要做什麼；历史看 git log |
 | `docs/runbooks/staging.md` | maintainer | staging 部署/回滚/smoke/人脸/腾讯/迁移附录 |
 | `docs/reference/REFERENCE.md` | maintainer | 自动生成机械索引；勿手改 |

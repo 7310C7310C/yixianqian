@@ -58,7 +58,7 @@ TEST_DATABASE_URL='postgres://yixianqian:yixianqian@localhost:5432/yixianqian_te
 | `AGENTS.md` | 唯一规则入口：工作流、门禁、安全红线、文档规则 |
 | `README.md` | 本文件；稳定概览、架构与本地开发入口 |
 | `docs/PRODUCT.md` | PM 权威：使命、非目标、硬约束、验收清单 |
-| `docs/STATUS.md` | 唯一进度来源：当前部署、阶段、已实现 vs 已验收、P0/缺口 |
+| `docs/STATUS.md` | 唯一进度来源：阶段、已实现 vs 已验收、P0/缺口；运行版本查 `/healthz` |
 | `docs/DECISIONS.md` | 现行决策、理由与「不要做什麼」；历史在 git log |
 | `docs/runbooks/staging.md` | staging 部署、回滚、smoke、人脸/腾讯、迁移附录 |
 | `docs/reference/REFERENCE.md` | 自动生成的机械事实索引（勿手改） |
@@ -67,7 +67,7 @@ TEST_DATABASE_URL='postgres://yixianqian:yixianqian@localhost:5432/yixianqian_te
 
 ## 维护规则
 
-- 本文件只写半年内不常变的稳定事实；功能完成度、当前版本、P0 与缺口只放 `docs/STATUS.md`。
+- 本文件只写半年内不常变的稳定事实；功能完成度、P0 与缺口只放 `docs/STATUS.md`；运行版本用 `/healthz` 查，不写进文档。
 - 路由、env、migration、Makefile target、目录结构以 code/config/Makefile 为准；需要索引时看 `docs/reference/REFERENCE.md`。
 - 历史与逐批证据看 `git log` 和 commit message，不写进 README/STATUS/runbook。
 - 验收目标只放 `docs/PRODUCT.md`；不要把「已实现」写成「已验收」。

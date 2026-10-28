@@ -7,32 +7,34 @@ last_verified: 2026-10-28
 sources: []
 -->
 
-> 本文件只写**当前**部署、阶段、已实现/已验收、P0 与缺口。历史批次、旧快照、
+> 本文件只写**当前**阶段、已实现/已验收、P0 与缺口。历史批次、旧快照、
 > 测试输出与 commit sha 叙事看 `git log` 和 commit message；机械事实用下方命令复核。
-> 更新时机：每次 staging 部署、阶段变化、P0/缺口变化。不要在这里追加批次日记。
+> **不要写死运行版本/SHA**；版本以 `/healthz` 与 `deployed.sha` 为准。
+> 更新时机：阶段、P0/缺口、验收状态变化；不要每次部署后补一条 STATUS 提交。
 
-## 1. 当前快照（2026-10-28 03:55 UTC）
+## 1. 当前快照（最后核对 2026-10-28）
 
 | 项目 | 值 |
 |---|---|
 | staging 入口 | `https://next.nantou.love`（server2 HK relay → server1） |
-| `/healthz`（运行二进制） | `staging-c4da265` |
-| 代码部署提交（healthz 对应） | `c4da265` |
-| 服务器 `src` HEAD | `c4da265`（手工 pull 可能不同步） |
-| `deployed.sha` | 见 `/opt/yixianqian-next/deployed.sha`；docs-only 提交会推进它，可能大于 healthz |
+| 运行版本 | `curl -sS https://next.nantou.love/healthz`（`version=staging-<sha>`） |
+| 代码部署提交 | 以 `/healthz` 的 version 为准；`deployed.sha` 可能因 docs-only 提交更大 |
+| 服务器 `src` HEAD | `git -C /opt/yixianqian-next/src rev-parse --short HEAD` |
 | migration 最大版本 | `11`（`0011_photo_upload_daily`） |
 | 用户 | `1115`：active 普通用户 `1111`、observer `4` |
 | 资料照片 | `1028` / `has_face=1019` / `unchecked=0` |
 | 自动部署 | `yxq-autodeploy.timer` enabled/active；CI + Docs 绿后部署 |
 | v2 生产 | 未切换；`app.nantou.love` 仍是 v1 |
 
-注意：docs-only 提交只推进 `deployed.sha`，不重启；`/healthz` 可能小于 repo HEAD。
+本文件不记录运行版本；docs-only 提交只推进 `deployed.sha`，不重启。
 smoke 以 `/healthz` 对齐最近一次**代码**部署提交，不要拿 docs tip 当运行版本。
 
 复核命令：
 
 ```sh
 curl -sS https://next.nantou.love/healthz
+cat /opt/yixianqian-next/deployed.sha
+git -C /opt/yixianqian-next/src rev-parse --short HEAD
 systemctl is-active yxq-autodeploy.timer
 runuser -u yxq -- psql -d yixianqian_staging -Atc \
   "select max(version) from schema_migrations; select count(*) from users; select count(*) from profile_photos;"
@@ -97,4 +99,5 @@ M6 进入条件：上述验收项完成，`docs/PRODUCT.md` 有证据地签核�
 - 本文件是唯一「当前进度」来源；README 只写稳定事实，`docs/PRODUCT.md` 的 `[ ]` 是验收目标而非实时进度。
 - 不得无证据写「已可用」；部署/人脸/数据事实必须用上方命令重新查询。
 - 人脸、`/admin` 入口、迁移计数等易漂移事实，以最近一次实测为准；旧 runbook 与历史文档不得当现状。
+- 不写死运行版本/SHA；不因每次部署补一条 STATUS 提交；版本以 `/healthz` 与 `deployed.sha` 为准。
 - 更新 `last_verified` 为实际复核日期；不追加批次历史。
