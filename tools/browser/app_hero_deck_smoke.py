@@ -990,6 +990,112 @@ def run_deck_swipe(browser, base_url: str, cookie: str, out_dir: Path) -> list[s
     return []
 
 
+def run_fast_deck(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """20-card bootstrap / static clone / fast switch queue smoke."""
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.locator("#boot-card").wait_for(state="visible", timeout=15000)
+        boot_len = page.evaluate("() => window.__YXQ_BOOTSTRAP__ && window.__YXQ_BOOTSTRAP__.cards ? window.__YXQ_BOOTSTRAP__.cards.length : 0")
+        if boot_len < 20:
+            raise SmokeFailure(f"bootstrap cards={boot_len}, want >=20")
+        start_index = 1
+        if not page.locator("#boot-card").count():
+            raise SmokeFailure("静态克隆断言前静态岛已被接管")
+        page.evaluate("window.__YXQ_BOOT_CARD__.setIndex(9, false)")
+        page.wait_for_timeout(120)
+        slides = page.locator("#boot-card .boot-deck-slide").count()
+        counter = page.evaluate("() => { const el=document.querySelector('#boot-card .card-counter'); return el?el.textContent.trim():''; }")
+        if slides < 10:
+            raise SmokeFailure(f"静态牌堆克隆后 slides={slides}, want >=10")
+        if not counter.startswith("10 /"):
+            raise SmokeFailure(f"静态牌堆第 10 张计数={counter!r}")
+        start_index = 10
+        page.locator("#boot-card").wait_for(state="detached", timeout=20000)
+        page.wait_for_function("() => !!window.__YXQ_DECK_DEBUG__", timeout=10000)
+        # 挂载后应立即预取下一页，Vue 窗口应明显大于 bootstrap 20。
+        page.wait_for_function("() => window.__YXQ_DECK_DEBUG__().len >= 60", timeout=10000)
+        for _ in range(10):
+            page.evaluate("window.__YXQ_SWITCH_CARD__(-1)")
+            page.wait_for_timeout(80)
+        page.wait_for_timeout(300)
+        state = page.evaluate("window.__YXQ_DECK_DEBUG__()")
+        counter = page.evaluate("() => { const el=document.querySelector('#app .cards-page .card-counter'); return el?el.textContent.trim():''; }")
+        want = str(start_index + 10)
+        if not counter.startswith(want + " /"):
+            raise SmokeFailure(f"快速切卡后计数={counter!r}, want {want}/...; state={state}")
+        if state["pending"] != 0:
+            raise SmokeFailure(f"快速切卡后仍有 pending={state['pending']}")
+        page.screenshot(path=str(out_dir / "boot-card-fast-deck-390.png"))
+        if errors:
+            raise SmokeFailure(f"快速切卡用例 pageerror {errors[:2]}")
+        return []
+    except Exception as exc:  # noqa: BLE001
+        return [f"快速切卡: {exc}"]
+    finally:
+        if context is not None:
+            context.close()
+
+
+def run_tail_queue(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """窗口尾 + 挂起分页：连续 6 次切卡必须全部补放，不能静默丢。"""
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        held = []
+
+        def hold_cards(route) -> None:
+            if not held:
+                held.append(route)
+                return
+            route.continue_()
+
+        context.route("**/legacy/api/cards**", hold_cards)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.locator("#boot-card").wait_for(state="visible", timeout=15000)
+        page.evaluate("window.__YXQ_BOOT_CARD__.setIndex(19, false)")
+        page.wait_for_timeout(150)
+        page.locator("#boot-card").wait_for(state="detached", timeout=20000)
+        page.wait_for_function("() => window.__YXQ_DECK_DEBUG__ && window.__YXQ_DECK_DEBUG__().len === 20", timeout=10000)
+        for _ in range(6):
+            page.evaluate("window.__YXQ_SWITCH_CARD__(-1)")
+            page.wait_for_timeout(30)
+        queued = page.evaluate("window.__YXQ_DECK_DEBUG__()")
+        if queued["pending"] != 6:
+            raise SmokeFailure(f"窗口尾 6 次切卡 pending={queued['pending']}, want 6")
+        if not held:
+            raise SmokeFailure("分页请求没有被挂起，队列用例无效")
+        held[0].continue_()
+        page.wait_for_function("() => window.__YXQ_DECK_DEBUG__().pending === 0", timeout=10000)
+        page.wait_for_timeout(300)
+        state = page.evaluate("window.__YXQ_DECK_DEBUG__()")
+        counter = page.evaluate("() => { const el=document.querySelector('#app .cards-page .card-counter'); return el?el.textContent.trim():''; }")
+        if not counter.startswith("26 /"):
+            raise SmokeFailure(f"窗口尾队列补放后计数={counter!r}, want 26/...; state={state}")
+        page.screenshot(path=str(out_dir / "boot-card-tail-queue-390.png"))
+        if errors:
+            raise SmokeFailure(f"窗口尾队列用例 pageerror {errors[:2]}")
+        return []
+    except Exception as exc:  # noqa: BLE001
+        return [f"窗口尾队列: {exc}"]
+    finally:
+        if context is not None:
+            try:
+                for route in held:
+                    try:
+                        route.abort()
+                    except Exception:  # noqa: BLE001
+                        pass
+            except Exception:  # noqa: BLE001
+                pass
+            context.close()
+
+
 def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
     """loadHome 挂起时，壳脚本/app.js 的 4s 硬上限必须移除静态岛并露出启动骨架。"""
     context = None
@@ -1083,6 +1189,8 @@ def main() -> int:
                 ("fallbacks", run_fallbacks),
                 ("takeover", run_takeover_regressions),
                 ("deck-swipe", run_deck_swipe),
+                ("fast-deck", run_fast_deck),
+                ("tail-queue", run_tail_queue),
                 ("touch-scroll", run_touch_scroll),
                 ("load-home-hang", run_load_home_hang),
                 ("dark", run_dark),

@@ -12,7 +12,7 @@
         <div class="swipe-card">
           <div class="card-photo-wrap">
             {{if $card.Photo}}
-            <img class="card-photo-item boot-photo" data-src="{{$card.Photo}}" alt="" decoding="async" fetchpriority="high"{{if $card.FacesJSON}} data-faces="{{$card.FacesJSON}}"{{end}}>
+            <img class="card-photo-item boot-photo" data-src="{{$card.Photo}}" alt="" decoding="async" fetchpriority="high" draggable="false"{{if $card.FacesJSON}} data-faces="{{$card.FacesJSON}}"{{end}}>
             {{else}}
             <div class="card-photo-placeholder">{{$card.PhotoPlaceholder}}</div>
             {{end}}

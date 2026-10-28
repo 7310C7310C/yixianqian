@@ -53,7 +53,9 @@ import (
 // loadHome is still pending (not while a complete static card is being read).
 // 2026-10-28 (boot mini deck): 46 invalidated index.html/app.css/app.js/boot-card.js after
 // a 3-card static deck and earlier login prefetch.
-const assetVersion = "46"
+// 2026-10-28 (20-card fast deck): 47 invalidated data/asset version after bootstrap 20 cards,
+// static island cloning and fast-swipe queue.
+const assetVersion = "47"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

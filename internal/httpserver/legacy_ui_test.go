@@ -2,9 +2,27 @@ package httpserver
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestLegacyShellBootstrapCardLimits(t *testing.T) {
+	src, err := os.ReadFile("legacy_ui.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"bootstrapLimit := 20",
+		`r.URL.Query().Get("native_admin") == "1"`,
+		"bootstrapLimit = 3",
+		"bootCardFromPayloadLimit(sanitized, 3)",
+	} {
+		if !strings.Contains(string(src), want) {
+			t.Fatalf("legacy shell bootstrap limit marker %q missing", want)
+		}
+	}
+}
 
 func TestSanitizeBootstrapStripsSensitiveKeys(t *testing.T) {
 	payload := map[string]any{

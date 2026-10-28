@@ -111,7 +111,12 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	bootCardHTML := ""
 	if a.db != nil {
 		bootCtx, cancel := context.WithTimeout(r.Context(), 800*time.Millisecond)
-		payload, bootErr := a.buildLegacyHomePayloadLimit(bootCtx, r, user, a.clock.Now(), 3)
+		// 牌堆页需要 20 张给快速滑动；native_admin 不是牌堆，只保留最小 bootstrap。
+		bootstrapLimit := 20
+		if r.URL.Query().Get("native_admin") == "1" {
+			bootstrapLimit = 3
+		}
+		payload, bootErr := a.buildLegacyHomePayloadLimit(bootCtx, r, user, a.clock.Now(), bootstrapLimit)
 		cancel()
 		if bootErr != nil {
 			a.logger(r).Warn("legacy shell bootstrap skipped", "error", bootErr, "user_id", user.ID)
@@ -135,7 +140,7 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 					// 首卡静态岛：首屏直接是最终卡片，而不是裸图 + 灰条。
 					// 无卡/门禁时 bootCardFromPayload 返回 false。
 					if a.tpl != nil {
-						if data, ok := bootCardFromPayload(sanitized); ok {
+						if data, ok := bootCardFromPayloadLimit(sanitized, 3); ok {
 							var card bytes.Buffer
 							if err := a.tpl.RenderBootCard(&card, data); err != nil {
 								a.logger(r).Warn("legacy boot card render skipped", "error", err, "user_id", user.ID)

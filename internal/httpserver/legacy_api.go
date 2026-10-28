@@ -80,8 +80,9 @@ func (a *App) buildLegacyHomePayload(ctx context.Context, r *http.Request, user 
 	return a.buildLegacyHomePayloadLimit(ctx, r, user, now, 20)
 }
 
-// buildLegacyHomePayloadLimit lets the shell bootstrap embed only a few cards
-// (3) while the /legacy/api/home contract keeps its 20-card window.
+// buildLegacyHomePayloadLimit lets the shell bootstrap embed a full 20-card
+// window for fast swiping; the static island separately renders only its first
+// three cards (see bootCardFromPayloadLimit).
 func (a *App) buildLegacyHomePayloadLimit(ctx context.Context, r *http.Request, user db.User, now time.Time, cardLimit int) (map[string]any, error) {
 	if cardLimit <= 0 {
 		cardLimit = 20

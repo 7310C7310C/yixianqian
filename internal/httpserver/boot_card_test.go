@@ -145,6 +145,29 @@ func TestBootCardMiniDeck(t *testing.T) {
 	}
 }
 
+func TestBootCardStaticLimit(t *testing.T) {
+	payload := bootCardFixture()
+	first := payload["cards"].([]map[string]any)[0]
+	cards := []map[string]any{first}
+	for i := 0; i < 5; i++ {
+		cards = append(cards, map[string]any{
+			"openid":   "openid-extra-" + string(rune('0'+i)),
+			"nickname": "候选" + string(rune('0'+i)),
+			"gender":   "女性",
+			"photo":    "/cards/photo/extra" + string(rune('0'+i)) + "?size=thumb",
+			"photos":   []string{"/cards/photo/extra" + string(rune('0'+i))},
+		})
+	}
+	payload["cards"] = cards
+	data, ok := bootCardFromPayloadLimit(payload, 3)
+	if !ok {
+		t.Fatal("bootCardFromPayloadLimit returned false")
+	}
+	if len(data.Cards) != 3 {
+		t.Fatalf("static mini deck cards=%d, want 3", len(data.Cards))
+	}
+}
+
 func TestBootCardEscapesUserContent(t *testing.T) {
 	payload := bootCardFixture()
 	card := payload["cards"].([]map[string]any)[0]

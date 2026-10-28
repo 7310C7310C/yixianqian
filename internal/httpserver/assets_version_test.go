@@ -116,6 +116,9 @@ func TestLegacyShellBootCard(t *testing.T) {
 		`boot-deck-track`,
 		`setIndex`,
 		`__YXQ_BOOT_DECK__`,
+		`appendSlide`,
+		`fillCompactSlide`,
+		`ensureSlides`,
 	} {
 		if !strings.Contains(bootCardJS, want) {
 			t.Fatalf("boot-card.js is missing %q", want)
@@ -181,7 +184,7 @@ func TestDeckRendersOnlyCurrentCard(t *testing.T) {
 	js := readEmbedded(t, "static/legacy/app.js")
 	for _, want := range []string{
 		"const currentCard = computed",
-		"cards.value[cardIndex.value + 1]",
+		"cards.value[cardIndex.value + i]",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("app.js is missing single-card window marker %q", want)
@@ -213,8 +216,10 @@ func TestDeckLoadsOnlyAdjacentPhotos(t *testing.T) {
 	if !strings.Contains(js, "function photoSrc(i)") {
 		t.Fatal("app.js is missing photoSrc")
 	}
-	if !strings.Contains(js, "cards.value[cardIndex.value + 1]") {
-		t.Fatal("preloadAround should only prefetch the next card")
+	for _, want := range []string{"for (var i = 1; i <= 2; i++)", "preloadedImageURLs"} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("preloadAround should prefetch the next two cards and dedupe (%q missing)", want)
+		}
 	}
 }
 

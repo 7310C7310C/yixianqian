@@ -68,7 +68,7 @@ make perf-lcp PERF_LCP_RUNS=3   # 需 BASE_URL + SESSION_COOKIE + Playwright
 ```
 
 - 预算在 `tools/perf/budgets.json`，每项 = 基线 +10%；只能手工修改并走 Review，没有自动更新。
-- `shell_gzip` 由「静态壳 + `bootstrap_allowance_bytes`（3 张卡 JSON）+ `boot_card_allowance_bytes`（Go 首卡静态岛，2,600B）」组成；`TestBootCardGzipBudget` 守住静态岛 ≤2,600B gzip。2026-10-28 boot card 迷你牌堆后 shell baseline 按实测校准为 29,806B，预算 32,787B（+10%）；boot-card.js 作为外部静态资源计入 first_load。
+- `shell_gzip` 由「静态壳 + `bootstrap_allowance_bytes`（20 卡 per-user bootstrap，4,971B）+ `boot_card_allowance_bytes`（Go 首卡静态岛，2,600B）」组成；`TestBootCardGzipBudget` 守住静态岛 ≤2,600B gzip。2026-10-28 20 卡 bootstrap 后 shell baseline 按实测校准为 31,550B，预算 34,705B（+10%）；boot-card.js 作为外部静态资源计入 first_load。
 - 采集点：`edge` 在 server2 本机、`origin`/`app` 在 server1；浏览器参考主机固定 390×844、CPU×4、1.6Mbps/150ms。
 - HTTP：N≥10、warmup≥3；p95 = 排序后第 `ceil(0.95n)` 个；记录 p50/p95、N、主机、时间。
 - LCP：N≥3（正式对比建议 5），取中位并记录 min–max；冷/热分开。

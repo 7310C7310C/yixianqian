@@ -12,6 +12,11 @@
   var total = parseInt(root.getAttribute('data-total'), 10) || 1;
   var index = 0;
   var state = { dismissed: false, removedAt: null, reason: '' };
+  // Bootstrap carries 20 cards for fast swiping; the island starts with three
+  // server-rendered slides and clones compact cards from this data on demand.
+  var bootCards = [];
+  try { bootCards = (window.__YXQ_BOOTSTRAP__ && window.__YXQ_BOOTSTRAP__.cards) || []; } catch (e) {}
+  var compactProto = slides[1] || null;
 
   // Same formula as app.js computeFaceCrop: static card and real card crop match.
   function computeFaceCrop(f, cw, ch, iw, ih) {
@@ -91,6 +96,140 @@
     if (img.getAttribute('src') && img.complete && !img.naturalWidth) failed();
   }
 
+  function firstThumb(card) {
+    if (!card) return '';
+    if (card.photos_thumb && card.photos_thumb.length) return card.photos_thumb[0];
+    if (card.photos && card.photos.length) return card.photos[0];
+    return card.photo || '';
+  }
+
+  function fillCompactSlide(slide, card, i) {
+    slide.setAttribute('data-index', String(i));
+    slide.setAttribute('data-openid', card.openid || '');
+    slide.classList.remove('is-active');
+
+    var wrap = slide.querySelector('.card-photo-wrap');
+    var img = slide.querySelector('.boot-photo');
+    var src = firstThumb(card);
+    // 原型可能是无照片卡（Go 不渲染 img）；克隆时补一个 img，避免 4..20 全无照片。
+    if (wrap && !img) {
+      img = document.createElement('img');
+      img.className = 'card-photo-item boot-photo';
+      img.alt = '';
+      img.decoding = 'async';
+      wrap.insertBefore(img, wrap.firstChild);
+    }
+    if (wrap) wrap.classList.remove('boot-photo-failed');
+    if (img && wrap) {
+      img.draggable = false;
+      img.removeAttribute('src');
+      img.removeAttribute('style');
+      img.style.display = '';
+      var oldPh = wrap.querySelector('.card-photo-placeholder');
+      if (oldPh) oldPh.parentNode.removeChild(oldPh);
+      if (src) {
+        img.setAttribute('data-src', src);
+        var faces = card.faces && card.faces[0];
+        if (faces) { try { img.setAttribute('data-faces', JSON.stringify(faces)); } catch (e) {} }
+        else img.removeAttribute('data-faces');
+      } else {
+        img.style.display = 'none';
+        var ph = document.createElement('div');
+        ph.className = 'card-photo-placeholder';
+        ph.textContent = card.gender === '男性' ? '👨' : '👩';
+        wrap.insertBefore(ph, wrap.firstChild);
+      }
+    }
+
+    var oldDots = slide.querySelector('.photo-dots');
+    if (oldDots) oldDots.parentNode.removeChild(oldDots);
+    var photos = card.photos || [];
+    if (photos.length > 1 && wrap) {
+      var dots = document.createElement('div');
+      dots.className = 'photo-dots';
+      for (var d = 0; d < photos.length; d++) {
+        var dot = document.createElement('div');
+        dot.className = 'photo-dot' + (d === 0 ? ' active' : '');
+        dots.appendChild(dot);
+      }
+      var overlay = wrap.querySelector('.card-photo-overlay');
+      if (overlay) wrap.insertBefore(dots, overlay); else wrap.appendChild(dots);
+    }
+
+    var text = slide.querySelector('.card-overlay-text');
+    if (text) {
+      var badgeText = '';
+      var badgeClass = '';
+      if (card.is_self) { badgeText = '这是你 · 他人视角'; badgeClass = 'boot-badge--self'; }
+      else if (card.recommended) { badgeText = '推荐'; badgeClass = 'boot-badge--recommend'; }
+      var badge = text.querySelector('.boot-badge');
+      if (badgeText) {
+        if (!badge) {
+          var badgeWrap = document.createElement('div');
+          badgeWrap.style.marginBottom = '6px';
+          badge = document.createElement('span');
+          badge.className = 'boot-badge';
+          badgeWrap.appendChild(badge);
+          text.insertBefore(badgeWrap, text.firstChild);
+        }
+        badge.className = 'boot-badge ' + badgeClass;
+        badge.textContent = badgeText;
+      } else if (badge && badge.parentNode) {
+        badge.parentNode.parentNode.removeChild(badge.parentNode);
+      }
+
+      var name = text.querySelector('.card-name');
+      if (name) {
+        name.textContent = card.nickname || '';
+        var gender = document.createElement('span');
+        gender.className = 'gender-icon';
+        gender.textContent = card.gender === '男性' ? '♂' : '♀';
+        name.appendChild(document.createTextNode(' '));
+        name.appendChild(gender);
+      }
+      var subtitle = text.querySelector('.card-subtitle');
+      var simple = card.display_fields && card.display_fields.simple;
+      if (simple) {
+        if (!subtitle) {
+          subtitle = document.createElement('div');
+          subtitle.className = 'card-subtitle';
+          if (name && name.parentNode) name.parentNode.insertBefore(subtitle, name.nextSibling);
+        }
+        subtitle.textContent = simple;
+      } else if (subtitle && subtitle.parentNode) {
+        subtitle.parentNode.removeChild(subtitle);
+      }
+    }
+
+    var tabs = slide.querySelectorAll('.card-tab');
+    var msgTab = tabs.length > 1 ? tabs[1] : null;
+    if (msgTab) {
+      msgTab.textContent = '留言';
+      var msgs = parseInt(card.msg_count, 10) || 0;
+      if (msgs > 0) {
+        var badgeEl = document.createElement('span');
+        badgeEl.textContent = String(msgs);
+        badgeEl.style.cssText = 'display:inline-block;min-width:16px;height:16px;line-height:16px;padding:0 4px;margin-left:4px;border-radius:8px;background:var(--yxq-brand-ink);color:#fff;font-size:11px;font-weight:600;vertical-align:1px;';
+        msgTab.appendChild(badgeEl);
+      }
+    }
+  }
+
+  function appendSlide(i) {
+    if (!compactProto || !bootCards[i]) return false;
+    var slide = compactProto.cloneNode(true);
+    fillCompactSlide(slide, bootCards[i], i);
+    track.appendChild(slide);
+    slides.push(slide);
+    count = slides.length;
+    track.style.setProperty('--boot-cards', String(count));
+    return true;
+  }
+
+  function ensureSlides(target) {
+    while (slides.length <= target && appendSlide(slides.length)) {}
+  }
+
   function activeSlide() { return slides[index] || null; }
   function activeImage() {
     var slide = activeSlide();
@@ -103,6 +242,7 @@
   }
 
   function setIndex(next, animate) {
+    if (next > 0) ensureSlides(next);
     next = Math.max(0, Math.min(count - 1, next));
     index = next;
     track.style.transition = animate ? 'transform .22s ease' : 'none';
@@ -157,6 +297,7 @@
   }
   function down(e) {
     var p = point(e);
+    if (index + 1 >= slides.length) ensureSlides(index + 1);
     drag = { x: p.x, y: p.y, dx: 0, dy: 0, horiz: false, id: e.pointerId };
     try { if (track.setPointerCapture && e.pointerId != null) track.setPointerCapture(e.pointerId); } catch (_) {}
   }
@@ -203,6 +344,7 @@
 
   window.__YXQ_BOOT_CARD__ = {
     setObjectPosition: setObjectPosition,
+    setIndex: setIndex,
     dismiss: dismiss,
     dismissed: function () { return state.dismissed; },
     reason: function () { return state.reason || ''; },
@@ -217,15 +359,31 @@
   }
 
   // data-src: boot-skip never requests the first card image; prefetch link only
-  // starts the normal path. First card gets src now; next card warms at idle.
-  setIndex(0, false);
-  setTimeout(function () {
-    var next = slides[1];
-    var img = next && next.querySelector('.boot-photo');
+  // starts the normal path. First card gets src now; next cards warm after the
+  // first image decodes (no fixed timer, no bandwidth race with card 1).
+  function warmAllowed() {
+    var conn = navigator.connection || {};
+    return !(conn.saveData || /(^|-)2g$/.test(conn.effectiveType || ''));
+  }
+  function warmSlide(i) {
+    if (!warmAllowed()) return;
+    var slide = slides[i];
+    var img = slide && slide.querySelector('.boot-photo');
     if (img && !img.getAttribute('src') && img.getAttribute('data-src')) {
+      try { img.fetchPriority = 'low'; } catch (e) {}
       img.setAttribute('src', img.getAttribute('data-src'));
     }
-  }, 1200);
+  }
+  function warmAfterFirst() {
+    warmSlide(1);
+    if (window.requestIdleCallback) window.requestIdleCallback(function () { warmSlide(2); }, { timeout: 1200 });
+    else setTimeout(function () { warmSlide(2); }, 600);
+  }
+  setIndex(0, false);
+  var first = activeImage();
+  if (first && first.complete && first.naturalWidth) warmAfterFirst();
+  else if (first) first.addEventListener('load', warmAfterFirst, { once: true });
+  else warmAfterFirst();
 
   // Slow-network hint: keep the complete card; takeover/failure is app.js.
   setTimeout(function () { if (!state.dismissed) root.classList.add('boot-card-slow'); }, 3000);

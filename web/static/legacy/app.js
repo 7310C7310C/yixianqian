@@ -737,6 +737,10 @@ const yxqApp = createApp({
     const cardsTotal = ref(0);
     const cardsVersion = ref(null);   // 服务端快照版本：变化则翻页序列失效需重拉
     const cardsLoadingMore = ref(false);
+    let pendingNextSwipes = 0; // 快速滑到数据窗口尾时先入队，分页回来按顺序补放
+    let deckLoadFailures = 0;
+    let deckRetryTimer = null;
+    try { window.__YXQ_PENDING_SWIPES__ = 0; } catch (e) {}
     const cardsStart = ref(0);        // 已载窗口在全序中的起始偏移（循环翻页窗口游标）
     const cardsPageCache = new Map(); // offset -> {cards,total,version}：翻页回退时避免重复请求
     // /legacy/api/home 会在无筛选时把本人卡置顶，而 /legacy/api/cards 不返回本人卡。
@@ -2526,6 +2530,7 @@ const yxqApp = createApp({
       const homeCards = data.cards || [];
       const homeSelf = homeCards.find(c => c && c.is_self);
       if (homeSelf) selfCard.value = homeSelf;
+      resetDeckQueue();
       cards.value = homeCards; cardIndex.value = 0; photoIndex.value = 0;
       cardsTotal.value = (typeof data.cards_total === 'number' ? data.cards_total : cards.value.length);
       cardsVersion.value = null;
@@ -2537,6 +2542,7 @@ const yxqApp = createApp({
       activities.value = data.activities || [];
       triggerPhotoLoading();
       schedulePreloadAround();
+      scheduleDeckPrefetch();
       maybeShowSwipeGuide();
       maybeShowActivityPromo();
       maybeShowUpdateNotes();
@@ -2768,9 +2774,12 @@ const yxqApp = createApp({
       if(guardOverlay('filter', () => { showFilter.value = false; })) return;
       showFilter.value = false;
     }
+    const preloadedImageURLs = new Set();
     function preloadImage(url) {
-      if (!url) return;
+      if (!url || preloadedImageURLs.has(url)) return;
+      preloadedImageURLs.add(url);
       const img = new Image();
+      try { img.fetchPriority = 'low'; } catch (e) {}
       img.src = url;
     }
     function cardPhotosOf(c) {
@@ -2781,22 +2790,42 @@ const yxqApp = createApp({
       if (c.photos_thumb && c.photos_thumb.length) return c.photos_thumb;
       return cardPhotosOf(c);
     }
+    function prefetchAllowed() {
+      if (nativeAdmin.value) return false;
+      if (page.value !== 'cards') return false;
+      if (document.documentElement.classList.contains('boot-skip')) return false;
+      const conn = navigator.connection || {};
+      if (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || '')) return false;
+      return true;
+    }
     function schedulePreloadAround() {
-      // 首屏不抢带宽：下一张卡的首图等 load 后空闲再预取；切卡仍走 preloadAround()。
+      // 首卡已绘制后再预取，但不再固定等 5 秒；idle 超时 800ms 兜底。
+      if (!prefetchAllowed()) return;
       var run = function(){ try { preloadAround(); } catch (e) {} };
       var start = function(){
-        if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 3000 });
-        else setTimeout(run, 1500);
+        if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 800 });
+        else setTimeout(run, 200);
       };
-      if (document.readyState === 'complete') setTimeout(start, 5000);
-      else window.addEventListener('load', function(){ setTimeout(start, 5000); }, { once: true });
+      if (document.readyState === 'loading') setTimeout(start, 0);
+      else start();
     }
     function preloadAround() {
-      // 只预取下一张卡片的首图；当前卡片的相邻照片由 deck 自身按需加载。
-      const next = cards.value[cardIndex.value + 1];
-      if (!next) return;
-      const p = cardDisplayPhotos(next);
-      if (p[0]) preloadImage(p[0]);
+      // 预取后续两张的首图；再往后由分页/切卡时的 idle 预取补。
+      if (!prefetchAllowed()) return;
+      for (var i = 1; i <= 2; i++) {
+        const next = cards.value[cardIndex.value + i];
+        if (!next) continue;
+        const p = cardDisplayPhotos(next);
+        if (p[0]) preloadImage(p[0]);
+      }
+    }
+    function scheduleDeckPrefetch() {
+      // 挂载后立即把下一页资料取进内存/缓存，不等用户滑到窗口尾。
+      if (!prefetchAllowed()) return;
+      if (cards.value.length >= 70) return; // 每 tab 回来不重复拉页
+      var run = function(){ try { loadMoreCards(); } catch (e) {} };
+      if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 1000 });
+      else setTimeout(run, 300);
     }
     function cardsQuery() {
       const q = buildFilterQuery();
@@ -2826,7 +2855,11 @@ const yxqApp = createApp({
       };
     }
     async function loadCards(force) {
-      if (cards.value.length && !force) return; // 缓存
+      if (cards.value.length && !force) {
+        scheduleDeckPrefetch(); // 深链回来时牌堆已存在，也要补跑挂载预取
+        return;
+      }
+      resetDeckQueue();
       if (force) cardsPageCache.clear();
       loadingCards.value = true;
       try {
@@ -2841,6 +2874,7 @@ const yxqApp = createApp({
         cardIndex.value = 0; photoIndex.value = 0;
         triggerPhotoLoading();
         preloadAround();
+        scheduleDeckPrefetch();
         maybeShowSwipeGuide();
       }
       catch(e) { vant.showToast(e.message); }
@@ -2867,16 +2901,60 @@ const yxqApp = createApp({
         cardIndex.value = seqCur - headCap;
       }
     }
+    function setPendingNextSwipes(n) {
+      pendingNextSwipes = Math.max(0, n);
+      try { window.__YXQ_PENDING_SWIPES__ = pendingNextSwipes; } catch (e) {}
+    }
+    function resetDeckQueue() {
+      setPendingNextSwipes(0);
+      deckLoadFailures = 0;
+      if (deckRetryTimer) { clearTimeout(deckRetryTimer); deckRetryTimer = null; }
+    }
+    function flushPendingNextSwipes() {
+      const remaining = Math.max(0, cardsTotal.value - (cardsStart.value + cardIndex.value) - 1);
+      if (pendingNextSwipes > remaining) setPendingNextSwipes(remaining);
+      while (pendingNextSwipes > 0) {
+        if (cardIndex.value < cards.value.length - 1) {
+          slideDir.value = 'right';
+          cardIndex.value += 1;
+          photoIndex.value = 0;
+          photoSlideDir.value = '';
+          setPendingNextSwipes(pendingNextSwipes - 1);
+          continue;
+        }
+        if (cardsStart.value + cards.value.length < cardsTotal.value) {
+          if (!cardsLoadingMore.value) loadMoreCards();
+          return;
+        }
+        setPendingNextSwipes(0);
+        return;
+      }
+    }
     async function loadMoreCards() {
       if (cardsLoadingMore.value || cardsStart.value + cards.value.length >= cardsTotal.value) return;
       cardsLoadingMore.value = true;
       const nextOffset = cardsStart.value + cards.value.length;
+      const cachedPage = cardsPageCache.get(nextOffset);
+      if (cachedPage && (cachedPage.version == null || cardsVersion.value == null || cachedPage.version === cardsVersion.value)) {
+        const cachedExisting = new Set(cards.value.map(c => c.openid));
+        const cachedFresh = cachedPage.cards.filter(c => !cachedExisting.has(c.openid));
+        if (cachedFresh.length) {
+          cards.value = cards.value.concat(cachedFresh);
+          cardsTotal.value = cachedPage.total;
+          deckLoadFailures = 0;
+          trimCardsWindow();
+          cardsLoadingMore.value = false;
+          flushPendingNextSwipes();
+          return;
+        }
+      }
       try {
         const data = await api('/api/cards' + cardsQuery() + 'offset=' + deckOffsetParam(nextOffset) + '&limit=' + deckLimitParam(nextOffset));
         // users 快照版本变化：顺序已变，按当前全序位置重建窗口（不跳回第一张）
         if (data.version != null && cardsVersion.value !== null && data.version !== cardsVersion.value) {
           cardsVersion.value = data.version;
           cardsPageCache.clear();
+          resetDeckQueue();
           const seqCur = cardsStart.value + cardIndex.value;
           const off = Math.floor(seqCur / 50) * 50;
           const ok = await loadPageAt(off);
@@ -2901,10 +2979,30 @@ const yxqApp = createApp({
         }
         cards.value = cards.value.concat(fresh);
         cardsTotal.value = page.total;
+        deckLoadFailures = 0;
         trimCardsWindow();
+        flushPendingNextSwipes();
       }
-      catch(e) { vant.showToast(e.message); }
+      catch(e) {
+        if (pendingNextSwipes > 0) {
+          deckLoadFailures += 1;
+          if (deckLoadFailures >= 2) {
+            resetDeckQueue();
+            vant.showToast('加载下一张失败，请稍后重试');
+          } else {
+            if (deckRetryTimer) clearTimeout(deckRetryTimer);
+            deckRetryTimer = setTimeout(() => {
+              deckRetryTimer = null;
+              if (!cardsLoadingMore.value && pendingNextSwipes > 0) loadMoreCards();
+            }, 700);
+          }
+        } else {
+          vant.showToast(e.message);
+        }
+      }
       cardsLoadingMore.value = false;
+      // 队列可能跨页（>50 连滑）：本页 append 后继续 drain，必要时再发下一页。
+      if (pendingNextSwipes > 0) flushPendingNextSwipes();
     }
     function onPhotoError() { clearTimeout(photoLoadingTimer); photoLoading.value = false; }
     // 弱网图片自愈：加载失败自动重试（逐次加 _r 穿透坏缓存），仍失败才执行 done（如清空占位）
@@ -2944,6 +3042,7 @@ const yxqApp = createApp({
     function onCardTouchMove(e) {}
     async function loadPageAt(offset) {
       // 整窗替换：版本变化时按全序位置重建窗口；失败返回 false 不抛异常
+      resetDeckQueue();
       try {
       const cached = cardsPageCache.get(offset);
       if (cached && (cached.version == null || cardsVersion.value == null || cached.version === cardsVersion.value)) {
@@ -3007,6 +3106,7 @@ const yxqApp = createApp({
     function switchCard(dir) {
       const total = cardsTotal.value;
       if (total <= 1) return;
+      if (dir > 0) setPendingNextSwipes(0);
       const n = cards.value.length;
       const seq = cardsStart.value + cardIndex.value;  // 当前全序位置
       const canMove = dir < 0 ? (cardIndex.value < n - 1 || seq < total - 1) : (cardIndex.value > 0 || seq > 0);
@@ -3024,15 +3124,10 @@ const yxqApp = createApp({
           }
           return;
         } else if (seq < total - 1) {
-          // 窗口尾且后面还有：加载下一页后前进
-          if (!cardsLoadingMore.value) {
-            loadMoreCards().then(() => {
-              if (cardIndex.value < cards.value.length - 1) {
-                cardIndex.value += 1;
-                slideDir.value = 'right';
-              }
-            }).catch(() => {});
-          }
+          // 窗口尾且后面还有：手势先入队，分页回来按顺序补放；不吞掉快速连滑。
+          const remaining = Math.max(0, total - seq - 1);
+          setPendingNextSwipes(Math.min(remaining, pendingNextSwipes + 1));
+          if (!cardsLoadingMore.value) loadMoreCards();
           photoIndex.value = 0;
           photoSlideDir.value = '';
           return;
@@ -5876,7 +5971,14 @@ const yxqApp = createApp({
         nextTick(settleBootCard);
       }
     });
-    watch(page, (v) => { if (v !== 'cards') dismissBootCard('tab'); });
+    watch(page, (v) => {
+      if (v === 'cards') {
+        try { document.documentElement.classList.remove('boot-skip'); } catch (e) {}
+        nextTick(() => scheduleDeckPrefetch());
+      } else {
+        dismissBootCard('tab');
+      }
+    });
     watch([cardIndex, cardsStart], ([idx, start]) => {
       if (!bootCardAnchor) return;
       if (idx !== bootCardAnchor.index || start !== bootCardAnchor.start) nextTick(() => dismissBootCard('card-changed'));
@@ -5904,6 +6006,15 @@ const yxqApp = createApp({
       window.__YXQ_BOOT_DECK_ON_CHANGE__ = () => {
         if (!bootLoading.value) nextTick(syncBootDeckIndex);
       };
+      // 数据/快速滑动验收使用的探针；不影响正常交互。
+      window.__YXQ_SWITCH_CARD__ = switchCard;
+      window.__YXQ_DECK_DEBUG__ = () => ({
+        len: cards.value.length,
+        start: cardsStart.value,
+        index: cardIndex.value,
+        total: cardsTotal.value,
+        pending: pendingNextSwipes,
+      });
       // 点击/触摸判定放在 app.js：触摸滑动 >10px 或长按不 dismiss，保证 .card-info 可滚动。
       try {
         const bootEl = document.getElementById('boot-card');

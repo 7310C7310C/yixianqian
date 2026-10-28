@@ -54,6 +54,13 @@ type bootCardField struct {
 // home bootstrap. It returns false when the viewer has no deck card (ID gate,
 // empty deck, …) so the shell falls back to the Vue boot skeleton.
 func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
+	return bootCardFromPayloadLimit(payload, 0)
+}
+
+// bootCardFromPayloadLimit caps the number of server-rendered slides. The
+// bootstrap carries 20 cards for fast swiping; the static island only renders
+// its first three and clones the rest from __YXQ_BOOTSTRAP__ on demand.
+func bootCardFromPayloadLimit(payload map[string]any, limit int) (bootCardData, bool) {
 	cards, ok := payload["cards"].([]map[string]any)
 	if !ok || len(cards) == 0 {
 		return bootCardData{}, false
@@ -69,6 +76,9 @@ func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 
 	views := make([]bootCardView, 0, len(cards))
 	for i, first := range cards {
+		if limit > 0 && i >= limit {
+			break
+		}
 		if first == nil {
 			continue
 		}
