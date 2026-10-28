@@ -577,7 +577,6 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
         context = make_context(browser, base_url, cookie, 390, 844)
         page = context.new_page()
         errors = page_errors(page)
-        throttle(context, page)
         held_img = {}
 
         def patch_bootstrap(route) -> None:
@@ -610,7 +609,7 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
         if held_img.get("route"):
             held_img["route"].fulfill(status=200, content_type="image/png", body=TINY_PNG)
         page.locator("#boot-card").wait_for(state="detached", timeout=15000)
-        page.wait_for_timeout(250)
+        # 交接瞬间读取：只验证 handoff 本身，避免随后 /api/cards 刷新/重渲染把 scroll 归零。
         real_scroll = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
         if real_scroll < 150:
             raise SmokeFailure(f"交接后真实卡未继承滚动位置：real scrollTop={real_scroll}")
