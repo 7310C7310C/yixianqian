@@ -5823,6 +5823,8 @@ const yxqApp = createApp({
 
     onMounted(() => {
       window.__YXQ_APP_MOUNTED__ = true;
+      // inline pointerdown 的交互 dismiss 必须走这里，才能先 syncBootCardScroll 再移除。
+      window.__YXQ_BOOT_CARD_HANDOFF__ = dismissBootCard;
       window.__YXQ_LOAD_HOME_STARTED__ = false;
       window.__YXQ_LOAD_HOME_DONE__ = false;
       armBootCardHardLimit();

@@ -207,6 +207,21 @@ def wait_counter_left(page, want_left: int, timeout: int = 15000) -> None:
         arg=want_left, timeout=timeout,
     )
 
+def wait_counter_exact(page, want: int, timeout: int = 20000) -> None:
+    """Wait until the deck counter shows want / want (app total, incl. self card)."""
+    try:
+        page.wait_for_function(
+            r"""(target) => {
+              const el = document.querySelector('.card-counter');
+              if (!el) return false;
+              const m = el.textContent.trim().match(/^([0-9]+)\s*\/\s*([0-9]+)$/);
+              return !!m && Number(m[1]) === target && Number(m[2]) === target;
+            }""",
+            arg=want, timeout=timeout,
+        )
+    except PlaywrightTimeoutError:
+        raise SmokeFailure(f"counter 未到 {want} / {want}") from None
+
 
 def drag_card(page, dx: int) -> None:
     box = rect(page.locator(".card-main"))
@@ -413,35 +428,31 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
             raise SmokeFailure(f"restore pos=0 落点不是第 1 张：{num} / {den}")
         last_num = None
         last_den = None
-        api_total = 0
+        app_total = 0
+        # restoreDeck 的 pos 以 app/bootstrap 总数为准（含本人卡），不是 /api/cards 的 total。
+        # bootstrap total 可能比 API total 大 1；用 counter 分母作为可复现的 app total。
         for _ in range(3):
-            api_resp = page.request.get(base_url + "/legacy/api/cards?limit=1")
-            if not api_resp.ok:
-                raise SmokeFailure(f"/legacy/api/cards status={api_resp.status}")
-            api_total = int(api_resp.json().get("cards_total") or 0)
-            if api_total < 3:
-                raise SmokeFailure(f"restore 末张前牌堆不足 3 张（total={api_total}）")
-            restore_pos(page, api_total - 1)
+            _, app_total = parse_counter(page)
+            if app_total < 3:
+                raise SmokeFailure(f"restore 末张前牌堆不足 3 张（app_total={app_total}）")
+            restore_pos(page, app_total - 1)
             wait_cards_ready(page)
             wait_hero_gone(page)
             try:
-                wait_counter_left(page, api_total, timeout=15000)
+                wait_counter_exact(page, app_total, timeout=20000)
             except SmokeFailure:
                 pass
             last_num, last_den = parse_counter(page)
-            if last_num == last_den:
+            if last_num == app_total and last_den == app_total:
                 break
-        # bootstrap cards_total 与 /api/cards 可能差 1（既有已知数据问题）；
-        # 只有落到真正的末张时才验证「已是最后一张」，否则记录 NOTE 跳过该子项。
-        if last_num == last_den:
-            drag_card(page, -90)
-            page.get_by_text("已是最后一张", exact=False).first.wait_for(state="visible", timeout=5000)
-            drag_card(page, 90)
-            num, den = parse_counter(page)
-            if num != den - 1:
-                raise SmokeFailure(f"末张回退落点 {num} / {den}")
-        else:
-            print(f"NOTE 末张 restore 跳过：counter={last_num}/{last_den}, api_total={api_total}")
+        if last_num != last_den:
+            raise SmokeFailure(f"restore 末张失败：{last_num} / {last_den}（app_total={app_total}）")
+        drag_card(page, -90)
+        page.get_by_text("已是最后一张", exact=False).first.wait_for(state="visible", timeout=5000)
+        drag_card(page, 90)
+        num, den = parse_counter(page)
+        if num != den - 1:
+            raise SmokeFailure(f"末张回退落点 {num} / {den}")
 
         # 5) #/likes 深链：hero 不应在非牵线页出现；回牵线也不重现。
         page.goto(base_url + "/app#/likes", wait_until="domcontentloaded", timeout=40000)
@@ -608,6 +619,58 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
             raise SmokeFailure(f"滚动交接用例 pageerror {errors[:2]}")
     except Exception as exc:  # noqa: BLE001
         failures.append(f"滚动交接: {exc}")
+    finally:
+        if context is not None:
+            try:
+                if held_img.get("route"):
+                    held_img["route"].abort()
+            except Exception:  # noqa: BLE001
+                pass
+            context.close()
+    # 3) 滚动后点一下（inline pointerdown）也必须走 app 的 dismiss hook，保留 scrollTop。
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        held_img = {}
+
+        def patch_bootstrap_click(route) -> None:
+            response = route.fetch()
+            body = re.sub(
+                r'("photos_thumb":\["?)[^"]*("?)',
+                r'\1/cards/photo/22222222-2222-2222-2222-222222222222?size=thumb\2',
+                response.text(), count=1, flags=re.S,
+            )
+            route.fulfill(response=response, body=body)
+
+        def hold_real_image_click(route) -> None:
+            if "route" not in held_img:
+                held_img["route"] = route
+                return
+            route.continue_()
+
+        context.route(base_url.rstrip("/") + "/app", patch_bootstrap_click)
+        context.route("**/cards/photo/22222222-2222-2222-2222-222222222222**", hold_real_image_click)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_function(
+            "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
+            timeout=15000,
+        )
+        page.evaluate("() => { const el = document.querySelector('#boot-card .card-info'); if (el) el.scrollTop = 180; }")
+        page.wait_for_timeout(120)
+        page.locator("#boot-card .card-info").click(position={"x": 12, "y": 12})
+        page.locator("#boot-card").wait_for(state="detached", timeout=5000)
+        removed = page.evaluate("window.__YXQ_BOOT_CARD__ ? {reason: window.__YXQ_BOOT_CARD__.reason()} : null")
+        real_scroll = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
+        if not removed or removed.get("reason") != "interact":
+            raise SmokeFailure(f"点击交接 reason 异常：{removed}")
+        if real_scroll < 150:
+            raise SmokeFailure(f"点击交接后真实卡未继承滚动位置：real scrollTop={real_scroll}")
+        if errors:
+            raise SmokeFailure(f"点击交接用例 pageerror {errors[:2]}")
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"点击交接: {exc}")
     finally:
         if context is not None:
             try:

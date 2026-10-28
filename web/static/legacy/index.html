@@ -155,7 +155,9 @@
     if (raw) applyFaces(JSON.parse(raw));
   } catch (e) {}
   document.addEventListener('pointerdown', function(){
-    if (window.__YXQ_APP_MOUNTED__) dismiss('interact');
+    if (!window.__YXQ_APP_MOUNTED__) return;
+    if (window.__YXQ_BOOT_CARD_HANDOFF__) window.__YXQ_BOOT_CARD_HANDOFF__('interact');
+    else dismiss('interact');
   }, true);
   // 慢网提示：完整卡保留，不降级成灰骨架；交接/失败由 app.js 负责。
   setTimeout(function(){ if (!state.dismissed) root.classList.add('boot-card-slow'); }, 3000);
