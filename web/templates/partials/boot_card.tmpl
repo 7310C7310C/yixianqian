@@ -9,7 +9,7 @@
     <div class="swipe-card">
       <div class="card-photo-wrap">
         {{if .Photo}}
-        <img class="card-photo-item boot-photo" src="{{.Photo}}" alt="" decoding="async" fetchpriority="high"{{if .FacesJSON}} data-faces="{{.FacesJSON}}"{{end}}>
+        <img class="card-photo-item boot-photo" data-src="{{.Photo}}" alt="" decoding="async" fetchpriority="high"{{if .FacesJSON}} data-faces="{{.FacesJSON}}"{{end}}>
         {{else}}
         <div class="card-photo-placeholder">{{.PhotoPlaceholder}}</div>
         {{end}}
@@ -50,11 +50,10 @@
           </div>
           {{end}}
         </div>
-        <div class="card-actions">
-          {{if .ShowFeedback}}<button class="feedback-btn" type="button" style="width:64px;height:32px;padding:0;border-radius:16px;border:1px solid #dcdee0;background:#fff;color:#6b7280;font-size:12px;">反馈</button>{{end}}
-          {{if .ShowPraise}}<button class="praise-btn" type="button" style="width:64px;height:64px;border-radius:50%;border:none;background:linear-gradient(135deg,#ffb26b,#ffcf8e);color:#fff;font-size:28px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(255,178,107,.4);">👍</button>{{end}}
-          {{if .ShowHeart}}<button class="heart-btn" type="button" style="width:64px;height:64px;border-radius:50%;border:none;background:linear-gradient(135deg,#ff6b81,#ff8e9b);color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(255,107,129,.4);">♥</button>{{end}}
-        </div>
+      </div>
+      <div class="card-actions">
+        {{if .ShowFeedback}}<button class="feedback-btn" type="button" style="width:64px;height:32px;padding:0;border-radius:16px;border:1px solid #dcdee0;background:#fff;color:#6b7280;font-size:12px;">反馈</button>{{end}}
+        {{if .ShowHeart}}<button class="heart-btn" type="button" style="width:64px;height:64px;border-radius:50%;border:none;background:linear-gradient(135deg,#ff6b81,#ff8e9b);color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(255,107,129,.4);">♥</button>{{end}}
       </div>
     </div>
   </div>

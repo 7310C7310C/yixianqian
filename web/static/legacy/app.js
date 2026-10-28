@@ -5738,12 +5738,23 @@ const yxqApp = createApp({
       el.scrollTop = top;
       setTimeout(() => { bootCardProgrammaticScroll = false; }, 100);
     }
+    function attachBootCardScrollCancel(el) {
+      if (!el || el.__yxqBootCardScroll) return;
+      el.__yxqBootCardScroll = true;
+      el.addEventListener('scroll', () => {
+        if (bootCardProgrammaticScroll) return;
+        if (bootCardHandoff) bootCardHandoff.cancelled = true;
+      }, { passive: true });
+    }
     function restoreBootCardScroll() {
       if (!bootCardHandoff || bootCardHandoff.cancelled) { bootCardHandoff = null; return; }
       if (Date.now() > bootCardHandoff.until || page.value !== 'cards') return;
       if (bootCardKey() !== bootCardHandoff.key) { bootCardHandoff = null; return; }
       const el = document.querySelector('#app .swipe-card .card-info');
-      if (el && Math.abs(el.scrollTop - bootCardHandoff.top) > 2) {
+      if (!el) return;
+      // tab 返回/重渲染会换新元素；必须给新元素补挂取消监听，否则会抢用户滚动。
+      attachBootCardScrollCancel(el);
+      if (Math.abs(el.scrollTop - bootCardHandoff.top) > 2) {
         applyBootCardScroll(el, bootCardHandoff.top);
       }
     }
@@ -5771,13 +5782,7 @@ const yxqApp = createApp({
         const top = bootInfo.scrollTop;
         applyBootCardScroll(realInfo, top);
         bootCardHandoff = { key: key, top: top, until: Date.now() + 1800, cancelled: false };
-        if (!realInfo.__yxqBootCardScroll) {
-          realInfo.__yxqBootCardScroll = true;
-          realInfo.addEventListener('scroll', () => {
-            if (bootCardProgrammaticScroll) return;
-            if (bootCardHandoff) bootCardHandoff.cancelled = true;
-          }, { passive: true });
-        }
+        attachBootCardScrollCancel(realInfo);
         armBootCardHandoffGuard();
       } catch (_) {}
     }
@@ -5849,11 +5854,7 @@ const yxqApp = createApp({
       window.__YXQ_LOAD_HOME_DONE__ = !v;
       if (!v) {
         window.__YXQ_LOAD_HOME_DONE_AT__ = Math.round(performance.now());
-        nextTick(() => {
-          // 真实卡 DOM 已 patch，可交互；用于 perf 的 time-to-interactive。
-          window.__YXQ_CARD_INTERACTIVE_AT__ = Math.round(performance.now());
-          settleBootCard();
-        });
+        nextTick(settleBootCard);
       }
     });
     watch(page, (v) => { if (v !== 'cards') dismissBootCard('tab'); });
@@ -5880,6 +5881,32 @@ const yxqApp = createApp({
       window.__YXQ_APP_MOUNTED__ = true;
       // inline pointerdown 的交互 dismiss 必须走这里，才能先 syncBootCardScroll 再移除。
       window.__YXQ_BOOT_CARD_HANDOFF__ = dismissBootCard;
+      // 点击/触摸判定放在 app.js：触摸滑动 >10px 或长按不 dismiss，保证 .card-info 可滚动。
+      try {
+        const bootEl = document.getElementById('boot-card');
+        if (bootEl) {
+          let tap = null;
+          const resetTap = () => { tap = null; };
+          bootEl.addEventListener('pointerdown', (e) => {
+            if (!e.target || !e.target.closest || !e.target.closest('#boot-card')) return;
+            tap = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), moved: false };
+          }, { passive: true });
+          bootEl.addEventListener('pointermove', (e) => {
+            if (!tap || tap.id !== e.pointerId) return;
+            if (Math.abs(e.clientX - tap.x) > 10 || Math.abs(e.clientY - tap.y) > 10) tap.moved = true;
+          }, { passive: true });
+          bootEl.addEventListener('pointercancel', resetTap, { passive: true });
+          bootEl.addEventListener('pointerup', (e) => {
+            if (!tap || tap.id !== e.pointerId) return;
+            const moved = tap.moved || Math.abs(e.clientX - tap.x) > 10 || Math.abs(e.clientY - tap.y) > 10;
+            const longPress = Date.now() - tap.t > 700;
+            const inside = e.target && e.target.closest && e.target.closest('#boot-card');
+            resetTap();
+            if (moved || longPress || !inside || !window.__YXQ_APP_MOUNTED__) return;
+            dismissBootCard('interact');
+          }, { passive: true });
+        }
+      } catch (_) {}
       window.__YXQ_LOAD_HOME_STARTED__ = false;
       window.__YXQ_LOAD_HOME_DONE__ = false;
       armBootCardHardLimit();

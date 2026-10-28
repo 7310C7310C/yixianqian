@@ -44,7 +44,9 @@ import (
 // the static island badge line box to the real card badge.
 // 2026-10-28 (boot card polish): 41 invalidated app.css/app.js after blocking click-through,
 // card actions, conditional preload and scroll handoff guard.
-const assetVersion = "41"
+// 2026-10-28 (boot card touch/deeplink): 42 invalidated index.html/app.css/app.js after
+// touch tap-vs-scroll, data-src image and new-element scroll cancel.
+const assetVersion = "42"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

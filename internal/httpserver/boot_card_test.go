@@ -76,7 +76,6 @@ func TestBootCardRendersCompleteFirstCard(t *testing.T) {
 		`info-grid-item full`,
 		`反馈`,
 		`♥`,
-		`👍`,
 		`>2</span>`,
 		`牵线`,
 		`我的`,
@@ -187,7 +186,7 @@ func TestBootCardSelfHasNoActionButtons(t *testing.T) {
 	card["is_self"] = true
 	card["recommended"] = false
 	out := renderBootCardForTest(t, payload)
-	for _, banned := range []string{"反馈", "♥", "👍"} {
+	for _, banned := range []string{"反馈", "♥"} {
 		if strings.Contains(out, banned) {
 			t.Fatalf("self boot card should not render action %q", banned)
 		}

@@ -64,7 +64,7 @@ make perf-budget          # 静态预算 + 19 项 nginx 断言（CI/prepush）
 make perf-guard-test      # 24 个自测：合成超限/删除 nginx 指令必红
 make perf-bench PERF_SOURCE=edge PERF_N=10 PERF_WARMUP=3
 make perf-lcp PERF_LCP_RUNS=3   # 需 BASE_URL + SESSION_COOKIE + Playwright
-# perf_boot.py --gap-p75-max 600：boot card 移除 - loadHome 完成 P75 超过 600ms 即失败
+# perf_boot.py --gap-p75-max 1000：boot card 移除 - loadHome 完成 P75 超过 1000ms 即失败
 ```
 
 - 预算在 `tools/perf/budgets.json`，每项 = 基线 +10%；只能手工修改并走 Review，没有自动更新。

@@ -113,8 +113,9 @@ def require(name: str) -> str:
     return value
 
 
-def make_context(browser, base_url: str, cookie: str, width: int, height: int, dark: bool = False):
-    context = browser.new_context(viewport={"width": width, "height": height}, locale="zh-CN")
+def make_context(browser, base_url: str, cookie: str, width: int, height: int, dark: bool = False, mobile: bool = False):
+    context = browser.new_context(viewport={"width": width, "height": height}, locale="zh-CN",
+                                  has_touch=mobile, is_mobile=mobile)
     context.add_cookies([{
         "name": "yxq_session", "value": cookie,
         "url": base_url, "httpOnly": True, "sameSite": "Lax",
@@ -304,7 +305,7 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
                 )
 
         timing = page.evaluate("""() => {
-          const removed = window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt();
+          const removed = window.__YXQ_BOOT_CARD_DETACHED_AT__;
           const home = window.__YXQ_LOAD_HOME_DONE_AT__;
           return {
             removed: removed == null ? null : Math.round(removed),
@@ -470,7 +471,24 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
         if num != den - 1:
             raise SmokeFailure(f"末张回退落点 {num} / {den}")
 
-        # 5) #/likes 深链：hero 不应在非牵线页出现；也不应 preload 首卡缩图。
+        # 5a) 全新 context 打开深链：静态岛 img data-src 不应发首卡图请求。
+        deep_ctx = make_context(browser, base_url, cookie, 390, 844)
+        deep_page = deep_ctx.new_page()
+        deep_reqs = []
+        deep_page.on("request", lambda req: deep_reqs.append(req.url) if "/cards/photo/" in req.url else None)
+        try:
+            deep_page.goto(base_url + "/app#/likes", wait_until="domcontentloaded", timeout=40000)
+            deep_page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
+            deep_page.wait_for_timeout(600)
+            deep_boot = deep_page.evaluate("() => window.__YXQ_PRELOAD__ || ''")
+            if deep_boot and any(deep_boot in u for u in deep_reqs):
+                raise SmokeFailure(f"全新深链仍请求静态岛首卡图：{[u for u in deep_reqs if deep_boot in u][:2]}")
+            if deep_page.evaluate("() => !!document.querySelector('link[rel=preload][as=image]')"):
+                raise SmokeFailure("全新深链仍创建首卡图 preload link")
+        finally:
+            deep_ctx.close()
+
+        # 5b) 原 page 深链：静态岛不出现；回牵线也不重现。
         boot_photo = page.evaluate("() => window.__YXQ_PRELOAD__ || ''")
         preload_hits = []
         page.on("request", lambda req: preload_hits.append(req.url) if boot_photo and boot_photo in req.url else None)
@@ -645,6 +663,16 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
         scroll_after_tab = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
         if scroll_after_tab < 150:
             raise SmokeFailure(f"切页返回后滚动位置丢失：real scrollTop={scroll_after_tab}")
+        # 守卫不能覆盖用户手动滚动：鼠标移到资料区滚 60，scrollTop 应继续增加。
+        box = page.locator("#app .swipe-card .card-info").bounding_box()
+        if not box:
+            raise SmokeFailure("真实卡资料区没有 bounding box")
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.wheel(0, 60)
+        page.wait_for_timeout(200)
+        scroll_after_wheel = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
+        if scroll_after_wheel <= scroll_after_tab:
+            raise SmokeFailure(f"scroll 守卫覆盖了用户滚动：{scroll_after_tab} -> {scroll_after_wheel}")
         page.screenshot(path=str(out_dir / "boot-card-scroll-transfer-390.png"))
         if errors:
             raise SmokeFailure(f"滚动交接用例 pageerror {errors[:2]}")
@@ -762,6 +790,72 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
     return failures
 
 
+def run_touch_scroll(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """触摸滑动静态岛 .card-info 不能被当作点击 dismiss（B1 回归）。"""
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844, mobile=True)
+        page = context.new_page()
+        errors = page_errors(page)
+        held_img = {}
+
+        def patch_bootstrap_touch(route) -> None:
+            response = route.fetch()
+            body = re.sub(
+                r'("photos_thumb":\["?)[^"]*("?)',
+                r'\1/cards/photo/44444444-4444-4444-4444-444444444444?size=thumb\2',
+                response.text(), count=1, flags=re.S,
+            )
+            route.fulfill(response=response, body=body)
+
+        def hold_real_image_touch(route) -> None:
+            if "route" not in held_img:
+                held_img["route"] = route
+                return
+            route.continue_()
+
+        context.route(base_url.rstrip("/") + "/app", patch_bootstrap_touch)
+        context.route("**/cards/photo/44444444-4444-4444-4444-444444444444**", hold_real_image_touch)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_function(
+            "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
+            timeout=15000,
+        )
+        box = page.locator("#boot-card .card-info").bounding_box()
+        if not box:
+            raise SmokeFailure("静态岛资料区没有 bounding box")
+        x = box["x"] + box["width"] / 2
+        y = box["y"] + box["height"] * 0.65
+        cdp = context.new_cdp_session(page)
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchStart",
+                                              "touchPoints": [{"x": x, "y": y, "id": 1, "radiusX": 2, "radiusY": 2, "force": 1}]})
+        for i in range(1, 7):
+            cdp.send("Input.dispatchTouchEvent", {"type": "touchMove",
+                                                  "touchPoints": [{"x": x, "y": y - 20 * i, "id": 1, "radiusX": 2, "radiusY": 2, "force": 1}]})
+            page.wait_for_timeout(30)
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        page.wait_for_timeout(300)
+        if page.locator("#boot-card").count() != 1:
+            raise SmokeFailure("触摸滑动被当成点击，静态岛提前移除")
+        scroll = page.evaluate("() => { const el = document.querySelector('#boot-card .card-info'); return el ? el.scrollTop : -1; }")
+        if scroll <= 0:
+            raise SmokeFailure(f"触摸滑动未滚动静态岛资料区：scrollTop={scroll}")
+        page.screenshot(path=str(out_dir / "boot-card-touch-scroll-390.png"))
+        if errors:
+            raise SmokeFailure(f"触摸滚动用例 pageerror {errors[:2]}")
+    except Exception as exc:  # noqa: BLE001
+        return [f"触摸滚动: {exc}"]
+    finally:
+        if context is not None:
+            try:
+                if held_img.get("route"):
+                    held_img["route"].abort()
+            except Exception:  # noqa: BLE001
+                pass
+            context.close()
+    return []
+
+
 def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
     """loadHome 挂起时，壳脚本/app.js 的 4s 硬上限必须移除静态岛并露出启动骨架。"""
     context = None
@@ -852,6 +946,7 @@ def main() -> int:
             failures.extend(run_interactions(browser, base_url, cookie, out_dir))
             failures.extend(run_fallbacks(browser, base_url, cookie, out_dir))
             failures.extend(run_takeover_regressions(browser, base_url, cookie, out_dir))
+            failures.extend(run_touch_scroll(browser, base_url, cookie, out_dir))
             failures.extend(run_load_home_hang(browser, base_url, cookie, out_dir))
             failures.extend(run_dark(browser, base_url, cookie, out_dir))
             browser.close()

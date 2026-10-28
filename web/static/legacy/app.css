@@ -219,6 +219,7 @@
   #boot-card .boot-slow { display: none; position: fixed; left: 50%; bottom: calc(70px + env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; z-index: 3; }
   #boot-card.boot-card-slow .boot-slow { display: block; }
   .van-theme-dark #boot-card { background: #111; }
+  .van-theme-dark #boot-card .feedback-btn { background: #1c1c1e !important; color: #c8c9cc !important; border-color: #4a4a4e !important; }
   html.boot-skip #boot-card { display: none; }
   @media (prefers-reduced-motion: reduce) {
     #boot-card { transition: none; }

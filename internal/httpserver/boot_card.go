@@ -29,7 +29,6 @@ type bootCardData struct {
 	MsgCount   int
 
 	ShowFeedback bool
-	ShowPraise   bool
 	ShowHeart    bool
 
 	Sections []bootCardSection
@@ -80,7 +79,7 @@ func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 			card.PhotoPlaceholder = "👩"
 		}
 	} else {
-		card.PhotoPlaceholder = "👤"
+		card.PhotoPlaceholder = "👩"
 	}
 	card.MsgCount = intValue(first["msg_count"])
 	if display, ok := first["display_fields"].(CardDisplayFields); ok {
@@ -126,7 +125,6 @@ func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 		card.BadgeClass = "boot-badge--recommend"
 	}
 	card.ShowFeedback = !isSelf
-	card.ShowPraise = !isSelf && !observer
 	card.ShowHeart = !isSelf && !observer
 
 	total, _ := payload["cards_total"].(int)

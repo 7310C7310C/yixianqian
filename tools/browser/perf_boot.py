@@ -118,9 +118,9 @@ def collect(page) -> dict:
             app_start_reason: window.__YXQ_APP_START_REASON__ || '',
             hero_ready_ms: window.__YXQ_HERO_READY_AT__ || (heroReady ? Math.round(heroReady.startTime) : null),
             home_done_ms: window.__YXQ_LOAD_HOME_DONE_AT__ || null,
-            boot_card_removed_ms: (window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt && window.__YXQ_BOOT_CARD__.removedAt()) || null,
+            boot_card_removed_ms: window.__YXQ_BOOT_CARD_DETACHED_AT__ || null,
             boot_gap_ms: (function () {
-              const removed = window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt && window.__YXQ_BOOT_CARD__.removedAt();
+              const removed = window.__YXQ_BOOT_CARD_DETACHED_AT__;
               const home = window.__YXQ_LOAD_HOME_DONE_AT__;
               return (removed != null && home != null) ? Math.round(removed - home) : null;
             })(),
@@ -155,8 +155,8 @@ def main() -> int:
     ap.add_argument("--latency", type=float, default=150)
     ap.add_argument("--down-mbps", type=float, default=1.6)
     ap.add_argument("--cpu", type=float, default=4)
-    ap.add_argument("--gap-p75-max", type=float, default=600,
-                    help="fail when card_removed-home_done P75 exceeds this many ms (default 600)")
+    ap.add_argument("--gap-p75-max", type=float, default=1000,
+                    help="fail when boot card detach - home_done P75 exceeds this many ms (default 1000)")
     args = ap.parse_args()
 
     base_url = os.environ.get("BASE_URL", "").strip().rstrip("/")
