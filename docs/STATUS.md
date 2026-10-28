@@ -11,14 +11,14 @@ sources: []
 > 测试输出与 commit sha 叙事看 `git log` 和 commit message；机械事实用下方命令复核。
 > 更新时机：每次 staging 部署、阶段变化、P0/缺口变化。不要在这里追加批次日记。
 
-## 1. 当前快照（2026-10-28 03:19 UTC）
+## 1. 当前快照（2026-10-28 03:55 UTC）
 
 | 项目 | 值 |
 |---|---|
 | staging 入口 | `https://next.nantou.love`（server2 HK relay → server1） |
-| `/healthz`（运行二进制） | `staging-9e9e405` |
-| 代码部署提交（healthz 对应） | `9e9e405` |
-| 服务器 `src` HEAD | `9e9e405`（手工 pull 可能不同步） |
+| `/healthz`（运行二进制） | `staging-c4da265` |
+| 代码部署提交（healthz 对应） | `c4da265` |
+| 服务器 `src` HEAD | `c4da265`（手工 pull 可能不同步） |
 | `deployed.sha` | 见 `/opt/yixianqian-next/deployed.sha`；docs-only 提交会推进它，可能大于 healthz |
 | migration 最大版本 | `11`（`0011_photo_upload_daily`） |
 | 用户 | `1115`：active 普通用户 `1111`、observer `4` |
