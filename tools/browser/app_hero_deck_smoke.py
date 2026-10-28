@@ -641,10 +641,13 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
             route.fulfill(response=response, body=body)
 
         def hold_real_image(route) -> None:
-            if "route" not in held_img:
-                held_img["route"] = route
+            # 挂起该 URL 的所有请求（preload/静态岛/真实卡）：只挂第一个时，后续
+            # 请求会继续并把图片放进缓存，真实卡提前可绘制，静态岛在断言前就被移除。
+            # 释放后迟到的请求直接放行，避免永久挂起。
+            if held_img.get("released"):
+                route.continue_()
                 return
-            route.continue_()
+            held_img.setdefault("routes", []).append(route)
 
         context.route(base_url.rstrip("/") + "/app", patch_bootstrap)
         context.route("**/cards/photo/11111111-1111-1111-1111-111111111111**", hold_real_image)
@@ -658,8 +661,14 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
         boot_scroll = page.evaluate("() => { const el = document.querySelector('#boot-card .boot-deck-slide.is-active .card-info'); return el ? el.scrollTop : -1; }")
         if boot_scroll < 150:
             raise SmokeFailure(f"静态岛资料区不可滚动：scrollTop={boot_scroll}")
-        if held_img.get("route"):
-            held_img["route"].fulfill(status=200, content_type="image/png", body=TINY_PNG)
+        released = held_img.get("routes", [])
+        held_img["released"] = True
+        held_img["routes"] = []
+        for held_route in released:
+            try:
+                held_route.fulfill(status=200, content_type="image/png", body=TINY_PNG)
+            except Exception:  # noqa: BLE001
+                pass
         page.locator("#boot-card").wait_for(state="detached", timeout=15000)
         # 交接瞬间读取：只验证 handoff 本身，避免随后 /api/cards 刷新/重渲染把 scroll 归零。
         real_scroll = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
@@ -691,8 +700,11 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
     finally:
         if context is not None:
             try:
-                if held_img.get("route"):
-                    held_img["route"].abort()
+                for held_route in held_img.get("routes", []):
+                    try:
+                        held_route.abort()
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:  # noqa: BLE001
                 pass
             context.close()
@@ -1064,14 +1076,20 @@ def main() -> int:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(args=["--no-sandbox"])
             for width, height in ((390, 844), (1280, 900), (375, 667), (768, 1024)):
+                print(f"RUN viewport {width}x{height}", flush=True)
                 failures.extend(run_viewport(browser, base_url, cookie, width, height, out_dir, throttle_net=True))
-            failures.extend(run_interactions(browser, base_url, cookie, out_dir))
-            failures.extend(run_fallbacks(browser, base_url, cookie, out_dir))
-            failures.extend(run_takeover_regressions(browser, base_url, cookie, out_dir))
-            failures.extend(run_deck_swipe(browser, base_url, cookie, out_dir))
-            failures.extend(run_touch_scroll(browser, base_url, cookie, out_dir))
-            failures.extend(run_load_home_hang(browser, base_url, cookie, out_dir))
-            failures.extend(run_dark(browser, base_url, cookie, out_dir))
+            for name, fn in (
+                ("interactions", run_interactions),
+                ("fallbacks", run_fallbacks),
+                ("takeover", run_takeover_regressions),
+                ("deck-swipe", run_deck_swipe),
+                ("touch-scroll", run_touch_scroll),
+                ("load-home-hang", run_load_home_hang),
+                ("dark", run_dark),
+            ):
+                print(f"RUN {name}", flush=True)
+                failures.extend(fn(browser, base_url, cookie, out_dir))
+                print(f"DONE {name} failures={len(failures)}", flush=True)
             browser.close()
     except Exception as exc:  # noqa: BLE001
         failures.append(f"fatal: {exc}")
