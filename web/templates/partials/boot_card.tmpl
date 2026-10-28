@@ -1,60 +1,75 @@
 {{define "boot_card"}}
-<div id="boot-card" aria-hidden="true">
+<div id="boot-card" aria-hidden="true" data-total="{{.Total}}">
   <div class="cards-page">
     <div class="card-top-left">
-      <div class="card-counter">{{.Counter}}</div>
+      <div class="card-counter" data-total="{{.Total}}">1 / {{.Total}}</div>
       {{if .ShowHearts}}<div class="hearts-badge">💕 匿名 {{.AnonLeft}} · 实名 {{.RealLeft}}</div>{{end}}
     </div>
     <div class="filter-btn">⚙ 筛选</div>
-    <div class="swipe-card">
-      <div class="card-photo-wrap">
-        {{if .Photo}}
-        <img class="card-photo-item boot-photo" data-src="{{.Photo}}" alt="" decoding="async" fetchpriority="high"{{if .FacesJSON}} data-faces="{{.FacesJSON}}"{{end}}>
-        {{else}}
-        <div class="card-photo-placeholder">{{.PhotoPlaceholder}}</div>
-        {{end}}
-        {{if gt .PhotoCount 1}}
-        <div class="photo-dots">
-          {{range .Dots}}<div class="photo-dot{{if .}} active{{end}}"></div>{{end}}
-        </div>
-        {{end}}
-        <div class="card-photo-overlay">
-          <div class="card-overlay-box">
-            <div class="card-overlay-text">
-              {{if .BadgeText}}<div style="margin-bottom:6px;"><span class="boot-badge {{.BadgeClass}}">{{.BadgeText}}</span></div>{{end}}
-              <div class="card-name">{{.Nickname}}
-                <span class="gender-icon">{{.GenderIcon}}</span>
+    <div class="boot-deck-track" style="--boot-cards:{{len .Cards}};">
+      {{range $i, $card := .Cards}}
+      <div class="boot-deck-slide{{if eq $i 0}} is-active{{end}}" data-index="{{$i}}" data-openid="{{$card.OpenID}}">
+        <div class="swipe-card">
+          <div class="card-photo-wrap">
+            {{if $card.Photo}}
+            <img class="card-photo-item boot-photo" data-src="{{$card.Photo}}" alt="" decoding="async" fetchpriority="high"{{if $card.FacesJSON}} data-faces="{{$card.FacesJSON}}"{{end}}>
+            {{else}}
+            <div class="card-photo-placeholder">{{$card.PhotoPlaceholder}}</div>
+            {{end}}
+            {{if gt $card.PhotoCount 1}}
+            <div class="photo-dots">
+              {{range $card.Dots}}<div class="photo-dot{{if .}} active{{end}}"></div>{{end}}
+            </div>
+            {{end}}
+            <div class="card-photo-overlay">
+              <div class="card-overlay-box">
+                <div class="card-overlay-text">
+                  {{if $card.BadgeText}}<div style="margin-bottom:6px;"><span class="boot-badge {{$card.BadgeClass}}">{{$card.BadgeText}}</span></div>{{end}}
+                  <div class="card-name">{{$card.Nickname}}
+                    <span class="gender-icon">{{$card.GenderIcon}}</span>
+                  </div>
+                  {{if $card.Simple}}<div class="card-subtitle">{{$card.Simple}}</div>{{end}}
+                </div>
               </div>
-              {{if .Simple}}<div class="card-subtitle">{{.Simple}}</div>{{end}}
             </div>
           </div>
-        </div>
-      </div>
-      <div class="card-main">
-        <div class="card-tabs">
-          <div class="card-tab active">资料</div>
-          <div class="card-tab">留言{{if gt .MsgCount 0}}<span style="display:inline-block;min-width:16px;height:16px;line-height:16px;padding:0 4px;margin-left:4px;border-radius:8px;background:var(--yxq-brand-ink);color:#fff;font-size:11px;font-weight:600;vertical-align:1px;">{{.MsgCount}}</span>{{end}}</div>
-        </div>
-        <div class="card-info">
-          {{range .Sections}}
-          <div class="card-section">
-            <div class="profile-section-title"><span class="ps-icon">{{.Icon}}</span>{{.Title}}</div>
-            <div class="info-grid">
-              {{range .Fields}}
-              <div class="info-grid-item{{if .Full}} full{{end}}">
-                <span class="df-label">{{.Label}}：</span>
-                <span class="df-value">{{.Value}}</span>
+          <div class="card-main">
+            <div class="card-tabs">
+              <div class="card-tab active">资料</div>
+              <div class="card-tab">留言{{if gt $card.MsgCount 0}}<span style="display:inline-block;min-width:16px;height:16px;line-height:16px;padding:0 4px;margin-left:4px;border-radius:8px;background:var(--yxq-brand-ink);color:#fff;font-size:11px;font-weight:600;vertical-align:1px;">{{$card.MsgCount}}</span>{{end}}</div>
+            </div>
+            <div class="card-info">
+              {{if $card.Compact}}
+              <div class="boot-shimmer boot-line boot-line--lg"></div>
+              <div class="boot-shimmer boot-line boot-line--md"></div>
+              <div class="boot-shimmer boot-line boot-line--sm"></div>
+              <div class="boot-shimmer boot-line boot-line--md"></div>
+              {{else}}
+              {{range $card.Sections}}
+              <div class="card-section">
+                <div class="profile-section-title"><span class="ps-icon">{{.Icon}}</span>{{.Title}}</div>
+                <div class="info-grid">
+                  {{range .Fields}}
+                  <div class="info-grid-item{{if .Full}} full{{end}}">
+                    <span class="df-label">{{.Label}}：</span>
+                    <span class="df-value">{{.Value}}</span>
+                  </div>
+                  {{end}}
+                </div>
               </div>
               {{end}}
+              {{end}}
             </div>
+          </div>
+          {{if not $card.Compact}}
+          <div class="card-actions">
+            {{if $card.ShowFeedback}}<button class="feedback-btn" type="button" style="width:64px;height:32px;padding:0;border-radius:16px;border:1px solid #dcdee0;background:#fff;color:#6b7280;font-size:12px;">反馈</button>{{end}}
+            {{if $card.ShowHeart}}<button class="heart-btn{{if $card.Liked}} liked{{end}}" type="button" style="width:64px;height:64px;border-radius:50%;border:none;background:linear-gradient(135deg,#ff6b81,#ff8e9b);color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(255,107,129,.4);{{if $card.Liked}}background:#c8c9cc;box-shadow:none;{{end}}">♥</button>{{end}}
           </div>
           {{end}}
         </div>
       </div>
-      <div class="card-actions">
-        {{if .ShowFeedback}}<button class="feedback-btn" type="button" style="width:64px;height:32px;padding:0;border-radius:16px;border:1px solid #dcdee0;background:#fff;color:#6b7280;font-size:12px;">反馈</button>{{end}}
-        {{if .ShowHeart}}<button class="heart-btn{{if .Liked}} liked{{end}}" type="button" style="width:64px;height:64px;border-radius:50%;border:none;background:linear-gradient(135deg,#ff6b81,#ff8e9b);color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(255,107,129,.4);{{if .Liked}}background:#c8c9cc;box-shadow:none;{{end}}">♥</button>{{end}}
-      </div>
+      {{end}}
     </div>
   </div>
   <div class="boot-tabbar" aria-hidden="true">

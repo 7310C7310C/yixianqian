@@ -102,6 +102,7 @@ def measure(root: Path, bootstrap_allowance: int = 0, boot_card_allowance: int =
         + metrics["vant_subset_css_gzip"]
         + file_size(legacy / "lib/vue.global.prod.js.gz")
         + file_size(legacy / "app.css.gz")
+        + file_size(legacy / "boot-card.js.gz")
         + photoswipe
         + file_size(legacy / "favicon.ico")
     )

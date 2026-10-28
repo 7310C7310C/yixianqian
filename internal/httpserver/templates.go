@@ -51,7 +51,9 @@ import (
 // 2026-10-28 (boot card touchend): 44 invalidated app.js after touch-only touchend tap.
 // 2026-10-28 (boot card hard cap): 45 invalidated app.js after only hard-cutting when
 // loadHome is still pending (not while a complete static card is being read).
-const assetVersion = "45"
+// 2026-10-28 (boot mini deck): 46 invalidated index.html/app.css/app.js/boot-card.js after
+// a 3-card static deck and earlier login prefetch.
+const assetVersion = "46"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

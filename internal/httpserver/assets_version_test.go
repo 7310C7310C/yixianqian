@@ -102,19 +102,30 @@ func TestLegacyShellBootCard(t *testing.T) {
 	html := readEmbedded(t, "static/legacy/index.html")
 	for _, want := range []string{
 		`<!--YXQ_BOOT_CARD-->`,
-		`__YXQ_BOOT_CARD__`,
-		`data-faces`,
+		`boot-card.js?v=__ASSET_URL_VERSION__`,
 		`boot-skip`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("shell is missing boot card marker %q", want)
 		}
 	}
+	bootCardJS := readEmbedded(t, "static/legacy/boot-card.js")
+	for _, want := range []string{
+		`__YXQ_BOOT_CARD__`,
+		`data-faces`,
+		`boot-deck-track`,
+		`setIndex`,
+		`__YXQ_BOOT_DECK__`,
+	} {
+		if !strings.Contains(bootCardJS, want) {
+			t.Fatalf("boot-card.js is missing %q", want)
+		}
+	}
 	if strings.Contains(html, `id="boot-skeleton"`) {
 		t.Fatal("shell still contains the old boot-skeleton hero")
 	}
 	bootCard := readEmbedded(t, "templates/partials/boot_card.tmpl")
-	for _, want := range []string{`id="boot-card"`, `class="boot-tabbar"`, `card-photo-overlay`, `card-info`, `profile-section-title`} {
+	for _, want := range []string{`id="boot-card"`, `class="boot-tabbar"`, `card-photo-overlay`, `card-info`, `profile-section-title`, `boot-deck-track`, `boot-deck-slide`, `data-src`} {
 		if !strings.Contains(bootCard, want) {
 			t.Fatalf("boot_card.tmpl is missing %q", want)
 		}
@@ -125,6 +136,8 @@ func TestLegacyShellBootCard(t *testing.T) {
 		"#boot-card.boot-card-out",
 		"#boot-card.boot-card-slow",
 		"#boot-card .boot-tab-text",
+		"#boot-card .boot-deck-track",
+		"#boot-card .boot-deck-slide",
 		"object-fit: cover",
 		"height: calc(50px + env(safe-area-inset-bottom))",
 		"prefers-reduced-motion",

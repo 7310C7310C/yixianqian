@@ -1,18 +1,21 @@
 package httpserver
 
-import (
-	"encoding/json"
-	"fmt"
-)
+import "encoding/json"
 
-// bootCardData is the server-rendered first card used before the SPA boots.
-// It intentionally mirrors the default card page (photo overlay + profile tab)
-// so the first paint is the final card, not a bare image + shimmer.
+// bootCardData is the server-rendered mini deck used before the SPA boots.
+// The first card is fully rendered; the next bootstrap cards are compact
+// (photo/name/simple + profile skeleton) so the user can swipe immediately.
 type bootCardData struct {
-	Counter    string
+	Total      int
+	Cards      []bootCardView
 	ShowHearts bool
 	AnonLeft   int
 	RealLeft   int
+}
+
+type bootCardView struct {
+	OpenID  string
+	Compact bool
 
 	Photo            string
 	PhotoCount       int
@@ -47,23 +50,15 @@ type bootCardField struct {
 	Full  bool
 }
 
-// bootCardFromPayload builds the boot card view from the already-sanitized
+// bootCardFromPayload builds the static mini deck from the already-sanitized
 // home bootstrap. It returns false when the viewer has no deck card (ID gate,
-// empty deck, …) so the shell falls back to the existing Vue boot skeleton.
+// empty deck, …) so the shell falls back to the Vue boot skeleton.
 func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 	cards, ok := payload["cards"].([]map[string]any)
 	if !ok || len(cards) == 0 {
 		return bootCardData{}, false
 	}
-	first := cards[0]
-	if first == nil {
-		return bootCardData{}, false
-	}
 
-	card := bootCardData{
-		Photo:    firstCardPhoto(first),
-		Nickname: stringValue(first["nickname"]),
-	}
 	observer := false
 	anonLeft, realLeft := 0, 0
 	if user, ok := payload["user"].(map[string]any); ok {
@@ -71,81 +66,102 @@ func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 		anonLeft = intValue(user["anon_left"])
 		realLeft = intValue(user["real_left"])
 	}
-	if gender := stringValue(first["gender"]); gender != "" {
-		if gender == "男性" {
-			card.GenderIcon = "♂"
-			card.PhotoPlaceholder = "👨"
+
+	views := make([]bootCardView, 0, len(cards))
+	for i, first := range cards {
+		if first == nil {
+			continue
+		}
+		view := bootCardView{
+			OpenID:   stringValue(first["openid"]),
+			Compact:  i > 0,
+			Photo:    firstCardPhoto(first),
+			Nickname: stringValue(first["nickname"]),
+			MsgCount: intValue(first["msg_count"]),
+		}
+		if gender := stringValue(first["gender"]); gender != "" {
+			if gender == "男性" {
+				view.GenderIcon = "♂"
+				view.PhotoPlaceholder = "👨"
+			} else {
+				view.GenderIcon = "♀"
+				view.PhotoPlaceholder = "👩"
+			}
 		} else {
-			card.GenderIcon = "♀"
-			card.PhotoPlaceholder = "👩"
+			view.PhotoPlaceholder = "👩"
 		}
-	} else {
-		card.PhotoPlaceholder = "👩"
-	}
-	card.MsgCount = intValue(first["msg_count"])
-	if display, ok := first["display_fields"].(CardDisplayFields); ok {
-		card.Simple = display.Simple
-		for _, section := range display.Sections {
-			view := bootCardSection{Title: section.Title, Icon: section.Icon}
-			for _, field := range section.Fields {
-				view.Fields = append(view.Fields, bootCardField{
-					Label: field.Label,
-					Value: field.Value,
-					Full:  field.Label == "我是怎样的人" || field.Label == "理想中的TA",
-				})
-			}
-			if len(view.Fields) > 0 {
-				card.Sections = append(card.Sections, view)
+		if display, ok := first["display_fields"].(CardDisplayFields); ok {
+			view.Simple = display.Simple
+			if !view.Compact {
+				for _, section := range display.Sections {
+					sec := bootCardSection{Title: section.Title, Icon: section.Icon}
+					for _, field := range section.Fields {
+						sec.Fields = append(sec.Fields, bootCardField{
+							Label: field.Label,
+							Value: field.Value,
+							Full:  field.Label == "我是怎样的人" || field.Label == "理想中的TA",
+						})
+					}
+					if len(sec.Fields) > 0 {
+						view.Sections = append(view.Sections, sec)
+					}
+				}
 			}
 		}
-	}
 
-	photos, _ := first["photos"].([]string)
-	card.PhotoCount = len(photos)
-	if card.PhotoCount == 0 && card.Photo != "" {
-		card.PhotoCount = 1
-	}
-	if card.PhotoCount > 0 {
-		card.Dots = make([]bool, card.PhotoCount)
-		card.Dots[0] = true
-	}
-
-	faces, _ := first["faces"].([]any)
-	if len(faces) > 0 && faces[0] != nil {
-		if raw, err := json.Marshal(faces[0]); err == nil {
-			card.FacesJSON = string(raw)
+		photos, _ := first["photos"].([]string)
+		view.PhotoCount = len(photos)
+		if view.PhotoCount == 0 && view.Photo != "" {
+			view.PhotoCount = 1
 		}
-	}
+		if view.PhotoCount > 0 {
+			view.Dots = make([]bool, view.PhotoCount)
+			view.Dots[0] = true
+		}
 
-	isSelf, _ := first["is_self"].(bool)
-	if isSelf {
-		card.BadgeText = "这是你 · 他人视角"
-		card.BadgeClass = "boot-badge--self"
-	} else if recommended, _ := first["recommended"].(bool); recommended {
-		card.BadgeText = "推荐"
-		card.BadgeClass = "boot-badge--recommend"
+		faces, _ := first["faces"].([]any)
+		if len(faces) > 0 && faces[0] != nil {
+			if raw, err := json.Marshal(faces[0]); err == nil {
+				view.FacesJSON = string(raw)
+			}
+		}
+
+		isSelf, _ := first["is_self"].(bool)
+		if isSelf {
+			view.BadgeText = "这是你 · 他人视角"
+			view.BadgeClass = "boot-badge--self"
+		} else if recommended, _ := first["recommended"].(bool); recommended {
+			view.BadgeText = "推荐"
+			view.BadgeClass = "boot-badge--recommend"
+		}
+		if !view.Compact {
+			view.ShowFeedback = !isSelf
+			view.ShowHeart = !isSelf && !observer
+			if liked, _ := first["liked"].(bool); liked {
+				view.Liked = true
+			}
+		}
+
+		views = append(views, view)
 	}
-	card.ShowFeedback = !isSelf
-	card.ShowHeart = !isSelf && !observer
-	if liked, _ := first["liked"].(bool); liked {
-		card.Liked = true
+	if len(views) == 0 {
+		return bootCardData{}, false
 	}
 
 	total, _ := payload["cards_total"].(int)
 	if total <= 0 {
-		total = len(cards)
+		total = len(views)
 	}
 	if total < 1 {
 		total = 1
 	}
-	card.Counter = fmt.Sprintf("1 / %d", total)
-
-	if !observer {
-		card.ShowHearts = true
-		card.AnonLeft = anonLeft
-		card.RealLeft = realLeft
-	}
-	return card, true
+	return bootCardData{
+		Total:      total,
+		Cards:      views,
+		ShowHearts: !observer,
+		AnonLeft:   anonLeft,
+		RealLeft:   realLeft,
+	}, true
 }
 
 func firstCardPhoto(card map[string]any) string {

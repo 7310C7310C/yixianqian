@@ -5724,6 +5724,20 @@ const yxqApp = createApp({
     let bootCardSettled = false;
     let bootCardHardTimer = null;
     function bootCardApi() { return window.__YXQ_BOOT_CARD__; }
+    function bootCardActive(sel) {
+      const slide = document.querySelector('#boot-card .boot-deck-slide.is-active');
+      return slide ? slide.querySelector(sel) : document.querySelector('#boot-card ' + sel);
+    }
+    function syncBootDeckIndex() {
+      const deck = window.__YXQ_BOOT_DECK__;
+      if (!deck || !deck.openid) return;
+      const at = cards.value.findIndex((c) => (c.openid || '') === deck.openid);
+      if (at >= 0 && at !== cardIndex.value) {
+        cardIndex.value = at;
+        photoIndex.value = 0;
+        triggerPhotoLoading();
+      }
+    }
     let bootCardHandoff = null;
     let bootCardProgrammaticScroll = false;
     let bootCardHandoffTimer = null;
@@ -5775,7 +5789,7 @@ const yxqApp = createApp({
     // 用户手动滚动真实卡时立即取消，避免抢用户操作。
     function syncBootCardScroll() {
       try {
-        const bootInfo = document.querySelector('#boot-card .card-info');
+        const bootInfo = bootCardActive('.card-info');
         const realInfo = document.querySelector('#app .swipe-card .card-info');
         if (!bootInfo || !realInfo || bootInfo.scrollTop <= 0) return;
         const key = bootCardKey();
@@ -5807,7 +5821,7 @@ const yxqApp = createApp({
     function syncBootCardCrop() {
       try {
         const api = bootCardApi();
-        const heroImg = document.querySelector('#boot-card .boot-photo');
+        const heroImg = bootCardActive('.boot-photo');
         const heroWrap = heroImg && heroImg.closest('.card-photo-wrap');
         const faces = (currentCard.value && currentCard.value.faces) || [];
         if (!api || !heroImg || !heroWrap) return;
@@ -5857,13 +5871,15 @@ const yxqApp = createApp({
       window.__YXQ_LOAD_HOME_DONE__ = !v;
       if (!v) {
         window.__YXQ_LOAD_HOME_DONE_AT__ = Math.round(performance.now());
+        // 静态迷你牌堆可能已滑到第 2/3 张；按 openid 把真实卡同步到同一张。
+        syncBootDeckIndex();
         nextTick(settleBootCard);
       }
     });
     watch(page, (v) => { if (v !== 'cards') dismissBootCard('tab'); });
     watch([cardIndex, cardsStart], ([idx, start]) => {
       if (!bootCardAnchor) return;
-      if (idx !== bootCardAnchor.index || start !== bootCardAnchor.start) dismissBootCard('card-changed');
+      if (idx !== bootCardAnchor.index || start !== bootCardAnchor.start) nextTick(() => dismissBootCard('card-changed'));
     });
     watch([bootError, gateMessage], ([err, gate]) => { if (err || gate) dismissBootCard('gate'); });
     // 首卡人脸裁切（photoPositions[0]）可能在首图 @load 之后才算出；持续同步给静态岛，
@@ -5884,6 +5900,10 @@ const yxqApp = createApp({
       window.__YXQ_APP_MOUNTED__ = true;
       // inline pointerdown 的交互 dismiss 必须走这里，才能先 syncBootCardScroll 再移除。
       window.__YXQ_BOOT_CARD_HANDOFF__ = dismissBootCard;
+      // 静态迷你牌堆滑动后（app 已挂载）同步真实卡索引；boot 未完成时等 watch(bootLoading)。
+      window.__YXQ_BOOT_DECK_ON_CHANGE__ = () => {
+        if (!bootLoading.value) nextTick(syncBootDeckIndex);
+      };
       // 点击/触摸判定放在 app.js：触摸滑动 >10px 或长按不 dismiss，保证 .card-info 可滚动。
       try {
         const bootEl = document.getElementById('boot-card');

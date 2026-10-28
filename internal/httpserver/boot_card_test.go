@@ -87,6 +87,64 @@ func TestBootCardRendersCompleteFirstCard(t *testing.T) {
 	}
 }
 
+func TestBootCardMiniDeck(t *testing.T) {
+	payload := bootCardFixture()
+	first := payload["cards"].([]map[string]any)[0]
+	payload["cards"] = []map[string]any{
+		first,
+		{
+			"openid":    "openid-second",
+			"nickname":  "小芳",
+			"gender":    "女性",
+			"photo":     "/cards/photo/b?size=thumb",
+			"photos":    []string{"/cards/photo/b"},
+			"msg_count": 4,
+			"display_fields": CardDisplayFields{
+				Simple: "31岁 · 杭州 · 硕士",
+				Sections: []CardFieldSection{
+					{Title: "基本信息", Icon: "👤", Fields: []CardFieldItem{{Label: "现居/工作城市", Value: "杭州"}}},
+				},
+			},
+		},
+		{
+			"openid":   "openid-third",
+			"nickname": "小云",
+			"gender":   "女性",
+			"photo":    "/cards/photo/c?size=thumb",
+			"photos":   []string{"/cards/photo/c"},
+		},
+	}
+	data, ok := bootCardFromPayload(payload)
+	if !ok {
+		t.Fatal("bootCardFromPayload returned false")
+	}
+	if len(data.Cards) != 3 {
+		t.Fatalf("mini deck cards=%d, want 3", len(data.Cards))
+	}
+	if data.Cards[0].Compact || !data.Cards[1].Compact || !data.Cards[2].Compact {
+		t.Fatalf("compact flags = %v/%v/%v", data.Cards[0].Compact, data.Cards[1].Compact, data.Cards[2].Compact)
+	}
+	if data.Cards[1].OpenID != "openid-second" || data.Cards[2].OpenID != "openid-third" {
+		t.Fatalf("mini deck openids = %q/%q", data.Cards[1].OpenID, data.Cards[2].OpenID)
+	}
+	if len(data.Cards[1].Sections) != 0 {
+		t.Fatalf("compact card should not render profile sections")
+	}
+	out := renderBootCardForTest(t, payload)
+	for _, want := range []string{
+		`data-openid="openid-second"`, `data-openid="openid-third"`,
+		`data-total="7"`, `--boot-cards:3`, `小芳`, `31岁 · 杭州 · 硕士`,
+		`boot-deck-slide is-active`, `boot-line`, `data-src="/cards/photo/c?size=thumb"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("mini deck missing %q", want)
+		}
+	}
+	if strings.Count(out, "card-section") != 2 {
+		t.Fatalf("profile sections rendered %d times, want 2 (first card only)", strings.Count(out, "card-section"))
+	}
+}
+
 func TestBootCardEscapesUserContent(t *testing.T) {
 	payload := bootCardFixture()
 	card := payload["cards"].([]map[string]any)[0]
@@ -145,8 +203,8 @@ func TestBootCardPhotoFallback(t *testing.T) {
 	if !ok {
 		t.Fatal("bootCardFromPayload returned false")
 	}
-	if data.Photo != "/cards/photo/a?size=thumb" {
-		t.Fatalf("photo fallback = %q", data.Photo)
+	if data.Cards[0].Photo != "/cards/photo/a?size=thumb" {
+		t.Fatalf("photo fallback = %q", data.Cards[0].Photo)
 	}
 }
 

@@ -7,8 +7,8 @@ import (
 )
 
 // TestBootCardGzipBudget keeps the server-rendered first card within the shell
-// allowance documented in tools/perf/budgets.json (2,300B). A full profile card
-// is the worst case: four sections with all visible fields + card actions.
+// allowance documented in tools/perf/budgets.json. The full first card + two
+// compact next cards are the worst case.
 func TestBootCardGzipBudget(t *testing.T) {
 	payload := bootCardFixture()
 	card := payload["cards"].([]map[string]any)[0]
@@ -46,6 +46,20 @@ func TestBootCardGzipBudget(t *testing.T) {
 			}},
 		},
 	}
+	cards := payload["cards"].([]map[string]any)
+	for i := 1; i < 3; i++ {
+		cards = append(cards, map[string]any{
+			"openid":   "openid-compact-" + string(rune('0'+i)),
+			"nickname": "候选" + string(rune('0'+i)),
+			"gender":   "女性",
+			"photo":    "/cards/photo/compact" + string(rune('0'+i)) + "?size=thumb",
+			"photos":   []string{"/cards/photo/compact" + string(rune('0'+i))},
+			"display_fields": CardDisplayFields{
+				Simple: "31岁 · 杭州 · 硕士",
+			},
+		})
+	}
+	payload["cards"] = cards
 	out := renderBootCardForTest(t, payload)
 	var buf bytes.Buffer
 	zw, err := gzip.NewWriterLevel(&buf, gzip.DefaultCompression)
@@ -59,7 +73,7 @@ func TestBootCardGzipBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("boot card raw=%d gzip=%d", len(out), buf.Len())
-	if buf.Len() > 2300 {
-		t.Fatalf("boot card gzip=%d exceeds 2300 bytes", buf.Len())
+	if buf.Len() > 2600 {
+		t.Fatalf("boot card gzip=%d exceeds 2600 bytes", buf.Len())
 	}
 }

@@ -653,9 +653,9 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
             "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
             timeout=15000,
         )
-        page.evaluate("() => { const el = document.querySelector('#boot-card .card-info'); if (el) el.scrollTop = 180; }")
+        page.evaluate("() => { const el = document.querySelector('#boot-card .boot-deck-slide.is-active .card-info'); if (el) el.scrollTop = 180; }")
         page.wait_for_timeout(100)
-        boot_scroll = page.evaluate("() => { const el = document.querySelector('#boot-card .card-info'); return el ? el.scrollTop : -1; }")
+        boot_scroll = page.evaluate("() => { const el = document.querySelector('#boot-card .boot-deck-slide.is-active .card-info'); return el ? el.scrollTop : -1; }")
         if boot_scroll < 150:
             raise SmokeFailure(f"静态岛资料区不可滚动：scrollTop={boot_scroll}")
         if held_img.get("route"):
@@ -726,9 +726,9 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
             "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
             timeout=15000,
         )
-        page.evaluate("() => { const el = document.querySelector('#boot-card .card-info'); if (el) el.scrollTop = 180; }")
+        page.evaluate("() => { const el = document.querySelector('#boot-card .boot-deck-slide.is-active .card-info'); if (el) el.scrollTop = 180; }")
         page.wait_for_timeout(120)
-        page.locator("#boot-card .card-info").click(position={"x": 12, "y": 12})
+        page.locator("#boot-card .boot-deck-slide.is-active .card-info").click(position={"x": 12, "y": 12})
         page.locator("#boot-card").wait_for(state="detached", timeout=5000)
         removed = page.evaluate("window.__YXQ_BOOT_CARD__ ? {reason: window.__YXQ_BOOT_CARD__.reason()} : null")
         real_scroll = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
@@ -833,8 +833,8 @@ def run_touch_scroll(browser, base_url: str, cookie: str, out_dir: Path) -> list
             "() => window.__YXQ_APP_MOUNTED__ && !!document.getElementById('boot-card')",
             timeout=15000,
         )
-        page.locator("#boot-card .card-info").wait_for(state="visible", timeout=5000)
-        box = page.locator("#boot-card .card-info").bounding_box()
+        page.locator("#boot-card .boot-deck-slide.is-active .card-info").wait_for(state="visible", timeout=5000)
+        box = page.locator("#boot-card .boot-deck-slide.is-active .card-info").bounding_box()
         if not box:
             raise SmokeFailure("静态岛资料区没有 bounding box")
         x = box["x"] + box["width"] / 2
@@ -850,13 +850,13 @@ def run_touch_scroll(browser, base_url: str, cookie: str, out_dir: Path) -> list
         page.wait_for_timeout(300)
         if page.locator("#boot-card").count() != 1:
             raise SmokeFailure("触摸滑动被当成点击，静态岛提前移除")
-        scroll = page.evaluate("() => { const el = document.querySelector('#boot-card .card-info'); return el ? el.scrollTop : -1; }")
+        scroll = page.evaluate("() => { const el = document.querySelector('#boot-card .boot-deck-slide.is-active .card-info'); return el ? el.scrollTop : -1; }")
         if scroll <= 0:
             raise SmokeFailure(f"触摸滑动未滚动静态岛资料区：scrollTop={scroll}")
         page.screenshot(path=str(out_dir / "boot-card-touch-scroll-390.png"))
         # touch-only（无 pointer 事件）的真 tap 必须 dismiss；touchend 完成判定。
         page.evaluate("""() => {
-          const el = document.querySelector('#boot-card .card-info');
+          const el = document.querySelector('#boot-card .boot-deck-slide.is-active .card-info');
           if (!el) return;
           const t = new Touch({identifier: 99, target: el, clientX: 20, clientY: 20});
           el.dispatchEvent(new TouchEvent('touchstart', {touches: [t], changedTouches: [t], bubbles: true, cancelable: true}));
@@ -870,6 +870,103 @@ def run_touch_scroll(browser, base_url: str, cookie: str, out_dir: Path) -> list
             raise SmokeFailure(f"触摸滚动用例 pageerror {errors[:2]}")
     except Exception as exc:  # noqa: BLE001
         return [f"触摸滚动: {exc}"]
+    finally:
+        if context is not None:
+            try:
+                if held_img.get("route"):
+                    held_img["route"].abort()
+            except Exception:  # noqa: BLE001
+                pass
+            context.close()
+    return []
+
+
+def run_deck_swipe(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """静态迷你牌堆：首卡出现即可滑到第 2 张，Vue 接管后不跳回第 1 张。"""
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        held_img = {}
+
+        def patch_bootstrap_deck(route) -> None:
+            response = route.fetch()
+            body = re.sub(
+                r'("photos_thumb":\["?)[^"]*("?)',
+                r'\1/cards/photo/55555555-5555-5555-5555-555555555555?size=thumb\2',
+                response.text(), count=1, flags=re.S,
+            )
+            route.fulfill(response=response, body=body)
+
+        def hold_first_image(route) -> None:
+            if "route" not in held_img:
+                held_img["route"] = route
+                return
+            route.continue_()
+
+        context.route(base_url.rstrip("/") + "/app", patch_bootstrap_deck)
+        context.route("**/cards/photo/55555555-5555-5555-5555-555555555555**", hold_first_image)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.locator("#boot-card .boot-deck-slide").first.wait_for(state="visible", timeout=15000)
+        slides = page.locator("#boot-card .boot-deck-slide").count()
+        if slides < 2:
+            raise SmokeFailure(f"静态牌堆只有 {slides} 张，无法立即滑动")
+        counter0 = page.evaluate("() => { const el=document.querySelector('#boot-card .card-counter'); return el?el.textContent.trim():''; }")
+        if not counter0.startswith("1 /"):
+            raise SmokeFailure(f"静态牌堆初始计数异常：{counter0!r}")
+        box = page.locator("#boot-card .boot-deck-slide").first.locator(".card-photo-wrap").bounding_box()
+        if not box:
+            raise SmokeFailure("静态牌堆首卡没有 bounding box")
+        x = box["x"] + box["width"] / 2
+        y = box["y"] + box["height"] / 2
+
+        def swipe(dx: int) -> None:
+            page.mouse.move(x, y)
+            page.mouse.down()
+            page.mouse.move(x + dx, y, steps=10)
+            page.mouse.up()
+            page.wait_for_timeout(350)
+
+        def boot_state() -> tuple[int, str, str]:
+            idx = page.evaluate("window.__YXQ_BOOT_DECK__ ? window.__YXQ_BOOT_DECK__.index : -1")
+            counter = page.evaluate("() => { const el=document.querySelector('#boot-card .card-counter'); return el?el.textContent.trim():''; }")
+            name = page.evaluate("() => { const el=document.querySelector('#boot-card .boot-deck-slide.is-active .card-name'); return el?el.textContent.trim():''; }")
+            return idx, counter, name
+
+        swipe(-140)
+        if page.locator("#boot-card").count():
+            idx, counter, _ = boot_state()
+            if idx != 1:
+                raise SmokeFailure(f"静态牌堆左滑后 index={idx}, want 1")
+            if not counter.startswith("2 /"):
+                raise SmokeFailure(f"静态牌堆左滑后计数={counter!r}")
+            # 立即右滑回到第 1 张：牌堆双向可滑，不是单向动画。
+            swipe(140)
+            idx, counter, _ = boot_state()
+            if idx != 0 or not counter.startswith("1 /"):
+                raise SmokeFailure(f"静态牌堆右滑回第 1 张失败：index={idx}, counter={counter!r}")
+            swipe(-140)
+            idx, counter, boot_name = boot_state()
+            if idx != 1 or not counter.startswith("2 /"):
+                raise SmokeFailure(f"静态牌堆再次左滑失败：index={idx}, counter={counter!r}")
+        else:
+            boot_name = ""
+        page.locator("#boot-card").wait_for(state="detached", timeout=15000)
+        page.locator("#app .cards-page .card-counter").wait_for(state="visible", timeout=20000)
+        page.wait_for_timeout(150)
+        real_counter = page.evaluate("() => { const el=document.querySelector('#app .cards-page .card-counter'); return el?el.textContent.trim():''; }")
+        if not real_counter.startswith("2 /"):
+            raise SmokeFailure(f"Vue 接管后未落在第 2 张：counter={real_counter!r}")
+        real_name = page.evaluate("() => { const el=document.querySelector('#app .swipe-card .card-name'); return el?el.textContent.trim():''; }")
+        if boot_name and real_name and boot_name.split()[0] != real_name.split()[0]:
+            raise SmokeFailure(f"接管后卡片不一致：boot={boot_name!r}, real={real_name!r}")
+        page.screenshot(path=str(out_dir / "boot-card-deck-swipe-390.png"))
+        if errors:
+            raise SmokeFailure(f"静态牌堆滑动用例 pageerror {errors[:2]}")
+    except Exception as exc:  # noqa: BLE001
+        failures_pending = [f"静态牌堆滑动: {exc}"]
+        return failures_pending
     finally:
         if context is not None:
             try:
@@ -971,6 +1068,7 @@ def main() -> int:
             failures.extend(run_interactions(browser, base_url, cookie, out_dir))
             failures.extend(run_fallbacks(browser, base_url, cookie, out_dir))
             failures.extend(run_takeover_regressions(browser, base_url, cookie, out_dir))
+            failures.extend(run_deck_swipe(browser, base_url, cookie, out_dir))
             failures.extend(run_touch_scroll(browser, base_url, cookie, out_dir))
             failures.extend(run_load_home_hang(browser, base_url, cookie, out_dir))
             failures.extend(run_dark(browser, base_url, cookie, out_dir))
