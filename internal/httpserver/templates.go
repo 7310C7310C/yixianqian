@@ -48,7 +48,8 @@ import (
 // touch tap-vs-scroll, data-src image and new-element scroll cancel.
 // 2026-10-28 (boot card touch fallback): 43 invalidated app.js after touchmove movement
 // fallback for mobile WebViews without pointermove.
-const assetVersion = "43"
+// 2026-10-28 (boot card touchend): 44 invalidated app.js after touch-only touchend tap.
+const assetVersion = "44"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

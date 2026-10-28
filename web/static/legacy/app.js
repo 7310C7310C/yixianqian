@@ -5907,15 +5907,26 @@ const yxqApp = createApp({
             const t = e.touches[0];
             if (Math.abs(t.clientX - tap.x) > 10 || Math.abs(t.clientY - tap.y) > 10) tap.moved = true;
           }, { passive: true });
-          bootEl.addEventListener('pointerup', (e) => {
-            if (!tap || tap.id !== e.pointerId) return;
-            const moved = tap.moved || Math.abs(e.clientX - tap.x) > 10 || Math.abs(e.clientY - tap.y) > 10;
+          function finishTap(x, y, target) {
+            if (!tap) return;
+            const moved = tap.moved || Math.abs(x - tap.x) > 10 || Math.abs(y - tap.y) > 10;
             const longPress = Date.now() - tap.t > 700;
-            const inside = e.target && e.target.closest && e.target.closest('#boot-card');
+            const inside = target && target.closest && target.closest('#boot-card');
             resetTap();
             if (moved || longPress || !inside || !window.__YXQ_APP_MOUNTED__) return;
             dismissBootCard('interact');
+          }
+          bootEl.addEventListener('pointerup', (e) => {
+            if (!tap || tap.id !== e.pointerId) return;
+            finishTap(e.clientX, e.clientY, e.target);
           }, { passive: true });
+          // touch-only WebView（无 pointer 事件）：touchend 也必须完成 tap 判定。
+          bootEl.addEventListener('touchend', (e) => {
+            const t = e.changedTouches && e.changedTouches[0];
+            if (!t) return;
+            finishTap(t.clientX, t.clientY, t.target || e.target);
+          }, { passive: true });
+          bootEl.addEventListener('touchcancel', resetTap, { passive: true });
         }
       } catch (_) {}
       window.__YXQ_LOAD_HOME_STARTED__ = false;

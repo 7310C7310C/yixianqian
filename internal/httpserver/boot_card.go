@@ -30,6 +30,7 @@ type bootCardData struct {
 
 	ShowFeedback bool
 	ShowHeart    bool
+	Liked        bool
 
 	Sections []bootCardSection
 }
@@ -126,6 +127,9 @@ func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 	}
 	card.ShowFeedback = !isSelf
 	card.ShowHeart = !isSelf && !observer
+	if liked, _ := first["liked"].(bool); liked {
+		card.Liked = true
+	}
 
 	total, _ := payload["cards_total"].(int)
 	if total <= 0 {

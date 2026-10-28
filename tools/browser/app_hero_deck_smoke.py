@@ -593,10 +593,13 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
 
         context.route(base_url.rstrip("/") + "/app", bad_boot_photo)
         # 静态岛首图 404，真实卡图片立即返回，确保“等真实卡”可证伪。
-        context.route("**/cards/photo/00000000-0000-0000-0000-000000000000**",
-                      lambda route: route.fulfill(status=404, content_type="text/plain", body="missing"))
-        context.route("**/cards/photo/**",
-                      lambda route: route.fulfill(status=200, content_type="image/png", body=TINY_PNG))
+        def bad_photo_route(route) -> None:
+            if "00000000-0000-0000-0000-000000000000" in route.request.url:
+                route.fulfill(status=404, content_type="text/plain", body="missing")
+            else:
+                route.fulfill(status=200, content_type="image/png", body=TINY_PNG)
+
+        context.route("**/cards/photo/**", bad_photo_route)
         context.route("**/profile/photo/**",
                       lambda route: route.fulfill(status=200, content_type="image/png", body=TINY_PNG))
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
@@ -848,6 +851,18 @@ def run_touch_scroll(browser, base_url: str, cookie: str, out_dir: Path) -> list
         if scroll <= 0:
             raise SmokeFailure(f"触摸滑动未滚动静态岛资料区：scrollTop={scroll}")
         page.screenshot(path=str(out_dir / "boot-card-touch-scroll-390.png"))
+        # touch-only（无 pointer 事件）的真 tap 必须 dismiss；touchend 完成判定。
+        page.evaluate("""() => {
+          const el = document.querySelector('#boot-card .card-info');
+          if (!el) return;
+          const t = new Touch({identifier: 99, target: el, clientX: 20, clientY: 20});
+          el.dispatchEvent(new TouchEvent('touchstart', {touches: [t], changedTouches: [t], bubbles: true, cancelable: true}));
+          el.dispatchEvent(new TouchEvent('touchend', {touches: [], changedTouches: [t], bubbles: true, cancelable: true}));
+        }""")
+        page.locator("#boot-card").wait_for(state="detached", timeout=5000)
+        removed = page.evaluate("window.__YXQ_BOOT_CARD__ ? {reason: window.__YXQ_BOOT_CARD__.reason()} : null")
+        if not removed or removed.get("reason") != "interact":
+            raise SmokeFailure(f"touch-only tap 未 dismiss：{removed}")
         if errors:
             raise SmokeFailure(f"触摸滚动用例 pageerror {errors[:2]}")
     except Exception as exc:  # noqa: BLE001
