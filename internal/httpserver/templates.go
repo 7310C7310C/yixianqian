@@ -40,7 +40,9 @@ import (
 // early face-crop retries and scroll handoff on every dismissal path.
 // 2026-10-28 (boot card interaction handoff): 39 invalidated index.html / app.min.js
 // after routing inline pointerdown through the app scroll-handoff hook.
-const assetVersion = "39"
+// 2026-10-28 (boot badge height): 40 invalidated app.css / critical CSS after matching
+// the static island badge line box to the real card badge.
+const assetVersion = "40"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
