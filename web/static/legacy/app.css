@@ -206,7 +206,7 @@
   .login-desc { color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 30px; }
   /* 壳内首卡静态岛：Go 服务端按真实卡结构渲染；Vue 真实卡绘制后原子移除。
      几何完全复用 .cards-page/.swipe-card/.card-photo-wrap，避免交接跳变。 */
-  #boot-card { position: fixed; inset: 0; z-index: 2000; background: #f7f8fa; pointer-events: none; opacity: 1; transition: opacity .12s ease; }
+  #boot-card { position: fixed; inset: 0; z-index: 2000; background: #f7f8fa; pointer-events: auto; opacity: 1; transition: opacity .12s ease; }
   #boot-card .card-info { pointer-events: auto; }
   #boot-card.boot-card-out { opacity: 0; }
   #boot-card .boot-badge { color: #fff; font-size: 11px; padding: 3px 9px; border-radius: 999px; background: #ff6b81; }

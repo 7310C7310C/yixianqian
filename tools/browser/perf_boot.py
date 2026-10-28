@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import statistics
 import time
@@ -70,6 +71,13 @@ def median(values: list[float]):
     return round(statistics.median(values), 1) if values else None
 
 
+def p75(values: list[float]):
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, math.ceil(len(ordered) * 0.75) - 1)]
+
+
 def collect(page) -> dict:
     return page.evaluate(
         """() => {
@@ -111,6 +119,12 @@ def collect(page) -> dict:
             hero_ready_ms: window.__YXQ_HERO_READY_AT__ || (heroReady ? Math.round(heroReady.startTime) : null),
             home_done_ms: window.__YXQ_LOAD_HOME_DONE_AT__ || null,
             boot_card_removed_ms: (window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt && window.__YXQ_BOOT_CARD__.removedAt()) || null,
+            boot_gap_ms: (function () {
+              const removed = window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt && window.__YXQ_BOOT_CARD__.removedAt();
+              const home = window.__YXQ_LOAD_HOME_DONE_AT__;
+              return (removed != null && home != null) ? Math.round(removed - home) : null;
+            })(),
+            interactive_ms: window.__YXQ_CARD_INTERACTIVE_AT__ || null,
             dom: document.querySelectorAll('*').length,
             cards: document.querySelectorAll('.swipe-card').length,
             hero_present: !!document.getElementById('boot-card'),
@@ -141,6 +155,8 @@ def main() -> int:
     ap.add_argument("--latency", type=float, default=150)
     ap.add_argument("--down-mbps", type=float, default=1.6)
     ap.add_argument("--cpu", type=float, default=4)
+    ap.add_argument("--gap-p75-max", type=float, default=600,
+                    help="fail when card_removed-home_done P75 exceeds this many ms (default 600)")
     args = ap.parse_args()
 
     base_url = os.environ.get("BASE_URL", "").strip().rstrip("/")
@@ -190,7 +206,7 @@ def main() -> int:
                 context.close()
                 keys = ("fcp", "lcp", "longest_task", "longtask_total", "bytes", "requests",
                         "mount_ms", "boot_ms", "app_start_ms", "hero_ready_ms",
-                        "home_done_ms", "boot_card_removed_ms")
+                        "home_done_ms", "boot_card_removed_ms", "boot_gap_ms", "interactive_ms")
                 med = {}
                 for key in keys:
                     vals = [r[key] for r in runs if r.get(key) is not None]
@@ -205,6 +221,20 @@ def main() -> int:
 
         browser.close()
 
+    gap_fail = False
+    for tag, modes in result.items():
+        for mode, data in modes.items():
+            gaps = [r.get("boot_gap_ms") for r in data["runs"] if r.get("boot_gap_ms") is not None]
+            gap_p75 = p75(gaps)
+            data["median"]["boot_gap_p75"] = gap_p75
+            if gap_p75 is not None and gap_p75 > args.gap_p75_max:
+                gap_fail = True
+                print(
+                    f"FAIL {tag} {mode}: boot_gap_p75={gap_p75}ms > {args.gap_p75_max}ms "
+                    "(card_removed - home_done)",
+                    file=sys.stderr,
+                )
+
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     for tag, modes in result.items():
@@ -216,12 +246,13 @@ def main() -> int:
                 f"mount {m['mount_ms']}ms boot {m['boot_ms']}ms "
                 f"app_start {m['app_start_ms']}ms hero_ready {m['hero_ready_ms']}ms "
                 f"home_done {m['home_done_ms']}ms card_removed {m['boot_card_removed_ms']}ms "
+                f"gap {m.get('boot_gap_p75')}ms(touch) interactive {m['interactive_ms']}ms "
                 f"({m.get('app_start_reason', '')}) "
                 f"bytes {m['bytes']} req {m['requests']} "
                 f"CLS {m['cls']} DOM {m['dom']} cards {m['cards']} | {m['lcp_el']}"
             )
     print(f"JSON: {args.out}")
-    return 0
+    return 1 if gap_fail else 0
 
 
 if __name__ == "__main__":

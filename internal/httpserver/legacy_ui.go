@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"html"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -19,6 +18,8 @@ import (
 
 // legacyIndexPath is the v1 Vue SPA entrypoint bundled with the binary.
 const legacyIndexPath = "static/legacy/index.html"
+
+const bootstrapPreloadScript = `<script>(function(){try{if(document.documentElement.classList.contains("boot-skip"))return;var u=window.__YXQ_PRELOAD__;if(!u)return;var l=document.createElement("link");l.rel="preload";l.as="image";l.href=u;l.setAttribute("fetchpriority","high");document.head.appendChild(l);}catch(e){}})();</script>`
 
 // SPA 外壳带一个固定的启动旗标，供内嵌的 Vue 应用判断页面是否由已登录
 // 用户请求。旗标本身不含账号资料；登录用户的首页数据由 bootstrap 注入，
@@ -125,7 +126,11 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 				// native_admin 的 SPA 页不是牌堆：不 preload 首卡图，也不渲染静态岛。
 				if r.URL.Query().Get("native_admin") != "1" {
 					if src := bootstrapPreloadURL(sanitized); src != "" {
-						preload = `<link rel="preload" as="image" href="` + html.EscapeString(src) + `" fetchpriority="high">`
+						if raw, pErr := json.Marshal(src); pErr == nil {
+							// 深链 #/likes、#/activities 会先由 head script 加 boot-skip；
+							// preload 改由客户端按需创建，避免深链白拉首卡缩图。
+							preload = "<script>window.__YXQ_PRELOAD__=" + string(raw) + ";</script>" + bootstrapPreloadScript
+						}
 					}
 					// 首卡静态岛：首屏直接是最终卡片，而不是裸图 + 灰条。
 					// 无卡/门禁时 bootCardFromPayload 返回 false。

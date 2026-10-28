@@ -22,6 +22,7 @@ func bootCardFixture() map[string]any {
 				"photos":       []string{"/cards/photo/a", "/cards/photo/b"},
 				"photos_thumb": []string{"/cards/photo/a?size=thumb", "/cards/photo/b?size=thumb"},
 				"recommended":  true,
+				"msg_count":    2,
 				"faces": []any{
 					map[string]any{"c": []any{0.5, 0.4}, "box": []any{0.2, 0.3}},
 				},
@@ -73,6 +74,10 @@ func TestBootCardRendersCompleteFirstCard(t *testing.T) {
 		`现居/工作城市`,
 		`我是怎样的人`,
 		`info-grid-item full`,
+		`反馈`,
+		`♥`,
+		`👍`,
+		`>2</span>`,
 		`牵线`,
 		`我的`,
 		`boot-tabbar`,
@@ -157,5 +162,34 @@ func TestBootCardSelfBadge(t *testing.T) {
 	}
 	if strings.Contains(out, ">推荐<") {
 		t.Fatal("self boot card should prefer self badge over recommended")
+	}
+}
+
+func TestBootCardNoPhotoPlaceholder(t *testing.T) {
+	payload := bootCardFixture()
+	card := payload["cards"].([]map[string]any)[0]
+	delete(card, "photo")
+	delete(card, "photos")
+	delete(card, "photos_thumb")
+	payload["cards"] = []map[string]any{card}
+	out := renderBootCardForTest(t, payload)
+	if !strings.Contains(out, `class="card-photo-placeholder"`) || !strings.Contains(out, "👩") {
+		t.Fatal("no-photo boot card missing gender placeholder")
+	}
+	if strings.Contains(out, "boot-photo") {
+		t.Fatal("no-photo boot card should not render a boot-photo img")
+	}
+}
+
+func TestBootCardSelfHasNoActionButtons(t *testing.T) {
+	payload := bootCardFixture()
+	card := payload["cards"].([]map[string]any)[0]
+	card["is_self"] = true
+	card["recommended"] = false
+	out := renderBootCardForTest(t, payload)
+	for _, banned := range []string{"反馈", "♥", "👍"} {
+		if strings.Contains(out, banned) {
+			t.Fatalf("self boot card should not render action %q", banned)
+		}
 	}
 }

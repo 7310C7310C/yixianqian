@@ -261,6 +261,8 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
             throttle(context, page)
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=60000)
         page.wait_for_function("() => !!window.__hero_snapshot", timeout=10000)
+        if not page.evaluate("() => !!document.querySelector('link[rel=preload][as=image]')"):
+            raise SmokeFailure(f"{tag}: 正常首页缺少首卡图 preload")
         page.screenshot(path=str(out_dir / f"boot-card-{tag}.png"))
         wait_hero_gone(page)
         # 读取移除前的最后一次快照：裁切可能由 app.js 在交接前才同步，必须比最终真实卡。
@@ -301,6 +303,20 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
                     f"{tag}: 静态岛假 tabbar {hero['tabbarHeight']}px != 真 tabbar {detail['tabbarHeight']}px"
                 )
 
+        timing = page.evaluate("""() => {
+          const removed = window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt();
+          const home = window.__YXQ_LOAD_HOME_DONE_AT__;
+          return {
+            removed: removed == null ? null : Math.round(removed),
+            home: home == null ? null : Math.round(home),
+            gap: (removed != null && home != null) ? Math.round(removed - home) : null,
+            interactive: window.__YXQ_CARD_INTERACTIVE_AT__ || null,
+          };
+        }""")
+        if timing["gap"] is not None and timing["gap"] > 1200:
+            raise SmokeFailure(f"{tag}: 静态岛交接 gap {timing['gap']}ms > 1200ms")
+        if timing["interactive"] is None:
+            raise SmokeFailure(f"{tag}: 缺少 time-to-interactive 标记")
         stats = page.evaluate("""() => ({
           cls: window.__b5.cls, lcp: Math.round(window.__b5.lcp), lcpEl: window.__b5.lcpEl,
           lcpClass: window.__b5.lcpClass,
@@ -454,9 +470,17 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
         if num != den - 1:
             raise SmokeFailure(f"末张回退落点 {num} / {den}")
 
-        # 5) #/likes 深链：hero 不应在非牵线页出现；回牵线也不重现。
+        # 5) #/likes 深链：hero 不应在非牵线页出现；也不应 preload 首卡缩图。
+        boot_photo = page.evaluate("() => window.__YXQ_PRELOAD__ || ''")
+        preload_hits = []
+        page.on("request", lambda req: preload_hits.append(req.url) if boot_photo and boot_photo in req.url else None)
         page.goto(base_url + "/app#/likes", wait_until="domcontentloaded", timeout=40000)
         page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
+        page.wait_for_timeout(500)
+        if page.evaluate("() => !!document.querySelector('link[rel=preload][as=image]')"):
+            raise SmokeFailure("深链 #/likes 仍创建首卡图 preload")
+        if preload_hits:
+            raise SmokeFailure(f"深链 #/likes 仍请求首卡缩图：{preload_hits[:2]}")
         if page.locator("#boot-card").count():
             raise SmokeFailure("深链 #/likes 时 静态岛残留")
         page.locator(".van-tabbar-item").filter(has_text="牵线").click()
@@ -613,6 +637,14 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
         real_scroll = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
         if real_scroll < 150:
             raise SmokeFailure(f"交接后真实卡未继承滚动位置：real scrollTop={real_scroll}")
+        # 首屏后切走再回牵线，deck 重渲染也不能把资料区拉回顶部（1.8s 守卫内）。
+        page.locator(".van-tabbar-item").filter(has_text="消息").click()
+        page.wait_for_timeout(200)
+        page.locator(".van-tabbar-item").filter(has_text="牵线").click()
+        page.wait_for_timeout(250)
+        scroll_after_tab = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
+        if scroll_after_tab < 150:
+            raise SmokeFailure(f"切页返回后滚动位置丢失：real scrollTop={scroll_after_tab}")
         page.screenshot(path=str(out_dir / "boot-card-scroll-transfer-390.png"))
         if errors:
             raise SmokeFailure(f"滚动交接用例 pageerror {errors[:2]}")
@@ -670,6 +702,55 @@ def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path)
             raise SmokeFailure(f"点击交接用例 pageerror {errors[:2]}")
     except Exception as exc:  # noqa: BLE001
         failures.append(f"点击交接: {exc}")
+    finally:
+        if context is not None:
+            try:
+                if held_img.get("route"):
+                    held_img["route"].abort()
+            except Exception:  # noqa: BLE001
+                pass
+            context.close()
+    # 4) 点击穿透：点静态岛 tabbar「消息」不能切到真实消息页，应只 dismiss。
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        held_img = {}
+
+        def patch_bootstrap_clickthrough(route) -> None:
+            response = route.fetch()
+            body = re.sub(
+                r'("photos_thumb":\["?)[^"]*("?)',
+                r'\1/cards/photo/33333333-3333-3333-3333-333333333333?size=thumb\2',
+                response.text(), count=1, flags=re.S,
+            )
+            route.fulfill(response=response, body=body)
+
+        def hold_real_image_clickthrough(route) -> None:
+            if "route" not in held_img:
+                held_img["route"] = route
+                return
+            route.continue_()
+
+        context.route(base_url.rstrip("/") + "/app", patch_bootstrap_clickthrough)
+        context.route("**/cards/photo/33333333-3333-3333-3333-333333333333**", hold_real_image_clickthrough)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_function(
+            "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
+            timeout=15000,
+        )
+        page.locator("#boot-card .boot-tab").filter(has_text="消息").click()
+        page.locator("#boot-card").wait_for(state="detached", timeout=5000)
+        active = page.locator(".van-tabbar-item--active").first.inner_text(timeout=5000)
+        if "牵线" not in active:
+            raise SmokeFailure(f"点击穿透切到了其他 tab：active={active!r}")
+        if page.locator("#app .swipe-card").count() != 1:
+            raise SmokeFailure("点击穿透后牵线卡不在")
+        if errors:
+            raise SmokeFailure(f"点击穿透用例 pageerror {errors[:2]}")
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"点击穿透: {exc}")
     finally:
         if context is not None:
             try:

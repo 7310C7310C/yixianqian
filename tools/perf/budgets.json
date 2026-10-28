@@ -1,20 +1,20 @@
 {
   "version": 1,
-  "verified_at": "2026-10-26",
+  "verified_at": "2026-10-28",
   "margin_percent": 10,
-  "baseline_ref": "origin/main@6b1fb23; shell measured at staging-0f14252 /app",
+  "baseline_ref": "origin/main@6b1fb23; shell measured at staging-0f14252 /app; 2026-10-28 boot card chrome re-baseline",
   "notes": [
     "所有值都是 gzip 字节；shell = 静态壳（index.html + 内联 critical CSS，gzip level 6）+ bootstrap_allowance_bytes + boot_card_allowance_bytes。",
     "bootstrap_allowance_bytes=3,309 由 2026-10-26 batch10 staging-0f14252 的 /app 实测 27,978B 校准（静态壳 24,669B）；覆盖 3 张卡的 per-user bootstrap，不含 API 与图片。",
-    "boot_card_allowance_bytes=1,900 覆盖 Go 服务端渲染的首卡静态岛（完整资料卡，gzip 实测 1,824B（level 6），留 76B）；由 TestBootCardGzipBudget 守住 ≤1,900B。",
+    "boot_card_allowance_bytes=2,300 覆盖 Go 服务端渲染的首卡静态岛（完整资料卡 + card-actions + 留言 badge，gzip 实测 2,239B（level 6），留 61B）；由 TestBootCardGzipBudget 守住 ≤2,300B。",
     "first_load_static_gzip 不含 API 与用户照片；critical CSS 已在 shell 内，只计一次。",
     "预算只能手工修改并走 Review；budget 不得超过 baseline×1.10；没有 --update 命令。"
   ],
   "limits": {
     "shell_gzip": {
       "label": "SPA 壳（含 critical CSS）",
-      "baseline_bytes": 27978,
-      "budget_bytes": 30776
+      "baseline_bytes": 31131,
+      "budget_bytes": 34245
     },
     "app_min_gzip": {
       "label": "app.min.js",
@@ -53,5 +53,5 @@
     }
   },
   "bootstrap_allowance_bytes": 3309,
-  "boot_card_allowance_bytes": 1900
+  "boot_card_allowance_bytes": 2300
 }

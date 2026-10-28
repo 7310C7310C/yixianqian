@@ -7,8 +7,8 @@ import (
 )
 
 // TestBootCardGzipBudget keeps the server-rendered first card within the shell
-// allowance documented in tools/perf/budgets.json (1,900B). A full profile card
-// is the worst case: four sections with all visible fields.
+// allowance documented in tools/perf/budgets.json (2,300B). A full profile card
+// is the worst case: four sections with all visible fields + card actions.
 func TestBootCardGzipBudget(t *testing.T) {
 	payload := bootCardFixture()
 	card := payload["cards"].([]map[string]any)[0]
@@ -59,7 +59,7 @@ func TestBootCardGzipBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("boot card raw=%d gzip=%d", len(out), buf.Len())
-	if buf.Len() > 1900 {
-		t.Fatalf("boot card gzip=%d exceeds 1900 bytes", buf.Len())
+	if buf.Len() > 2300 {
+		t.Fatalf("boot card gzip=%d exceeds 2300 bytes", buf.Len())
 	}
 }

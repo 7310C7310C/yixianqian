@@ -154,7 +154,8 @@ sources: []
 - 决策：任何 `web/static/**` 变更必须 bump `internal/httpserver/templates.go` 的 `assetVersion` 并同步 admin CSS `@import`；`make spa-check` 校验 manifest/sha/bytes。
 - 决策（壳/首屏）：壳保留启动旗标/版本/单块 ≤5KB inline script + critical CSS + Go 服务端渲染的**首卡静态岛**（`boot_card`，与真实卡同一套 `.cards-page/.swipe-card/.card-info` class，gzip ≤2KB）；`app.css`/`app.min.js`/`app.render.js` 外置；主脚本按 `vue → app.render → app.min` 在静态岛首图 `load+decode` 后注入；Vue 真实卡首图 decode + 双 rAF 后同帧移除静态岛，不固定等待、不为 LCP 压 UI。登录/注册/激活页用外部 `prefetch.js` 预热 SPA 资源（CSP `script-src 'self'`，不用 inline）。
 - 不要做：不恢复裸图 hero / `dismissHeroAfterPaint` 的 2s `notBefore`；不把静态岛塞进 `#app`（会破坏预编译根模板 hash）；不把大段 CSS/JS 内联回壳；不改回静态 `defer`。
-- 验证：`TestBootCard*` / `TestLegacyShellBootCard` / `app_hero_deck_smoke.py` / `perf_boot.py` 的 `home_done_ms`、`boot_card_removed_ms`；`make perf-budget` 的 `boot_card_allowance_bytes`。
+- 验证：`TestBootCard*` / `TestLegacyShellBootCard` / `app_hero_deck_smoke.py` / `perf_boot.py` 的 `home_done_ms`、`boot_card_removed_ms`、`boot_gap_ms`、`interactive_ms`；`perf_boot --gap-p75-max 600`；`make perf-budget` 的 `boot_card_allowance_bytes`（2,300B）与 re-baseline 后的 shell 预算。
+- 决策（静态岛交互）：`#boot-card` 必须 `pointer-events:auto` 接住点击（不能穿透到真实卡）；点击只走 `__YXQ_BOOT_CARD_HANDOFF__` 交接。静态岛滚动位置在移除前交接，并保留 1.8s 守卫应对 deck 重渲染；用户手动滚动立即取消。首卡图 preload 改为客户端按需创建，深链 `#/likes`/`#/activities` 不拉首卡缩图。
 - 不要做：不手改生成物；不在模板改动后不重建；不生成 sourcemap 到 `web/`；不破坏 classic script 语义。
 - 验证：`make spa-check`、`make static-gzip-check`；详见 `tools/README.md`。
 

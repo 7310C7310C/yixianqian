@@ -14,9 +14,10 @@ type bootCardData struct {
 	AnonLeft   int
 	RealLeft   int
 
-	Photo      string
-	PhotoCount int
-	Dots       []bool
+	Photo            string
+	PhotoCount       int
+	Dots             []bool
+	PhotoPlaceholder string
 
 	BadgeText  string
 	BadgeClass string
@@ -25,6 +26,11 @@ type bootCardData struct {
 	GenderIcon string
 	Simple     string
 	FacesJSON  string
+	MsgCount   int
+
+	ShowFeedback bool
+	ShowPraise   bool
+	ShowHeart    bool
 
 	Sections []bootCardSection
 }
@@ -58,13 +64,25 @@ func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 		Photo:    firstCardPhoto(first),
 		Nickname: stringValue(first["nickname"]),
 	}
+	observer := false
+	anonLeft, realLeft := 0, 0
+	if user, ok := payload["user"].(map[string]any); ok {
+		observer, _ = user["is_observer"].(bool)
+		anonLeft = intValue(user["anon_left"])
+		realLeft = intValue(user["real_left"])
+	}
 	if gender := stringValue(first["gender"]); gender != "" {
 		if gender == "男性" {
 			card.GenderIcon = "♂"
+			card.PhotoPlaceholder = "👨"
 		} else {
 			card.GenderIcon = "♀"
+			card.PhotoPlaceholder = "👩"
 		}
+	} else {
+		card.PhotoPlaceholder = "👤"
 	}
+	card.MsgCount = intValue(first["msg_count"])
 	if display, ok := first["display_fields"].(CardDisplayFields); ok {
 		card.Simple = display.Simple
 		for _, section := range display.Sections {
@@ -99,13 +117,17 @@ func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 		}
 	}
 
-	if isSelf, _ := first["is_self"].(bool); isSelf {
+	isSelf, _ := first["is_self"].(bool)
+	if isSelf {
 		card.BadgeText = "这是你 · 他人视角"
 		card.BadgeClass = "boot-badge--self"
 	} else if recommended, _ := first["recommended"].(bool); recommended {
 		card.BadgeText = "推荐"
 		card.BadgeClass = "boot-badge--recommend"
 	}
+	card.ShowFeedback = !isSelf
+	card.ShowPraise = !isSelf && !observer
+	card.ShowHeart = !isSelf && !observer
 
 	total, _ := payload["cards_total"].(int)
 	if total <= 0 {
@@ -116,12 +138,10 @@ func bootCardFromPayload(payload map[string]any) (bootCardData, bool) {
 	}
 	card.Counter = fmt.Sprintf("1 / %d", total)
 
-	if user, ok := payload["user"].(map[string]any); ok {
-		if observer, _ := user["is_observer"].(bool); !observer {
-			card.ShowHearts = true
-			card.AnonLeft = intValue(user["anon_left"])
-			card.RealLeft = intValue(user["real_left"])
-		}
+	if !observer {
+		card.ShowHearts = true
+		card.AnonLeft = anonLeft
+		card.RealLeft = realLeft
 	}
 	return card, true
 }

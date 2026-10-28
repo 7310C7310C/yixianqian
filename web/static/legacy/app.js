@@ -5724,12 +5724,61 @@ const yxqApp = createApp({
     let bootCardSettled = false;
     let bootCardHardTimer = null;
     function bootCardApi() { return window.__YXQ_BOOT_CARD__; }
+    let bootCardHandoff = null;
+    let bootCardProgrammaticScroll = false;
+    let bootCardHandoffTimer = null;
+    function bootCardKey() {
+      const c = currentCard.value;
+      if (!c) return '';
+      return c.openid || (c.id != null ? String(c.id) : '');
+    }
+    function applyBootCardScroll(el, top) {
+      if (!el) return;
+      bootCardProgrammaticScroll = true;
+      el.scrollTop = top;
+      setTimeout(() => { bootCardProgrammaticScroll = false; }, 100);
+    }
+    function restoreBootCardScroll() {
+      if (!bootCardHandoff || bootCardHandoff.cancelled) { bootCardHandoff = null; return; }
+      if (Date.now() > bootCardHandoff.until || page.value !== 'cards') return;
+      if (bootCardKey() !== bootCardHandoff.key) { bootCardHandoff = null; return; }
+      const el = document.querySelector('#app .swipe-card .card-info');
+      if (el && Math.abs(el.scrollTop - bootCardHandoff.top) > 2) {
+        applyBootCardScroll(el, bootCardHandoff.top);
+      }
+    }
+    function armBootCardHandoffGuard() {
+      if (bootCardHandoffTimer) return;
+      let ticks = 0;
+      bootCardHandoffTimer = setInterval(() => {
+        if (!bootCardHandoff || bootCardHandoff.cancelled || ++ticks > 36) {
+          clearInterval(bootCardHandoffTimer);
+          bootCardHandoffTimer = null;
+          return;
+        }
+        restoreBootCardScroll();
+      }, 50);
+    }
     // 任何交接/硬上限/切页移除前都当场把静态岛滚动位置交给真实卡（目标必须限定 #app）。
+    // 首屏期间的 deck 刷新/重渲染可能把 scrollTop 归零，因此保留一个短时守卫；
+    // 用户手动滚动真实卡时立即取消，避免抢用户操作。
     function syncBootCardScroll() {
       try {
         const bootInfo = document.querySelector('#boot-card .card-info');
         const realInfo = document.querySelector('#app .swipe-card .card-info');
-        if (bootInfo && realInfo && bootInfo.scrollTop > 0) realInfo.scrollTop = bootInfo.scrollTop;
+        if (!bootInfo || !realInfo || bootInfo.scrollTop <= 0) return;
+        const key = bootCardKey();
+        const top = bootInfo.scrollTop;
+        applyBootCardScroll(realInfo, top);
+        bootCardHandoff = { key: key, top: top, until: Date.now() + 1800, cancelled: false };
+        if (!realInfo.__yxqBootCardScroll) {
+          realInfo.__yxqBootCardScroll = true;
+          realInfo.addEventListener('scroll', () => {
+            if (bootCardProgrammaticScroll) return;
+            if (bootCardHandoff) bootCardHandoff.cancelled = true;
+          }, { passive: true });
+        }
+        armBootCardHandoffGuard();
       } catch (_) {}
     }
     function dismissBootCard(reason) {
@@ -5800,7 +5849,11 @@ const yxqApp = createApp({
       window.__YXQ_LOAD_HOME_DONE__ = !v;
       if (!v) {
         window.__YXQ_LOAD_HOME_DONE_AT__ = Math.round(performance.now());
-        nextTick(settleBootCard);
+        nextTick(() => {
+          // 真实卡 DOM 已 patch，可交互；用于 perf 的 time-to-interactive。
+          window.__YXQ_CARD_INTERACTIVE_AT__ = Math.round(performance.now());
+          settleBootCard();
+        });
       }
     });
     watch(page, (v) => { if (v !== 'cards') dismissBootCard('tab'); });
@@ -5820,6 +5873,8 @@ const yxqApp = createApp({
         if (api) api.setObjectPosition(pos);
       } catch (_) {}
     }, { deep: true });
+    // 切回牵线页时补一次滚动守卫（deck 重渲染可能已把资料区拉回顶部）。
+    watch(page, (v) => { if (v === 'cards' && bootCardHandoff) nextTick(restoreBootCardScroll); });
 
     onMounted(() => {
       window.__YXQ_APP_MOUNTED__ = true;

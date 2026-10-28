@@ -204,8 +204,8 @@ func TestIntegrationShellBootstrapInjection(t *testing.T) {
 	if strings.Contains(body, "window.__YXQ_BOOTSTRAP__=null") {
 		t.Fatal("shell kept the empty bootstrap placeholder")
 	}
-	if !strings.Contains(body, `<link rel="preload" as="image"`) {
-		t.Fatal("shell did not preload the first card thumbnail")
+	if !strings.Contains(body, `window.__YXQ_PRELOAD__=`) {
+		t.Fatal("shell did not prepare the first card thumbnail preload")
 	}
 	for _, want := range []string{
 		`id="boot-card"`,
@@ -226,8 +226,8 @@ func TestIntegrationShellBootstrapInjection(t *testing.T) {
 	if strings.Contains(native, `id="boot-card"`) {
 		t.Fatal("native_admin shell must not render the boot card")
 	}
-	if strings.Contains(native, `rel="preload" as="image"`) {
-		t.Fatal("native_admin shell must not preload the deck thumbnail")
+	if strings.Contains(native, `window.__YXQ_PRELOAD__=`) {
+		t.Fatal("native_admin shell must not prepare the deck thumbnail preload")
 	}
 
 	etag := resp.Header.Get("ETag")
