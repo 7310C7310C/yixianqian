@@ -6,6 +6,21 @@ import (
 	"testing"
 )
 
+func TestRewriteBootstrapHeroPhoto(t *testing.T) {
+	payload := map[string]any{"cards": []map[string]any{{
+		"photo":        "/cards/photo/a?size=thumb",
+		"photos_thumb": []string{"/cards/photo/a?size=thumb"},
+	}}}
+	rewriteBootstrapHeroPhoto(payload)
+	card := payload["cards"].([]map[string]any)[0]
+	if card["photo"] != "/cards/photo/a?size=hero" {
+		t.Fatalf("photo=%v", card["photo"])
+	}
+	if got := card["photos_thumb"].([]string)[0]; got != "/cards/photo/a?size=hero" {
+		t.Fatalf("photos_thumb[0]=%v", got)
+	}
+}
+
 func TestSanitizeBootstrapStripsSensitiveKeys(t *testing.T) {
 	payload := map[string]any{
 		"user": map[string]any{

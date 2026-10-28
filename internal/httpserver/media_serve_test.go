@@ -1,8 +1,12 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"log/slog"
 	"net/http"
@@ -61,6 +65,31 @@ func mediaObjectFixture(id string) mediaObject {
 		ObjectType: "image/jpeg",
 		ThumbKey:   "media/" + id + "_thumb.jpg",
 		ThumbSize:  4,
+	}
+}
+
+func TestMediaHeroVariant(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			src.Set(x, y, color.RGBA{uint8(x * 4), uint8(y * 4), 120, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, src, &jpeg.Options{Quality: 82}); err != nil {
+		t.Fatal(err)
+	}
+	app := testMediaApp(fakeMediaStore{data: buf.Bytes()})
+	rec := httptest.NewRecorder()
+	app.serveMediaHero(rec, httptest.NewRequest(http.MethodGet, "/cards/photo/m1?size=hero", nil), mediaObjectFixture("m1"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("ETag"); !strings.Contains(got, "-hero") {
+		t.Fatalf("etag=%q", got)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/jpeg" {
+		t.Fatalf("content-type=%q", got)
 	}
 }
 

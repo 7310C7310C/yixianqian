@@ -113,13 +113,16 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 		cancel()
 		if bootErr != nil {
 			a.logger(r).Warn("legacy shell bootstrap skipped", "error", bootErr, "user_id", user.ID)
-		} else if raw, mErr := json.Marshal(sanitizeBootstrap(payload)); mErr != nil {
-			a.logger(r).Warn("legacy shell bootstrap marshal failed", "error", mErr, "user_id", user.ID)
 		} else {
-			// json.Marshal escapes HTML; also neutralise the script terminator.
-			boot = bytes.ReplaceAll(raw, []byte("</"), []byte("<\\/"))
-			if src := bootstrapPreloadURL(payload); src != "" {
-				preload = `<link rel="preload" as="image" href="` + html.EscapeString(src) + `" fetchpriority="high">`
+			rewriteBootstrapHeroPhoto(payload)
+			if raw, mErr := json.Marshal(sanitizeBootstrap(payload)); mErr != nil {
+				a.logger(r).Warn("legacy shell bootstrap marshal failed", "error", mErr, "user_id", user.ID)
+			} else {
+				// json.Marshal escapes HTML; also neutralise the script terminator.
+				boot = bytes.ReplaceAll(raw, []byte("</"), []byte("<\\/"))
+				if src := bootstrapPreloadURL(payload); src != "" {
+					preload = `<link rel="preload" as="image" href="` + html.EscapeString(src) + `" fetchpriority="high">`
+				}
 			}
 		}
 	}
@@ -143,6 +146,29 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-cache")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
+}
+
+// rewriteBootstrapHeroPhoto points only the shell's first card at the small
+// ?size=hero variant. The regular API/home payload keeps the 512px thumbnail.
+func rewriteBootstrapHeroPhoto(payload map[string]any) {
+	cards, ok := payload["cards"].([]map[string]any)
+	if !ok || len(cards) == 0 || cards[0] == nil {
+		return
+	}
+	card := cards[0]
+	if photo, ok := card["photo"].(string); ok {
+		card["photo"] = heroPhotoURL(photo)
+	}
+	if thumbs, ok := card["photos_thumb"].([]string); ok && len(thumbs) > 0 {
+		thumbs[0] = heroPhotoURL(thumbs[0])
+	}
+}
+
+func heroPhotoURL(raw string) string {
+	if strings.Contains(raw, "size=thumb") {
+		return strings.Replace(raw, "size=thumb", "size=hero", 1)
+	}
+	return raw
 }
 
 // bootstrapPreloadURL returns the first card thumbnail from the bootstrap

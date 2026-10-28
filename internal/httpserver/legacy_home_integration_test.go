@@ -207,6 +207,9 @@ func TestIntegrationShellBootstrapInjection(t *testing.T) {
 	if !strings.Contains(body, `<link rel="preload" as="image"`) {
 		t.Fatal("shell did not preload the first card thumbnail")
 	}
+	if !strings.Contains(body, "size=hero") {
+		t.Fatal("shell did not preload the hero-sized first card image")
+	}
 	etag := resp.Header.Get("ETag")
 	if !strings.Contains(etag, fmt.Sprintf("-u%d-", me.ID)) {
 		t.Fatalf("shell etag %q is not bound to the user", etag)

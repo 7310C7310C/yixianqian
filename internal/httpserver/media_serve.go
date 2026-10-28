@@ -112,6 +112,42 @@ func (a *App) serveMediaObject(w http.ResponseWriter, r *http.Request, m mediaOb
 	}
 }
 
+// serveMediaHero serves a small hero-only JPEG for the first-screen card.
+// It is derived from the already-authorized thumbnail, cached separately from
+// ?size=thumb, and keeps the same private/immutable semantics.
+func (a *App) serveMediaHero(w http.ResponseWriter, r *http.Request, m mediaObject) {
+	if m.ThumbKey == "" || m.ThumbSize <= 0 {
+		a.serveMediaObject(w, r, m, true)
+		return
+	}
+	etag := `"` + m.ID + "-hero" + `"`
+	cacheKey := media.ThumbCacheKey(m.ID, m.ThumbKey+"|hero", m.ThumbSize)
+	if a.thumbCache != nil {
+		if data, ok := a.thumbCache.Get(cacheKey); ok {
+			a.thumbCacheHits.Add(1)
+			writeMediaBytes(w, r, etag, "image/jpeg", int64(len(data)), data)
+			return
+		}
+		a.thumbCacheMisses.Add(1)
+	}
+	data, err := a.readStoreObject(w, r, m, m.ThumbKey, m.ThumbSize)
+	if err != nil {
+		return
+	}
+	hero, err := media.HeroJPEG(data, 420, 70)
+	resized := err == nil
+	if err != nil {
+		a.logger(r).Warn("hero thumbnail resize failed", "error", err, "media_id", m.ID)
+		hero = data
+	}
+	if resized && a.thumbCache != nil {
+		if err := a.thumbCache.Put(cacheKey, hero); err != nil {
+			a.logger(r).Warn("hero cache write failed", "error", err, "media_id", m.ID)
+		}
+	}
+	writeMediaBytes(w, r, etag, "image/jpeg", int64(len(hero)), hero)
+}
+
 // activityPosterObject derives the cache identity from the poster media row, so
 // replacing the poster changes the ETag (URLs are stable).
 func activityPosterObject(p db.ActivityPoster) mediaObject {

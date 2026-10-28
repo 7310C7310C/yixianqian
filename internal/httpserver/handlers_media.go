@@ -303,14 +303,35 @@ func (a *App) handleMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.serveMediaObject(w, r, mediaObject{
-		ID:         m.ID,
-		ObjectKey:  m.ObjectKey,
-		ObjectSize: m.ByteSize,
-		ObjectType: m.ContentType,
-		ThumbKey:   m.ThumbKey,
-		ThumbSize:  m.ThumbSize,
-	}, r.URL.Query().Get("size") == "thumb")
+	switch r.URL.Query().Get("size") {
+	case "hero":
+		a.serveMediaHero(w, r, mediaObject{
+			ID:         m.ID,
+			ObjectKey:  m.ObjectKey,
+			ObjectSize: m.ByteSize,
+			ObjectType: m.ContentType,
+			ThumbKey:   m.ThumbKey,
+			ThumbSize:  m.ThumbSize,
+		})
+	case "thumb":
+		a.serveMediaObject(w, r, mediaObject{
+			ID:         m.ID,
+			ObjectKey:  m.ObjectKey,
+			ObjectSize: m.ByteSize,
+			ObjectType: m.ContentType,
+			ThumbKey:   m.ThumbKey,
+			ThumbSize:  m.ThumbSize,
+		}, true)
+	default:
+		a.serveMediaObject(w, r, mediaObject{
+			ID:         m.ID,
+			ObjectKey:  m.ObjectKey,
+			ObjectSize: m.ByteSize,
+			ObjectType: m.ContentType,
+			ThumbKey:   m.ThumbKey,
+			ThumbSize:  m.ThumbSize,
+		}, false)
+	}
 }
 
 func validMediaID(id string) bool {

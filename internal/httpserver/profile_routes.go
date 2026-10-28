@@ -903,14 +903,35 @@ func (a *App) handleProfilePhotoServe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.serveMediaObject(w, r, mediaObject{
-		ID:         mediaID,
-		ObjectKey:  photo.ObjectKey,
-		ObjectSize: photo.ByteSize,
-		ObjectType: photo.ContentType,
-		ThumbKey:   photo.ThumbKey,
-		ThumbSize:  photo.ThumbSize,
-	}, r.URL.Query().Get("size") == "thumb")
+	switch r.URL.Query().Get("size") {
+	case "hero":
+		a.serveMediaHero(w, r, mediaObject{
+			ID:         mediaID,
+			ObjectKey:  photo.ObjectKey,
+			ObjectSize: photo.ByteSize,
+			ObjectType: photo.ContentType,
+			ThumbKey:   photo.ThumbKey,
+			ThumbSize:  photo.ThumbSize,
+		})
+	case "thumb":
+		a.serveMediaObject(w, r, mediaObject{
+			ID:         mediaID,
+			ObjectKey:  photo.ObjectKey,
+			ObjectSize: photo.ByteSize,
+			ObjectType: photo.ContentType,
+			ThumbKey:   photo.ThumbKey,
+			ThumbSize:  photo.ThumbSize,
+		}, true)
+	default:
+		a.serveMediaObject(w, r, mediaObject{
+			ID:         mediaID,
+			ObjectKey:  photo.ObjectKey,
+			ObjectSize: photo.ByteSize,
+			ObjectType: photo.ContentType,
+			ThumbKey:   photo.ThumbKey,
+			ThumbSize:  photo.ThumbSize,
+		}, false)
+	}
 }
 
 type accountStatusRequest struct {

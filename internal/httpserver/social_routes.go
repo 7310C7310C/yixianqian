@@ -195,12 +195,33 @@ func (a *App) handleCardPhoto(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	a.serveMediaObject(w, r, mediaObject{
-		ID:         m.ID,
-		ObjectKey:  m.ObjectKey,
-		ObjectSize: m.ByteSize,
-		ObjectType: m.ContentType,
-		ThumbKey:   m.ThumbKey,
-		ThumbSize:  m.ThumbSize,
-	}, r.URL.Query().Get("size") == "thumb")
+	switch r.URL.Query().Get("size") {
+	case "hero":
+		a.serveMediaHero(w, r, mediaObject{
+			ID:         m.ID,
+			ObjectKey:  m.ObjectKey,
+			ObjectSize: m.ByteSize,
+			ObjectType: m.ContentType,
+			ThumbKey:   m.ThumbKey,
+			ThumbSize:  m.ThumbSize,
+		})
+	case "thumb":
+		a.serveMediaObject(w, r, mediaObject{
+			ID:         m.ID,
+			ObjectKey:  m.ObjectKey,
+			ObjectSize: m.ByteSize,
+			ObjectType: m.ContentType,
+			ThumbKey:   m.ThumbKey,
+			ThumbSize:  m.ThumbSize,
+		}, true)
+	default:
+		a.serveMediaObject(w, r, mediaObject{
+			ID:         m.ID,
+			ObjectKey:  m.ObjectKey,
+			ObjectSize: m.ByteSize,
+			ObjectType: m.ContentType,
+			ThumbKey:   m.ThumbKey,
+			ThumbSize:  m.ThumbSize,
+		}, false)
+	}
 }
