@@ -58,7 +58,7 @@ def file_size(path: Path) -> int:
     return path.stat().st_size
 
 
-def shell_gzip(root: Path, bootstrap_allowance: int) -> int:
+def shell_gzip(root: Path, bootstrap_allowance: int, boot_card_allowance: int = 0) -> int:
     legacy = root / "web/static/legacy"
     index = (legacy / "index.html").read_bytes()
     critical = (legacy / "app.critical.css").read_bytes()
@@ -72,13 +72,13 @@ def shell_gzip(root: Path, bootstrap_allowance: int) -> int:
     body = body.replace(b"__ASSET_VERSION_VALUE__", version)
     body = body.replace(b"__ASSET_URL_VERSION__", version)
     body = body.replace(b"<!--YXQ_CRITICAL_CSS-->", b"<style>" + critical + b"</style>", 1)
-    return len(gzip.compress(body, compresslevel=6, mtime=0)) + bootstrap_allowance
+    return len(gzip.compress(body, compresslevel=6, mtime=0)) + bootstrap_allowance + boot_card_allowance
 
 
-def measure(root: Path, bootstrap_allowance: int = 0) -> dict[str, int]:
+def measure(root: Path, bootstrap_allowance: int = 0, boot_card_allowance: int = 0) -> dict[str, int]:
     legacy = root / "web/static/legacy"
     metrics = {
-        "shell_gzip": shell_gzip(root, bootstrap_allowance),
+        "shell_gzip": shell_gzip(root, bootstrap_allowance, boot_card_allowance),
         "app_min_gzip": file_size(legacy / "app.min.js.gz"),
         "initial_render_gzip": file_size(legacy / "app.render.js.gz"),
         "vant_subset_js_gzip": file_size(legacy / "lib/vant.subset.min.js.gz"),
@@ -178,7 +178,10 @@ def main(argv: list[str] | None = None) -> int:
         allowance = data.get("bootstrap_allowance_bytes", 0)
         if not isinstance(allowance, int) or allowance < 0:
             raise GuardError("bootstrap_allowance_bytes 必须是非负整数")
-        measured = measure(root, allowance)
+        boot_card_allowance = data.get("boot_card_allowance_bytes", 0)
+        if not isinstance(boot_card_allowance, int) or boot_card_allowance < 0:
+            raise GuardError("boot_card_allowance_bytes 必须是非负整数")
+        measured = measure(root, allowance, boot_card_allowance)
         errors = validate_specs(data, measured)
         table, over = render_table(measured, data)
     except GuardError as exc:

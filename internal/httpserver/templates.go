@@ -32,7 +32,11 @@ import (
 // added the v1 heart icon set (svg/png/ico) to the template links.
 // 2026-10-28 (remove self-card hint): 35 invalidated app.css / app.min.js /
 // app.render.js after dropping the redundant first-card bubble.
-const assetVersion = "35"
+// 2026-10-28 (boot card island): 36 invalidated index.html / app.css / app.min.js
+// after replacing the bare hero with the server-rendered complete first card.
+// 2026-10-28 (boot card takeover fix): 37 invalidated index.html / app.min.js after
+// scoping the real-card selector/scroll transfer to #app and skipping restore.
+const assetVersion = "37"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
@@ -71,6 +75,10 @@ type PageData struct {
 	// chrome and loads the ASCII-only home.css/auth.css pair; Chinese copy is
 	// injected by /static/public-copy.js.
 	ScanSafe bool
+	// PrefetchSPA warms the SPA shell assets after a login/activate/register
+	// page loads, so the first authenticated `/` visit is not a cold bundle
+	// download. The layout skips it on Save-Data/2G connections.
+	PrefetchSPA bool
 	// CopyPage selects the public-copy.js copy table (ASCII value). When set,
 	// the layout loads public-copy.js and exposes the value as
 	// <body data-copy-page>.
@@ -99,6 +107,9 @@ type PageData struct {
 // own "content" block while sharing the layout.
 type Templates struct {
 	pages map[string]*template.Template
+	// base holds the shared layout + partials. It is used to render the
+	// server-side first-card island (boot_card) outside the SPA root.
+	base *template.Template
 }
 
 // LoadTemplates parses embedded templates once at startup.
@@ -121,7 +132,7 @@ func LoadTemplates() (*Templates, error) {
 		return nil, fmt.Errorf("httpserver: no page templates found")
 	}
 
-	out := &Templates{pages: make(map[string]*template.Template, len(pageFiles))}
+	out := &Templates{pages: make(map[string]*template.Template, len(pageFiles)), base: base}
 	for _, file := range pageFiles {
 		name := strings.TrimSuffix(path.Base(file), ".tmpl")
 		clone, err := base.Clone()
@@ -149,6 +160,19 @@ func (t *Templates) Render(w io.Writer, page string, data PageData) error {
 func (t *Templates) HasPage(page string) bool {
 	_, ok := t.pages[page]
 	return ok
+}
+
+// RenderBootCard renders the server-side first-card island into the SPA shell.
+// The template lives in templates/partials/boot_card.tmpl and is parsed with the
+// shared base set so it cannot drift into a second template engine.
+func (t *Templates) RenderBootCard(w io.Writer, data any) error {
+	if t == nil || t.base == nil {
+		return fmt.Errorf("httpserver: templates not loaded")
+	}
+	if t.base.Lookup("boot_card") == nil {
+		return fmt.Errorf("httpserver: boot_card template missing")
+	}
+	return t.base.ExecuteTemplate(w, "boot_card", data)
 }
 
 // renderPage buffers output so a template failure cannot emit a half page.

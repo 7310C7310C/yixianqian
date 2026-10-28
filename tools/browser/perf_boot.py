@@ -109,9 +109,11 @@ def collect(page) -> dict:
             app_start_ms: window.__YXQ_APP_START_AT__ || (appStart ? Math.round(appStart.startTime) : null),
             app_start_reason: window.__YXQ_APP_START_REASON__ || '',
             hero_ready_ms: window.__YXQ_HERO_READY_AT__ || (heroReady ? Math.round(heroReady.startTime) : null),
+            home_done_ms: window.__YXQ_LOAD_HOME_DONE_AT__ || null,
+            boot_card_removed_ms: (window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt && window.__YXQ_BOOT_CARD__.removedAt()) || null,
             dom: document.querySelectorAll('*').length,
             cards: document.querySelectorAll('.swipe-card').length,
-            hero_present: !!document.getElementById('boot-skeleton'),
+            hero_present: !!document.getElementById('boot-card'),
             counter: (document.querySelector('.card-counter') || {}).textContent || '',
             url: location.href
           };
@@ -125,7 +127,7 @@ def run_once(context, page, base_url: str, suffix: str = "", reload: bool = Fals
     else:
         page.goto(base_url.rstrip("/") + "/app" + suffix, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_selector(".van-tabbar", timeout=30000)
-    page.wait_for_selector("#boot-skeleton", state="detached", timeout=20000)
+    page.wait_for_selector("#boot-card", state="detached", timeout=20000)
     page.wait_for_timeout(1200)  # LCP/长任务收尾
     return collect(page)
 
@@ -187,7 +189,8 @@ def main() -> int:
                     runs.append(run_once(context, page, base_url, suffix, reload=(mode == "warm")))
                 context.close()
                 keys = ("fcp", "lcp", "longest_task", "longtask_total", "bytes", "requests",
-                        "mount_ms", "boot_ms", "app_start_ms", "hero_ready_ms")
+                        "mount_ms", "boot_ms", "app_start_ms", "hero_ready_ms",
+                        "home_done_ms", "boot_card_removed_ms")
                 med = {}
                 for key in keys:
                     vals = [r[key] for r in runs if r.get(key) is not None]
@@ -211,7 +214,9 @@ def main() -> int:
             print(
                 f"  {mode}: FCP {m['fcp']}ms LCP {m['lcp']}ms longest {m['longest_task']}ms "
                 f"mount {m['mount_ms']}ms boot {m['boot_ms']}ms "
-                f"app_start {m['app_start_ms']}ms hero_ready {m['hero_ready_ms']}ms ({m.get('app_start_reason', '')}) "
+                f"app_start {m['app_start_ms']}ms hero_ready {m['hero_ready_ms']}ms "
+                f"home_done {m['home_done_ms']}ms card_removed {m['boot_card_removed_ms']}ms "
+                f"({m.get('app_start_reason', '')}) "
                 f"bytes {m['bytes']} req {m['requests']} "
                 f"CLS {m['cls']} DOM {m['dom']} cards {m['cards']} | {m['lcp_el']}"
             )

@@ -207,6 +207,29 @@ func TestIntegrationShellBootstrapInjection(t *testing.T) {
 	if !strings.Contains(body, `<link rel="preload" as="image"`) {
 		t.Fatal("shell did not preload the first card thumbnail")
 	}
+	for _, want := range []string{
+		`id="boot-card"`,
+		`class="card-photo-item boot-photo"`,
+		`class="card-photo-overlay"`,
+		`class="card-info"`,
+		`class="boot-tabbar"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("shell did not render the complete boot card (%q missing)", want)
+		}
+	}
+	if strings.Contains(body, `id="boot-card"`) && !strings.Contains(body, "正在加载") {
+		t.Fatal("boot card slow hint missing")
+	}
+	// native_admin 是管理台原生 SPA，不是牌堆：不渲染首卡静态岛，也不 preload 首卡图。
+	native := readBody(t, client.get("/app?native_admin=1"))
+	if strings.Contains(native, `id="boot-card"`) {
+		t.Fatal("native_admin shell must not render the boot card")
+	}
+	if strings.Contains(native, `rel="preload" as="image"`) {
+		t.Fatal("native_admin shell must not preload the deck thumbnail")
+	}
+
 	etag := resp.Header.Get("ETag")
 	if !strings.Contains(etag, fmt.Sprintf("-u%d-", me.ID)) {
 		t.Fatalf("shell etag %q is not bound to the user", etag)

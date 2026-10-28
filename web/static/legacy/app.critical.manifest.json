@@ -1,15 +1,15 @@
 {
   "source": {
     "path": "app.css",
-    "bytes": 91215,
-    "sha256": "a25e70d2166825609af3fba6ee016ded53ffccb91d082c2398083a624e8f66c3"
+    "bytes": 91552,
+    "sha256": "029cd13cdf3fdd3ab63545559b850b149ac3e0637e8e0e71b6bd0f6c92e28e76"
   },
   "critical": {
     "path": "app.critical.css",
-    "bytes": 29799,
-    "gzip_bytes": 7732,
-    "sha256": "9f89230fd2184953315a2f49d03abfba0af33942280c50b73e35685685354fd9",
-    "blocks": 261
+    "bytes": 30180,
+    "gzip_bytes": 7815,
+    "sha256": "75e69c2076c3a8faf8142de33e965d76d42947903c47863d3eb981cd61615721",
+    "blocks": 262
   },
   "keep_prefixes": [
     ":root",
@@ -17,7 +17,7 @@
     "html",
     "html, body",
     "#app",
-    "#boot-skeleton",
+    "#boot-card",
     "body",
     "*",
     ".van-theme-dark",

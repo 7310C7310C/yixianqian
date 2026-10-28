@@ -54,12 +54,13 @@ func (a *App) renderRegister(w http.ResponseWriter, r *http.Request, status int,
 	data := buildRegisterPageData(values)
 	data.MaxMB = int(a.cfg.MediaMaxBytes / (1 << 20))
 	a.render(w, r, status, "register", PageData{
-		Title:    "注册",
-		Error:    message,
-		Data:     data,
-		PageCSS:  "register.css",
-		ScanSafe: true,
-		CopyJSON: registerCopyJSON(data, message),
+		Title:       "注册",
+		Error:       message,
+		Data:        data,
+		PageCSS:     "register.css",
+		ScanSafe:    true,
+		PrefetchSPA: true,
+		CopyJSON:    registerCopyJSON(data, message),
 	})
 }
 

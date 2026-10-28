@@ -152,7 +152,9 @@ sources: []
 
 - 决策：`app.js` 由 `tools/spa_minify` 压成 `app.min.js`；根模板与页面由 `tools/spa_precompile` 预编译成 `app.render.js` + `pages/*.render.js`；Vant 用 `tools/spa_vendor` 子集；生成物提交仓库，部署/CI 不依赖 Node。
 - 决策：任何 `web/static/**` 变更必须 bump `internal/httpserver/templates.go` 的 `assetVersion` 并同步 admin CSS `@import`；`make spa-check` 校验 manifest/sha/bytes。
-- 决策（壳/首屏）：壳只保留启动旗标/版本/单块 ≤5KB inline script + critical CSS；`app.css`/`app.min.js`/`app.render.js` 外置；主脚本按 `vue → app.render → app.min` 在首卡 hero `load+decode` 后注入，不把大段 CSS/JS 内联回壳、不改回静态 `defer`。
+- 决策（壳/首屏）：壳保留启动旗标/版本/单块 ≤5KB inline script + critical CSS + Go 服务端渲染的**首卡静态岛**（`boot_card`，与真实卡同一套 `.cards-page/.swipe-card/.card-info` class，gzip ≤2KB）；`app.css`/`app.min.js`/`app.render.js` 外置；主脚本按 `vue → app.render → app.min` 在静态岛首图 `load+decode` 后注入；Vue 真实卡首图 decode + 双 rAF 后同帧移除静态岛，不固定等待、不为 LCP 压 UI。登录/注册/激活页用外部 `prefetch.js` 预热 SPA 资源（CSP `script-src 'self'`，不用 inline）。
+- 不要做：不恢复裸图 hero / `dismissHeroAfterPaint` 的 2s `notBefore`；不把静态岛塞进 `#app`（会破坏预编译根模板 hash）；不把大段 CSS/JS 内联回壳；不改回静态 `defer`。
+- 验证：`TestBootCard*` / `TestLegacyShellBootCard` / `app_hero_deck_smoke.py` / `perf_boot.py` 的 `home_done_ms`、`boot_card_removed_ms`；`make perf-budget` 的 `boot_card_allowance_bytes`。
 - 不要做：不手改生成物；不在模板改动后不重建；不生成 sourcemap 到 `web/`；不破坏 classic script 语义。
 - 验证：`make spa-check`、`make static-gzip-check`；详见 `tools/README.md`。
 

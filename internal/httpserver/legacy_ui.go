@@ -107,29 +107,49 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	// shortcut; the shell must render and the client falls back to the API.
 	boot := []byte("null")
 	preload := ""
+	bootCardHTML := ""
 	if a.db != nil {
 		bootCtx, cancel := context.WithTimeout(r.Context(), 800*time.Millisecond)
 		payload, bootErr := a.buildLegacyHomePayloadLimit(bootCtx, r, user, a.clock.Now(), 3)
 		cancel()
 		if bootErr != nil {
 			a.logger(r).Warn("legacy shell bootstrap skipped", "error", bootErr, "user_id", user.ID)
-		} else if raw, mErr := json.Marshal(sanitizeBootstrap(payload)); mErr != nil {
-			a.logger(r).Warn("legacy shell bootstrap marshal failed", "error", mErr, "user_id", user.ID)
 		} else {
-			// json.Marshal escapes HTML; also neutralise the script terminator.
-			boot = bytes.ReplaceAll(raw, []byte("</"), []byte("<\\/"))
-			if src := bootstrapPreloadURL(payload); src != "" {
-				preload = `<link rel="preload" as="image" href="` + html.EscapeString(src) + `" fetchpriority="high">`
+			sanitized, _ := sanitizeBootstrap(payload).(map[string]any)
+			raw, mErr := json.Marshal(sanitized)
+			if mErr != nil {
+				a.logger(r).Warn("legacy shell bootstrap marshal failed", "error", mErr, "user_id", user.ID)
+			} else {
+				// json.Marshal escapes HTML; also neutralise the script terminator.
+				boot = bytes.ReplaceAll(raw, []byte("</"), []byte("<\\/"))
+				// native_admin 的 SPA 页不是牌堆：不 preload 首卡图，也不渲染静态岛。
+				if r.URL.Query().Get("native_admin") != "1" {
+					if src := bootstrapPreloadURL(sanitized); src != "" {
+						preload = `<link rel="preload" as="image" href="` + html.EscapeString(src) + `" fetchpriority="high">`
+					}
+					// 首卡静态岛：首屏直接是最终卡片，而不是裸图 + 灰条。
+					// 无卡/门禁时 bootCardFromPayload 返回 false。
+					if a.tpl != nil {
+						if data, ok := bootCardFromPayload(sanitized); ok {
+							var card bytes.Buffer
+							if err := a.tpl.RenderBootCard(&card, data); err != nil {
+								a.logger(r).Warn("legacy boot card render skipped", "error", err, "user_id", user.ID)
+							} else {
+								bootCardHTML = card.String()
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 	body = bytes.Replace(body, []byte("window.__YXQ_BOOTSTRAP__=null;"),
 		append(append([]byte("window.__YXQ_BOOTSTRAP__="), boot...), ';'), 1)
 	body = bytes.Replace(body, []byte("<!--YXQ_BOOTSTRAP_PRELOAD-->"), []byte(preload), 1)
-	// The ETag covers the rendered shell *and* the bootstrap bytes, so a 304
-	// only ever reuses a body whose embedded personal data is byte-identical.
-	// 64 bits of the payload hash keeps accidental collisions negligible.
-	bootSum := sha256.Sum256(boot)
+	body = bytes.Replace(body, []byte("<!--YXQ_BOOT_CARD-->"), []byte(bootCardHTML), 1)
+	// The ETag covers the rendered shell, bootstrap bytes and boot card, so a
+	// 304 only reuses a body whose first-screen content is byte-identical.
+	bootSum := sha256.Sum256(append(append([]byte{}, boot...), bootCardHTML...))
 	etag := fmt.Sprintf(`"shell-%s-auth-a%s-u%d-%x"`, platform.Version, assetVersion, user.ID, bootSum[:8])
 	w.Header().Add("Vary", "Cookie")
 	w.Header().Set("ETag", etag)
@@ -152,8 +172,7 @@ func bootstrapPreloadURL(payload map[string]any) string {
 	if !ok || len(cards) == 0 {
 		return ""
 	}
-	photo, _ := cards[0]["photo"].(string)
-	return photo
+	return firstCardPhoto(cards[0])
 }
 
 // sensitiveBootstrapKey matches by pattern rather than by an exact list: the

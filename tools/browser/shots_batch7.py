@@ -158,7 +158,7 @@ def main() -> int:
                     page.goto(base_url + "/", wait_until="domcontentloaded", timeout=60000)
                     page.wait_for_selector(".van-tabbar", timeout=30000)
                     try:
-                        page.locator("#boot-skeleton").wait_for(state="detached", timeout=20000)
+                        page.locator("#boot-card").wait_for(state="detached", timeout=20000)
                     except Exception:  # noqa: BLE001 - hero 已移除/不存在都算继续
                         pass
                     for name in pages:

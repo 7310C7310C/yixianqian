@@ -174,9 +174,9 @@ def assert_state(page, expr: str, message: str) -> None:
 def wait_app(page, timeout: int = 40000) -> None:
     try:
         page.wait_for_function("window.__YXQ_APP_MOUNTED__ === true", timeout=timeout)
-        page.locator("#boot-skeleton").wait_for(state="detached", timeout=timeout)
+        page.locator("#boot-card").wait_for(state="detached", timeout=timeout)
     except PlaywrightTimeoutError as exc:
-        raise Failure("SPA 未完成挂载（__YXQ_APP_MOUNTED__ / #boot-skeleton）") from exc
+        raise Failure("SPA 未完成挂载（__YXQ_APP_MOUNTED__ / #boot-card）") from exc
     page.wait_for_timeout(500)
 
 

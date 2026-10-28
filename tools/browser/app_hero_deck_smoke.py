@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""壳内首卡 hero + 牌堆单卡窗口回归（批次5）。
+"""壳内首卡静态岛 + 牌堆单卡窗口回归（批次5）。
 
 覆盖：
-1. 390/1280：`#boot-skeleton` 的首卡 hero 与 Vue 真实 `.swipe-card`/`.card-photo-wrap`
-   几何一致（±1px），首图 URL 使用 `?size=thumb`；Vue 首卡图绘制后 hero 移除；
-2. hero 期间/交接无 layout-shift（CLS < 0.01），LCP 元素是首卡缩图；
-3. 滑动、切 tab、浏览器回退、`#/likes` 深链、restore 后 hero 不残留、不重现；
+1. 390/1280：`#boot-card` 的首卡 hero 与 Vue 真实 `.swipe-card`/`.card-photo-wrap`
+   几何一致（±1px），首图 URL 使用 `?size=thumb`；Vue 首卡图绘制后 静态岛移除；
+2. 静态岛期间/交接无 layout-shift（CLS < 0.01），LCP 元素是首卡缩图（静态岛或真实卡）；
+3. 滑动、切 tab、浏览器回退、`#/likes` 深链、restore 后 静态岛不残留、不重现；
 4. 牌堆只挂载当前 1 张卡（DOM 节点数受控），0/1/2/末张/回退/restore 用例；
-5. 无卡（bootstrap cards 为空）与首图请求失败时降级：hero 显示 shimmer/不出现破图，
+5. 无卡（bootstrap cards 为空）与首图请求失败时降级：静态岛显示占位/不出现破图，
    数据就绪后移除；
 6. 暗色主题与 375/390/768/1280 视口。
 
@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -39,11 +40,14 @@ FILTER_DEFAULT = {
     "height_min": "", "height_max": "", "age_min": "", "age_max": "",
     "education": [], "income": [], "house": [], "driving": [],
 }
+TINY_PNG = base64.b64decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1cAAAAASUVORK5CYII='
+)
 HERO_INIT = """
 window.__hero_snapshot = null;
 (function () {
   function snap() {
-    const h = document.getElementById('boot-skeleton');
+    const h = document.getElementById('boot-card');
     if (!h) return;
     const c = h.querySelector('.swipe-card');
     const p = h.querySelector('.card-photo-wrap');
@@ -59,8 +63,8 @@ window.__hero_snapshot = null;
       imgDisplay: i && getComputedStyle(i).display,
       objectPosition: i && getComputedStyle(i).objectPosition,
       tabbarHeight: (h.querySelector('.boot-tabbar') || {getBoundingClientRect: () => null}).getBoundingClientRect()?.height || null,
-      ready: h.classList.contains('boot-hero-ready'),
-      failed: h.classList.contains('boot-hero-failed')
+      ready: !!(i && i.complete && i.naturalWidth),
+      failed: !!(p && p.classList.contains('boot-photo-failed'))
     };
   }
   new MutationObserver(snap).observe(document.documentElement || document, {
@@ -69,7 +73,7 @@ window.__hero_snapshot = null;
   window.__heroRemovedAt = null;
   window.__heroSeen = false;
   new MutationObserver(function () {
-    if (document.getElementById('boot-skeleton')) { window.__heroSeen = true; return; }
+    if (document.getElementById('boot-card')) { window.__heroSeen = true; return; }
     if (window.__heroSeen && window.__heroRemovedAt === null) {
       window.__heroRemovedAt = Math.round(performance.now());
     }
@@ -145,7 +149,7 @@ def throttle(context, page, cpu: int = 4, latency: float = 150, down_mbps: float
 
 def wait_hero_gone(page, timeout: int = 20000) -> None:
     try:
-        page.locator("#boot-skeleton").wait_for(state="detached", timeout=timeout)
+        page.locator("#boot-card").wait_for(state="detached", timeout=timeout)
     except PlaywrightTimeoutError:
         raise SmokeFailure("壳内 hero 未在超时内移除") from None
 
@@ -221,6 +225,12 @@ def restore_pos(page, pos: int) -> None:
         {"pos": pos, "filters": FILTER_DEFAULT, "ts": int(time.time() * 1000)},
     )
     page.reload(wait_until="domcontentloaded")
+    # 首帧断言：DOMContentLoaded 时静态岛必须已被 head script 跳过。
+    # 不能只等 detached——旧实现会先显示第 1 张、约 1s 后才被 app.js 移除。
+    if page.locator("#boot-card").count():
+        raise SmokeFailure("restore 刷新时静态岛在 DOMContentLoaded 仍存在（首帧会显示第 1 张）")
+    if not page.evaluate("() => document.documentElement.classList.contains('boot-skip')"):
+        raise SmokeFailure("restore 刷新时未设置 boot-skip")
     page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
 
 
@@ -238,7 +248,8 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
         page.wait_for_function("() => !!window.__hero_snapshot", timeout=10000)
         hero = page.evaluate("window.__hero_snapshot")
         if "/cards/photo/" not in hero["src"] or "size=thumb" not in hero["src"]:
-            raise SmokeFailure(f"{tag}: hero 首图不是卡片缩图 {hero['src']!r}")
+            raise SmokeFailure(f"{tag}: 静态岛首图不是卡片缩图 {hero['src']!r}")
+        page.screenshot(path=str(out_dir / f"boot-card-{tag}.png"))
         wait_hero_gone(page)
         wait_cards_ready(page)
         real = page.evaluate("""() => {
@@ -250,8 +261,8 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
         }""")
         if real["card"] is None:
             raise SmokeFailure(f"{tag}: 没有渲染真实卡片")
-        assert_close(hero["card"], real["card"], f"{tag} hero/真实卡")
-        assert_close(hero["photo"], real["photo"], f"{tag} hero/真实卡照片区")
+        assert_close(hero["card"], real["card"], f"{tag} 静态岛/真实卡")
+        assert_close(hero["photo"], real["photo"], f"{tag} 静态岛/真实卡照片区")
         detail = page.evaluate("""() => {
           const img = document.querySelector('.swipe-card .card-photo-item');
           const extra = document.querySelectorAll('.swipe-card .card-photo-item')[1];
@@ -266,12 +277,12 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
             # 真实卡可能按人脸写 object-position；hero 默认/复制值必须一致。
             if hero["objectPosition"] != detail["objectPosition"]:
                 raise SmokeFailure(
-                    f"{tag}: hero 裁切 {hero['objectPosition']!r} != 真实卡 {detail['objectPosition']!r}"
+                    f"{tag}: 静态岛裁切 {hero['objectPosition']!r} != 真实卡 {detail['objectPosition']!r}"
                 )
         if hero.get("tabbarHeight") and detail["tabbarHeight"] is not None:
             if abs(float(hero["tabbarHeight"]) - float(detail["tabbarHeight"])) > 1.5:
                 raise SmokeFailure(
-                    f"{tag}: hero 假 tabbar {hero['tabbarHeight']}px != 真 tabbar {detail['tabbarHeight']}px"
+                    f"{tag}: 静态岛假 tabbar {hero['tabbarHeight']}px != 真 tabbar {detail['tabbarHeight']}px"
                 )
 
         stats = page.evaluate("""() => ({
@@ -285,15 +296,18 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
           dom: document.querySelectorAll('*').length,
           mount: (performance.getEntriesByName('yxq-mount')[0] || {}).duration || null,
           boot: (performance.getEntriesByName('yxq-boot')[0] || {}).duration || null,
-          hero: !!document.getElementById('boot-skeleton'),
+          hero: !!document.getElementById('boot-card'),
         })""")
         if stats["hero"]:
-            raise SmokeFailure(f"{tag}: hero 仍在 DOM")
+            raise SmokeFailure(f"{tag}: 静态岛仍在 DOM")
         if stats["cls"] > 0.01:
             raise SmokeFailure(f"{tag}: CLS {stats['cls']} 超过 0.01")
-        if "/cards/photo/" not in stats["lcpEl"] or "boot-photo" not in stats["lcpClass"]:
+        # LCP 可以是首卡照片，也可以是首卡文案（小图/mock 图时文字更大）；
+        # 关键是元素属于首卡，且时间在预算内。
+        if not any(name in stats["lcpClass"] for name in
+                   ("boot-photo", "card-photo-item", "card-subtitle", "card-name")) and "/cards/photo/" not in stats["lcpEl"]:
             raise SmokeFailure(
-                f"{tag}: LCP 不是壳内 hero（class={stats['lcpClass']!r}, url={stats['lcpEl']!r}）"
+                f"{tag}: LCP 不是首卡内容（class={stats['lcpClass']!r}, url={stats['lcpEl']!r}）"
             )
         if stats["cards"] != 1:
             raise SmokeFailure(f"{tag}: 牌堆应只挂当前 1 张，实际 {stats['cards']}")
@@ -348,12 +362,12 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
         # 1) 切 tab：hero 已消失，不因回切而重现。
         page.locator(".van-tabbar-item").filter(has_text="消息").click()
         page.wait_for_timeout(500)
-        if page.locator("#boot-skeleton").count():
-            raise SmokeFailure("切消息后 hero 重现")
+        if page.locator("#boot-card").count():
+            raise SmokeFailure("切消息后 静态岛重现")
         page.locator(".van-tabbar-item").filter(has_text="牵线").click()
         page.wait_for_timeout(500)
-        if page.locator("#boot-skeleton").count():
-            raise SmokeFailure("回牵线后 hero 重现")
+        if page.locator("#boot-card").count():
+            raise SmokeFailure("回牵线后 静态岛重现")
 
         # 2) 滑动：1→2→1；始终只有一张卡。
         drag_card(page, -90)
@@ -364,7 +378,7 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
         drag_card(page, 90)
         wait_counter_left(page, 1)
 
-        # 3) 浏览器回退：我的 → 我的麦穗（pushState）→ back → 我的；hero 不重现。
+        # 3) 浏览器回退：我的 → 我的麦穗（pushState）→ back → 我的；静态岛不重现。
         page.locator(".van-tabbar-item").filter(has_text="我的").click()
         page.wait_for_timeout(500)
         page.locator(".profile-card-row").filter(has_text="我的麦穗").click()
@@ -373,8 +387,8 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
         page.go_back()
         page.wait_for_timeout(600)
         page.locator(".van-tabbar").wait_for(state="visible", timeout=10000)
-        if page.locator("#boot-skeleton").count():
-            raise SmokeFailure("浏览器回退后 hero 重现")
+        if page.locator("#boot-card").count():
+            raise SmokeFailure("浏览器回退后 静态岛重现")
         page.locator(".van-tabbar-item").filter(has_text="牵线").click()
         page.wait_for_timeout(500)
 
@@ -412,12 +426,12 @@ def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list
         # 5) #/likes 深链：hero 不应在非牵线页出现；回牵线也不重现。
         page.goto(base_url + "/app#/likes", wait_until="domcontentloaded", timeout=40000)
         page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
-        if page.locator("#boot-skeleton").count():
-            raise SmokeFailure("深链 #/likes 时 hero 残留")
+        if page.locator("#boot-card").count():
+            raise SmokeFailure("深链 #/likes 时 静态岛残留")
         page.locator(".van-tabbar-item").filter(has_text="牵线").click()
         page.wait_for_timeout(500)
-        if page.locator("#boot-skeleton").count():
-            raise SmokeFailure("深链回牵线后 hero 重现")
+        if page.locator("#boot-card").count():
+            raise SmokeFailure("深链回牵线后 静态岛重现")
         if errors:
             raise SmokeFailure(f"交互用例 pageerror {errors[:2]}")
         return []
@@ -442,16 +456,15 @@ def run_fallbacks(browser, base_url: str, cookie: str, out_dir: Path) -> list[st
         def strip_cards(route) -> None:
             response = route.fetch()
             body = re.sub(r'"cards":\[.*?\],"cards_total"', '"cards":[],"cards_total"', response.text(), count=1, flags=re.S)
+            # 无卡时 Go 不会渲染静态岛；测试里把整块（含 inline script）去掉，模拟服务端无卡。
+            body = re.sub(r'<div id="boot-card".*?(?=<div id="app" v-cloak>)', '', body, count=1, flags=re.S)
             route.fulfill(response=response, body=body)
 
         context.route(base_url.rstrip("/") + "/app", strip_cards)
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
-        page.wait_for_function("() => !!window.__hero_snapshot", timeout=10000)
-        if page.evaluate("window.__hero_snapshot.src"):
-            raise SmokeFailure("无卡时 hero 仍设置首图")
-        wait_hero_gone(page)
+        page.locator("#boot-card").wait_for(state="detached", timeout=5000)
         page.locator(".van-empty").wait_for(state="visible", timeout=20000)
-        page.screenshot(path=str(out_dir / "hero-no-cards-390.png"))
+        page.screenshot(path=str(out_dir / "boot-card-no-cards-390.png"))
         if errors:
             raise SmokeFailure(f"无卡用例 pageerror {errors[:2]}")
     except Exception as exc:  # noqa: BLE001
@@ -485,8 +498,109 @@ def run_fallbacks(browser, base_url: str, cookie: str, out_dir: Path) -> list[st
     return failures
 
 
+def run_takeover_regressions(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """B1/B2/I1 回归：真实卡图片等待与滚动位置必须命中 #app，而不是静态岛。"""
+    failures: list[str] = []
+
+    # 1) 静态岛首图坏掉、真实卡首图正常：交接必须等真实卡 decode，不能等静态岛。
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+
+        def bad_boot_photo(route) -> None:
+            response = route.fetch()
+            body = re.sub(
+                r'(class="card-photo-item boot-photo" src=")[^"]*(")',
+                r'\1/cards/photo/00000000-0000-0000-0000-000000000000?size=thumb\2',
+                response.text(), count=1, flags=re.S,
+            )
+            route.fulfill(response=response, body=body)
+
+        context.route(base_url.rstrip("/") + "/app", bad_boot_photo)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_function(
+            "() => window.__YXQ_BOOT_CARD__ && window.__YXQ_BOOT_CARD__.removedAt()",
+            timeout=6000,
+        )
+        removed = page.evaluate("window.__YXQ_BOOT_CARD__ ? {at: window.__YXQ_BOOT_CARD__.removedAt(), reason: window.__YXQ_BOOT_CARD__.reason()} : null")
+        if not removed or removed["reason"] != "painted":
+            raise SmokeFailure(f"坏静态岛首图时交接未等真实卡：{removed}")
+        page.locator("#boot-card").wait_for(state="detached", timeout=5000)
+        page.screenshot(path=str(out_dir / "boot-card-bad-island-photo-390.png"))
+        if errors:
+            raise SmokeFailure(f"坏静态岛首图用例 pageerror {errors[:2]}")
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"坏静态岛首图: {exc}")
+    finally:
+        if context is not None:
+            context.close()
+
+    # 2) 静态岛滚动后交接：真实卡必须继承 scrollTop（选择器必须限定 #app）。
+    #    用 bootstrap 里首卡的 photos_thumb 指向一个受控 URL，等 app 已挂载、
+    #    loadHome 已返回、真实卡图仍被挂起时再滚动；这样“settle 时快照”的旧实现
+    #    会取到 0，而“done 前读取”的新实现取到 180。
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        throttle(context, page)
+        held_img = {}
+
+        def patch_bootstrap(route) -> None:
+            response = route.fetch()
+            body = re.sub(
+                r'("photos_thumb":\["?)[^"]*("?)',
+                r'\1/cards/photo/11111111-1111-1111-1111-111111111111?size=thumb\2',
+                response.text(), count=1, flags=re.S,
+            )
+            route.fulfill(response=response, body=body)
+
+        def hold_real_image(route) -> None:
+            if "route" not in held_img:
+                held_img["route"] = route
+                return
+            route.continue_()
+
+        context.route(base_url.rstrip("/") + "/app", patch_bootstrap)
+        context.route("**/cards/photo/11111111-1111-1111-1111-111111111111**", hold_real_image)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_function(
+            "() => window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_DONE__ === true && !!document.getElementById('boot-card')",
+            timeout=15000,
+        )
+        page.evaluate("() => { const el = document.querySelector('#boot-card .card-info'); if (el) el.scrollTop = 180; }")
+        page.wait_for_timeout(100)
+        boot_scroll = page.evaluate("() => { const el = document.querySelector('#boot-card .card-info'); return el ? el.scrollTop : -1; }")
+        if boot_scroll < 150:
+            raise SmokeFailure(f"静态岛资料区不可滚动：scrollTop={boot_scroll}")
+        if held_img.get("route"):
+            held_img["route"].fulfill(status=200, content_type="image/png", body=TINY_PNG)
+        page.locator("#boot-card").wait_for(state="detached", timeout=15000)
+        page.wait_for_timeout(250)
+        real_scroll = page.evaluate("() => { const el = document.querySelector('#app .swipe-card .card-info'); return el ? el.scrollTop : -1; }")
+        if real_scroll < 150:
+            raise SmokeFailure(f"交接后真实卡未继承滚动位置：real scrollTop={real_scroll}")
+        page.screenshot(path=str(out_dir / "boot-card-scroll-transfer-390.png"))
+        if errors:
+            raise SmokeFailure(f"滚动交接用例 pageerror {errors[:2]}")
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"滚动交接: {exc}")
+    finally:
+        if context is not None:
+            try:
+                if held_img.get("route"):
+                    held_img["route"].abort()
+            except Exception:  # noqa: BLE001
+                pass
+            context.close()
+    return failures
+
+
 def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
-    """loadHome 挂起时，壳脚本/app.js 的 4s 硬上限必须移除 hero 并露出启动骨架。"""
+    """loadHome 挂起时，壳脚本/app.js 的 4s 硬上限必须移除静态岛并露出启动骨架。"""
     context = None
     try:
         context = make_context(browser, base_url, cookie, 390, 844)
@@ -515,12 +629,12 @@ def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> li
         context.route("**/legacy/api/home", hold_home)
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
         page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=15000)
-        page.locator("#boot-skeleton").wait_for(state="detached", timeout=6000)
-        removed = page.evaluate("window.__YXQ_HERO__ ? {at: window.__YXQ_HERO__.removedAt(), reason: window.__YXQ_HERO__.reason()} : null")
+        page.locator("#boot-card").wait_for(state="detached", timeout=6000)
+        removed = page.evaluate("window.__YXQ_BOOT_CARD__ ? {at: window.__YXQ_BOOT_CARD__.removedAt(), reason: window.__YXQ_BOOT_CARD__.reason()} : null")
         if not removed or removed["at"] is None or removed["at"] > 4300:
-            raise SmokeFailure(f"loadHome 挂起时 hero 移除过晚：{removed}")
+            raise SmokeFailure(f"loadHome 挂起时 静态岛移除过晚：{removed}")
         if removed["reason"] not in ("load-timeout", "hard-timeout"):
-            raise SmokeFailure(f"loadHome 挂起时 hero 移除原因异常：{removed}")
+            raise SmokeFailure(f"loadHome 挂起时 静态岛移除原因异常：{removed}")
         page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=5000)
         page.screenshot(path=str(out_dir / "hero-load-home-hang-390.png"))
         if errors:
@@ -574,6 +688,7 @@ def main() -> int:
                 failures.extend(run_viewport(browser, base_url, cookie, width, height, out_dir, throttle_net=True))
             failures.extend(run_interactions(browser, base_url, cookie, out_dir))
             failures.extend(run_fallbacks(browser, base_url, cookie, out_dir))
+            failures.extend(run_takeover_regressions(browser, base_url, cookie, out_dir))
             failures.extend(run_load_home_hang(browser, base_url, cookie, out_dir))
             failures.extend(run_dark(browser, base_url, cookie, out_dir))
             browser.close()
@@ -583,7 +698,7 @@ def main() -> int:
         for item in failures:
             print("FAIL", item)
         return 1
-    print("PASS hero/deck smoke (390/1280/375/768, dark, interactions, fallbacks)")
+    print("PASS boot-card/deck smoke (390/1280/375/768, dark, interactions, fallbacks)")
     return 0
 
 

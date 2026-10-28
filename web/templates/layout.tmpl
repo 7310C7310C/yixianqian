@@ -25,8 +25,9 @@
   <link rel="stylesheet" href="/static/shell.css?v={{assetVersion}}">
   {{end}}
   {{if .PageCSS}}<link rel="stylesheet" href="/static/{{.PageCSS}}?v={{assetVersion}}">{{end}}
+  {{if .PrefetchSPA}}<script src="/static/prefetch.js?v={{assetVersion}}" defer></script>{{end}}
 </head>
-<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}{{if .PublicLanding}} public-landing home-pending{{end}}{{if .ScanSafe}} scan-safe copy-pending{{end}}"{{if .CopyPage}} data-copy-page="{{.CopyPage}}"{{end}}{{if .ErrorCode}} data-error-code="{{.ErrorCode}}"{{end}}{{if .CopyJSON}} data-copy-json="{{.CopyJSON}}"{{end}}>
+<body class="shell-body{{if .ActiveNav}} admin-shell{{end}}{{if .PublicLanding}} public-landing home-pending{{end}}{{if .ScanSafe}} scan-safe copy-pending{{end}}" data-asset-version="{{assetVersion}}"{{if .PrefetchSPA}} data-prefetch-spa="1"{{end}}{{if .CopyPage}} data-copy-page="{{.CopyPage}}"{{end}}{{if .ErrorCode}} data-error-code="{{.ErrorCode}}"{{end}}{{if .CopyJSON}} data-copy-json="{{.CopyJSON}}"{{end}}>
   {{if and (not .PublicLanding) (not .ScanSafe)}}<a class="shell-skip" href="#main">跳至主要内容</a>
 
   <header class="shell-header">

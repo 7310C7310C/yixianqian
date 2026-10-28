@@ -211,7 +211,7 @@ def dismiss_guides(page) -> None:
 def wait_app(page) -> None:
     page.wait_for_selector(".van-tabbar", timeout=20000)
     try:
-        page.locator("#boot-skeleton").wait_for(state="detached", timeout=15000)
+        page.locator("#boot-card").wait_for(state="detached", timeout=15000)
     except PlaywrightTimeoutError:
         pass
     wait_page_ready(page, "cards")

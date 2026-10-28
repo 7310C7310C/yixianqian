@@ -39,6 +39,7 @@
 })();
 </script>
 <script>try{if(localStorage.getItem('yxq_dark')==='1')document.documentElement.classList.add('van-theme-dark');}catch(e){}</script>
+<script>try{if(/^#\/(likes|activities)(\/|$)/.test(location.hash)||sessionStorage.getItem('yxq_deck_restore'))document.documentElement.classList.add('boot-skip');}catch(e){}</script>
 <title>一线牵</title>
 <link rel="icon" href="favicon.ico?v=__ASSET_URL_VERSION__" sizes="any">
 <link rel="icon" href="favicon.svg?v=__ASSET_URL_VERSION__" type="image/svg+xml">
@@ -53,38 +54,17 @@
 
 </head>
 <body>
-<div id="boot-skeleton" aria-hidden="true">
-  <div class="cards-page">
-    <div class="swipe-card">
-      <div class="card-photo-wrap">
-        <div class="boot-shimmer boot-hero-shimmer"></div>
-        <img class="card-photo-item boot-photo" alt="" decoding="async" fetchpriority="high">
-      </div>
-      <div class="boot-hero-body">
-        <div class="boot-shimmer boot-line boot-line--md"></div>
-        <div class="boot-shimmer boot-line boot-line--sm"></div>
-      </div>
-    </div>
-  </div>
-  <div class="boot-tabbar" aria-hidden="true">
-    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">牵线</span></div>
-    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">消息</span></div>
-    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">活动</span></div>
-    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">我的</span></div>
-  </div>
-</div>
-<style>#boot-skeleton{position:fixed;inset:0;z-index:2000;background:#f7f8fa;pointer-events:none}.van-theme-dark #boot-skeleton{background:#111}</style>
+<!--YXQ_BOOT_CARD-->
 <script>
-// 壳内首卡 hero：沿用牵线页 .cards-page/.swipe-card/.card-photo-wrap 的同一套几何，
-// Vue 的首卡图真正绘制后再淡出，避免新 LCP 候选被挂载长任务重置。
-// 挂载前不响应交互，避免用户点一下就把唯一的首屏内容移除成 v-cloak 空白。
+// 壳内首卡静态岛：服务端已渲染完整首卡（照片/姓名/资料/tabbar）。
+// 这里只负责首帧人脸裁切、慢网提示与交接；真实卡绘制后由 app.js 原子移除。
 (function(){
-  var root = document.getElementById('boot-skeleton');
+  var root = document.getElementById('boot-card');
   if (!root) return;
   var img = root.querySelector('.boot-photo');
-  var state = {dismissed:false, loaded:false};
-  // 与 app.js computeFaceCrop 同一公式：hero 在首帧就按人脸裁切，挂载后 Vue 卡片
-  // 不会出现「hero 居中 → 真实卡偏移」的视觉跳动。
+  var wrap = img && img.closest('.card-photo-wrap');
+  var state = {dismissed:false, removedAt:null, reason:''};
+  // 与 app.js computeFaceCrop 同一公式：静态岛与真实卡裁切一致，交接不跳。
   function computeFaceCrop(f, cw, ch, iw, ih){
     if (!f || !f.c || !cw || !ch || !iw || !ih) return '';
     try {
@@ -118,25 +98,26 @@
       return '50% ' + Math.round(off) + 'px';
     } catch (e) { return ''; }
   }
-  function applyCrop(faces){
+  function applyFaces(faces){
     try {
-      var f = faces && faces[0];
-      var wrap = img && img.closest('.card-photo-wrap');
-      if (!f || !wrap || !img.naturalWidth) return;
-      var pos = computeFaceCrop(f, wrap.clientWidth, wrap.clientHeight,
-        img.naturalWidth, img.naturalHeight);
-      if (pos) img.style.objectPosition = pos;
+      var f = (faces && faces.length) ? faces[0] : faces;
+      if (!f || !img || !wrap) return;
+      function run(){
+        if (!img.naturalWidth) return;
+        var pos = computeFaceCrop(f, wrap.clientWidth, wrap.clientHeight,
+          img.naturalWidth, img.naturalHeight);
+        if (pos) img.style.objectPosition = pos;
+      }
+      if (img.complete && img.naturalWidth) run();
+      else img.addEventListener('load', run, { once: true });
     } catch (e) {}
   }
-  function setPhoto(src, faces){
-    if (!img || !src || state.dismissed) return;
-    img.onload = function(){
-      state.loaded = true;
-      root.classList.add('boot-hero-ready');
-      applyCrop(faces);
-    };
-    img.onerror = function(){ root.classList.add('boot-hero-failed'); try{ img.removeAttribute('src'); }catch(e){} };
-    img.src = src;
+  function markPhotoFailed(){
+    try { img.style.display = 'none'; if (wrap) wrap.classList.add('boot-photo-failed'); } catch (e) {}
+  }
+  if (img) {
+    img.addEventListener('error', markPhotoFailed, { once: true });
+    if (img.complete && !img.naturalWidth) markPhotoFailed();
   }
   function setObjectPosition(pos){
     if (img && pos && !state.dismissed) img.style.objectPosition = pos;
@@ -146,30 +127,32 @@
     state.dismissed = true;
     state.reason = reason || '';
     state.removedAt = Math.round(performance.now());
-    document.removeEventListener('pointerdown', onInteract, true);
-    document.removeEventListener('touchstart', onInteract, true);
-    document.removeEventListener('keydown', onInteract, true);
-    document.removeEventListener('wheel', onInteract, true);
-    root.classList.add('boot-hero-out');
+    root.classList.add('boot-card-out');
     setTimeout(function(){ if (root.parentNode) root.parentNode.removeChild(root); }, 180);
   }
-  function onInteract(){ if (window.__YXQ_APP_MOUNTED__) dismiss('interact'); }
-  document.addEventListener('pointerdown', onInteract, true);
-  document.addEventListener('touchstart', onInteract, true);
-  document.addEventListener('keydown', onInteract, true);
-  document.addEventListener('wheel', onInteract, true);
-  window.__YXQ_HERO__ = {
-    setPhoto: setPhoto,
+  window.__YXQ_BOOT_CARD__ = {
+    applyFaces: applyFaces,
     setObjectPosition: setObjectPosition,
     dismiss: dismiss,
-    loaded: function(){ return state.loaded; },
     dismissed: function(){ return state.dismissed; },
     reason: function(){ return state.reason || ''; },
     removedAt: function(){ return state.removedAt || null; }
   };
-  // 冷启硬上限：从壳脚本执行起算 4s；app 已挂载时即使 loadHome 卡住也移除，
-  // 露出 Vue 启动骨架（未挂载则保留 hero，避免白屏，app.js 挂载后会再兜底）。
-  setTimeout(function(){ if (!state.dismissed && window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_STARTED__ === true && window.__YXQ_LOAD_HOME_DONE__ !== true) dismiss('load-timeout'); }, 4000);
+  try {
+    if (document.documentElement.classList.contains('boot-skip')) {
+      state.dismissed = true;
+      state.reason = 'deep-link';
+      if (root.parentNode) root.parentNode.removeChild(root);
+      return;
+    }
+    var raw = img && img.getAttribute('data-faces');
+    if (raw) applyFaces(JSON.parse(raw));
+  } catch (e) {}
+  document.addEventListener('pointerdown', function(){
+    if (window.__YXQ_APP_MOUNTED__) dismiss('interact');
+  }, true);
+  // 慢网提示：完整卡保留，不降级成灰骨架；交接/失败由 app.js 负责。
+  setTimeout(function(){ if (!state.dismissed) root.classList.add('boot-card-slow'); }, 3000);
 })();
 </script>
 <div id="app" v-cloak>
@@ -961,34 +944,24 @@
 </div>
 <script>window.__YXQ_BOOTSTRAP__=null;</script>
 <script>
-// 首屏卡片图早于 Vue 启动：优先消费服务端 bootstrap；缺失时回退原 API。
+// 首卡由服务端静态岛直接渲染；这里只准备 home 数据 Promise，供 app.js 启动时消费。
 (function(){
   try {
-    function show(d){
-      if (!d || !d.cards || !d.cards.length) return;
-      var c = d.cards[0];
-      var src = c.photo || (c.photos_thumb && c.photos_thumb[0]) || (c.photos && c.photos[0]);
-      if (!src || !window.__YXQ_HERO__) return;
-      window.__YXQ_HERO__.setPhoto(src, c.faces);
-    }
     var boot = window.__YXQ_BOOTSTRAP__;
     if (boot) {
-      show(boot);
       window.__YXQ_HOME_PROMISE__ = Promise.resolve(boot);
       return;
     }
-    var p = fetch('/legacy/api/home', {credentials:'same-origin', headers:{'Accept':'application/json'}})
+    window.__YXQ_HOME_PROMISE__ = fetch('/legacy/api/home', {credentials:'same-origin', headers:{'Accept':'application/json'}})
       .then(function(r){ return r.ok ? r.json() : null; })
       .catch(function(){ return null; });
-    window.__YXQ_HOME_PROMISE__ = p;
-    p.then(show);
   } catch (e) {}
 })();
 </script>
 <script>
-// 主脚本缺失时的最小可见错误页：不依赖 Vue/app.js，hero 先让位。
+// 主脚本缺失时的最小可见错误页：不依赖 Vue/app.js，静态岛先让位。
 window.__YXQ_BOOT_FAIL__ = function(detail){
-  try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss('boot-fail'); } catch (e) {}
+  try { if (window.__YXQ_BOOT_CARD__) window.__YXQ_BOOT_CARD__.dismiss('boot-fail'); } catch (e) {}
   try {
     var root = document.getElementById('app');
     if (!root) return;
@@ -1006,9 +979,9 @@ window.__YXQ_BOOT_FAIL__ = function(detail){
 };
 </script>
 <script>
-// 批次10（1B）渐进启动：三个主脚本只预下载，等壳内首卡 hero 真正绘制后再按序执行。
-// 根因：慢机 CPU×4 时 app.min.js 解析/执行 + Vue 挂载是 1.6–2.1s 长任务；若它在 hero
-// 绘制前跑，LCP 会被推到任务结束（批次9 基线冷 3.74s / 热 1.91s）。这里先让 hero 提交
+// 批次10（1B）渐进启动：三个主脚本只预下载，等壳内首卡静态岛照片绘制后再按序执行。
+// 根因：慢机 CPU×4 时 app.min.js 解析/执行 + Vue 挂载是 1.6–2.1s 长任务；若它在静态岛
+// 绘制前跑，LCP 会被推到任务结束（批次9 基线冷 3.74s / 热 1.91s）。这里先让静态岛提交
 // 一帧，再启动 Vue。启动前的点击/返回不绑定业务逻辑、不重放事件，只记录 pending 标记。
 (function(){
   var ASSETS = [
@@ -1081,7 +1054,11 @@ window.__YXQ_BOOT_FAIL__ = function(detail){
     img.addEventListener('error', function(){ clearTimeout(cap); finish('hero-error'); }, { once: true });
   }
   function begin(){
-    var root = document.getElementById('boot-skeleton');
+    var root = document.getElementById('boot-card');
+    if (!root || document.documentElement.classList.contains('boot-skip')) {
+      afterPaint(function(){ start(root ? 'deep-link' : 'no-boot-card'); });
+      return;
+    }
     var img = root && root.querySelector('.boot-photo');
     var waited = 0;
     function poll(){

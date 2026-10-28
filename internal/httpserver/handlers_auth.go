@@ -46,18 +46,20 @@ func (a *App) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 		NoticeCopyKey: noticeKey,
 		Next:          next,
 		ScanSafe:      true,
+		PrefetchSPA:   true,
 		CopyPage:      "login",
 	})
 }
 
 func (a *App) renderLogin(w http.ResponseWriter, r *http.Request, status int, message, phone, next string) {
 	a.render(w, r, status, "login", PageData{
-		Title:    "登录",
-		Error:    message,
-		Phone:    phone,
-		Next:     next,
-		ScanSafe: true,
-		CopyPage: "login",
+		Title:       "登录",
+		Error:       message,
+		Phone:       phone,
+		Next:        next,
+		ScanSafe:    true,
+		PrefetchSPA: true,
+		CopyPage:    "login",
 	})
 }
 
@@ -302,13 +304,14 @@ func (a *App) renderActivate(w http.ResponseWriter, r *http.Request, status int,
 		}
 	}
 	a.render(w, r, status, "activate", PageData{
-		Title:    "设定密码",
-		Token:    token,
-		Phone:    auth.MaskPhone(at.Phone),
-		Error:    message,
-		ScanSafe: true,
-		CopyPage: "activate",
-		Data:     activatePageData{NameHTML: asciiEntityText(at.Name)},
+		Title:       "设定密码",
+		Token:       token,
+		Phone:       auth.MaskPhone(at.Phone),
+		Error:       message,
+		ScanSafe:    true,
+		PrefetchSPA: true,
+		CopyPage:    "activate",
+		Data:        activatePageData{NameHTML: asciiEntityText(at.Name)},
 	})
 }
 

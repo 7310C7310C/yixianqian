@@ -39,7 +39,7 @@ try {
 // runtime-only Vue（3.4.27 无编译器构建）不能再把 template 当兜底：渲染器或运行库缺失时
 // 必须给出可诊断的可见错误，而不是静默白屏。这里只依赖 DOM，不依赖 Vue。
 function yxqBootFailure(detail){
-  try{ if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss('boot-fail'); }catch(e){}
+  try{ if (window.__YXQ_BOOT_CARD__) window.__YXQ_BOOT_CARD__.dismiss('boot-fail'); }catch(e){}
   try{
     var root = document.getElementById('app');
     if (root){
@@ -5717,121 +5717,105 @@ const yxqApp = createApp({
       setTimeout(schedulePhotoCropRecalc, 360);
     });
 
-    // ===== 壳内首卡 hero：等 Vue 首卡图真正绘制后再移除 =====
-    // hero 的 DOM/几何由 index.html 静态渲染（与 .swipe-card 同一套 CSS），
-    // 这里只决定何时淡出：首卡图 decode+paint 后；无卡/无图/切页/换卡/门禁/失败立即移除。
-    let bootHeroAnchor = null;
-    let bootHeroSettled = false;
-    let bootHeroHardTimer = null;
-    let bootHeroLastLongTaskEnd = 0;
-    try {
-      new PerformanceObserver((list) => {
-        for (const e of list.getEntries()) {
-          bootHeroLastLongTaskEnd = Math.max(bootHeroLastLongTaskEnd, e.startTime + e.duration);
-        }
-      }).observe({type: 'longtask', buffered: true});
-    } catch (_) {}
-    function dismissBootHero(reason) {
-      try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss(reason); } catch (_) {}
+    // ===== 壳内首卡静态岛：真实卡绘制后原子交接 =====
+    // 静态岛的 DOM/几何由 Go 服务端渲染（与 .swipe-card 同一套 CSS）；这里只决定
+    // 何时交接：真实卡首图 decode + 双 rAF 后同一帧移除，不固定等待、不为 LCP 压 UI。
+    let bootCardAnchor = null;
+    let bootCardSettled = false;
+    let bootCardHardTimer = null;
+    function bootCardApi() { return window.__YXQ_BOOT_CARD__; }
+    function dismissBootCard(reason) {
+      try { const api = bootCardApi(); if (api) api.dismiss(reason); } catch (_) {}
     }
-    // 硬上限从 navigationStart 起算 4s：loadHome 卡住时 settleBootHero 不会启动，
-    // 这里确保 hero 不会无限覆盖；移除后露出 Vue 启动骨架（bootLoading 仍为 true）。
-    function armBootHeroHardLimit() {
-      if (bootHeroHardTimer) return;
+    // 硬上限从 navigationStart 起算 4s：无论 loadHome 是否挂起，都不能让静态岛无限覆盖。
+    function armBootCardHardLimit() {
+      if (bootCardHardTimer) return;
       const remain = Math.max(0, 4000 - performance.now());
-      bootHeroHardTimer = setTimeout(() => {
-        bootHeroHardTimer = null;
-        // 只在 loadHome 仍挂起时强制移除；正常慢图由 settleBootHero 的绘制/超时路径处理，
-        // 避免把已经下载中的 hero 首图在 4s 时误删、反而推后 LCP。
-        if (bootLoading.value && window.__YXQ_LOAD_HOME_STARTED__) dismissBootHero('load-timeout');
+      bootCardHardTimer = setTimeout(() => {
+        bootCardHardTimer = null;
+        const api = bootCardApi();
+        if (!api || !api.dismissed()) dismissBootCard('hard-timeout');
       }, remain);
     }
-    // 等首屏长任务（Vant 执行/mount/数据渲染）结束并完成一帧绘制后再移除 hero。
-    // 只等 complete 会让 hero 在长任务开始前被移除，真实卡成为新的 LCP 候选（实测 6.5s）。
-    function dismissHeroAfterPaint() {
-      // 2s 窗口覆盖首屏 mount/Vant/数据渲染长任务的启动；之后要求长任务静默 200ms。
-      const notBefore = performance.now() + 2000;
-      const started = Date.now();
-      const step = () => {
-        if (window.__YXQ_HERO__.dismissed()) return;
-        const now = performance.now();
-        if (now < notBefore || now - bootHeroLastLongTaskEnd < 200) {
-          if (Date.now() - started > 10000) { dismissBootHero('paint-timeout'); return; }
-          setTimeout(step, 100);
-          return;
-        }
-        requestAnimationFrame(() => requestAnimationFrame(() => dismissBootHero('painted')));
-      };
-      step();
+    // 把静态岛的人脸裁切同步到真实卡算法，交接瞬间不垂直跳。
+    function syncBootCardCrop() {
+      try {
+        const api = bootCardApi();
+        const heroImg = document.querySelector('#boot-card .boot-photo');
+        const heroWrap = heroImg && heroImg.closest('.card-photo-wrap');
+        const faces = (currentCard.value && currentCard.value.faces) || [];
+        if (!api || !heroImg || !heroWrap) return;
+        const pos = computeFaceCrop(faces[0], heroWrap.clientWidth, heroWrap.clientHeight,
+          heroImg.naturalWidth, heroImg.naturalHeight);
+        if (pos) api.setObjectPosition(pos);
+      } catch (_) {}
     }
-    function settleBootHero() {
-      if (bootHeroSettled) return;
-      bootHeroSettled = true;
-      if (!window.__YXQ_HERO__ || window.__YXQ_HERO__.dismissed()) return;
-      if (page.value !== 'cards' || !currentCard.value) { dismissBootHero('not-deck'); return; }
-      bootHeroAnchor = {
+    function dismissBootCardAfterPaint() {
+      requestAnimationFrame(() => requestAnimationFrame(() => dismissBootCard('painted')));
+    }
+    function settleBootCard() {
+      if (bootCardSettled) return;
+      bootCardSettled = true;
+      const api = bootCardApi();
+      if (!api || api.dismissed()) return;
+      if (page.value !== 'cards' || !currentCard.value) { dismissBootCard('not-deck'); return; }
+      bootCardAnchor = {
         start: cardsStart.value,
         index: cardIndex.value,
         oid: currentCard.value.openid || '',
       };
-      if (!currentPhotoList.value[0]) { dismissBootHero('no-photo'); return; }
-      const deadline = Date.now() + 8000;
+      if (!currentPhotoList.value[0]) { dismissBootCard('no-photo'); return; }
+      // 真实卡首图通常与静态岛同 URL（已 preload/缓存）；最多等 2.5s，避免慢图锁住交接。
+      const deadline = Date.now() + 2500;
       const step = () => {
-        if (window.__YXQ_HERO__.dismissed()) return;
+        if (api.dismissed()) return;
         if (page.value !== 'cards' || !currentCard.value ||
-            (currentCard.value.openid || '') !== bootHeroAnchor.oid) {
-          dismissBootHero('card-changed');
+            (currentCard.value.openid || '') !== bootCardAnchor.oid) {
+          dismissBootCard('card-changed');
           return;
         }
-        const img = document.querySelector('.swipe-card .card-photo-item');
+        const img = document.querySelector('#app .swipe-card .card-photo-item');
         if (img && img.complete && img.naturalWidth) {
-          // hero 的裁切要跟真实卡一致，避免淡出瞬间垂直跳。
-          // 不能只复制真实卡的 computed style：真实卡的位置由 @load 时的 recalcPhotoPosition
-          // 写入，首图可能先于 faces/布局就绪，命中「几乎没动」分支或稍后才重算——
-          // hero 若那一刻复制就会停在默认 50% 0（实测 staging 冷启 +2.4s 才出现人脸裁切，
-          // hero 已在 3.1s 被移除）。这里用同一个 computeFaceCrop 直接按 faces[0] 算，
-          // 真实卡稍后也算出同一个值；两者公式一致，淡出前后不会跳。
-          try {
-            const heroImg = document.querySelector('#boot-skeleton .boot-photo');
-            const heroWrap = heroImg && heroImg.closest('.card-photo-wrap');
-            const faces = currentCard.value.faces || [];
-            const pos = heroImg && heroWrap
-              ? computeFaceCrop(faces[0], heroWrap.clientWidth, heroWrap.clientHeight,
-                                heroImg.naturalWidth, heroImg.naturalHeight)
-              : '';
-            if (pos && window.__YXQ_HERO__.setObjectPosition) window.__YXQ_HERO__.setObjectPosition(pos);
-          } catch (_) {}
-          // 等首屏长任务结束 + 至少一帧绘制；见 dismissHeroAfterPaint 注释。
-          dismissHeroAfterPaint();
+          syncBootCardCrop();
+          const done = () => {
+            try {
+              // 交接前当场读取静态岛滚动位置，写到真实卡（必须限定 #app，避免命中静态岛）。
+              const bootInfo = document.querySelector('#boot-card .card-info');
+              const realInfo = document.querySelector('#app .swipe-card .card-info');
+              if (bootInfo && realInfo && bootInfo.scrollTop > 0) realInfo.scrollTop = bootInfo.scrollTop;
+            } catch (_) {}
+            dismissBootCardAfterPaint();
+          };
+          if (img.decode) img.decode().then(done, done); else done();
           return;
         }
-        if (Date.now() > deadline) { dismissBootHero('timeout'); return; }
+        if (Date.now() > deadline) { dismissBootCard('image-timeout'); return; }
         setTimeout(step, 60);
       };
       step();
     }
     watch(bootLoading, (v) => {
       window.__YXQ_LOAD_HOME_DONE__ = !v;
-      if (!v) nextTick(settleBootHero);
+      if (!v) {
+        window.__YXQ_LOAD_HOME_DONE_AT__ = Math.round(performance.now());
+        nextTick(settleBootCard);
+      }
     });
-    watch(page, (v) => { if (v !== 'cards') dismissBootHero('tab'); });
+    watch(page, (v) => { if (v !== 'cards') dismissBootCard('tab'); });
     watch([cardIndex, cardsStart], ([idx, start]) => {
-      if (!bootHeroAnchor) return;
-      if (idx !== bootHeroAnchor.index || start !== bootHeroAnchor.start) dismissBootHero('card-changed');
+      if (!bootCardAnchor) return;
+      if (idx !== bootCardAnchor.index || start !== bootCardAnchor.start) dismissBootCard('card-changed');
     });
-    watch([bootError, gateMessage], ([err, gate]) => { if (err || gate) dismissBootHero('gate'); });
-    // 首卡人脸裁切（photoPositions[0]）可能在首图 @load 之后才算出（容器尺寸/faces 数据
-    // 未就绪会重试），而 settleBootHero 只在 img.complete 时复制一次——那样 hero 会停在
-    // 默认 50% 0，淡出瞬间真实卡却已上移，出现垂直跳变（批次7 集成排查发现）。
-    // 这里在裁切值变化时持续同步给还活着的 hero（dismissed 后 setObjectPosition 自动 no-op）。
+    watch([bootError, gateMessage], ([err, gate]) => { if (err || gate) dismissBootCard('gate'); });
+    // 首卡人脸裁切（photoPositions[0]）可能在首图 @load 之后才算出；持续同步给静态岛，
+    // 保证交接前后裁切一致（dismissed 后 setObjectPosition 自动 no-op）。
     watch(photoPositions, (arr) => {
       if (page.value !== 'cards') return;
       const pos = arr && arr[0];
       if (!pos) return;
       try {
-        if (window.__YXQ_HERO__ && window.__YXQ_HERO__.setObjectPosition) {
-          window.__YXQ_HERO__.setObjectPosition(pos);
-        }
+        const api = bootCardApi();
+        if (api) api.setObjectPosition(pos);
       } catch (_) {}
     }, { deep: true });
 
@@ -5839,8 +5823,8 @@ const yxqApp = createApp({
       window.__YXQ_APP_MOUNTED__ = true;
       window.__YXQ_LOAD_HOME_STARTED__ = false;
       window.__YXQ_LOAD_HOME_DONE__ = false;
-      armBootHeroHardLimit();
-      // 首屏 hero 绘制 + 应用挂载后，likes 立即预取，其余 chunk LCP 后 idle；
+      armBootCardHardLimit();
+      // 首卡静态岛绘制 + 应用挂载后，likes 立即预取，其余 chunk LCP 后 idle；
       // 管理台 iframe 不预取，避免占用原生管理页带宽。
       if (!nativeAdmin.value) { yxqPrefetchPageChunks(); prefetchPhotoSwipe(); }
       // 可视区域变化：更新 --yxq-vh（壳内已尽早设过）并重算人脸裁切。

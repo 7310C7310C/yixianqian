@@ -1,0 +1,76 @@
+{{define "boot_card"}}
+<div id="boot-card" aria-hidden="true">
+  <div class="cards-page">
+    <div class="card-top-left">
+      <div class="card-counter">{{.Counter}}</div>
+      {{if .ShowHearts}}<div class="hearts-badge">💕 匿名 {{.AnonLeft}} · 实名 {{.RealLeft}}</div>{{end}}
+    </div>
+    <div class="filter-btn">⚙ 筛选</div>
+    <div class="swipe-card">
+      <div class="card-photo-wrap">
+        {{if .Photo}}
+        <img class="card-photo-item boot-photo" src="{{.Photo}}" alt="" decoding="async" fetchpriority="high"{{if .FacesJSON}} data-faces="{{.FacesJSON}}"{{end}}>
+        {{else}}
+        <div class="card-photo-item card-photo-ghost"></div>
+        {{end}}
+        {{if gt .PhotoCount 1}}
+        <div class="photo-dots">
+          {{range .Dots}}<div class="photo-dot{{if .}} active{{end}}"></div>{{end}}
+        </div>
+        {{end}}
+        <div class="card-photo-overlay">
+          <div class="card-overlay-box">
+            <div class="card-overlay-text">
+              {{if .BadgeText}}<div style="margin-bottom:6px;"><span class="boot-badge {{.BadgeClass}}">{{.BadgeText}}</span></div>{{end}}
+              <div class="card-name">{{.Nickname}}
+                <span class="gender-icon">{{.GenderIcon}}</span>
+              </div>
+              {{if .Simple}}<div class="card-subtitle">{{.Simple}}</div>{{end}}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-main">
+        <div class="card-tabs">
+          <div class="card-tab active">资料</div>
+          <div class="card-tab">留言</div>
+        </div>
+        <div class="card-info">
+          {{range .Sections}}
+          <div class="card-section">
+            <div class="profile-section-title"><span class="ps-icon">{{.Icon}}</span>{{.Title}}</div>
+            <div class="info-grid">
+              {{range .Fields}}
+              <div class="info-grid-item{{if .Full}} full{{end}}">
+                <span class="df-label">{{.Label}}：</span>
+                <span class="df-value">{{.Value}}</span>
+              </div>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="boot-tabbar" aria-hidden="true">
+    <div class="boot-tab boot-tab--active">
+      <span class="boot-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21.2l8.8-8.8a5.5 5.5 0 0 0 0-7.8z"></path></svg></span>
+      <span class="boot-tab-text">牵线</span>
+    </div>
+    <div class="boot-tab">
+      <span class="boot-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.5 9.5 0 0 1-3.3-.6L3 21l1.7-5.1A8.4 8.4 0 1 1 21 11.5z"></path></svg></span>
+      <span class="boot-tab-text">消息</span>
+    </div>
+    <div class="boot-tab">
+      <span class="boot-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 9.5V21h14V9.5"></path></svg></span>
+      <span class="boot-tab-text">活动</span>
+    </div>
+    <div class="boot-tab">
+      <span class="boot-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"></path></svg></span>
+      <span class="boot-tab-text">我的</span>
+    </div>
+  </div>
+  <div class="boot-slow">正在加载…</div>
+</div>
+{{end}}
