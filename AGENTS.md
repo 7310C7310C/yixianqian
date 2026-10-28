@@ -31,7 +31,7 @@ sources:
 
 - 不写密钥；密码、token、cookie、`.env`、R2 key 不得进入 repo、日志、报告或文档。
 - 用户端复用 v1 Vue 3 + Vant SPA；管理台只经同源 iframe，顶层 `/admin` 一律 303 到 `/?admin=1`。
-- 不恢复已废弃方案：`/welcome` 页面、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、Redis、飞书 runtime、第二套用户 UI、首卡自我引导气泡（`self-guide-tip`；首卡已自带「这是你 · 他人视角」标签）、裸图 hero + `dismissHeroAfterPaint` 的 2s `notBefore`（改为服务端首卡静态岛 + 原子接管；静态岛裁切在布局就绪后重试，滚动位置在任何移除路径含 4s 硬上限都交接给真实卡；4s 硬切只在 loadHome 仍挂起时执行，数据就绪后等真实卡图片；`#boot-card` 必须接住点击，不能穿透；点击只在 pointerup 且位移 ≤10px/非长按时交接（touchmove 也要判定，touchend 完成 touch-only tap，保证资料区可滚动）；深链不 preload/不请求首卡缩图）。
+- 不恢复已废弃方案：`/welcome` 页面、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、Redis、飞书 runtime、第二套用户 UI、首卡自我引导气泡（`self-guide-tip`；首卡已自带「这是你 · 他人视角」标签）、裸图 hero + `dismissHeroAfterPaint` 的 2s `notBefore`（改为服务端首卡静态岛 + 原子接管；静态岛裁切在布局就绪后重试，滚动位置在任何移除路径含 4s 硬上限都交接给真实卡；4s 硬切只在 loadHome 仍挂起时执行，数据就绪后等真实卡图片；`#boot-card` 必须接住点击，不能穿透；点击只在 pointerup 且位移 ≤10px/非长按时交接（touchmove 也要判定，touchend 完成 touch-only tap，保证资料区可滚动）；深链不 preload/不请求首卡缩图；首卡出现即可滑：静态岛渲染 3 卡迷你牌堆（首卡完整、后续 compact），由外部 `boot-card.js` 处理 pointer/touch 双向滑动，Vue 接管按 openid 同步 `cardIndex`，不跳回第 1 张）。
 - PostgreSQL 是唯一权威；R2 只存私有媒体，浏览器只经 `/media/{id}`；不把对象存储 URL 给前端。
 - 不新增 Redis 或消息队列；当前正确性不依赖缓存或队列。
 - migration 只增不改；回滚 binary 不等于回滚 schema；生产大表索引需另行走手工窗口。
