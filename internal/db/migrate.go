@@ -100,7 +100,7 @@ func (d *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 				return fmt.Errorf(
 					"db: migration %04d is recorded as %q but the embedded file is %04d_%s; "+
 						"this database was migrated with a different numbering. "+
-						"Recreate it (dropdb/createdb) and rerun migrations; see docs/MIGRATION.md",
+						"Recreate it (dropdb/createdb) and rerun migrations; see docs/runbooks/staging.md §8",
 					m.version, name, m.version, m.name)
 			}
 			continue

@@ -19,6 +19,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 ROOT_DOCS = ("README.md", "AGENTS.md", "CLAUDE.md")
+TOOL_DOCS = ("tools/README.md",)
 POINTER_DOCS = ("CLAUDE.md",)
 OBSOLETE_GENERATED = (
     "GEMINI.md",
@@ -107,6 +108,9 @@ def governed_docs(root: Path | str) -> list[str]:
     root = Path(root)
     docs: set[str] = set()
     for name in ROOT_DOCS:
+        if (root / name).is_file():
+            docs.add(name)
+    for name in TOOL_DOCS:
         if (root / name).is_file():
             docs.add(name)
     for base_name in ("docs", ".github"):

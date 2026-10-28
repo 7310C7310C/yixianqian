@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -487,8 +488,8 @@ def check_governance(root: Path) -> list[common.Finding]:
                 file,
                 line,
                 f"Go 版本 {found} 与 go.mod 的 {canonical} 不一致",
-                "统一 go.mod/CI/README/Charter 的 Go major.minor；"
-                "Charter 变更需 PM 批准后单独提交",
+                "统一 go.mod/CI/README/PRODUCT 的 Go major.minor；"
+                "PRODUCT 变更需 PM 批准后单独提交",
             )
         )
 
@@ -501,17 +502,15 @@ def check_governance(root: Path) -> list[common.Finding]:
         elif match.group(1) != canonical:
             add("README.md", text.count("\n", 0, match.start()) + 1, match.group(1))
 
-    charter = root / "docs" / "PROJECT_CHARTER.md"
-    if charter.is_file():
-        text = charter.read_text(encoding="utf-8")
-        match = re.search(r"Go（目前\s*(\d+\.\d+)", text)
+    product = root / "docs" / "PRODUCT.md"
+    if product.is_file():
+        text = product.read_text(encoding="utf-8")
+        match = re.search(r"\bGo\s+(\d+\.\d+)", text)
         if not match:
-            match = re.search(r"\|\s*后端\s*\|\s*Go[^\n]*?(\d+\.\d+)", text)
-        if not match:
-            add("docs/PROJECT_CHARTER.md", 1, "（未找到）")
+            add("docs/PRODUCT.md", 1, "（未找到）")
         elif match.group(1) != canonical:
             add(
-                "docs/PROJECT_CHARTER.md",
+                "docs/PRODUCT.md",
                 text.count("\n", 0, match.start()) + 1,
                 match.group(1),
             )
@@ -558,8 +557,10 @@ def check_structure(root: Path, docs: list[str]) -> list[common.Finding]:
     findings: list[common.Finding] = []
     readme_text = (root / "README.md").read_text(encoding="utf-8") if (root / "README.md").is_file() else ""
     agents_text = (root / "AGENTS.md").read_text(encoding="utf-8") if (root / "AGENTS.md").is_file() else ""
-    structure_text = _readme_structure_text(readme_text)
-    combined = readme_text + "\n" + agents_text
+    reference_path = root / gen_docs.REFERENCE_PATH
+    reference_text = reference_path.read_text(encoding="utf-8") if reference_path.is_file() else ""
+    structure_text = reference_text or _readme_structure_text(readme_text)
+    combined = readme_text + "\n" + agents_text + "\n" + reference_text
 
     cmd_root = root / "cmd"
     if cmd_root.is_dir():
@@ -574,8 +575,8 @@ def check_structure(root: Path, docs: list[str]) -> list[common.Finding]:
                         "error",
                         "README.md",
                         1,
-                        f"cmd 入口 {token} 未在 README/AGENTS 提及",
-                        "在 README 结构块与 AGENTS 结构清单补该入口，然后运行 make docs-check",
+                        f"cmd 入口 {token} 未在 README/AGENTS/REFERENCE 提及",
+                        "在 README 快速入口或 AGENTS 结构清单补该入口；机械清单由 make docs-gen 生成，然后运行 make docs-check",
                     )
                 )
 
@@ -612,10 +613,10 @@ def check_structure(root: Path, docs: list[str]) -> list[common.Finding]:
                     common.Finding(
                         "E-STRUCT-001",
                         "error",
-                        "README.md",
+                        "docs/reference/REFERENCE.md",
                         1,
-                        f"{token} 未在 README 结构块提及",
-                        "在 README 结构块补该目录，然后运行 make docs-check",
+                        f"{token} 未在 README 结构块/REFERENCE 提及",
+                        "在 README 结构块补该目录，或运行 make docs-gen 刷新 REFERENCE；然后运行 make docs-check",
                     )
                 )
 
@@ -686,8 +687,150 @@ def check_structure(root: Path, docs: list[str]) -> list[common.Finding]:
 
 
 # ---------------------------------------------------------------------------
-# E. environment variables
+# D2. document budgets and current-only headings
 # ---------------------------------------------------------------------------
+
+DOC_BUDGET_PATH = "tools/docs_budget.json"
+HISTORY_DOCS = ("docs/STATUS.md", "docs/runbooks/staging.md")
+HISTORY_HEADING = re.compile(
+    r"^#{1,6}\s+(?:20\d{2}-\d{2}-\d{2}[A-Za-z]?(?![\w])|.*(?:批次|性能批次))"
+)
+
+
+def check_doc_budgets(root: Path, docs: list[str]) -> list[common.Finding]:
+    """Fail when a hand-written doc exceeds its line budget.
+
+    Budgets live in tools/docs_budget.json so that raising one is a visible,
+    reviewable change instead of a silent append.
+    """
+    findings: list[common.Finding] = []
+    budget_path = root / DOC_BUDGET_PATH
+    if not budget_path.is_file():
+        return [
+            common.Finding(
+                "E-DOC-BUDGET",
+                "error",
+                DOC_BUDGET_PATH,
+                1,
+                "缺少行数预算文件",
+                "创建 tools/docs_budget.json；每个受治理手写文档都要有预算，生成物可豁免",
+            )
+        ]
+    try:
+        budgets = json.loads(budget_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [
+            common.Finding(
+                "E-DOC-BUDGET",
+                "error",
+                DOC_BUDGET_PATH,
+                1,
+                f"无法读取行数预算：{exc}",
+                "修正 tools/docs_budget.json；格式为 {相对路径: 最大行数}",
+            )
+        ]
+    if not isinstance(budgets, dict):
+        return [
+            common.Finding(
+                "E-DOC-BUDGET",
+                "error",
+                DOC_BUDGET_PATH,
+                1,
+                "行数预算必须是 JSON object",
+                "改为 {相对路径: 最大行数}",
+            )
+        ]
+    generated = {"CLAUDE.md", gen_docs.REFERENCE_PATH}
+    for rel in docs:
+        if rel in generated:
+            continue
+        if rel not in budgets:
+            findings.append(
+                common.Finding(
+                    "E-DOC-BUDGET",
+                    "error",
+                    rel,
+                    1,
+                    "受治理文档未设置行数预算",
+                    "在 tools/docs_budget.json 增加该文件的正整数预算；"
+                    "生成物可加入 generated 豁免",
+                )
+            )
+    for rel, limit in sorted(budgets.items()):
+        path = root / rel
+        if not path.is_file():
+            findings.append(
+                common.Finding(
+                    "E-DOC-BUDGET",
+                    "error",
+                    DOC_BUDGET_PATH,
+                    1,
+                    f"预算条目对应的文件不存在：{rel}",
+                    "删除该预算条目，或补回文件；然后运行 make docs-check",
+                )
+            )
+            continue
+        try:
+            lines = len(path.read_text(encoding="utf-8").splitlines())
+        except OSError as exc:
+            findings.append(
+                common.Finding(
+                    "E-DOC-BUDGET",
+                    "error",
+                    rel,
+                    1,
+                    f"无法读取文档：{exc}",
+                    "确认文件存在且可读，然后运行 make docs-check",
+                )
+            )
+            continue
+        if not isinstance(limit, int) or limit <= 0:
+            findings.append(
+                common.Finding(
+                    "E-DOC-BUDGET",
+                    "error",
+                    DOC_BUDGET_PATH,
+                    1,
+                    f"{rel} 的预算不是正整数：{limit!r}",
+                    "改为正整数行数；放宽容必须说明理由并走 Review",
+                )
+            )
+            continue
+        if lines > limit:
+            findings.append(
+                common.Finding(
+                    "E-DOC-BUDGET",
+                    "error",
+                    rel,
+                    1,
+                    f"文档超过行数预算：{lines}/{limit} 行",
+                    "把历史/机械细节移到 git log 或 code，只留非可推导知识；"
+                    "确需放宽时修改 tools/docs_budget.json 并说明理由，然后运行 make docs-check",
+                )
+            )
+    return findings
+
+
+def check_current_only_headings(root: Path) -> list[common.Finding]:
+    """STATUS/runbook must not grow dated or batch-history headings."""
+    findings: list[common.Finding] = []
+    for rel in HISTORY_DOCS:
+        path = root / rel
+        if not path.is_file():
+            continue
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if HISTORY_HEADING.match(line.strip()):
+                findings.append(
+                    common.Finding(
+                        "E-DOC-HISTORY",
+                        "error",
+                        rel,
+                        line_no,
+                        f"当前状态文档出现历史/批次标题：{line.strip()}",
+                        "把该段移到 commit message/.team/git log；STATUS/runbook 只写当前状态与操作步骤",
+                    )
+                )
+    return findings
 
 
 def check_env(root: Path) -> list[common.Finding]:
@@ -1040,6 +1183,8 @@ def run_checks(
     findings.extend(check_refs(root, docs))
     findings.extend(check_governance(root))
     findings.extend(check_structure(root, docs))
+    findings.extend(check_doc_budgets(root, docs))
+    findings.extend(check_current_only_headings(root))
     findings.extend(check_env(root))
     findings.extend(check_routes_flags(root))
     findings.extend(check_age(metas, now, max_age_days))

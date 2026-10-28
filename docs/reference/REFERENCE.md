@@ -364,11 +364,10 @@ sources: []
 
 | 文档 | sources |
 |---|---|
-| `AGENTS.md` | `Makefile`, `.github/workflows/**`, `tools/perf/**`, `deploy/nginx/**`, `internal/httpserver/middleware.go`, `internal/httpserver/handlers_media.go`, `internal/httpserver/media_serve.go`, `internal/httpserver/legacy_ui.go`, `internal/httpserver/readcache.go`, `internal/httpserver/app.go`, `internal/httpserver/register_pages.go`, `tools/test_perf_guardrails.py`, `web/static/public-copy.js`, `web/static/register.js`, `web/static/auth.css` |
+| `AGENTS.md` | `Makefile`, `.github/workflows/**`, `tools/perf/**`, `deploy/nginx/**`, `web/static/legacy/app.js` |
 | `README.md` | `go.mod` |
 | `docs/DECISIONS.md` | — |
-| `docs/MIGRATION.md` | `migrations/**`, `tools/migrate_testapp.py` |
-| `docs/PROJECT_CHARTER.md` | — |
-| `docs/STATUS.md` | `cmd/**`, `migrations/**`, `deploy/**`, `internal/httpserver/routes.go`, `internal/httpserver/legacy_api.go`, `internal/httpserver/activities_view.go`, `internal/httpserver/activities_routes.go`, `internal/httpserver/handlers_home.go`, `web/templates/layout.tmpl`, `web/templates/pages/home.tmpl`, `web/static/home.css`, `web/static/home.js`, `web/static/auth.css`, `web/static/public-copy.js`, `web/static/register.js`, `web/static/legacy/index.html`, `internal/httpserver/social_pages.go`, `internal/httpserver/register_pages.go`, `internal/db/activities.go`, `internal/db/grouping.go`, `internal/db/profile.go`, `internal/db/photo_quota.go`, `internal/httpserver/photo_quota.go`, `internal/config/config.go`, `internal/tencentface/**`, `.env.example` |
-| `docs/product-spec.md` | — |
-| `docs/runbooks/staging.md` | `deploy/**`, `.env.example`, `migrations/**`, `.github/workflows/ci.yml`, `internal/tencentface/**`, `internal/face/**`, `cmd/facebackfill/main.go`, `cmd/facebackfill/main_guard.go` |
+| `docs/PRODUCT.md` | — |
+| `docs/STATUS.md` | — |
+| `docs/runbooks/staging.md` | `deploy/**`, `.env.example`, `migrations/**`, `.github/workflows/ci.yml`, `internal/tencentface/**`, `internal/face/**`, `cmd/facebackfill/main.go`, `cmd/facebackfill/main_guard.go`, `tools/migrate_testapp.py` |
+| `tools/README.md` | `tools/spa_minify/**`, `tools/spa_precompile/**`, `tools/spa_vendor/**`, `tools/css_split/**`, `tools/perf/**` |

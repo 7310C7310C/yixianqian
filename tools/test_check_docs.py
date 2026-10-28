@@ -73,13 +73,12 @@ def build_fixture(root: Path) -> None:
     agent_paths = [
         "README.md",
         "CLAUDE.md",
-        "docs/PROJECT_CHARTER.md",
+        "docs/PRODUCT.md",
         "docs/STATUS.md",
-        "docs/product-spec.md",
         "docs/DECISIONS.md",
-        "docs/MIGRATION.md",
         "docs/runbooks/staging.md",
         "docs/reference/REFERENCE.md",
+        "tools/README.md",
     ]
     write(
         root,
@@ -92,18 +91,31 @@ def build_fixture(root: Path) -> None:
     )
     write(
         root,
-        "docs/PROJECT_CHARTER.md",
-        "# Charter\n\n" + meta(owner="pm") + "\n\nGo（目前 1.24）\n",
-    )
-    write(
-        root,
-        "docs/product-spec.md",
-        "# Product spec\n\n" + meta(owner="pm") + "\n",
+        "docs/PRODUCT.md",
+        "# Product\n\n" + meta(owner="pm") + "\n\nGo 1.24\n",
     )
     write(root, "docs/STATUS.md", "# Status\n\n" + meta() + "\n")
     write(root, "docs/DECISIONS.md", "# Decisions\n\n" + meta() + "\n")
-    write(root, "docs/MIGRATION.md", "# Migration\n\n" + meta() + "\n")
     write(root, "docs/runbooks/staging.md", "# Staging\n\n" + meta() + "\n")
+    write(
+        root,
+        "docs/reference/REFERENCE.md",
+        "# Reference\n\ncmd/demo\ninternal/config\ninternal/httpserver\n",
+    )
+    write(root, "tools/README.md", "# Tools\n\n" + meta() + "\n")
+    write(
+        root,
+        "tools/docs_budget.json",
+        '{\n'
+        '  "README.md": 500,\n'
+        '  "AGENTS.md": 500,\n'
+        '  "docs/PRODUCT.md": 500,\n'
+        '  "docs/STATUS.md": 500,\n'
+        '  "docs/DECISIONS.md": 500,\n'
+        '  "docs/runbooks/staging.md": 500,\n'
+        '  "tools/README.md": 500\n'
+        '}\n',
+    )
     write(
         root,
         "cmd/demo/main.go",
@@ -354,7 +366,7 @@ class DocsCheckTests(unittest.TestCase):
     # -- governance / structure ------------------------------------------
 
     def test_go_version_drift(self):
-        charter = self.root / "docs/PROJECT_CHARTER.md"
+        charter = self.root / "docs/PRODUCT.md"
         charter.write_text(
             charter.read_text(encoding="utf-8").replace("1.24", "1.27"),
             encoding="utf-8",
@@ -363,7 +375,7 @@ class DocsCheckTests(unittest.TestCase):
         self.assertIn("E-GOVER-001", codes(findings))
 
     def test_cmd_missing_from_readme(self):
-        for rel in ("README.md", "AGENTS.md"):
+        for rel in ("README.md", "AGENTS.md", "docs/reference/REFERENCE.md"):
             path = self.root / rel
             path.write_text(
                 path.read_text(encoding="utf-8").replace("cmd/demo", "demo"), encoding="utf-8"
@@ -382,7 +394,7 @@ class DocsCheckTests(unittest.TestCase):
         self.assertIn("E-CMD-002", codes(findings))
 
     def test_internal_pkg_missing_from_structure(self):
-        path = self.root / "README.md"
+        path = self.root / "docs/reference/REFERENCE.md"
         path.write_text(
             path.read_text(encoding="utf-8").replace("internal/config", "config"),
             encoding="utf-8",
@@ -399,6 +411,69 @@ class DocsCheckTests(unittest.TestCase):
             self.root, docs_common.governed_docs(self.root)
         )
         self.assertIn("E-MAKE-001", codes(findings))
+
+    # -- budgets / current-only headings ---------------------------------
+
+    def test_doc_budget_exceeded(self):
+        write(self.root, "tools/docs_budget.json", '{"README.md": 1}\n')
+        findings = check_docs.check_doc_budgets(
+            self.root, docs_common.governed_docs(self.root)
+        )
+        self.assertIn("E-DOC-BUDGET", codes(findings))
+
+    def test_doc_budget_missing_file(self):
+        (self.root / "tools/docs_budget.json").unlink()
+        findings = check_docs.check_doc_budgets(
+            self.root, docs_common.governed_docs(self.root)
+        )
+        self.assertIn("E-DOC-BUDGET", codes(findings))
+
+    def test_doc_budget_unlisted_doc(self):
+        write(
+            self.root,
+            "tools/docs_budget.json",
+            '{"README.md": 500, "AGENTS.md": 500}\n',
+        )
+        findings = check_docs.check_doc_budgets(
+            self.root, docs_common.governed_docs(self.root)
+        )
+        self.assertIn("E-DOC-BUDGET", codes(findings))
+
+    def test_doc_budget_invalid_json(self):
+        write(self.root, "tools/docs_budget.json", "{not json\n")
+        findings = check_docs.check_doc_budgets(
+            self.root, docs_common.governed_docs(self.root)
+        )
+        self.assertIn("E-DOC-BUDGET", codes(findings))
+
+    def test_doc_budget_missing_entry_file(self):
+        write(
+            self.root,
+            "tools/docs_budget.json",
+            '{"README.md": 500, "docs/gone.md": 10}\n',
+        )
+        findings = check_docs.check_doc_budgets(
+            self.root, docs_common.governed_docs(self.root)
+        )
+        self.assertIn("E-DOC-BUDGET", codes(findings))
+
+    def test_current_only_headings_reject_dated_batch(self):
+        with (self.root / "docs/STATUS.md").open("a", encoding="utf-8") as handle:
+            handle.write("\n## 2026-10-27 用户端报障批次\n")
+        findings = check_docs.check_current_only_headings(self.root)
+        self.assertIn("E-DOC-HISTORY", codes(findings))
+
+    def test_current_only_headings_reject_date_suffix(self):
+        with (self.root / "docs/STATUS.md").open("a", encoding="utf-8") as handle:
+            handle.write("\n## 2026-10-27c 扫描防护\n")
+        findings = check_docs.check_current_only_headings(self.root)
+        self.assertIn("E-DOC-HISTORY", codes(findings))
+
+    def test_current_only_headings_allow_snapshot(self):
+        with (self.root / "docs/STATUS.md").open("a", encoding="utf-8") as handle:
+            handle.write("\n## 1. 当前快照（2026-10-28 02:36 UTC）\n")
+        findings = check_docs.check_current_only_headings(self.root)
+        self.assertEqual(findings, [])
 
     # -- env --------------------------------------------------------------
 
