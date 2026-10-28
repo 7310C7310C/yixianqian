@@ -315,7 +315,7 @@ sources: []
 | `perf-budget` | — |
 | `perf-guard-test` | — |
 | `perf-lcp` | — |
-| `prepush` | `fmt-check static-gzip-check spa-check docs-check asset-version-check perf-budget perf-guard-test vet build` |
+| `prepush` | `fmt-check static-gzip-check spa-check docs-check docs-check-stale asset-version-check perf-budget perf-guard-test vet build` |
 | `review-packet` | — |
 | `run` | — |
 | `seed` | — |

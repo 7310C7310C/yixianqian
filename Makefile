@@ -68,6 +68,7 @@ docs-check:
 	python3 tools/check_docs.py --strict
 
 docs-check-stale:
+	@git rev-parse --verify --quiet '$(DOCS_BASE)^{commit}' >/dev/null || { echo "docs-check-stale: 基线 $(DOCS_BASE) 不存在；先 git fetch origin main"; exit 1; }
 	python3 tools/check_docs.py --strict --base=$(DOCS_BASE)
 
 test-broadcast-ui:
@@ -143,7 +144,7 @@ asset-version-check:
 		python3 tools/check_asset_version.py; \
 	fi
 
-prepush: fmt-check static-gzip-check spa-check docs-check asset-version-check perf-budget perf-guard-test vet build
+prepush: fmt-check static-gzip-check spa-check docs-check docs-check-stale asset-version-check perf-budget perf-guard-test vet build
 
 # perf-guard-test 由 test-migration 的 discover 统一执行，ci 不重复显式跑。
 ci: fmt-check static-gzip-check spa-check docs-check asset-version-check perf-budget vet test test-migration build

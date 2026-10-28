@@ -119,7 +119,7 @@ POST 表单错误消息与内部 500/管理台错误页是明示例外。旧 `/w
 顺序固定，不得跳步、不得重排：
 
 1. **改动**：小改动直接在 `main`；较大改动用独立 worktree/分支，由维护者本地合并后 push。
-2. **本地验证**：`gofmt -l .` 为空 + `go vet ./...` + 定向测试 + `make ci`（够用时可先 `make prepush` 快速门禁）；前端改动跑对应 browser smoke。
+2. **本地验证**：`gofmt -l .` 为空 + `go vet ./...` + 定向测试 + `make ci`；**push 前必跑 `make prepush`**（含 `docs-check-stale`）；前端改动跑对应 browser smoke。
    - 日常 edit 后只跑 `make fast`（<30s，受影响检查）；`make ci` 每个 commit 一次即可，不要每次编辑全跑。
    - 本机 `test-race` 已废弃为提示 target（不跑测试）；CI 已对全部 package 跑 `-race`。发版前需要时用 `make test-race-full`。
 
@@ -150,7 +150,7 @@ POST 表单错误消息与内部 500/管理台错误页是明示例外。旧 `/w
 
 自动部署运维：`systemctl is-active yxq-autodeploy.timer`、`tail -n 50 /var/log/yxq-autodeploy.log`、紧急冻结 `systemctl stop yxq-autodeploy.timer`；细节见 `docs/runbooks/staging.md`「自动部署」。人工部署仅用于回滚/热修。
 
-**文档门禁减负**：仅当改动命中 `docs/`、env、route、migration 时跑 `docs-check-stale`；纯前端模板/样式允许 `Docs-Impact: none（理由）`，不强制刷新 `docs/STATUS.md` 的 sources。
+**文档 stale 门禁（2026-10-28 修正）**：`Docs` CI 每次 push 都跑 `docs-check-stale`，按每份文档 doc-meta 的 `sources` 判定——改动命中某文档的 sources 时，必须在同一批更新该文档（内容 + `last_verified`），否则 Docs 红、autodeploy 拒绝部署。`Docs-Impact: none（理由）` 只表示本任务无文档语义变更，**不能豁免 sources 命中**；确实不该再被追踪的纯展示文件，应从对应文档 sources 移除（单独评审），不要靠 trailer 绕过。
 
 ## Agent 快速路径（2026-10-27）
 
@@ -158,12 +158,13 @@ POST 表单错误消息与内部 500/管理台错误页是明示例外。旧 `/w
 
 - **每个 edit 后**：`make fast`。只跑受影响的 gofmt/vet/test/static/docs，<30s。
 - **每个 commit 前**：`make ci` 一次；不要 46 次。`make fast` 已覆盖大部分即时错误。
+- **每次 push 前**：`make prepush` 必跑（含 `docs-check-stale`、asset-version、perf-budget）；只跑 `make ci` 会漏掉 stale，Docs 会在远端红。
 - **每个 batch**：`make smoke-fast`（390x844 + 390x700 并行）；**优先在 server1** 跑，`BASE_URL=http://127.0.0.1:8093`，staging 就在本机。
 - **每个 batch 只跑一次全套**：`make smoke-full`；不要每修一个 bug 全跑 19 项。
 - **等部署**：`make deploy-wait`，一个阻塞命令等 CI + healthz；不要每 10 秒发一轮 `gh run list`。
 - **Review 前**：`make review-packet` 生成 diffstat/风险/证据清单；Reviewer 只跑必要的复核。
 - 本机不跑 race；CI 已覆盖全量 race。发版前需要时用 `make test-race-full`。
-- **docs stale**：只有 docs/config/route/migration 变更才强制；test-only/frontend 用 `Docs-Impact: none（理由）`。
+- **docs stale**：sources 驱动、每次 push 都跑；命中即须同批更新文档（内容 + `last_verified`）。`make ci` 不含此检查，push 前必跑 `make prepush`（先 `git fetch origin main`）。
 
 ## 文档自动更新协议
 
@@ -226,8 +227,8 @@ make spa-check         # 校验 SPA 生成物（Vant 子集/render chunk/app.min
 make spa-check-node    # 开发机 Node 重建后复核（部署/CI 不依赖 Node）
 make docs-gen          # 刷新 REFERENCE 与入口指针
 make docs-check        # 文档元数据/地图/链接/生成物检查
-make docs-check-stale  # 先 git fetch origin main；base 默认 origin/main，须可解析
-make prepush           # 快速本地门禁（push 前必跑）：fmt-check + static-gzip-check + spa-check + docs-check + asset-version-check + vet + build
+make docs-check-stale  # 检查 doc-meta sources 是否过期（prepush 已包含；先 git fetch origin main）
+make prepush           # push 前必跑：fmt-check + static-gzip-check + spa-check + docs-check + docs-check-stale + asset-version-check + perf-budget + perf-guard-test + vet + build
 make asset-version-check # 单独跑静态资源版本门禁（默认 base=origin/main）
 make ci                # 本地合并门禁：fmt-check + static-gzip-check + spa-check + docs-check + asset-version-check + vet + test + 工具测试 + build
 make run
