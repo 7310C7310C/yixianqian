@@ -36,7 +36,9 @@ import (
 // after replacing the bare hero with the server-rendered complete first card.
 // 2026-10-28 (boot card takeover fix): 37 invalidated index.html / app.min.js after
 // scoping the real-card selector/scroll transfer to #app and skipping restore.
-const assetVersion = "37"
+// 2026-10-28 (boot card staging fixes): 38 invalidated index.html / app.min.js after
+// early face-crop retries and scroll handoff on every dismissal path.
+const assetVersion = "38"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

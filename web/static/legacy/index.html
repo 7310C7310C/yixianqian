@@ -102,8 +102,14 @@
     try {
       var f = (faces && faces.length) ? faces[0] : faces;
       if (!f || !img || !wrap) return;
+      var tries = 0;
       function run(){
         if (!img.naturalWidth) return;
+        // 首帧脚本可能早于布局：容器宽高为 0 时重试，避免静态岛停在默认居中。
+        if (!wrap.clientWidth || !wrap.clientHeight) {
+          if (tries++ < 20) setTimeout(run, 50);
+          return;
+        }
         var pos = computeFaceCrop(f, wrap.clientWidth, wrap.clientHeight,
           img.naturalWidth, img.naturalHeight);
         if (pos) img.style.objectPosition = pos;

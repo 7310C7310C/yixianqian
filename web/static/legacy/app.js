@@ -5724,7 +5724,16 @@ const yxqApp = createApp({
     let bootCardSettled = false;
     let bootCardHardTimer = null;
     function bootCardApi() { return window.__YXQ_BOOT_CARD__; }
+    // 任何交接/硬上限/切页移除前都当场把静态岛滚动位置交给真实卡（目标必须限定 #app）。
+    function syncBootCardScroll() {
+      try {
+        const bootInfo = document.querySelector('#boot-card .card-info');
+        const realInfo = document.querySelector('#app .swipe-card .card-info');
+        if (bootInfo && realInfo && bootInfo.scrollTop > 0) realInfo.scrollTop = bootInfo.scrollTop;
+      } catch (_) {}
+    }
     function dismissBootCard(reason) {
+      syncBootCardScroll();
       try { const api = bootCardApi(); if (api) api.dismiss(reason); } catch (_) {}
     }
     // 硬上限从 navigationStart 起算 4s：无论 loadHome 是否挂起，都不能让静态岛无限覆盖。
@@ -5777,15 +5786,8 @@ const yxqApp = createApp({
         const img = document.querySelector('#app .swipe-card .card-photo-item');
         if (img && img.complete && img.naturalWidth) {
           syncBootCardCrop();
-          const done = () => {
-            try {
-              // 交接前当场读取静态岛滚动位置，写到真实卡（必须限定 #app，避免命中静态岛）。
-              const bootInfo = document.querySelector('#boot-card .card-info');
-              const realInfo = document.querySelector('#app .swipe-card .card-info');
-              if (bootInfo && realInfo && bootInfo.scrollTop > 0) realInfo.scrollTop = bootInfo.scrollTop;
-            } catch (_) {}
-            dismissBootCardAfterPaint();
-          };
+          // 滚动位置由 dismissBootCard 在移除前统一交接（硬上限/切页等路径也覆盖）。
+          const done = () => dismissBootCardAfterPaint();
           if (img.decode) img.decode().then(done, done); else done();
           return;
         }
