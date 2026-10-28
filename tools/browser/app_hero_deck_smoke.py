@@ -3,7 +3,7 @@
 
 覆盖：
 1. 390/1280：`#boot-skeleton` 的首卡 hero 与 Vue 真实 `.swipe-card`/`.card-photo-wrap`
-   几何一致（±1px），首图 URL 使用 `?size=thumb`；Vue 首卡图绘制后 hero 移除；
+   几何一致（±1px），首图 URL 使用 `?size=hero`（或 thumb 回退）；Vue 首卡图绘制后 hero 移除；
 2. hero 期间/交接无 layout-shift（CLS < 0.01），LCP 元素是首卡缩图；
 3. 滑动、切 tab、浏览器回退、`#/likes` 深链、restore 后 hero 不残留、不重现；
 4. 牌堆只挂载当前 1 张卡（DOM 节点数受控），0/1/2/末张/回退/restore 用例；
@@ -237,7 +237,7 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=60000)
         page.wait_for_function("() => !!window.__hero_snapshot", timeout=10000)
         hero = page.evaluate("window.__hero_snapshot")
-        if "/cards/photo/" not in hero["src"] or "size=thumb" not in hero["src"]:
+        if "/cards/photo/" not in hero["src"] or not any(v in hero["src"] for v in ("size=hero", "size=thumb")):
             raise SmokeFailure(f"{tag}: hero 首图不是卡片缩图 {hero['src']!r}")
         wait_hero_gone(page)
         wait_cards_ready(page)
