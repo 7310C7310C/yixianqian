@@ -507,7 +507,7 @@ func TestRegisterPageReferencesHanFreeAssets(t *testing.T) {
 	seen := map[string]bool{}
 	for _, ref := range refs {
 		name := strings.TrimPrefix(ref[1], "/")
-		if seen[name] {
+		if seen[name] || !scanTextAsset(name) {
 			continue
 		}
 		seen[name] = true

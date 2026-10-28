@@ -7,7 +7,10 @@
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#ff6b81">
   <title>{{if .PublicLanding}}{{.Title}}{{else}}{{.Title}} · 一线牵{{end}}</title>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon.ico?v={{assetVersion}}" sizes="any">
+  <link rel="icon" href="/static/favicon.svg?v={{assetVersion}}" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon.png?v={{assetVersion}}" type="image/png">
+  <link rel="apple-touch-icon" href="/static/favicon.png?v={{assetVersion}}">
   {{if .PublicLanding}}
   <!-- Public landing: dedicated ASCII-only stylesheet (no app.css/shell.css,
        whose comments contain Chinese); the copy itself comes from home.js. -->

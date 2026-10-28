@@ -36,12 +36,26 @@ sources:
 - 更新日期：2026-10-28
 - 维护者：项目维护者
 - 下一更新点：PM 在 Android Via/Kiwi/荣耀真机复验虚拟历史栈与可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-28 对 server1 复核；staging 运行 `staging-39daf52`、
-  `deployed.sha`=6438e7f，`8136204`（首页页脚文案删除）因 Docs 门禁红未部署，修正提交后由 autodeploy
-  接手，版本以 `/healthz` 为准；生产 `app.nantou.love` 未切换。
+- 事实基准：部署/数据事实于 2026-10-28 对 server1 复核；staging 运行 `staging-d853b96`，
+  `deployed.sha`=d853b96（本次 favicon 修复提交随后自动部署，版本以 `/healthz` 为准）；
+  生产 `app.nantou.love` 未切换。
   本地批次 2026-10-27c（welcome 合并 + 公开页扫描防护 + 大图全屏缩图）、
-  2026-10-27f（/register 表单扫描防护）、2026-10-27g（facebackfill 守卫）、2026-10-28（照片每日配额）
-  与 2026-10-28（首页页脚文案删除）已实现并 push。
+  2026-10-27f（/register 表单扫描防护）、2026-10-27g（facebackfill 守卫）、2026-10-28（照片每日配额）、
+  2026-10-28（首页页脚文案删除）与 2026-10-28（品牌 favicon 对齐 v1）已实现并 push。
+
+## 2026-10-28 品牌 favicon 对齐 v1（快速通道）
+
+- 触发：PM 指出 v2 使用的 favicon 错误，v1 的才是正确品牌图标。
+- 根因：`web/static/favicon.svg` 与 `web/static/legacy/favicon.svg` 是占位图（绿底三横线），
+  而 v1 为粉底双心；SPA 优先加载 SVG，故现代浏览器显示占位图；根路径 `/favicon.ico`
+  也没有路由（404），Safari/主屏快捷方式拿不到 v1 的 ico。
+- 改动：两处 `favicon.svg` 及新增的 `web/static/favicon.{ico,png}` 均对齐 v1 品牌图标
+  （`favicon.ico`/`png` 与 v1 字节一致）；模板按 v1 顺序声明 ico/svg/png + apple-touch-icon
+  并带 `?v={{assetVersion}}`；新增 `GET /favicon.ico` 直接从 embed 返回 ico；
+  assetVersion 33→34，重建 SVG 的 `.gz`；新增品牌图标与根路径 ico 回归断言。
+- 证据：`make fast` PASS；定向 httpserver 测试（favicon/legacy favicon/route table）PASS；
+  `make ci`、`make prepush` 见提交记录。
+- 回滚：`git revert` 本提交并重建静态资源；无 schema/接口行为变化。
 
 ## 2026-10-28 首页移除页脚文案（快速通道）
 

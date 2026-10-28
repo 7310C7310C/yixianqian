@@ -114,6 +114,7 @@ sources: []
 | POST | `/api/profile/photo` | `internal/httpserver/legacy_profile_api.go` |
 | GET | `/app` | `internal/httpserver/routes.go` |
 | GET | `/cards/photo/{id}` | `internal/httpserver/social_routes.go` |
+| GET | `/favicon.ico` | `internal/httpserver/routes.go` |
 | POST | `/feedback` | `internal/httpserver/feedback_routes.go` |
 | GET | `/healthz` | `internal/httpserver/routes.go` |
 | POST | `/legacy/api/account/status` | `internal/httpserver/legacy_profile_api.go` |
@@ -225,8 +226,8 @@ sources: []
 | `/admin` | 36 |
 | `/api` | 28 |
 | `/legacy` | 87 |
-| 其他 | 22 |
-| **合计** | **173** |
+| 其他 | 23 |
+| **合计** | **174** |
 
 ## 4. 环境变量（key 集合对比）
 

@@ -3,6 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"io/fs"
+	"path"
 	"regexp"
 	"strings"
 	"testing"
@@ -49,6 +50,17 @@ func assertHanFreePublicBody(t *testing.T, body string) {
 
 var staticRefPattern = regexp.MustCompile(`(?:src|href)="(/static/[^"?#]+)`)
 var copyKeyPattern = regexp.MustCompile(`data-copy-(?:text|aria|html|placeholder)="([^"]+)"`)
+
+// scanTextAsset reports whether a referenced static asset is a text asset the
+// Han-free contract applies to. Binary images are exempt: favicon.ico/png bytes
+// can decode as Han by chance and are not part of the copy surface.
+func scanTextAsset(name string) bool {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".css", ".js", ".svg", ".json", ".webmanifest":
+		return true
+	}
+	return false
+}
 
 // TestPublicScanPagesAreHanFree renders every scan-safe page and checks both
 // halves of the contract: the HTML (outside <title>) and every referenced
@@ -171,6 +183,9 @@ func TestPublicScanPagesAreHanFree(t *testing.T) {
 
 	for asset := range assets {
 		name := strings.TrimPrefix(asset, "/")
+		if !scanTextAsset(name) {
+			continue
+		}
 		data, err := fs.ReadFile(webassets.FS, name)
 		if err != nil {
 			t.Fatalf("scan-safe page references missing asset %q: %v", asset, err)

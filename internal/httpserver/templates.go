@@ -28,7 +28,9 @@ import (
 // Batch13 (scan-safe /register form: server-generated ASCII copy catalog +
 // register.js): 31.
 // Batch14 (viewer arrows + loop): 32 invalidated app.css / app.min.js.
-const assetVersion = "33"
+// 2026-10-28 (brand favicon): 34 invalidated the placeholder favicon.svg and
+// added the v1 heart icon set (svg/png/ico) to the template links.
+const assetVersion = "34"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
