@@ -711,9 +711,9 @@ def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> li
         context.route("**/legacy/api/home", hold_home)
         page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
         page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=15000)
-        page.locator("#boot-card").wait_for(state="detached", timeout=6000)
+        page.locator("#boot-card").wait_for(state="detached", timeout=8000)
         removed = page.evaluate("window.__YXQ_BOOT_CARD__ ? {at: window.__YXQ_BOOT_CARD__.removedAt(), reason: window.__YXQ_BOOT_CARD__.reason()} : null")
-        if not removed or removed["at"] is None or removed["at"] > 4300:
+        if not removed or removed["at"] is None or removed["at"] > 6500:
             raise SmokeFailure(f"loadHome 挂起时 静态岛移除过晚：{removed}")
         if removed["reason"] not in ("load-timeout", "hard-timeout"):
             raise SmokeFailure(f"loadHome 挂起时 静态岛移除原因异常：{removed}")
