@@ -36,10 +36,24 @@ sources:
 - 更新日期：2026-10-28
 - 维护者：项目维护者
 - 下一更新点：PM 在 Android Via/Kiwi/荣耀真机复验虚拟历史栈与可视区域修复、下一次 staging 部署、生产 cutover 决策；不要等新阶段才开始更新。
-- 事实基准：部署/数据事实于 2026-10-27 对 server1 复核；staging 已部署 `staging-aab3bb5`（代码 `aab3bb5`：腾讯云照片合规判定接回，assetVersion 30，migration 10 不变；`/healthz` 2026-10-27T13:57Z）；
-  生产 `app.nantou.love` 未切换。本地批次 2026-10-27c（welcome 合并 + 公开页扫描防护 + 大图全屏缩图）、
-  2026-10-27f（/register 表单扫描防护）、2026-10-27g（facebackfill 守卫）与 2026-10-28（照片每日配额）
-  已实现，**未 push、未部署**。
+- 事实基准：部署/数据事实于 2026-10-28 对 server1 复核；staging 运行 `staging-39daf52`、
+  `deployed.sha`=6438e7f，`8136204`（首页页脚文案删除）因 Docs 门禁红未部署，修正提交后由 autodeploy
+  接手，版本以 `/healthz` 为准；生产 `app.nantou.love` 未切换。
+  本地批次 2026-10-27c（welcome 合并 + 公开页扫描防护 + 大图全屏缩图）、
+  2026-10-27f（/register 表单扫描防护）、2026-10-27g（facebackfill 守卫）、2026-10-28（照片每日配额）
+  与 2026-10-28（首页页脚文案删除）已实现并 push。
+
+## 2026-10-28 首页移除页脚文案（快速通道）
+
+- 触发：PM 2026-10-28 指示首页去掉「一线牵 · 遇见对的人」整行。
+- 改动：`web/templates/pages/home.tmpl` 删除 `welcome-footer-note` 块；`web/static/home.js`
+  删除 `footer.note` 键；`web/static/register.css` 删除对应无用样式；assetVersion 32→33，
+  重建 `home.js`/`register.css` 与 admin CSS `@import` 的 `.gz`；`home_test` 增加
+  「落地页不含 welcome-footer-note」回归断言。
+- 证据：`make fast` PASS；`make ci` exit 0；定向 httpserver 测试（landing/asset-version/
+  copy-key/Han-free）全 PASS。
+- 注记：首轮 Docs 红是 `docs/STATUS.md` 的 sources 命中 `home.js`/`home.tmpl` 而本文档未更新；
+  本段即修正，未绕过门禁。
 
 ## 2026-10-28 照片上传每日配额（本地实现，待部署）
 

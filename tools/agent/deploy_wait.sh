@@ -49,51 +49,64 @@ if ! has_code "$ci_sha"; then
   log "tip $SHA 是 docs-only；用 code commit ${ci_sha:0:7} 等 CI"
 fi
 
-if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
-  log "gh 不可用/未登录；跳过 CI，直接等 healthz=${SHA:0:7}"
-else
-  log "等待 CI：${ci_sha:0:7}（最多 ${CI_TIMEOUT}s）"
-  deadline=$((SECONDS + CI_TIMEOUT))
-  while ((SECONDS < deadline)); do
-    state=$(
-      NO_COLOR=1 GH_FORCE_TTY=0 gh run list --repo "$REPO" --commit "$ci_sha" \
-        --event push --limit 10 --json workflowName,status,conclusion,databaseId \
-      | python3 -c '
+# 单个 workflow 的状态：completed|success / in_progress| / missing| / error|
+run_state() {
+  local name=$1 sha=$2
+  NO_COLOR=1 GH_FORCE_TTY=0 gh run list --repo "$REPO" --commit "$sha" \
+    --event push --limit 10 --json workflowName,status,conclusion,databaseId \
+    | python3 -c '
 import json, sys
+name = sys.argv[1]
 try:
     runs = json.load(sys.stdin)
 except Exception:
     print("error|bad-json")
     raise SystemExit
-runs = [r for r in runs if r.get("workflowName") == "CI"]
+runs = [r for r in runs if r.get("workflowName") == name]
 if not runs:
     print("missing|")
     raise SystemExit
 r = sorted(runs, key=lambda x: x.get("databaseId") or 0)[-1]
 print("%s|%s" % (r.get("status"), r.get("conclusion") or ""))
-' 2>/dev/null || echo "error|"
-    )
-    case "$state" in
-      "completed|success")
-        log "CI success"
-        break
-        ;;
+' "$name" 2>/dev/null || echo "error|"
+}
+
+if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+  log "gh 不可用/未登录；跳过 CI/Docs，直接等 healthz=${SHA:0:7}"
+else
+  # autodeploy 的闸门是 CI + Docs 都绿（YXQ_REQUIRE_DOCS 默认 1），
+  # 只盯 CI 会在 Docs 红时白等到 healthz 超时，所以这里一起等、一起判红。
+  log "等待 CI + Docs：CI=${ci_sha:0:7} Docs=${SHA:0:7}（最多 ${CI_TIMEOUT}s）"
+  deadline=$((SECONDS + CI_TIMEOUT))
+  while ((SECONDS < deadline)); do
+    ci_state=$(run_state CI "$ci_sha")
+    docs_state=$(run_state Docs "$SHA")
+    # docs-only tip 的 Docs 仍在 tip 上跑；只有 Docs run 缺失时才回退 code commit。
+    if [[ $docs_state == "missing|" && $ci_sha != "$SHA" ]]; then
+      docs_state=$(run_state Docs "$ci_sha")
+    fi
+    case "$ci_state" in
+      "completed|success") ci_ok=1 ;;
       "completed|failure"|"completed|cancelled"|"completed|timed_out"|"completed|action_required")
-        die "CI $state"
+        die "CI $ci_state"
         ;;
-      "missing|")
-        log "CI run 尚未出现"
-        ;;
-      in_progress\|*|queued\|*|requested\|*|waiting\|*)
-        log "CI $state"
-        ;;
-      *)
-        log "CI 状态未知：$state"
-        ;;
+      *) ci_ok=0 ;;
     esac
+    case "$docs_state" in
+      "completed|success") docs_ok=1 ;;
+      "completed|failure"|"completed|cancelled"|"completed|timed_out"|"completed|action_required")
+        die "Docs $docs_state（autodeploy 要求 CI + Docs 均绿，不会部署）"
+        ;;
+      *) docs_ok=0 ;;
+    esac
+    if ((ci_ok == 1 && docs_ok == 1)); then
+      log "CI + Docs success"
+      break
+    fi
+    log "CI $ci_state；Docs $docs_state"
     sleep "$POLL"
   done
-  ((SECONDS < deadline)) || die "CI 超时（${CI_TIMEOUT}s）"
+  ((SECONDS < deadline)) || die "CI/Docs 超时（${CI_TIMEOUT}s）"
 fi
 
 # autodeploy 的 CODE_CHANGED 口径：docs/*、*.md、.team/* 以外的任何文件都算代码，
