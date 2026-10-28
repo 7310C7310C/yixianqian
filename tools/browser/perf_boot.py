@@ -111,7 +111,7 @@ def collect(page) -> dict:
             hero_ready_ms: window.__YXQ_HERO_READY_AT__ || (heroReady ? Math.round(heroReady.startTime) : null),
             dom: document.querySelectorAll('*').length,
             cards: document.querySelectorAll('.swipe-card').length,
-            hero_present: !!document.getElementById('boot-splash'),
+            hero_present: !!document.getElementById('boot-skeleton'),
             counter: (document.querySelector('.card-counter') || {}).textContent || '',
             url: location.href
           };
@@ -125,7 +125,7 @@ def run_once(context, page, base_url: str, suffix: str = "", reload: bool = Fals
     else:
         page.goto(base_url.rstrip("/") + "/app" + suffix, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_selector(".van-tabbar", timeout=30000)
-    page.wait_for_selector("#boot-splash", state="detached", timeout=20000)
+    page.wait_for_selector("#boot-skeleton", state="detached", timeout=20000)
     page.wait_for_timeout(1200)  # LCP/长任务收尾
     return collect(page)
 

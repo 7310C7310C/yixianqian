@@ -1,104 +1,589 @@
 #!/usr/bin/env python3
-"""纯品牌启动页 smoke：💗 + 一线牵，真实卡就绪后立即撤走。
+"""壳内首卡 hero + 牌堆单卡窗口回归（批次5）。
 
-    BASE_URL=https://next.nantou.love SESSION_COOKIE=<yxq_session> \\
-      SHOT_DIR=/tmp/opencode/splash python3 tools/browser/app_hero_deck_smoke.py
+覆盖：
+1. 390/1280：`#boot-skeleton` 的首卡 hero 与 Vue 真实 `.swipe-card`/`.card-photo-wrap`
+   几何一致（±1px），首图 URL 使用 `?size=thumb`；Vue 首卡图绘制后 hero 移除；
+2. hero 期间/交接无 layout-shift（CLS < 0.01），LCP 元素是首卡缩图；
+3. 滑动、切 tab、浏览器回退、`#/likes` 深链、restore 后 hero 不残留、不重现；
+4. 牌堆只挂载当前 1 张卡（DOM 节点数受控），0/1/2/末张/回退/restore 用例；
+5. 无卡（bootstrap cards 为空）与首图请求失败时降级：hero 显示 shimmer/不出现破图，
+   数据就绪后移除；
+6. 暗色主题与 375/390/768/1280 视口。
+
+需要已登录 staging/本地实例的原始 session cookie：
+
+    BASE_URL=http://127.0.0.1:18296 SESSION_COOKIE=<yxq_session> \
+    SHOT_DIR=/tmp/opencode/b5-hero python3 tools/browser/app_hero_deck_smoke.py
+
+依赖 playwright；不放进 make ci。
 """
+
 from __future__ import annotations
 
+import json
 import os
+import re
 import sys
+import time
 from pathlib import Path
 
 try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
-except ImportError:  # pragma: no cover
+except ImportError:  # pragma: no cover - environment guard
     sys.exit("需要 playwright：pip install playwright && python3 -m playwright install chromium")
 
-FAILS: list[str] = []
+FILTER_DEFAULT = {
+    "gender": "", "nickname": "", "user_id": "",
+    "height_min": "", "height_max": "", "age_min": "", "age_max": "",
+    "education": [], "income": [], "house": [], "driving": [],
+}
+HERO_INIT = """
+window.__hero_snapshot = null;
+(function () {
+  function snap() {
+    const h = document.getElementById('boot-skeleton');
+    if (!h) return;
+    const c = h.querySelector('.swipe-card');
+    const p = h.querySelector('.card-photo-wrap');
+    const i = h.querySelector('.boot-photo');
+    const cr = c && c.getBoundingClientRect();
+    const pr = p && p.getBoundingClientRect();
+    window.__hero_snapshot = {
+      present: true,
+      src: (i && i.getAttribute('src')) || '',
+      card: cr && cr.toJSON(), photo: pr && pr.toJSON(),
+      bg: getComputedStyle(h).backgroundColor,
+      cardBg: c && getComputedStyle(c).backgroundColor,
+      imgDisplay: i && getComputedStyle(i).display,
+      objectPosition: i && getComputedStyle(i).objectPosition,
+      tabbarHeight: (h.querySelector('.boot-tabbar') || {getBoundingClientRect: () => null}).getBoundingClientRect()?.height || null,
+      ready: h.classList.contains('boot-hero-ready'),
+      failed: h.classList.contains('boot-hero-failed')
+    };
+  }
+  new MutationObserver(snap).observe(document.documentElement || document, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class', 'style']
+  });
+  window.__heroRemovedAt = null;
+  window.__heroSeen = false;
+  new MutationObserver(function () {
+    if (document.getElementById('boot-skeleton')) { window.__heroSeen = true; return; }
+    if (window.__heroSeen && window.__heroRemovedAt === null) {
+      window.__heroRemovedAt = Math.round(performance.now());
+    }
+  }).observe(document, {childList: true, subtree: true});
+  document.addEventListener('readystatechange', snap);
+  document.addEventListener('DOMContentLoaded', snap);
+  setTimeout(snap, 0);
+})();
+"""
+
+PERF_INIT = """
+window.__b5 = {lcp: 0, lcpEl: '', lcpClass: '', cls: 0, longtasks: []};
+try { new PerformanceObserver(function (l) {
+  for (const e of l.getEntries()) {
+    window.__b5.lcp = e.startTime;
+    window.__b5.lcpEl = (e.element && (e.element.currentSrc || e.element.src)) || e.url || '';
+    window.__b5.lcpClass = (e.element && typeof e.element.className === 'string') ? e.element.className : '';
+  }
+}).observe({type: 'largest-contentful-paint', buffered: true}); } catch (e) {}
+try { new PerformanceObserver(function (l) {
+  for (const e of l.getEntries()) { if (!e.hadRecentInput) window.__b5.cls += e.value; }
+}).observe({type: 'layout-shift', buffered: true}); } catch (e) {}
+try { new PerformanceObserver(function (l) {
+  for (const e of l.getEntries()) window.__b5.longtasks.push({start: e.startTime, dur: e.duration});
+}).observe({type: 'longtask', buffered: true}); } catch (e) {}
+"""
 
 
-def cookie_context(browser, base: str, cookie: str, width: int, height: int, dark: bool = False):
-    ctx = browser.new_context(viewport={"width": width, "height": height})
-    ctx.add_cookies([{"name": "yxq_session", "value": cookie, "url": base,
-                      "httpOnly": True, "sameSite": "Lax"}])
-    if dark:
-        ctx.add_init_script("try{localStorage.setItem('yxq_dark','1')}catch(e){}")
-    return ctx
+class SmokeFailure(AssertionError):
+    pass
 
 
-def one(browser, base: str, cookie: str, out: Path, width: int, height: int, dark: bool = False) -> None:
-    tag = f"{width}x{height}" + ("-dark" if dark else "")
-    ctx = cookie_context(browser, base, cookie, width, height, dark)
-    page = ctx.new_page()
+def require(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        sys.exit(f"缺少环境变量 {name}")
+    return value
+
+
+def make_context(browser, base_url: str, cookie: str, width: int, height: int, dark: bool = False):
+    context = browser.new_context(viewport={"width": width, "height": height}, locale="zh-CN")
+    context.add_cookies([{
+        "name": "yxq_session", "value": cookie,
+        "url": base_url, "httpOnly": True, "sameSite": "Lax",
+    }])
+    context.add_init_script(
+        "try{localStorage.setItem('yxq_swipe_guide_v1','1');"
+        "localStorage.setItem('yxq_update_notes_v1','1');"
+        + ("localStorage.setItem('yxq_dark','1');" if dark else "")
+        + "}catch(e){}"
+    )
+    context.add_init_script(PERF_INIT + HERO_INIT)
+    return context
+
+
+def page_errors(page) -> list[str]:
     errors: list[str] = []
-    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("pageerror", lambda exc: errors.append(str(exc)))
+    return errors
+
+
+def throttle(context, page, cpu: int = 4, latency: float = 150, down_mbps: float = 1.6):
+    cdp = context.new_cdp_session(page)
+    cdp.send("Network.enable")
+    cdp.send("Emulation.setCPUThrottlingRate", {"rate": cpu})
+    cdp.send("Network.emulateNetworkConditions", {
+        "offline": False, "latency": latency,
+        "downloadThroughput": int(down_mbps * 1024 * 1024 / 8),
+        "uploadThroughput": int(down_mbps * 1024 * 1024 / 16),
+    })
+    return cdp
+
+
+def wait_hero_gone(page, timeout: int = 20000) -> None:
     try:
-        page.goto(base + "/app", wait_until="domcontentloaded", timeout=40000)
-        page.locator("#boot-splash").wait_for(state="visible", timeout=5000)
-        text = page.locator("#boot-splash").inner_text()
-        if "💗" not in text or "一线牵" not in text:
-            raise RuntimeError(f"splash 文案异常：{text!r}")
-        page.screenshot(path=str(out / f"splash-{tag}.png"))
-        page.locator("#boot-splash").wait_for(state="detached", timeout=20000)
-        page.locator("#app .cards-page .card-counter").wait_for(state="visible", timeout=20000)
-        timing = page.evaluate("""() => ({
-          ready: window.__YXQ_CARD_READY_AT__ || null,
-          removed: window.__YXQ_HERO__ ? window.__YXQ_HERO__.removedAt() : null,
-          reason: window.__YXQ_HERO__ ? window.__YXQ_HERO__.reason() : '',
+        page.locator("#boot-skeleton").wait_for(state="detached", timeout=timeout)
+    except PlaywrightTimeoutError:
+        raise SmokeFailure("壳内 hero 未在超时内移除") from None
+
+
+def wait_cards_ready(page, timeout: int = 30000) -> None:
+    page.locator(".van-tabbar").wait_for(state="visible", timeout=timeout)
+    page.locator(".swipe-card, .van-empty").first.wait_for(state="visible", timeout=timeout)
+
+
+def rect(locator) -> dict:
+    box = locator.bounding_box()
+    if box is None:
+        raise SmokeFailure("元素没有 bounding box")
+    return box
+
+
+def assert_close(a: dict, b: dict, label: str, tol: float = 1.5) -> None:
+    for key in ("x", "y", "width", "height"):
+        if abs(float(a[key]) - float(b[key])) > tol:
+            raise SmokeFailure(f"{label} 几何不一致 {key}: hero={a[key]} card={b[key]}")
+
+
+def counter_text(page) -> str:
+    return page.locator(".card-counter").inner_text().strip()
+
+
+def parse_counter(page) -> tuple[int, int]:
+    text = counter_text(page)
+    try:
+        left, right = text.split("/")
+        return int(left.strip()), int(right.strip())
+    except ValueError:
+        raise SmokeFailure(f"无法解析卡片计数器 {text!r}") from None
+
+
+def wait_counter(page, want: str, timeout: int = 15000) -> None:
+    try:
+        page.wait_for_function(
+            "(want) => { const el = document.querySelector('.card-counter'); return !!el && el.textContent.trim() === want; }",
+            arg=want, timeout=timeout,
+        )
+    except PlaywrightTimeoutError:
+        raise SmokeFailure(f"计数器等待 {want!r} 超时，当前 {counter_text(page)!r}") from None
+
+
+def wait_counter_left(page, want_left: int, timeout: int = 15000) -> None:
+    """Wait for numerator only; bootstrap vs /api/cards total may differ by one."""
+    page.wait_for_function(
+        r"""(left) => {
+          const el = document.querySelector('.card-counter');
+          if (!el) return false;
+          const m = el.textContent.trim().match(/^([0-9]+)\s*\/\s*([0-9]+)$/);
+          return !!m && Number(m[1]) === left && Number(m[2]) > 0;
+        }""",
+        arg=want_left, timeout=timeout,
+    )
+
+
+def drag_card(page, dx: int) -> None:
+    box = rect(page.locator(".card-main"))
+    x = box["x"] + box["width"] / 2
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + dx, y, steps=10)
+    page.mouse.up()
+    page.wait_for_timeout(350)
+
+
+def restore_pos(page, pos: int) -> None:
+    page.evaluate(
+        """(payload) => sessionStorage.setItem('yxq_deck_restore', JSON.stringify(payload))""",
+        {"pos": pos, "filters": FILTER_DEFAULT, "ts": int(time.time() * 1000)},
+    )
+    page.reload(wait_until="domcontentloaded")
+    page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
+
+
+def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
+                 out_dir: Path, throttle_net: bool) -> list[str]:
+    tag = f"{width}x{height}"
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, width, height)
+        page = context.new_page()
+        errors = page_errors(page)
+        if throttle_net:
+            throttle(context, page)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_function("() => !!window.__hero_snapshot", timeout=10000)
+        hero = page.evaluate("window.__hero_snapshot")
+        if "/cards/photo/" not in hero["src"] or "size=thumb" not in hero["src"]:
+            raise SmokeFailure(f"{tag}: hero 首图不是卡片缩图 {hero['src']!r}")
+        wait_hero_gone(page)
+        wait_cards_ready(page)
+        real = page.evaluate("""() => {
+          const card = document.querySelector('.swipe-card');
+          const photo = card && card.querySelector('.card-photo-wrap');
+          const cr = card && card.getBoundingClientRect();
+          const pr = photo && photo.getBoundingClientRect();
+          return {card: cr && cr.toJSON(), photo: pr && pr.toJSON()};
+        }""")
+        if real["card"] is None:
+            raise SmokeFailure(f"{tag}: 没有渲染真实卡片")
+        assert_close(hero["card"], real["card"], f"{tag} hero/真实卡")
+        assert_close(hero["photo"], real["photo"], f"{tag} hero/真实卡照片区")
+        detail = page.evaluate("""() => {
+          const img = document.querySelector('.swipe-card .card-photo-item');
+          const extra = document.querySelectorAll('.swipe-card .card-photo-item')[1];
+          const tab = document.querySelector('.van-tabbar');
+          return {
+            objectPosition: img ? getComputedStyle(img).objectPosition : '',
+            nextObjectPosition: extra ? getComputedStyle(extra).objectPosition : '',
+            tabbarHeight: tab ? tab.getBoundingClientRect().height : null,
+          };
+        }""")
+        if hero.get("objectPosition") and detail["objectPosition"]:
+            # 真实卡可能按人脸写 object-position；hero 默认/复制值必须一致。
+            if hero["objectPosition"] != detail["objectPosition"]:
+                raise SmokeFailure(
+                    f"{tag}: hero 裁切 {hero['objectPosition']!r} != 真实卡 {detail['objectPosition']!r}"
+                )
+        if hero.get("tabbarHeight") and detail["tabbarHeight"] is not None:
+            if abs(float(hero["tabbarHeight"]) - float(detail["tabbarHeight"])) > 1.5:
+                raise SmokeFailure(
+                    f"{tag}: hero 假 tabbar {hero['tabbarHeight']}px != 真 tabbar {detail['tabbarHeight']}px"
+                )
+
+        stats = page.evaluate("""() => ({
+          cls: window.__b5.cls, lcp: Math.round(window.__b5.lcp), lcpEl: window.__b5.lcpEl,
+          lcpClass: window.__b5.lcpClass,
+          longtasks: window.__b5.longtasks.length,
+          cards: document.querySelectorAll('.swipe-card').length,
+          photos: [...document.querySelectorAll('.card-photo-item')]
+                    .filter((el) => el.getAttribute('src')).length,
+          photoNodes: document.querySelectorAll('.card-photo-item').length,
+          dom: document.querySelectorAll('*').length,
+          mount: (performance.getEntriesByName('yxq-mount')[0] || {}).duration || null,
+          boot: (performance.getEntriesByName('yxq-boot')[0] || {}).duration || null,
+          hero: !!document.getElementById('boot-skeleton'),
         })""")
-        if not timing["ready"] or not timing["removed"]:
-            raise RuntimeError(f"缺少 ready/removed 时序：{timing}")
-        gap = timing["removed"] - timing["ready"]
-        if gap > 300:
-            raise RuntimeError(f"splash 撤走过慢：removed-ready={gap}ms")
+        if stats["hero"]:
+            raise SmokeFailure(f"{tag}: hero 仍在 DOM")
+        if stats["cls"] > 0.01:
+            raise SmokeFailure(f"{tag}: CLS {stats['cls']} 超过 0.01")
+        if "/cards/photo/" not in stats["lcpEl"] or "boot-photo" not in stats["lcpClass"]:
+            raise SmokeFailure(
+                f"{tag}: LCP 不是壳内 hero（class={stats['lcpClass']!r}, url={stats['lcpEl']!r}）"
+            )
+        if stats["cards"] != 1:
+            raise SmokeFailure(f"{tag}: 牌堆应只挂当前 1 张，实际 {stats['cards']}")
+        # 卡片模板按 v-for 渲染全部照片节点（滑动切换用），但只有当前与下一张应当带 src
+        # （批次4/5 的解码预算）。旧断言数的是节点总数，卡有 >2 张照片时必然假红
+        # （批次7 集成排查：staging 账号首卡 9 张照片，节点 9 / 带 src 2）。
+        if stats["photos"] > 2:
+            raise SmokeFailure(
+                f"{tag}: 当前卡带 src 的照片超过 2 张（{stats['photos']}，节点共 {stats.get('photoNodes')}）"
+            )
+        # 仍保留对 v-for 渲染膨胀的约束（reviewer N7）：节点数不应随牌堆/窗口无限增长。
+        if stats["photoNodes"] > 12:
+            raise SmokeFailure(f"{tag}: 当前卡照片节点过多（{stats['photoNodes']} > 12）")
+        if stats["dom"] > 260:
+            raise SmokeFailure(f"{tag}: DOM 节点 {stats['dom']} 超过 260")
+        if stats["mount"] is None:
+            raise SmokeFailure(f"{tag}: 缺少 yxq-mount 测量")
+        if stats["boot"] is None:
+            raise SmokeFailure(f"{tag}: 缺少 yxq-boot 测量")
+        page.screenshot(path=str(out_dir / f"hero-{tag}.png"))
         if errors:
-            raise RuntimeError(f"pageerror: {errors[:2]}")
-        print(f"PASS {tag} ready/removed gap={gap}ms reason={timing['reason']}")
-    except Exception as exc:
-        FAILS.append(f"{tag}: {exc}")
-        print(f"FAIL {tag}: {exc}")
+            raise SmokeFailure(f"{tag}: pageerror {errors[:2]}")
+        return []
+    except Exception as exc:  # noqa: BLE001 - report all viewport failures together
+        return [f"{tag}: {exc}"]
     finally:
-        ctx.close()
+        if context is not None:
+            context.close()
 
 
-def no_splash(browser, base: str, cookie: str, path: str) -> None:
-    ctx = cookie_context(browser, base, cookie, 390, 844)
-    page = ctx.new_page()
+def run_interactions(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    context = None
     try:
-        page.goto(base + path, wait_until="domcontentloaded", timeout=40000)
-        page.wait_for_timeout(800)
-        if page.locator("#boot-splash").count():
-            FAILS.append(f"{path}: splash 不应显示")
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=60000)
+        wait_hero_gone(page)
+        wait_cards_ready(page)
+        # 首屏 bootstrap 的 cards_total 与随后 /api/cards 可能差 1（推荐位/候选变动）；
+        # 统一以一次刷新后的 API 总数为准。
+        page.reload(wait_until="domcontentloaded")
+        page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
+        wait_hero_gone(page)
+        wait_cards_ready(page)
+        total_text = counter_text(page)
+        total = int(total_text.split("/")[-1].strip())
+        if total < 3:
+            raise SmokeFailure(f"测试账号牌堆不足 3 张（{total_text}）")
+        wait_counter_left(page, 1)
+
+        # 1) 切 tab：hero 已消失，不因回切而重现。
+        page.locator(".van-tabbar-item").filter(has_text="消息").click()
+        page.wait_for_timeout(500)
+        if page.locator("#boot-skeleton").count():
+            raise SmokeFailure("切消息后 hero 重现")
+        page.locator(".van-tabbar-item").filter(has_text="牵线").click()
+        page.wait_for_timeout(500)
+        if page.locator("#boot-skeleton").count():
+            raise SmokeFailure("回牵线后 hero 重现")
+
+        # 2) 滑动：1→2→1；始终只有一张卡。
+        drag_card(page, -90)
+        wait_counter_left(page, 2)
+        if page.locator(".swipe-card").count() != 1:
+            raise SmokeFailure("滑动后牌堆 DOM 不是 1 张")
+        page.screenshot(path=str(out_dir / "deck-2-390.png"))
+        drag_card(page, 90)
+        wait_counter_left(page, 1)
+
+        # 3) 浏览器回退：我的 → 我的麦穗（pushState）→ back → 我的；hero 不重现。
+        page.locator(".van-tabbar-item").filter(has_text="我的").click()
+        page.wait_for_timeout(500)
+        page.locator(".profile-card-row").filter(has_text="我的麦穗").click()
+        page.wait_for_timeout(600)
+        page.get_by_text("我的麦穗", exact=False).first.wait_for(state="visible", timeout=10000)
+        page.go_back()
+        page.wait_for_timeout(600)
+        page.locator(".van-tabbar").wait_for(state="visible", timeout=10000)
+        if page.locator("#boot-skeleton").count():
+            raise SmokeFailure("浏览器回退后 hero 重现")
+        page.locator(".van-tabbar-item").filter(has_text="牵线").click()
+        page.wait_for_timeout(500)
+
+        # 4) restore：pos 2 / 0 / 末张。总人数以落地后计数器为准（可能因候选变动 ±1）。
+        restore_pos(page, 2)
+        wait_cards_ready(page)
+        wait_hero_gone(page)
+        num, den = parse_counter(page)
+        if num != 3:
+            raise SmokeFailure(f"restore pos=2 落点不是第 3 张：{num} / {den}")
+        restore_pos(page, 0)
+        wait_cards_ready(page)
+        wait_hero_gone(page)
+        num, den = parse_counter(page)
+        if num != 1:
+            raise SmokeFailure(f"restore pos=0 落点不是第 1 张：{num} / {den}")
+        last_total = None
+        for _ in range(3):
+            last_total = parse_counter(page)[1]
+            restore_pos(page, last_total - 1)
+            wait_cards_ready(page)
+            wait_hero_gone(page)
+            num, den = parse_counter(page)
+            if num == den:
+                break
         else:
-            print(f"PASS no-splash {path}")
-    except Exception as exc:
-        FAILS.append(f"{path}: {exc}")
+            raise SmokeFailure(f"restore 末张失败：{num} / {den}")
+        drag_card(page, -90)
+        page.get_by_text("已是最后一张", exact=False).first.wait_for(state="visible", timeout=5000)
+        drag_card(page, 90)
+        num, den = parse_counter(page)
+        if num != den - 1:
+            raise SmokeFailure(f"末张回退落点 {num} / {den}")
+
+        # 5) #/likes 深链：hero 不应在非牵线页出现；回牵线也不重现。
+        page.goto(base_url + "/app#/likes", wait_until="domcontentloaded", timeout=40000)
+        page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
+        if page.locator("#boot-skeleton").count():
+            raise SmokeFailure("深链 #/likes 时 hero 残留")
+        page.locator(".van-tabbar-item").filter(has_text="牵线").click()
+        page.wait_for_timeout(500)
+        if page.locator("#boot-skeleton").count():
+            raise SmokeFailure("深链回牵线后 hero 重现")
+        if errors:
+            raise SmokeFailure(f"交互用例 pageerror {errors[:2]}")
+        return []
+    except Exception as exc:  # noqa: BLE001
+        return [f"390 交互/restore: {exc}"]
     finally:
-        ctx.close()
+        if context is not None:
+            context.close()
+
+
+def run_fallbacks(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    failures: list[str] = []
+
+    # 无卡：bootstrap cards 置空，hero 只有 shimmer；数据就绪后移除并显示空态。
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        throttle(context, page)
+
+        def strip_cards(route) -> None:
+            response = route.fetch()
+            body = re.sub(r'"cards":\[.*?\],"cards_total"', '"cards":[],"cards_total"', response.text(), count=1, flags=re.S)
+            route.fulfill(response=response, body=body)
+
+        context.route(base_url.rstrip("/") + "/app", strip_cards)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_function("() => !!window.__hero_snapshot", timeout=10000)
+        if page.evaluate("window.__hero_snapshot.src"):
+            raise SmokeFailure("无卡时 hero 仍设置首图")
+        wait_hero_gone(page)
+        page.locator(".van-empty").wait_for(state="visible", timeout=20000)
+        page.screenshot(path=str(out_dir / "hero-no-cards-390.png"))
+        if errors:
+            raise SmokeFailure(f"无卡用例 pageerror {errors[:2]}")
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"无卡降级: {exc}")
+    finally:
+        if context is not None:
+            context.close()
+
+    # 首图请求失败：hero 不出现破图，最终移除；卡片走自身占位。
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        throttle(context, page)
+        context.route("**/cards/photo/**", lambda route: route.abort())
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_function("() => !!window.__hero_snapshot && window.__hero_snapshot.failed", timeout=15000)
+        if page.evaluate("window.__hero_snapshot.imgDisplay") != "none":
+            raise SmokeFailure("首图失败后 hero 仍显示破图")
+        wait_hero_gone(page, timeout=25000)
+        page.screenshot(path=str(out_dir / "hero-image-fail-390.png"))
+        if errors:
+            raise SmokeFailure(f"首图失败用例 pageerror {errors[:2]}")
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"首图失败降级: {exc}")
+    finally:
+        if context is not None:
+            context.close()
+
+    return failures
+
+
+def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    """loadHome 挂起时，壳脚本/app.js 的 4s 硬上限必须移除 hero 并露出启动骨架。"""
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844)
+        page = context.new_page()
+        errors = page_errors(page)
+        # 不节流：本用例验证「已挂载后 loadHome 挂起」的 4s 硬上限，
+        # 避免 CPU×4 下 mount 本身超过 4s 把场景变成「尚未开始 loadHome」。
+        held = {}
+
+        def hold_home(route) -> None:
+            if "route" not in held:
+                held["route"] = route
+                return
+            route.continue_()
+
+        def strip_bootstrap(route) -> None:
+            response = route.fetch()
+            body = re.sub(
+                r"window\.__YXQ_BOOTSTRAP__=\{.*?\};",
+                "window.__YXQ_BOOTSTRAP__=null;",
+                response.text(), count=1, flags=re.S,
+            )
+            route.fulfill(response=response, body=body)
+
+        context.route(base_url.rstrip("/") + "/app", strip_bootstrap)
+        context.route("**/legacy/api/home", hold_home)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=15000)
+        page.locator("#boot-skeleton").wait_for(state="detached", timeout=6000)
+        removed = page.evaluate("window.__YXQ_HERO__ ? {at: window.__YXQ_HERO__.removedAt(), reason: window.__YXQ_HERO__.reason()} : null")
+        if not removed or removed["at"] is None or removed["at"] > 4300:
+            raise SmokeFailure(f"loadHome 挂起时 hero 移除过晚：{removed}")
+        if removed["reason"] not in ("load-timeout", "hard-timeout"):
+            raise SmokeFailure(f"loadHome 挂起时 hero 移除原因异常：{removed}")
+        page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=5000)
+        page.screenshot(path=str(out_dir / "hero-load-home-hang-390.png"))
+        if errors:
+            raise SmokeFailure(f"loadHome 挂起用例 pageerror {errors[:2]}")
+        return []
+    except Exception as exc:  # noqa: BLE001
+        return [f"loadHome 挂起硬上限: {exc}"]
+    finally:
+        if context is not None:
+            try:
+                if held.get("route"):
+                    held["route"].abort()
+            except Exception:  # noqa: BLE001 - best effort cleanup
+                pass
+            context.close()
+
+
+def run_dark(browser, base_url: str, cookie: str, out_dir: Path) -> list[str]:
+    context = None
+    try:
+        context = make_context(browser, base_url, cookie, 390, 844, dark=True)
+        page = context.new_page()
+        throttle(context, page)
+        page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_function("() => !!window.__hero_snapshot", timeout=10000)
+        snap = page.evaluate("window.__hero_snapshot")
+        if snap["bg"] != "rgb(17, 17, 17)":
+            raise SmokeFailure(f"暗色 hero 背景 {snap['bg']!r}")
+        if snap["cardBg"] not in ("rgb(34, 34, 38)", "rgba(0, 0, 0, 0)"):
+            raise SmokeFailure(f"暗色卡片背景 {snap['cardBg']!r}")
+        page.screenshot(path=str(out_dir / "hero-dark-390.png"))
+        wait_hero_gone(page)
+        return []
+    except Exception as exc:  # noqa: BLE001
+        return [f"暗色: {exc}"]
+    finally:
+        if context is not None:
+            context.close()
 
 
 def main() -> int:
-    base = os.environ.get("BASE_URL", "").rstrip("/")
-    cookie = os.environ.get("SESSION_COOKIE", "")
-    if not base or not cookie:
-        sys.exit("BASE_URL/SESSION_COOKIE required")
-    out = Path(os.environ.get("SHOT_DIR", "/tmp/opencode/splash"))
-    out.mkdir(parents=True, exist_ok=True)
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(args=["--no-sandbox"])
-        for w, h in ((390, 844), (1280, 900)):
-            one(browser, base, cookie, out, w, h)
-        one(browser, base, cookie, out, 390, 844, dark=True)
-        no_splash(browser, base, cookie, "/app#/likes")
-        no_splash(browser, base, cookie, "/app#/activities")
-        no_splash(browser, base, cookie, "/app?native_admin=1&p=group_admin")
-        browser.close()
-    if FAILS:
-        for f in FAILS:
-            print("FAIL", f)
+    base_url = require("BASE_URL").rstrip("/")
+    cookie = require("SESSION_COOKIE")
+    out_dir = Path(os.environ.get("SHOT_DIR", "/tmp/opencode/b5-hero"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    failures: list[str] = []
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(args=["--no-sandbox"])
+            for width, height in ((390, 844), (1280, 900), (375, 667), (768, 1024)):
+                failures.extend(run_viewport(browser, base_url, cookie, width, height, out_dir, throttle_net=True))
+            failures.extend(run_interactions(browser, base_url, cookie, out_dir))
+            failures.extend(run_fallbacks(browser, base_url, cookie, out_dir))
+            failures.extend(run_load_home_hang(browser, base_url, cookie, out_dir))
+            failures.extend(run_dark(browser, base_url, cookie, out_dir))
+            browser.close()
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"fatal: {exc}")
+    if failures:
+        for item in failures:
+            print("FAIL", item)
         return 1
-    print("PASS splash smoke (390/1280, dark, deep-link, native_admin)")
+    print("PASS hero/deck smoke (390/1280/375/768, dark, interactions, fallbacks)")
     return 0
 
 

@@ -259,7 +259,7 @@ def wait_app(page, timeout: int = 50000) -> None:
             "window.yxqRootProxy.bootLoading === false",
             timeout=timeout,
         )
-        page.locator("#boot-splash").wait_for(state="detached", timeout=timeout)
+        page.locator("#boot-skeleton").wait_for(state="detached", timeout=timeout)
     except PlaywrightTimeoutError as exc:
         raise Failure("SPA 未完成挂载（__YXQ_APP_MOUNTED__ / bootLoading）") from exc
     page.wait_for_timeout(300)

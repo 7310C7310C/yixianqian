@@ -68,7 +68,7 @@ def visible_blockers(scope) -> list[str]:
 def wait_boot_hero_gone(scope, timeout_ms: int = 15000) -> bool:
     """等待壳内首卡 hero 移除（批次5）。不存在时立即返回 True。"""
     try:
-        scope.wait_for_selector("#boot-splash", state="detached", timeout=timeout_ms)
+        scope.wait_for_selector("#boot-skeleton", state="detached", timeout=timeout_ms)
         return True
     except PlaywrightError:
         return False

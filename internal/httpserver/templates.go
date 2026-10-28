@@ -34,7 +34,9 @@ import (
 // app.render.js after dropping the redundant first-card bubble.
 // 2026-10-29 (brand splash): 50 invalidated index/app.css/app.min.js after reverting
 // the static island and adding the pure heart + 一线牵 splash.
-const assetVersion = "50"
+// 2026-10-29 (old hero restore): 51 invalidated index/app.css/app.min.js after
+// removing the brand splash and returning to the pre-static-island hero.
+const assetVersion = "51"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

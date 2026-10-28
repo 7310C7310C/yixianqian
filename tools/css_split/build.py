@@ -36,7 +36,7 @@ KEEP_PREFIXES = (
     "html",
     "html, body",
     "#app",
-    "#boot-splash",
+    "#boot-skeleton",
     "body",
     "*",
     ".van-theme-dark",

@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-28
+last_verified: 2026-10-29
 sources:
   - tools/spa_minify/**
   - tools/spa_precompile/**

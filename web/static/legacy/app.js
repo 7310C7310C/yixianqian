@@ -5734,24 +5734,35 @@ const yxqApp = createApp({
     function dismissBootHero(reason) {
       try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss(reason); } catch (_) {}
     }
-    // 硬上限从 navigationStart 起算 6s：loadHome 卡住时 settleBootHero 不会启动，
+    // 硬上限从 navigationStart 起算 4s：loadHome 卡住时 settleBootHero 不会启动，
     // 这里确保 hero 不会无限覆盖；移除后露出 Vue 启动骨架（bootLoading 仍为 true）。
     function armBootHeroHardLimit() {
       if (bootHeroHardTimer) return;
-      const remain = Math.max(1500, 6000 - performance.now());
+      const remain = Math.max(0, 4000 - performance.now());
       bootHeroHardTimer = setTimeout(() => {
         bootHeroHardTimer = null;
         // 只在 loadHome 仍挂起时强制移除；正常慢图由 settleBootHero 的绘制/超时路径处理，
-        // 避免把已经下载中的首卡图在 6s 前误删。
+        // 避免把已经下载中的 hero 首图在 4s 时误删、反而推后 LCP。
         if (bootLoading.value && window.__YXQ_LOAD_HOME_STARTED__) dismissBootHero('load-timeout');
       }, remain);
     }
     // 等首屏长任务（Vant 执行/mount/数据渲染）结束并完成一帧绘制后再移除 hero。
     // 只等 complete 会让 hero 在长任务开始前被移除，真实卡成为新的 LCP 候选（实测 6.5s）。
     function dismissHeroAfterPaint() {
-      // 品牌启动页不再等待 2s/长任务静默；真实卡首图 decode 后双 rAF 即撤。
-      window.__YXQ_CARD_READY_AT__ = Math.round(performance.now());
-      requestAnimationFrame(() => requestAnimationFrame(() => dismissBootHero('painted')));
+      // 2s 窗口覆盖首屏 mount/Vant/数据渲染长任务的启动；之后要求长任务静默 200ms。
+      const notBefore = performance.now() + 2000;
+      const started = Date.now();
+      const step = () => {
+        if (window.__YXQ_HERO__.dismissed()) return;
+        const now = performance.now();
+        if (now < notBefore || now - bootHeroLastLongTaskEnd < 200) {
+          if (Date.now() - started > 10000) { dismissBootHero('paint-timeout'); return; }
+          setTimeout(step, 100);
+          return;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(() => dismissBootHero('painted')));
+      };
+      step();
     }
     function settleBootHero() {
       if (bootHeroSettled) return;
@@ -5774,6 +5785,23 @@ const yxqApp = createApp({
         }
         const img = document.querySelector('.swipe-card .card-photo-item');
         if (img && img.complete && img.naturalWidth) {
+          // hero 的裁切要跟真实卡一致，避免淡出瞬间垂直跳。
+          // 不能只复制真实卡的 computed style：真实卡的位置由 @load 时的 recalcPhotoPosition
+          // 写入，首图可能先于 faces/布局就绪，命中「几乎没动」分支或稍后才重算——
+          // hero 若那一刻复制就会停在默认 50% 0（实测 staging 冷启 +2.4s 才出现人脸裁切，
+          // hero 已在 3.1s 被移除）。这里用同一个 computeFaceCrop 直接按 faces[0] 算，
+          // 真实卡稍后也算出同一个值；两者公式一致，淡出前后不会跳。
+          try {
+            const heroImg = document.querySelector('#boot-skeleton .boot-photo');
+            const heroWrap = heroImg && heroImg.closest('.card-photo-wrap');
+            const faces = currentCard.value.faces || [];
+            const pos = heroImg && heroWrap
+              ? computeFaceCrop(faces[0], heroWrap.clientWidth, heroWrap.clientHeight,
+                                heroImg.naturalWidth, heroImg.naturalHeight)
+              : '';
+            if (pos && window.__YXQ_HERO__.setObjectPosition) window.__YXQ_HERO__.setObjectPosition(pos);
+          } catch (_) {}
+          // 等首屏长任务结束 + 至少一帧绘制；见 dismissHeroAfterPaint 注释。
           dismissHeroAfterPaint();
           return;
         }
@@ -5792,6 +5820,21 @@ const yxqApp = createApp({
       if (idx !== bootHeroAnchor.index || start !== bootHeroAnchor.start) dismissBootHero('card-changed');
     });
     watch([bootError, gateMessage], ([err, gate]) => { if (err || gate) dismissBootHero('gate'); });
+    // 首卡人脸裁切（photoPositions[0]）可能在首图 @load 之后才算出（容器尺寸/faces 数据
+    // 未就绪会重试），而 settleBootHero 只在 img.complete 时复制一次——那样 hero 会停在
+    // 默认 50% 0，淡出瞬间真实卡却已上移，出现垂直跳变（批次7 集成排查发现）。
+    // 这里在裁切值变化时持续同步给还活着的 hero（dismissed 后 setObjectPosition 自动 no-op）。
+    watch(photoPositions, (arr) => {
+      if (page.value !== 'cards') return;
+      const pos = arr && arr[0];
+      if (!pos) return;
+      try {
+        if (window.__YXQ_HERO__ && window.__YXQ_HERO__.setObjectPosition) {
+          window.__YXQ_HERO__.setObjectPosition(pos);
+        }
+      } catch (_) {}
+    }, { deep: true });
+
     onMounted(() => {
       window.__YXQ_APP_MOUNTED__ = true;
       window.__YXQ_LOAD_HOME_STARTED__ = false;

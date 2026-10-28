@@ -58,8 +58,8 @@ func TestLegacyShellHasNoLargeInlineAssets(t *testing.T) {
 			t.Fatalf("shell still loads %s synchronously", banned)
 		}
 	}
-	if !strings.Contains(html, "boot-splash") {
-		t.Fatal("shell is missing the boot splash")
+	if !strings.Contains(html, "boot-skeleton") {
+		t.Fatal("shell is missing the boot skeleton")
 	}
 }
 
@@ -98,32 +98,77 @@ func TestRootRenderIsPrecompiled(t *testing.T) {
 	}
 }
 
-func TestLegacyShellRendersSplash(t *testing.T) {
+func TestLegacyShellRendersStaticHero(t *testing.T) {
 	html := readEmbedded(t, "static/legacy/index.html")
 	for _, want := range []string{
-		`id="boot-splash"`,
-		`boot-splash-heart`,
-		`boot-splash-brand`,
-		`一线牵`,
+		`id="boot-skeleton"`,
+		`class="cards-page"`,
+		`class="swipe-card"`,
+		`class="card-photo-wrap"`,
+		`class="card-photo-item boot-photo"`,
 		`__YXQ_HERO__`,
 	} {
 		if !strings.Contains(html, want) {
-			t.Fatalf("shell is missing splash marker %q", want)
+			t.Fatalf("shell is missing hero marker %q", want)
 		}
 	}
 	css := readEmbedded(t, "static/legacy/app.css")
 	for _, want := range []string{
-		"#boot-splash",
-		"#boot-splash.boot-splash-out",
-		"#boot-splash .boot-splash-brand",
+		"#boot-skeleton",
+		".boot-hero-ready",
+		"#boot-skeleton.boot-hero-out",
+		"#boot-skeleton .boot-tab-text",
+		"object-position: 50% 0",
+		"height: calc(50px + env(safe-area-inset-bottom))",
 		"prefers-reduced-motion",
 	} {
 		if !strings.Contains(css, want) {
-			t.Fatalf("app.css is missing splash rule %q", want)
+			t.Fatalf("app.css is missing hero rule %q", want)
+		}
+	}
+	// 批次10（1B）：主脚本不得以静态 defer 标签在 hero 绘制前执行；壳必须用
+	// 预下载 + hero 绘制后按序注入，并保留启动前交互/错误兜底标记。
+	for _, forbidden := range []string{
+		`<script src="lib/vue.global.prod.js`,
+		`<script src="app.render.js`,
+		`<script src="app.min.js`,
+	} {
+		if strings.Contains(html, forbidden) {
+			t.Fatalf("shell still executes %q before the hero paints", forbidden)
+		}
+	}
+	for _, want := range []string{
+		`window.__YXQ_APP_START_AT__`,
+		`window.__YXQ_APP_START_REASON__`,
+		`yxq-hero-ready`,
+		`window.__YXQ_BOOT_PENDING_INTERACT__`,
+		`window.__YXQ_BOOT_FAIL__`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("shell is missing progressive-boot marker %q", want)
+		}
+	}
+	js := readEmbedded(t, "static/legacy/app.js")
+	if strings.Contains(js, "boot.remove()") {
+		t.Fatal("app.js still removes the shell hero on mount")
+	}
+	for _, want := range []string{
+		"__YXQ_APP_MOUNTED__",
+		"settleBootHero",
+		"yxqAfterFirstPaint",
+		"yxq-mount-start",
+		"yxq-boot-end",
+		"setObjectPosition",
+		"__YXQ_LOAD_HOME_DONE__",
+		"load-timeout",
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("app.js is missing hero lifecycle marker %q", want)
 		}
 	}
 }
 
+// 牌堆只渲染当前卡片：数据窗口可以保留多张，但 DOM 不能一次挂 20 张。
 func TestDeckRendersOnlyCurrentCard(t *testing.T) {
 	html := readEmbedded(t, "static/legacy/pages/cards.html")
 	if regexp.MustCompile(`v-for="[^"]*\bin cards\b`).MatchString(html) {

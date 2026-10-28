@@ -39,7 +39,6 @@
 })();
 </script>
 <script>try{if(localStorage.getItem('yxq_dark')==='1')document.documentElement.classList.add('van-theme-dark');}catch(e){}</script>
-<script>try{if(/^#\/(likes|activities)(\/|$)/.test(location.hash)||/[?&]native_admin=1(?:&|$)/.test(location.search))document.documentElement.classList.add('boot-skip');}catch(e){}</script>
 <title>一线牵</title>
 <link rel="icon" href="favicon.ico?v=__ASSET_URL_VERSION__" sizes="any">
 <link rel="icon" href="favicon.svg?v=__ASSET_URL_VERSION__" type="image/svg+xml">
@@ -54,56 +53,123 @@
 
 </head>
 <body>
-<div id="boot-splash" aria-hidden="true">
-  <div class="boot-splash-inner">
-    <div class="boot-splash-heart">💗</div>
-    <div class="boot-splash-brand">一线牵</div>
+<div id="boot-skeleton" aria-hidden="true">
+  <div class="cards-page">
+    <div class="swipe-card">
+      <div class="card-photo-wrap">
+        <div class="boot-shimmer boot-hero-shimmer"></div>
+        <img class="card-photo-item boot-photo" alt="" decoding="async" fetchpriority="high">
+      </div>
+      <div class="boot-hero-body">
+        <div class="boot-shimmer boot-line boot-line--md"></div>
+        <div class="boot-shimmer boot-line boot-line--sm"></div>
+      </div>
+    </div>
+  </div>
+  <div class="boot-tabbar" aria-hidden="true">
+    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">牵线</span></div>
+    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">消息</span></div>
+    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">活动</span></div>
+    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">我的</span></div>
   </div>
 </div>
-<style>
-  #boot-splash { position: fixed; inset: 0; z-index: 2000; background: #f7f8fa; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 1; transition: opacity .15s ease; }
-  #boot-splash .boot-splash-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; transform: translateY(-2vh); }
-  #boot-splash .boot-splash-heart { font-size: 68px; line-height: 1; filter: drop-shadow(0 8px 22px rgba(255,107,129,.24)); animation: boot-splash-beat 1.6s ease-in-out infinite; }
-  #boot-splash .boot-splash-brand { font-size: 25px; line-height: 1.2; font-weight: 600; letter-spacing: .12em; color: #ff6b81; }
-  #boot-splash.boot-splash-out { opacity: 0; }
-  .van-theme-dark #boot-splash { background: #111; }
-  .van-theme-dark #boot-splash .boot-splash-brand { color: #ff9aa8; }
-  @keyframes boot-splash-beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
-  @media (prefers-reduced-motion: reduce) {
-    #boot-splash, #boot-splash .boot-splash-heart { animation: none; transition: none; }
-  }
-</style>
+<style>#boot-skeleton{position:fixed;inset:0;z-index:2000;background:#f7f8fa;pointer-events:none}.van-theme-dark #boot-skeleton{background:#111}</style>
 <script>
-// 纯品牌启动页：爱心 + 一线牵；真实卡首图 decode 后由 app.js 的 __YXQ_HERO__ 移除。
+// 壳内首卡 hero：沿用牵线页 .cards-page/.swipe-card/.card-photo-wrap 的同一套几何，
+// Vue 的首卡图真正绘制后再淡出，避免新 LCP 候选被挂载长任务重置。
+// 挂载前不响应交互，避免用户点一下就把唯一的首屏内容移除成 v-cloak 空白。
 (function(){
-  var root = document.getElementById('boot-splash');
+  var root = document.getElementById('boot-skeleton');
   if (!root) return;
-  var state = {dismissed:false, removedAt:null, reason:''};
+  var img = root.querySelector('.boot-photo');
+  var state = {dismissed:false, loaded:false};
+  // 与 app.js computeFaceCrop 同一公式：hero 在首帧就按人脸裁切，挂载后 Vue 卡片
+  // 不会出现「hero 居中 → 真实卡偏移」的视觉跳动。
+  function computeFaceCrop(f, cw, ch, iw, ih){
+    if (!f || !f.c || !cw || !ch || !iw || !ih) return '';
+    try {
+      var scale = Math.max(cw / iw, ch / ih);
+      var dh = ih * scale;
+      var tb = (f.tb && f.tb.length === 2) ? f.tb : [0, 0];
+      var ct = tb[0], cb = tb[1], cr = 1 - ct - cb;
+      if (cr < 0.55) return '';
+      var eh = dh * cr;
+      var cy_e = (f.c[1] - ct) / cr;
+      var fh = (f.box && f.box[1]) ? f.box[1] : 0;
+      var fh_e = fh / cr;
+      var off_e;
+      if (eh <= ch + 1) {
+        off_e = (ch - eh) / 2;
+      } else {
+        var top_e = (cy_e - fh_e / 2) * eh;
+        var bottom_e = (cy_e + fh_e / 2) * eh;
+        var headTop_e = top_e - fh_e * 0.35 * eh;
+        var offDef_e = (ch - eh) / 2;
+        if (offDef_e + headTop_e >= 0 && offDef_e + bottom_e <= ch) off_e = offDef_e;
+        else if (offDef_e + headTop_e < 0) off_e = -headTop_e;
+        else if (offDef_e + bottom_e > ch) off_e = ch - bottom_e;
+        else off_e = offDef_e;
+        off_e = Math.max(ch - eh, Math.min(0, off_e));
+      }
+      var off = off_e - ct * dh;
+      off = Math.max(ch - dh, Math.min(0, off));
+      var offDef = (ch - dh) / 2;
+      if (Math.abs(off - offDef) < 1) return '';
+      return '50% ' + Math.round(off) + 'px';
+    } catch (e) { return ''; }
+  }
+  function applyCrop(faces){
+    try {
+      var f = faces && faces[0];
+      var wrap = img && img.closest('.card-photo-wrap');
+      if (!f || !wrap || !img.naturalWidth) return;
+      var pos = computeFaceCrop(f, wrap.clientWidth, wrap.clientHeight,
+        img.naturalWidth, img.naturalHeight);
+      if (pos) img.style.objectPosition = pos;
+    } catch (e) {}
+  }
+  function setPhoto(src, faces){
+    if (!img || !src || state.dismissed) return;
+    img.onload = function(){
+      state.loaded = true;
+      root.classList.add('boot-hero-ready');
+      applyCrop(faces);
+    };
+    img.onerror = function(){ root.classList.add('boot-hero-failed'); try{ img.removeAttribute('src'); }catch(e){} };
+    img.src = src;
+  }
+  function setObjectPosition(pos){
+    if (img && pos && !state.dismissed) img.style.objectPosition = pos;
+  }
   function dismiss(reason){
     if (state.dismissed) return;
     state.dismissed = true;
     state.reason = reason || '';
     state.removedAt = Math.round(performance.now());
-    root.classList.add('boot-splash-out');
-    setTimeout(function(){
-      if (root.parentNode) root.parentNode.removeChild(root);
-      window.__YXQ_SPLASH_DETACHED_AT__ = Math.round(performance.now());
-    }, 160);
+    document.removeEventListener('pointerdown', onInteract, true);
+    document.removeEventListener('touchstart', onInteract, true);
+    document.removeEventListener('keydown', onInteract, true);
+    document.removeEventListener('wheel', onInteract, true);
+    root.classList.add('boot-hero-out');
+    setTimeout(function(){ if (root.parentNode) root.parentNode.removeChild(root); }, 180);
   }
+  function onInteract(){ if (window.__YXQ_APP_MOUNTED__) dismiss('interact'); }
+  document.addEventListener('pointerdown', onInteract, true);
+  document.addEventListener('touchstart', onInteract, true);
+  document.addEventListener('keydown', onInteract, true);
+  document.addEventListener('wheel', onInteract, true);
   window.__YXQ_HERO__ = {
+    setPhoto: setPhoto,
+    setObjectPosition: setObjectPosition,
     dismiss: dismiss,
+    loaded: function(){ return state.loaded; },
     dismissed: function(){ return state.dismissed; },
     reason: function(){ return state.reason || ''; },
-    removedAt: function(){ return state.removedAt || null; },
-    setObjectPosition: function(){}
+    removedAt: function(){ return state.removedAt || null; }
   };
-  try {
-    if (document.documentElement.classList.contains('boot-skip')) {
-      state.dismissed = true;
-      state.reason = 'deep-link';
-      if (root.parentNode) root.parentNode.removeChild(root);
-    }
-  } catch (e) {}
+  // 冷启硬上限：从壳脚本执行起算 4s；app 已挂载时即使 loadHome 卡住也移除，
+  // 露出 Vue 启动骨架（未挂载则保留 hero，避免白屏，app.js 挂载后会再兜底）。
+  setTimeout(function(){ if (!state.dismissed && window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_STARTED__ === true && window.__YXQ_LOAD_HOME_DONE__ !== true) dismiss('load-timeout'); }, 4000);
 })();
 </script>
 <div id="app" v-cloak>
@@ -895,17 +961,27 @@
 </div>
 <script>window.__YXQ_BOOTSTRAP__=null;</script>
 <script>
-// 优先消费服务端 bootstrap；缺失时回退原 API。启动页不依赖首卡图。
+// 首屏卡片图早于 Vue 启动：优先消费服务端 bootstrap；缺失时回退原 API。
 (function(){
   try {
+    function show(d){
+      if (!d || !d.cards || !d.cards.length) return;
+      var c = d.cards[0];
+      var src = c.photo || (c.photos_thumb && c.photos_thumb[0]) || (c.photos && c.photos[0]);
+      if (!src || !window.__YXQ_HERO__) return;
+      window.__YXQ_HERO__.setPhoto(src, c.faces);
+    }
     var boot = window.__YXQ_BOOTSTRAP__;
     if (boot) {
+      show(boot);
       window.__YXQ_HOME_PROMISE__ = Promise.resolve(boot);
       return;
     }
-    window.__YXQ_HOME_PROMISE__ = fetch('/legacy/api/home', {credentials:'same-origin', headers:{'Accept':'application/json'}})
+    var p = fetch('/legacy/api/home', {credentials:'same-origin', headers:{'Accept':'application/json'}})
       .then(function(r){ return r.ok ? r.json() : null; })
       .catch(function(){ return null; });
+    window.__YXQ_HOME_PROMISE__ = p;
+    p.then(show);
   } catch (e) {}
 })();
 </script>
@@ -1005,8 +1081,22 @@ window.__YXQ_BOOT_FAIL__ = function(detail){
     img.addEventListener('error', function(){ clearTimeout(cap); finish('hero-error'); }, { once: true });
   }
   function begin(){
-    // 纯品牌启动页不再等待图片；app 脚本尽早启动，splash 由 app.js 在真实卡就绪后移除。
-    afterPaint(function(){ start('splash'); });
+    var root = document.getElementById('boot-skeleton');
+    var img = root && root.querySelector('.boot-photo');
+    var waited = 0;
+    function poll(){
+      if (img && img.getAttribute('src')) {
+        waitForHeroPhoto(img, function(reason){ afterPaint(function(){ start(reason); }); });
+        return;
+      }
+      waited += 50;
+      if (waited >= HERO_SRC_POLL_MS) {
+        afterPaint(function(){ start('no-hero-photo'); });
+        return;
+      }
+      setTimeout(poll, 50);
+    }
+    poll();
   }
   function recordPendingInteract(){
     if (!window.__YXQ_APP_MOUNTED__) window.__YXQ_BOOT_PENDING_INTERACT__ = true;

@@ -165,7 +165,7 @@ def main() -> int:
             page = context.new_page()
             page.goto(base_url + "/app", wait_until="domcontentloaded", timeout=60000)
             page.wait_for_selector(".van-tabbar", timeout=30000)
-            page.wait_for_selector("#boot-splash", state="detached", timeout=20000)
+            page.wait_for_selector("#boot-skeleton", state="detached", timeout=20000)
             page.wait_for_timeout(500)
             dismiss_guides(page)
             assert_card_photo(page)
