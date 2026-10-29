@@ -527,3 +527,45 @@ textarea::placeholder {
 .register-angel-qr .hint {
   margin: 0;
 }
+
+.register-angel-option {
+  margin: 4px 0 8px;
+  padding: 12px;
+  border: 1px solid #ffe3e8;
+  border-color: var(--shell-brand-line, #ffe3e8);
+  border-radius: 12px;
+  background: #fff7f8;
+  background: var(--shell-brand-wash, #fff7f8);
+}
+
+.register-angel-option .register-check {
+  margin: 0;
+}
+
+.register-angel-option .register-angel-qr {
+  margin: 10px 0 0;
+}
+
+.register-angel-press {
+  color: #1f7a3d;
+  font-weight: 600;
+}
+
+.register-angel-fallback {
+  display: inline-block;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #ad2139;
+  color: var(--shell-brand-deep, #ad2139);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.register-angel-fallback[hidden] {
+  display: none;
+}

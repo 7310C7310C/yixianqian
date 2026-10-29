@@ -6,12 +6,17 @@ import (
 	"encoding/hex"
 	"errors"
 	"image"
-	"image/jpeg"
+	_ "image/gif"
+	_ "image/jpeg"
 	"image/png"
 	"io"
 	"net/http"
 	"sync"
 	"time"
+
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
 )
@@ -58,6 +63,15 @@ func (c *siteAssetCache) delete(key string) {
 	c.mu.Lock()
 	delete(c.items, key)
 	c.mu.Unlock()
+}
+
+func qrFormatSupported(format string) bool {
+	switch format {
+	case "jpeg", "png", "gif", "webp", "bmp", "tiff":
+		return true
+	default:
+		return false
+	}
 }
 
 func init() { registerModule(registerSiteAssets) }
@@ -188,8 +202,9 @@ func (a *App) handleAdminAngelQRUpload(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || (format != "jpeg" && format != "png") {
-		a.renderAdminAngelQR(w, r, access, http.StatusBadRequest, "只支持 PNG 或 JPEG 图片。")
+	if err != nil || !qrFormatSupported(format) {
+		a.renderAdminAngelQR(w, r, access, http.StatusBadRequest,
+			"图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF。")
 		return
 	}
 	// Reject oversized dimensions before a full decode: a 2MB PNG/JPEG header
@@ -210,13 +225,10 @@ func (a *App) handleAdminAngelQRUpload(w http.ResponseWriter, r *http.Request, a
 	bounds := src.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
 	var encoded bytes.Buffer
+	// QR assets are always stored as PNG: lossless edges scan more reliably
+	// than JPEG artifacts, regardless of the uploaded format.
 	contentType := "image/png"
-	if format == "jpeg" {
-		contentType = "image/jpeg"
-		err = jpeg.Encode(&encoded, src, &jpeg.Options{Quality: 92})
-	} else {
-		err = png.Encode(&encoded, src)
-	}
+	err = png.Encode(&encoded, src)
 	if err != nil {
 		a.renderAdminAngelQR(w, r, access, http.StatusInternalServerError, "图片处理失败，请重试。")
 		return

@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
+	_ "image/gif"
 	"image/jpeg"
-	"image/png"
-	"net/http"
 	"strings"
 
+	_ "golang.org/x/image/bmp"
 	xdraw "golang.org/x/image/draw"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 )
 
 const (
@@ -23,13 +26,14 @@ const (
 )
 
 var (
-	ErrUnsupportedImage = errors.New("media: only JPEG and PNG images are supported")
+	ErrUnsupportedImage = errors.New("media: unsupported image format")
 	ErrHEIC             = errors.New("media: HEIC/HEIF images are not supported")
 	ErrImageDimensions  = errors.New("media: image dimensions exceed the limit")
 	ErrFileTooLarge     = errors.New("media: file exceeds the configured size limit")
 )
 
-// Processed is a validated original plus a JPEG thumbnail.
+// Processed is a validated original plus a JPEG thumbnail. Both are JPEG:
+// every supported input format is normalized to one storage/display format.
 type Processed struct {
 	Original    []byte
 	ContentType string
@@ -58,16 +62,11 @@ func ProcessWithLimits(data []byte, thumbSize, maxDim int, maxPixels int64) (Pro
 	if isHEIC(data) {
 		return Processed{}, ErrHEIC
 	}
-	contentType := http.DetectContentType(data)
-	if contentType != "image/jpeg" && contentType != "image/png" {
-		return Processed{}, ErrUnsupportedImage
-	}
-
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return Processed{}, fmt.Errorf("%w: decode config: %v", ErrUnsupportedImage, err)
 	}
-	if (format != "jpeg" && format != "png") || cfg.Width <= 0 || cfg.Height <= 0 {
+	if !supportedImageFormat(format) || cfg.Width <= 0 || cfg.Height <= 0 {
 		return Processed{}, ErrUnsupportedImage
 	}
 	if cfg.Width > maxDim || cfg.Height > maxDim ||
@@ -89,7 +88,10 @@ func ProcessWithLimits(data []byte, thumbSize, maxDim int, maxPixels int64) (Pro
 	}
 	oriented := applyOrientation(src, orientation)
 
-	original, err := encodeOriginal(oriented, decodedFormat)
+	// One storage format for every input: JPEG. Flatten transparency onto
+	// white first; Go's JPEG encoder would otherwise turn transparent pixels
+	// black. GIF/WebP animations are reduced to their first frame by Decode.
+	original, err := encodeJPEG(flattenWhite(oriented))
 	if err != nil {
 		return Processed{}, fmt.Errorf("%w: encode original: %v", ErrUnsupportedImage, err)
 	}
@@ -101,30 +103,42 @@ func ProcessWithLimits(data []byte, thumbSize, maxDim int, maxPixels int64) (Pro
 	bounds := oriented.Bounds()
 	return Processed{
 		Original:    original,
-		ContentType: contentType,
+		ContentType: "image/jpeg",
 		Width:       bounds.Dx(),
 		Height:      bounds.Dy(),
 		Thumbnail:   thumb,
 	}, nil
 }
 
-// encodeOriginal re-encodes the decoded image so the stored original carries no
-// container metadata (EXIF GPS, camera, timestamps, XMP/IPTC, PNG text chunks).
-func encodeOriginal(img image.Image, format string) ([]byte, error) {
-	var buf bytes.Buffer
+func supportedImageFormat(format string) bool {
 	switch format {
-	case "jpeg":
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}); err != nil {
-			return nil, err
-		}
-	case "png":
-		if err := png.Encode(&buf, img); err != nil {
-			return nil, err
-		}
+	case "jpeg", "png", "gif", "webp", "bmp", "tiff":
+		return true
 	default:
-		return nil, ErrUnsupportedImage
+		return false
+	}
+}
+
+// encodeJPEG re-encodes the decoded image so the stored original carries no
+// container metadata (EXIF GPS, camera, timestamps, XMP/IPTC, PNG text chunks).
+func encodeJPEG(img image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 92}); err != nil {
+		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// flattenWhite composites alpha onto white before JPEG encoding.
+func flattenWhite(src image.Image) image.Image {
+	if opaque, ok := src.(interface{ Opaque() bool }); ok && opaque.Opaque() {
+		return src
+	}
+	b := src.Bounds()
+	dst := image.NewRGBA(b)
+	draw.Draw(dst, b, &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+	draw.Draw(dst, b, src, b.Min, draw.Over)
+	return dst
 }
 
 func makeThumbnail(src image.Image, thumbSize int) ([]byte, error) {

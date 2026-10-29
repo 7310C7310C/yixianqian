@@ -233,7 +233,7 @@ func TestIntegrationAdminActivityCreateWithPoster(t *testing.T) {
 	}
 	thumbURL := "/admin/activities/" + strconv.FormatInt(activityID, 10) + "/poster?size=thumb"
 	for _, want := range []string{
-		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png"`,
+		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff"`,
 		`src="` + thumbURL + `"`, "活动海报.png", "最大 10 MB",
 	} {
 		if !strings.Contains(editHTML, want) {
@@ -247,13 +247,13 @@ func TestIntegrationAdminActivityCreateWithPoster(t *testing.T) {
 	posterPath := "/admin/activities/" + strconv.FormatInt(activityID, 10) + "/poster"
 	resp = client.get(posterPath)
 	_ = readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("admin poster status=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
 	// 海报原图也是媒体串流：顶层 document 打开（新窗口/直接导航）仍返回图片，不做页面 303。
 	resp = client.getWithHeaders(posterPath, map[string]string{"Sec-Fetch-Dest": "document"})
 	_ = readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("admin poster document status=%d type=%q",
 			resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
@@ -264,7 +264,7 @@ func TestIntegrationAdminActivityCreateWithPoster(t *testing.T) {
 	}
 	resp = client.get("/activities/" + reloaded.ActivityNo + "/poster")
 	_ = readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("public poster status=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
 }
@@ -400,7 +400,7 @@ func TestIntegrationAdminActivityPosterRejectsNonImage(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("non-image status = %d body=%s", resp.StatusCode, body)
 	}
-	if !strings.Contains(body, "只支持 JPEG 与 PNG 图片") || !strings.Contains(body, `name="poster"`) {
+	if !strings.Contains(body, "图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF") || !strings.Contains(body, `name="poster"`) {
 		t.Fatalf("non-image response was not the edit form: %s", body)
 	}
 	var activityCount int
@@ -564,7 +564,7 @@ func TestAdminActivityEditTemplatePosterForm(t *testing.T) {
 	}
 	editHTML := buf.String()
 	for _, want := range []string{
-		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png"`,
+		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff"`,
 		`src="/admin/activities/5/poster?size=thumb"`, "活动海报.png", "最大 10 MB",
 	} {
 		if !strings.Contains(editHTML, want) {
@@ -585,7 +585,7 @@ func TestAdminActivityEditTemplatePosterForm(t *testing.T) {
 	}
 	newHTML := buf.String()
 	for _, want := range []string{
-		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png"`,
+		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff"`,
 	} {
 		if !strings.Contains(newHTML, want) {
 			t.Fatalf("new template missing %q", want)

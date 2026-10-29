@@ -134,7 +134,11 @@ type ProfileUpdate struct {
 	Position        *string
 	Income          *string
 	House           *string
+	HouseNoteHave   *string
+	HouseNoteNone   *string
 	Driving         *string
+	DrivingNoteHave *string
+	DrivingNoteNone *string
 	Personality     *string
 	Family          *string
 	LiveWithParents *string
@@ -163,7 +167,9 @@ func (u ProfileUpdate) Empty() bool {
 		u.Education == nil &&
 		u.City == nil && u.Church == nil && u.ChurchGroup == nil &&
 		u.ChurchLocation == nil && u.NativePlace == nil && u.Industry == nil &&
-		u.Position == nil && u.Income == nil && u.House == nil && u.Driving == nil &&
+		u.Position == nil && u.Income == nil && u.House == nil &&
+		u.HouseNoteHave == nil && u.HouseNoteNone == nil &&
+		u.Driving == nil && u.DrivingNoteHave == nil && u.DrivingNoteNone == nil &&
 		u.Personality == nil && u.Family == nil && u.LiveWithParents == nil &&
 		u.PartnerCriteria == nil && u.SelfTraits == nil && u.SelfHobbies == nil &&
 		u.SelfSports == nil && u.MBTI == nil && u.PartnerTraits == nil &&
@@ -313,6 +319,7 @@ func (d *DB) GetProfileByLegacyID(ctx context.Context, legacyID string) (Profile
 // UpdateProfile validates and applies whitelisted fields. Values that fail
 // validation are rejected before any SQL runs.
 func (d *DB) UpdateProfile(ctx context.Context, userID int64, upd ProfileUpdate) (Profile, error) {
+	normalizeHouseCarNotes(&upd)
 	if err := validateProfileUpdate(&upd); err != nil {
 		return Profile{}, err
 	}
@@ -364,8 +371,20 @@ func (d *DB) UpdateProfile(ctx context.Context, userID int64, upd ProfileUpdate)
 	if upd.House != nil {
 		add("house", *upd.House)
 	}
+	if upd.HouseNoteHave != nil {
+		add("house_note_have", *upd.HouseNoteHave)
+	}
+	if upd.HouseNoteNone != nil {
+		add("house_note_none", *upd.HouseNoteNone)
+	}
 	if upd.Driving != nil {
 		add("driving", *upd.Driving)
+	}
+	if upd.DrivingNoteHave != nil {
+		add("driving_note_have", *upd.DrivingNoteHave)
+	}
+	if upd.DrivingNoteNone != nil {
+		add("driving_note_none", *upd.DrivingNoteNone)
 	}
 	if upd.Personality != nil {
 		add("personality", *upd.Personality)
@@ -449,6 +468,32 @@ func (d *DB) IDCardHashInUse(ctx context.Context, hash string, excludeUserID int
 	return exists, nil
 }
 
+// normalizeHouseCarNotes clears the note that belongs to the other option so
+// switching 有/无 cannot leave stale text in the unused column.
+func normalizeHouseCarNotes(upd *ProfileUpdate) {
+	empty := func() *string { v := ""; return &v }
+	if upd.House != nil {
+		switch *upd.House {
+		case "有":
+			upd.HouseNoteNone = empty()
+		case "无":
+			upd.HouseNoteHave = empty()
+		default:
+			upd.HouseNoteHave, upd.HouseNoteNone = empty(), empty()
+		}
+	}
+	if upd.Driving != nil {
+		switch *upd.Driving {
+		case "有":
+			upd.DrivingNoteNone = empty()
+		case "无":
+			upd.DrivingNoteHave = empty()
+		default:
+			upd.DrivingNoteHave, upd.DrivingNoteNone = empty(), empty()
+		}
+	}
+}
+
 func validateProfileUpdate(upd *ProfileUpdate) error {
 	if err := cleanProfileText("nickname", "昵称", upd.Nickname, 30, false); err != nil {
 		return err
@@ -487,6 +532,18 @@ func validateProfileUpdate(upd *ProfileUpdate) error {
 		return err
 	}
 	if err := validateProfileSelect("driving", "汽车", upd.Driving, ProfileYesNoOptions); err != nil {
+		return err
+	}
+	if err := cleanProfileText("house_note_have", "房产补充", upd.HouseNoteHave, 500, true); err != nil {
+		return err
+	}
+	if err := cleanProfileText("house_note_none", "房产补充", upd.HouseNoteNone, 500, true); err != nil {
+		return err
+	}
+	if err := cleanProfileText("driving_note_have", "车辆补充", upd.DrivingNoteHave, 500, true); err != nil {
+		return err
+	}
+	if err := cleanProfileText("driving_note_none", "车辆补充", upd.DrivingNoteNone, 500, true); err != nil {
 		return err
 	}
 	if err := validateProfileSelect("live_with_parents", "婚后与父母同住", upd.LiveWithParents, ProfileLiveWithOptions); err != nil {

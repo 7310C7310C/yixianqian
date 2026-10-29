@@ -1704,6 +1704,10 @@ const yxqApp = createApp({
         const canvas = document.createElement('canvas');
         canvas.width=nw; canvas.height=nh;
         const ctx = canvas.getContext('2d');
+        // JPEG has no alpha; fill white first so transparent PNG/WebP pixels
+        // do not become black before the server's JPEG normalization.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, nw, nh);
         ctx.drawImage(img, 0, 0, nw, nh);
         const blob = await new Promise(r=> canvas.toBlob(r, 'image/jpeg', quality));
         if (!blob || blob.size>=file.size) return file;

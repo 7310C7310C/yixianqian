@@ -7,9 +7,13 @@ import (
 	"hash/crc32"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"testing"
+
+	"golang.org/x/image/bmp"
+	"golang.org/x/image/tiff"
 )
 
 func encodeTestImage(t *testing.T, format string, w, h int) []byte {
@@ -27,6 +31,12 @@ func encodeTestImage(t *testing.T, format string, w, h int) []byte {
 		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90})
 	case "png":
 		err = png.Encode(&buf, img)
+	case "gif":
+		err = gif.Encode(&buf, img, nil)
+	case "bmp":
+		err = bmp.Encode(&buf, img)
+	case "tiff":
+		err = tiff.Encode(&buf, img, nil)
 	default:
 		t.Fatalf("unknown format %q", format)
 	}
@@ -83,8 +93,12 @@ func TestProcessPNGDoesNotUpscale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("process: %v", err)
 	}
-	if got.ContentType != "image/png" {
+	if got.ContentType != "image/jpeg" {
 		t.Fatalf("content type = %q", got.ContentType)
+	}
+	_, outFormat, err := image.DecodeConfig(bytes.NewReader(got.Original))
+	if err != nil || outFormat != "jpeg" {
+		t.Fatalf("original format = %q err=%v, want jpeg", outFormat, err)
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(got.Thumbnail))
 	if err != nil {
@@ -332,8 +346,8 @@ func TestProcessStripsPNGTextChunks(t *testing.T) {
 	if bytes.Contains(got.Original, []byte("tEXt")) || bytes.Contains(got.Original, []byte("GPSLatitude")) {
 		t.Fatal("PNG text metadata survived")
 	}
-	if _, format, err := image.DecodeConfig(bytes.NewReader(got.Original)); err != nil || format != "png" {
-		t.Fatalf("decode rewritten png: format=%q err=%v", format, err)
+	if _, format, err := image.DecodeConfig(bytes.NewReader(got.Original)); err != nil || format != "jpeg" {
+		t.Fatalf("decode rewritten original: format=%q err=%v", format, err)
 	}
 }
 
@@ -490,5 +504,27 @@ func TestApplyOrientationAllCases(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestProcessExtraFormatsNormalizeToJPEG(t *testing.T) {
+	for _, format := range []string{"gif", "bmp", "tiff"} {
+		t.Run(format, func(t *testing.T) {
+			data := encodeTestImage(t, format, 120, 80)
+			got, err := Process(data, 64)
+			if err != nil {
+				t.Fatalf("process %s: %v", format, err)
+			}
+			if got.ContentType != "image/jpeg" {
+				t.Fatalf("%s content type = %q, want image/jpeg", format, got.ContentType)
+			}
+			_, outFormat, err := image.DecodeConfig(bytes.NewReader(got.Original))
+			if err != nil || outFormat != "jpeg" {
+				t.Fatalf("%s original format = %q err=%v, want jpeg", format, outFormat, err)
+			}
+			if got.Width != 120 || got.Height != 80 {
+				t.Fatalf("%s dimensions = %dx%d", format, got.Width, got.Height)
+			}
+		})
 	}
 }

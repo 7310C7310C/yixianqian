@@ -53,7 +53,7 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 		Phone:           "13800000000",
 	}
 	fields := legacyProfileEditable(profile)
-	if len(fields) != 26 {
+	if len(fields) != 30 {
 		t.Fatalf("editable fields = %d", len(fields))
 	}
 	byName := map[string]legacyEditableField{}
@@ -64,7 +64,9 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 		legacyFieldIDCard, legacyFieldNickname, legacyFieldHeight, legacyFieldEducation, legacyFieldCity,
 		legacyFieldChurch, legacyFieldChurchGroup, legacyFieldChurchLocation,
 		legacyFieldIndustry, legacyFieldPosition, legacyFieldIncome, legacyFieldHouse,
-		legacyFieldDriving, legacyFieldPersonality, legacyFieldSelfTraits,
+		legacyFieldHouseNoteHave, legacyFieldHouseNoteNone,
+		legacyFieldDriving, legacyFieldDrivingNoteHave, legacyFieldDrivingNoteNone,
+		legacyFieldPersonality, legacyFieldSelfTraits,
 		legacyFieldSelfHobbies, legacyFieldSelfSports, legacyFieldMBTI,
 		legacyFieldLiveWithParents, legacyFieldFamily, legacyFieldPartnerCriteria,
 		legacyFieldPartnerTraits, legacyFieldPartnerHobbies, legacyFieldPartnerSports,

@@ -245,7 +245,11 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		Position:        input.Position,
 		Income:          input.Income,
 		House:           input.House,
+		HouseNoteHave:   input.HouseNoteHave,
+		HouseNoteNone:   input.HouseNoteNone,
 		Driving:         input.Driving,
+		DrivingNoteHave: input.DrivingNoteHave,
+		DrivingNoteNone: input.DrivingNoteNone,
 		Marriage:        input.Marriage,
 		Family:          input.Family,
 		LiveWithParents: input.LiveWithParents,
@@ -439,6 +443,12 @@ func (a *App) stageRegistrationPhotos(files []*multipart.FileHeader, dir string)
 			a.cfg.MediaMaxDim, a.cfg.MediaMaxPixels)
 		if err != nil {
 			return nil, err
+		}
+		// A small compressed source can expand past MediaMaxBytes when
+		// normalized to JPEG; enforce the same per-photo bound as profile and
+		// poster uploads before staging/creating the user.
+		if int64(len(processed.Original)) > a.cfg.MediaMaxBytes {
+			return nil, media.ErrFileTooLarge
 		}
 		originalPath := fmt.Sprintf("%s/%d-original", dir, i+1)
 		thumbPath := fmt.Sprintf("%s/%d-thumb.jpg", dir, i+1)

@@ -38,9 +38,10 @@ import (
 // removing the brand splash and returning to the pre-static-island hero.
 // 2026-10-29 (login dialog + register regions/QR): 52 invalidated home.css/
 // home.js/register.css/register.js/admin.css and added the register.js region
-// loader. 53 covers the review fixes to home.js/register.js. Keep admin
-// @import query values in sync.
-const assetVersion = "53"
+// loader. 53 covered the review fixes to home.js/register.js; 54 covers the
+// house/car notes, QR long-press gate and unified image-format changes. 55
+// covers the SPA compression white-fill fix. Keep admin @import values in sync.
+const assetVersion = "55"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

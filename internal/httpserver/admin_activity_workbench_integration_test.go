@@ -212,7 +212,7 @@ func TestIntegrationAdminActivityAttendancePosterAndBroadcast(t *testing.T) {
 		t.Fatalf("poster not linked: %+v err=%v", reloaded, err)
 	}
 	resp = client.get(posterPath)
-	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("poster stream status=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
 	_ = readBody(t, resp)

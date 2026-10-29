@@ -180,6 +180,11 @@ func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (d
 	if err != nil {
 		return db.Media{}, err
 	}
+	// A small but highly compressed source can expand past the limit when
+	// normalized to PNG; enforce the same bound on the stored bytes.
+	if int64(len(processed.Original)) > a.cfg.MediaMaxBytes {
+		return db.Media{}, media.ErrFileTooLarge
+	}
 
 	id, err := platform.NewUUID()
 	if err != nil {
@@ -270,7 +275,7 @@ func uploadErrorDetails(err error) (status int, code, message string) {
 	case errors.Is(err, media.ErrFileTooLarge):
 		return http.StatusRequestEntityTooLarge, "file_too_large", "文件超过大小上限。"
 	case errors.Is(err, media.ErrUnsupportedImage):
-		return http.StatusBadRequest, "unsupported_type", "只支持 JPEG 与 PNG 图片。"
+		return http.StatusBadRequest, "unsupported_type", "图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF。"
 	case errors.Is(err, media.ErrImageDimensions):
 		return http.StatusBadRequest, "image_dimensions", "图片尺寸过大。"
 	case errors.Is(err, errNoFile):

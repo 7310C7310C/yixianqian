@@ -54,7 +54,11 @@ type RegisterParams struct {
 	Position        string
 	Income          string
 	House           string
+	HouseNoteHave   string
+	HouseNoteNone   string
 	Driving         string
+	DrivingNoteHave string
+	DrivingNoteNone string
 	Marriage        string
 	Family          string
 	LiveWithParents string
@@ -145,7 +149,8 @@ func insertRegisteredUserTx(ctx context.Context, tx pgx.Tx, p RegisterParams) (U
 		`INSERT INTO users (
 		   legacy_user_id, phone, name, nickname, gender, birthday, height_cm, education,
 		   baptismal_name, church, church_location, church_group, native_place,
-		   city, industry, position, income, house, driving, marriage, family,
+		   city, industry, position, income, house, house_note_have, house_note_none,
+		   driving, driving_note_have, driving_note_none, marriage, family,
 		   live_with_parents, personality, self_traits, self_hobbies, self_sports,
 		   mbti, partner_criteria, partner_traits, partner_hobbies, partner_sports,
 		   wechat, id_card_ciphertext, id_card_last4, id_card_hash, contact_consent,
@@ -153,15 +158,16 @@ func insertRegisteredUserTx(ctx context.Context, tx pgx.Tx, p RegisterParams) (U
 		 ) VALUES (
 		   'U-' || nextval('user_no_seq'), $1, $2, $3, $4, $5, $6, $7,
 		   $8, $9, $10, $11, $12,
-		   $13, $14, $15, $16, $17, $18, $19, $20,
-		   $21, $22, $23::jsonb, $24::jsonb, $25::jsonb,
-		   $26::jsonb, $27, $28::jsonb, $29::jsonb, $30::jsonb,
-		   $31, $32, $33, $34, $35,
-		   $36, $37, 'active', 'pending', now()
+		   $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25,
+		   $26, $27::jsonb, $28::jsonb, $29::jsonb,
+		   $30::jsonb, $31, $32::jsonb, $33::jsonb, $34::jsonb,
+		   $35, $36, $37, $38, $39,
+		   $40, $41, 'active', 'pending', now()
 		 ) RETURNING `+userColumns,
 		p.Phone, p.Name, p.Nickname, p.Gender, p.Birthday, p.HeightCM, p.Education,
 		p.BaptismalName, p.Church, p.ChurchLocation, p.ChurchGroup, p.NativePlace,
-		p.City, p.Industry, p.Position, p.Income, p.House, p.Driving, p.Marriage, p.Family,
+		p.City, p.Industry, p.Position, p.Income, p.House, p.HouseNoteHave, p.HouseNoteNone,
+		p.Driving, p.DrivingNoteHave, p.DrivingNoteNone, p.Marriage, p.Family,
 		p.LiveWithParents, p.Personality, marshalStringList(p.SelfTraits),
 		marshalStringList(p.SelfHobbies), marshalStringList(p.SelfSports),
 		marshalStringList(p.MBTI), p.PartnerCriteria,

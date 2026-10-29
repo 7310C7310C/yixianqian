@@ -86,21 +86,15 @@
   var COPY_REGION_FAILED = '\u5730\u533a\u6570\u636e\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u6539\u7528\u624b\u52a8\u586b\u5199\u3002';
   var COPY_REGION_REQUIRED = '\u8bf7\u9009\u62e9\u5b8c\u6574\u7684\u5730\u533a\u3002';
   var COPY_REGION_MANUALREQUIRED = '\u8bf7\u586b\u5199\u5730\u533a\u3002';
-  var COPY_ID_OK = '\u8eab\u4efd\u8bc1\u6821\u9a8c\u901a\u8fc7';
-  var COPY_ID_FORMAT = '\u8eab\u4efd\u8bc1\u53f7\u683c\u5f0f\u4e0d\u6b63\u786e';
-  var COPY_ID_CHECKSUM = '\u8eab\u4efd\u8bc1\u6821\u9a8c\u4f4d\u4e0d\u6b63\u786e';
-  var COPY_ID_BIRTH = '\u8eab\u4efd\u8bc1\u5185\u51fa\u751f\u65e5\u671f\u65e0\u6548';
-  var COPY_ID_MISMATCH = '\u4e0e\u586b\u5199\u7684\u751f\u65e5\u4e0d\u4e00\u81f4';
-  var COPY_ID_UNDERAGE = '\u672a\u6ee1 18 \u5c81';
-  var COPY_ID_AUTOFILL = '\u5df2\u6309\u8eab\u4efd\u8bc1\u586b\u5199\u751f\u65e5';
-  var COPY_ID_PROVINCE = '\u8eab\u4efd\u8bc1\u7701\u4efd\u4ee3\u7801\u4e0d\u5728\u5e38\u89c1\u8303\u56f4\u5185';
-  var COPY_PHONE_OK = '\u624b\u673a\u53f7\u7801\u683c\u5f0f\u6b63\u786e';
-  var COPY_PHONE_BAD = '\u8bf7\u586b\u5199 11 \u4f4d\u4e2d\u56fd\u5927\u9646\u624b\u673a\u53f7\u7801';
-  var COPY_WECHAT_OK = '\u5fae\u4fe1\u53f7\u683c\u5f0f\u6b63\u786e';
-  var COPY_WECHAT_BAD = '\u5fae\u4fe1\u53f7\u9700\u4e3a 5-64 \u4e2a\u5b57\u6bcd\u3001\u6570\u5b57\u6216 _ - . @ +';
-  var COPY_BIRTHDAY_BAD = '\u9700\u5e74\u6ee1 18 \u5c81\u624d\u80fd\u6ce8\u518c';
-  var COPY_INVITER_BAD = '\u9080\u8bf7\u4eba ID \u5f62\u5982 U-0001';
-  var COPY_HEIGHT_BAD = '\u8eab\u9ad8\u9700\u5728 100-250 \u5398\u7c73\u4e4b\u95f4';
+  var COPY_ID_BAD = '\u8eab\u4efd\u8bc1\u53f7\u7801\u4e0d\u6b63\u786e';
+  var COPY_PHONE_BAD = '\u624b\u673a\u53f7\u7801\u4e0d\u6b63\u786e';
+  var COPY_WECHAT_BAD = '\u5fae\u4fe1\u53f7\u4e0d\u6b63\u786e';
+  var COPY_BIRTHDAY_BAD = '\u751f\u65e5\u4e0d\u6b63\u786e\uff08\u9700\u5e74\u6ee1 18 \u5c81\uff09';
+  var COPY_INVITER_BAD = '\u9080\u8bf7\u4eba ID \u4e0d\u6b63\u786e';
+  var COPY_HEIGHT_BAD = '\u8eab\u9ad8\u4e0d\u6b63\u786e';
+  var COPY_ANGEL_PRESSED = '\u5df2\u68c0\u6d4b\u5230\u957f\u6309\uff1b\u8bf7\u786e\u8ba4\u5df2\u4fdd\u5b58/\u6dfb\u52a0\u5c0f\u5929\u4f7f\u3002';
+  var COPY_ANGEL_PRESS_HINT = '\u8bf7\u5148\u957f\u6309\u4e8c\u7ef4\u7801\u4fdd\u5b58/\u6dfb\u52a0\u5c0f\u5929\u4f7f\uff0c\u518d\u52fe\u9009\u786e\u8ba4\u3002';
+  var COPY_ANGEL_PRESS_DONE = '\u5df2\u6539\u4e3a\u624b\u52a8\u786e\u8ba4\uff0c\u8bf7\u52fe\u9009\u5e76\u7ee7\u7eed\u3002';
 
   var REGION_CACHE = null;
 
@@ -400,53 +394,37 @@
     var birthday = '';
     if (/^[0-9]{17}[0-9X]$/.test(raw)) {
       if (idChecksum(raw.substr(0, 17)) !== raw.charAt(17)) {
-        setStatus(input, COPY_ID_CHECKSUM, true);
+        setStatus(input, COPY_ID_BAD, true);
         return;
       }
       birthday = birthdayOfId(raw);
     } else if (/^[0-9]{15}$/.test(raw)) {
       birthday = birthdayOfId(raw);
     } else {
-      setStatus(input, COPY_ID_FORMAT, true);
+      setStatus(input, COPY_ID_BAD, true);
       return;
     }
-    if (!validDate(birthday)) {
-      setStatus(input, COPY_ID_BIRTH, true);
-      return;
-    }
-    if (!ageAtLeast18(birthday)) {
-      setStatus(input, COPY_ID_UNDERAGE, true);
+    if (!validDate(birthday) || !ageAtLeast18(birthday)) {
+      setStatus(input, COPY_ID_BAD, true);
       return;
     }
     var birthdayInput = document.getElementById('f_birthday');
     if (birthdayInput) {
       if (!birthdayInput.value) {
         birthdayInput.value = birthday;
-        setStatus(input, COPY_ID_AUTOFILL, false);
       } else if (birthdayInput.value !== birthday) {
-        setStatus(input, COPY_ID_MISMATCH, true);
+        setStatus(input, COPY_ID_BAD, true);
         return;
       }
     }
-    var province = raw.substr(0, 2);
-    var known = false;
-    if (REGION_CACHE) {
-      for (var i = 0; i < REGION_CACHE.length; i++) {
-        if (REGION_CACHE[i].code === province) { known = true; break; }
-      }
-    }
-    if (REGION_CACHE && !known) {
-      setStatus(input, COPY_ID_PROVINCE, false);
-      return;
-    }
-    setStatus(input, COPY_ID_OK, false);
+    setStatus(input, '', false);
   }
 
   function validatePhone(input) {
     var raw = String(input.value || '').trim();
     if (!raw) { setStatus(input, '', false); return; }
     if (/^1[3-9][0-9]{9}$/.test(normalizePhone(raw))) {
-      setStatus(input, COPY_PHONE_OK, false);
+      setStatus(input, '', false);
     } else {
       setStatus(input, COPY_PHONE_BAD, true);
     }
@@ -456,7 +434,7 @@
     var raw = String(input.value || '').trim();
     if (!raw) { setStatus(input, '', false); return; }
     if (/^[A-Za-z0-9_.@+-]{5,64}$/.test(raw)) {
-      setStatus(input, COPY_WECHAT_OK, false);
+      setStatus(input, '', false);
     } else {
       setStatus(input, COPY_WECHAT_BAD, true);
     }
@@ -464,8 +442,7 @@
 
   function validateBirthday(input) {
     if (!input.value) { setStatus(input, '', false); return; }
-    if (!validDate(input.value)) { setStatus(input, COPY_BIRTHDAY_BAD, true); return; }
-    if (!ageAtLeast18(input.value)) {
+    if (!validDate(input.value) || !ageAtLeast18(input.value)) {
       setStatus(input, COPY_BIRTHDAY_BAD, true);
       return;
     }
@@ -538,6 +515,98 @@
     }
   }
 
+
+  function initAngelQR() {
+    var img = document.querySelector('[data-angel-qr-image]');
+    var ack = document.querySelector('input[name="angel_ack"]');
+    var status = document.querySelector('[data-angel-press-status]');
+    var fallback = document.querySelector('[data-angel-fallback]');
+    if (!img || !ack) return;
+    var timer = null;
+
+    function setStatus(text) {
+      if (!status) return;
+      status.textContent = text || '';
+      status.hidden = !text;
+    }
+
+    function unlock(manual) {
+      ack.disabled = false;
+      if (!manual) ack.checked = true;
+      if (fallback) fallback.hidden = true;
+      setStatus(manual ? COPY_ANGEL_PRESS_DONE : COPY_ANGEL_PRESSED);
+    }
+
+    function clearTimer() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    // Browsers do not expose a "saved to album" event. We can only detect a
+    // long press/right-click; it unlocks and checks the explicit confirmation
+    // box, which remains the enforceable submit gate. The fallback button
+    // keeps keyboard/desktop users unblocked.
+    // Always require a fresh long-press/right-click (or the explicit
+    // fallback) on a QR page, even when a rejected POST re-rendered the box as
+    // checked. The server cannot distinguish a forged checked field anyway;
+    // this is a UX gate, not an authorization control.
+    ack.disabled = true;
+    if (fallback) fallback.hidden = false;
+    setStatus(COPY_ANGEL_PRESS_HINT);
+    if (fallback) {
+      fallback.addEventListener('click', function () {
+        unlock(true);
+        ack.focus();
+      });
+    }
+    img.addEventListener('contextmenu', function () {
+      unlock(false);
+    });
+    img.addEventListener('touchstart', function () {
+      clearTimer();
+      timer = setTimeout(function () { unlock(false); }, 700);
+    }, { passive: true });
+    img.addEventListener('touchmove', clearTimer, { passive: true });
+    img.addEventListener('touchend', clearTimer, { passive: true });
+    img.addEventListener('touchcancel', clearTimer, { passive: true });
+
+    var form = img.closest('form');
+    if (form) {
+      form.addEventListener('submit', function (event) {
+        if (ack.disabled) {
+          event.preventDefault();
+          setStatus(COPY_ANGEL_PRESS_HINT);
+          if (fallback) fallback.focus();
+        }
+      }, true);
+    }
+  }
+
+  function initConditionalFields() {
+    var nodes = document.querySelectorAll('[data-show-when-field]');
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      var targetName = node.getAttribute('data-show-when-field');
+      var target = document.querySelector('select[name="' + targetName + '"]');
+      if (!target) continue;
+      var input = node.querySelector('input[name="' + node.id.replace(/^field_/, '') + '"]');
+      var optionIndex = parseInt(node.getAttribute('data-show-when-option'), 10);
+      if (!isFinite(optionIndex)) continue;
+      (function (node, target, input, optionIndex) {
+        function sync() {
+          var option = target.options[optionIndex + 1];
+          var show = !!option && target.value === option.value;
+          node.hidden = !show;
+          if (!show && input) input.value = '';
+        }
+        target.addEventListener('change', sync);
+        sync();
+      })(node, target, input, optionIndex);
+    }
+  }
+
   function start() {
     fillText();
     fillPlaceholders();
@@ -545,6 +614,8 @@
     fillValues();
     fillError();
     fillAria();
+    initConditionalFields();
+    initAngelQR();
     bindValidation();
     loadRegions();
     body.classList.remove('copy-pending');

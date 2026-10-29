@@ -124,7 +124,7 @@ func homeFlash(r *http.Request) (notice, errMessage string) {
 	case "too_large":
 		errMessage = "文件超过大小上限。"
 	case "unsupported":
-		errMessage = "只支持 JPEG 与 PNG 图片。"
+		errMessage = "图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF。"
 	case "dimensions":
 		errMessage = "图片尺寸过大。"
 	case "no_file":

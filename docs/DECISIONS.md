@@ -135,7 +135,8 @@ sources: []
 - 决策（2026-10-29）：独立 `/login` 页并入匿名首页登录弹框；`GET /login` 303 `/?login=1`（保留 `next`/`logged_out`/`activated`），`POST /login` 契约不变；弹框文案仍由 `home.js` 注入，首页保持 0 汉字。
 - 决策（2026-10-29）：注册页「小天使二维码」由后台「内容与安全 → 小天使二维码」上传/更换；资产存 `site_assets`，公开只读 `/angel-qr`（5 分钟缓存）；与已废弃的首页二维码无关，首页仍不展示二维码。
 - 决策（2026-10-29）：注册地区改省-市 / 市-区联动（值保持 `广东深圳`/`深圳南山`），行业/来源改 combobox，身份证即时校验并限 18+，手机限 11 位大陆号码；地区数据 vendored（2023，WTFPL）。
-- 不要做：不恢复独立登录页；不把二维码放回首页；不把身份证改回选填（与门禁冲突）。
+- 决策（2026-10-29）：注册校验每个字段只给一条通用错误（身份证不再提示校验位/证内生日/省份子原因）；房/车补充内容为条件字段；用户照片统一转 JPEG，二维码统一转 PNG，支持 JPEG/PNG/WebP/GIF/BMP/TIFF（HEIC 仍需转换）。
+- 不要做：不恢复独立登录页；不把二维码放回首页；不把身份证改回选填（与门禁冲突）；不再按输入格式分叉存储图片。
 - 验证：`TestPublicScanPagesAreHanFree`、`TestRegisterCopyCatalogIsASCII`、`TestParseRegisterRegionFields`、`TestRegisterRegionsEndpoint`、Playwright `public_scan_pages_smoke.py`。
 
 ## 4. 性能与前端构建

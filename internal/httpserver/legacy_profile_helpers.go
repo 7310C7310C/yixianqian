@@ -28,7 +28,11 @@ const (
 	legacyFieldPosition        = "职位"
 	legacyFieldIncome          = "年收入"
 	legacyFieldHouse           = "房产状况"
+	legacyFieldHouseNoteHave   = "房产状况-有-补充内容"
+	legacyFieldHouseNoteNone   = "房产状况-无-补充内容"
 	legacyFieldDriving         = "是否有车"
+	legacyFieldDrivingNoteHave = "是否有车-有-补充内容"
+	legacyFieldDrivingNoteNone = "是否有车-无-补充内容"
 	legacyFieldPersonality     = "我是一个怎样的人"
 	legacyFieldSelfTraits      = "我是一个怎样的人-性格"
 	legacyFieldSelfHobbies     = "我是一个怎样的人-爱好"
@@ -75,7 +79,11 @@ func legacyProfileEditable(p db.Profile) []legacyEditableField {
 		{Field: legacyFieldPosition, Label: "职位", Type: "text", Value: p.Position},
 		{Field: legacyFieldIncome, Label: "年收入", Type: "select", Options: db.ProfileIncomeOptions, Value: p.Income},
 		{Field: legacyFieldHouse, Label: "房产状况", Type: "select", Options: db.ProfileYesNoOptions, Value: p.House},
+		{Field: legacyFieldHouseNoteHave, Label: "房产补充（有房，公开）", Type: "text", Value: p.HouseNoteHave, Hint: "可注明城市、平米数；此信息会公开。"},
+		{Field: legacyFieldHouseNoteNone, Label: "房产补充（无房，公开）", Type: "text", Value: p.HouseNoteNone},
 		{Field: legacyFieldDriving, Label: "汽车", Type: "select", Options: db.ProfileYesNoOptions, Value: p.Driving},
+		{Field: legacyFieldDrivingNoteHave, Label: "车辆补充（有车，公开）", Type: "text", Value: p.DrivingNoteHave},
+		{Field: legacyFieldDrivingNoteNone, Label: "车辆补充（无车，公开）", Type: "text", Value: p.DrivingNoteNone},
 		{Field: legacyFieldPersonality, Label: "我是怎样的人", Type: "text", Long: true, Value: p.Personality},
 		{Field: legacyFieldSelfTraits, Label: "性格", Type: "multi", Options: db.ProfileTraitOptions, Value: legacyStringList(p.SelfTraits)},
 		{Field: legacyFieldSelfHobbies, Label: "爱好", Type: "multi", Options: db.ProfileHobbyOptions, Value: legacyStringList(p.SelfHobbies)},
@@ -224,10 +232,30 @@ func legacyProfileUpdateFromJSON(body map[string]any) (db.ProfileUpdate, error) 
 	} else if ok {
 		upd.House = v
 	}
+	if v, ok, err := legacyStringValue(body, legacyFieldHouseNoteHave, "house_note_have"); err != nil {
+		return upd, err
+	} else if ok {
+		upd.HouseNoteHave = v
+	}
+	if v, ok, err := legacyStringValue(body, legacyFieldHouseNoteNone, "house_note_none"); err != nil {
+		return upd, err
+	} else if ok {
+		upd.HouseNoteNone = v
+	}
 	if v, ok, err := legacyStringValue(body, legacyFieldDriving, "汽车", "driving"); err != nil {
 		return upd, err
 	} else if ok {
 		upd.Driving = v
+	}
+	if v, ok, err := legacyStringValue(body, legacyFieldDrivingNoteHave, "driving_note_have"); err != nil {
+		return upd, err
+	} else if ok {
+		upd.DrivingNoteHave = v
+	}
+	if v, ok, err := legacyStringValue(body, legacyFieldDrivingNoteNone, "driving_note_none"); err != nil {
+		return upd, err
+	} else if ok {
+		upd.DrivingNoteNone = v
 	}
 	if v, ok, err := legacyStringValue(body, legacyFieldPersonality, "personality"); err != nil {
 		return upd, err

@@ -1,6 +1,6 @@
 {{define "register_field"}}
 {{$field := .}}
-<div class="register-field" id="field_{{.Name}}">
+<div class="register-field" id="field_{{.Name}}"{{if .HasShowWhen}} data-show-when-field="{{.ShowWhenField}}" data-show-when-option="{{.ShowWhenOption}}" hidden{{end}}>
   {{if eq .Type "multi"}}
   <fieldset class="register-multi">
     <legend><span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</legend>
@@ -15,16 +15,31 @@
     </div>
   </fieldset>
   {{else if eq .Type "checkbox"}}
-  {{if .ShowQR}}
-  <div class="register-angel-qr">
-    <img src="/angel-qr?v={{assetVersion}}" alt="" width="220" height="299" loading="lazy">
+  {{if eq .Name "angel_ack"}}
+  <div class="register-angel-option">
+    <label class="register-check">
+      <input type="checkbox" name="{{.Name}}" data-register-option="{{.Name}}.0"{{if .Checked}} checked{{end}}{{if .Required}} required{{end}}>
+      <span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}
+    </label>
+    {{if .ShowQR}}
+    <div class="register-angel-qr">
+      <img src="/angel-qr?v={{assetVersion}}" alt="" width="220" height="299" loading="lazy" data-angel-qr-image>
+      <p class="hint" data-register-text="field.angel_ack.qrHint"></p>
+      <p class="hint register-angel-press" data-angel-press-status hidden></p>
+      <button type="button" class="register-angel-fallback" data-angel-fallback hidden>
+        <span data-register-text="field.angel_ack.pressFallback"></span>
+      </button>
+    </div>
+    {{end}}
+    {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
   </div>
-  {{end}}
+  {{else}}
   <label class="register-check">
     <input type="checkbox" name="{{.Name}}" data-register-option="{{.Name}}.0"{{if .Checked}} checked{{end}}{{if .Required}} required{{end}}>
     <span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}
   </label>
   {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
+  {{end}}
   {{else if eq .Type "select"}}
   <label for="f_{{.Name}}"><span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
   <select id="f_{{.Name}}" name="{{.Name}}"{{if .Required}} required{{end}}>

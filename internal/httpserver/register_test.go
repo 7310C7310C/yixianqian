@@ -58,7 +58,11 @@ func validRegisterValues(t *testing.T, phone, idCard, birthday string) url.Value
 		"position":                 {"工程师"},
 		"income":                   {"20W - 30W"},
 		"house":                    {"有"},
+		"house_note_have":          {"深圳南山 89 平米"},
+		"house_note_none":          {"无房"},
 		"driving":                  {"无"},
+		"driving_note_have":        {"粤 B"},
+		"driving_note_none":        {"无车"},
 		"marriage":                 {"没结过婚"},
 		"live_with_parents":        {"独立生活"},
 		"personality":              {"性格开朗，喜欢服务。"},
@@ -216,6 +220,11 @@ func TestParseRegisterInputValid(t *testing.T) {
 	if in.HeightCM != 165 || len(in.SelfTraits) != 2 || in.Birthday.Format("2006-01-02") != "1990-01-01" {
 		t.Fatalf("unexpected input: %+v", in)
 	}
+	if in.HouseNoteHave != "深圳南山 89 平米" || in.HouseNoteNone != "" ||
+		in.DrivingNoteNone != "无车" || in.DrivingNoteHave != "" {
+		t.Fatalf("house/car notes = %q/%q/%q/%q", in.HouseNoteHave, in.HouseNoteNone,
+			in.DrivingNoteHave, in.DrivingNoteNone)
+	}
 }
 
 func TestParseRegisterInputRejectsInvalidFields(t *testing.T) {
@@ -230,16 +239,16 @@ func TestParseRegisterInputRejectsInvalidFields(t *testing.T) {
 		want   string
 	}{
 		{"missing name", func(v url.Values) { v.Del("name") }, "姓名"},
-		{"bad phone", func(v url.Values) { v.Set("phone", "123") }, "手机号码格式"},
-		{"bad id checksum", func(v url.Values) { v.Set("id_card", badID) }, "身份证号码格式"},
+		{"bad phone", func(v url.Values) { v.Set("phone", "123") }, "手机号码"},
+		{"bad id checksum", func(v url.Values) { v.Set("id_card", badID) }, "身份证号码"},
 		{"bad option", func(v url.Values) { v.Set("gender", "其他") }, "选项不正确"},
 		{"bad multi", func(v url.Values) { v["self_traits"] = []string{"不存在"} }, "选项不正确"},
 		{"missing ack", func(v url.Values) { v.Del("angel_ack") }, "小天使"},
 		{"mismatched password", func(v url.Values) { v.Set("password_confirm", "different-123") }, "不一致"},
 		{"short password", func(v url.Values) { v.Set("password", "short"); v.Set("password_confirm", "short") }, "至少需要 8"},
-		{"bad height", func(v url.Values) { v.Set("height_cm", "99") }, "100-250"},
+		{"bad height", func(v url.Values) { v.Set("height_cm", "99") }, "身高"},
 		{"bad birthday", func(v url.Values) { v.Set("birthday", "1990-13-01") }, "生日格式"},
-		{"id birthday mismatch", func(v url.Values) { v.Set("birthday", "1990-01-02") }, "出生日期"},
+		{"id birthday mismatch", func(v url.Values) { v.Set("birthday", "1990-01-02") }, "身份证号码"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -285,6 +294,8 @@ func TestRegisterTemplatesRender(t *testing.T) {
 		`data-register-option="gender.0"`, `data-register-value="name"`,
 		`data-region-field="city"`, `name="city_province"`, `name="city_city"`,
 		`name="church_location_area"`, `data-region-manual-toggle`,
+		`id="field_house_note_have"`, `data-show-when-field="house"`, `name="house_note_have"`,
+		`id="field_driving_note_none"`, `data-show-when-field="driving"`,
 		`list="dl_industry"`, `list="dl_referral_source"`,
 		`/static/register.js`} {
 		if !strings.Contains(body, want) {
@@ -417,6 +428,9 @@ func TestRegisterCopyCatalogIsASCII(t *testing.T) {
 	if len(catalog.Text) < 30 || len(catalog.Options) < 50 || len(catalog.Values) == 0 {
 		t.Fatalf("suspiciously small catalog: text=%d options=%d values=%d",
 			len(catalog.Text), len(catalog.Options), len(catalog.Values))
+	}
+	if got := catalog.Text["field.house_note_have.label"]; got != "房产补充（有房）" {
+		t.Fatalf("house note label = %q", got)
 	}
 	if got := catalog.Text["field.id_card.label"]; got != "身份证号码" {
 		t.Fatalf("id card label = %q", got)
@@ -656,7 +670,7 @@ func TestParseRegisterRegionFields(t *testing.T) {
 	bad := validRegisterValues(t, "13800138002", id, "1990-01-01")
 	bad.Set("city_province", "44")
 	bad.Set("city_city", "1101")
-	if _, ferr := parseRegisterInput(bad); ferr == nil || !strings.Contains(ferr.Message, "地区选择") {
+	if _, ferr := parseRegisterInput(bad); ferr == nil || !strings.Contains(ferr.Message, "地区不正确") {
 		t.Fatalf("mismatched region error = %v", ferr)
 	}
 }
@@ -700,8 +714,29 @@ func TestRegisterAngelQRMarkupWhenAssetExists(t *testing.T) {
 	if !strings.Contains(body, `src="/angel-qr?v=`) {
 		t.Fatal("register page missing angel QR image")
 	}
-	if !strings.Contains(body, `class="register-angel-qr"`) {
-		t.Fatal("register page missing QR container")
+	if !strings.Contains(body, `class="register-angel-qr"`) ||
+		!strings.Contains(body, `data-angel-qr-image`) ||
+		!strings.Contains(body, `data-angel-fallback`) ||
+		!strings.Contains(body, `data-register-text="field.angel_ack.qrHint"`) {
+		t.Fatal("register page missing QR option markup")
 	}
 	assertHanFreePublicBody(t, body)
+}
+
+func TestParseRegisterClearsUnselectedNotes(t *testing.T) {
+	id := makeTestIDCard(t, "19900101", "002")
+	values := validRegisterValues(t, "13800138000", id, "1990-01-01")
+	values.Set("house", "无")
+	values.Set("house_note_have", "不应保留")
+	values.Set("driving", "有")
+	values.Set("driving_note_none", "不应保留")
+	in, ferr := parseRegisterInput(values)
+	if ferr != nil {
+		t.Fatal(ferr)
+	}
+	if in.HouseNoteHave != "" || in.HouseNoteNone != "无房" ||
+		in.DrivingNoteHave != "粤 B" || in.DrivingNoteNone != "" {
+		t.Fatalf("notes after switch = %q/%q/%q/%q",
+			in.HouseNoteHave, in.HouseNoteNone, in.DrivingNoteHave, in.DrivingNoteNone)
+	}
 }

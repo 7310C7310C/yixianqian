@@ -89,7 +89,7 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 		Photos   []string              `json:"photos"`
 	}
 	legacyJSONDecode(t, resp, &self)
-	if len(self.Editable) != 25 {
+	if len(self.Editable) != 29 {
 		t.Fatalf("editable schema length = %d", len(self.Editable))
 	}
 	for _, field := range self.Editable {
@@ -111,7 +111,9 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 		"职位":                 "老师",
 		"年收入":                "20W - 30W",
 		"房产状况":               "有",
+		"房产状况-有-补充内容":        "上海浦东 89 平米",
 		"是否有车":               "无",
+		"是否有车-无-补充内容":        "暂无",
 		"我是一个怎样的人":           "喜欢安静",
 		"我是一个怎样的人-性格":        []string{"喜欢安静", "正直"},
 		"我是一个怎样的人-爱好":        []string{"看书"},
@@ -143,6 +145,24 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 	}
 	if len(reloaded.SelfTraits) != 2 || len(reloaded.MBTI) != 2 {
 		t.Fatalf("multi values = %v / %v", reloaded.SelfTraits, reloaded.MBTI)
+	}
+	if reloaded.HouseNoteHave != "上海浦东 89 平米" || reloaded.DrivingNoteNone != "暂无" {
+		t.Fatalf("notes = %q / %q", reloaded.HouseNoteHave, reloaded.DrivingNoteNone)
+	}
+
+	// Switching 有/无 must clear the other option's note even if the client
+	// sends the stale value back.
+	resp = profileJSONRequest(t, ownerClient, http.MethodPut, "/legacy/api/profile", csrf,
+		map[string]any{"房产状况": "无", "房产状况-有-补充内容": "旧值"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("note switch status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	reloaded, err = env.database.GetProfile(env.ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.HouseNoteHave != "" {
+		t.Fatalf("house note after switch = %q, want empty", reloaded.HouseNoteHave)
 	}
 
 	resp = profileJSONRequest(t, ownerClient, http.MethodPut, "/legacy/api/profile", csrf,

@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	errIDCardFormat = errors.New("身份证号码格式不正确。")
+	errIDCardFormat = errors.New("身份证号码不正确。")
 	idCard18RE      = regexp.MustCompile(`^[0-9]{17}[0-9X]$`)
 	idCard15RE      = regexp.MustCompile(`^[0-9]{15}$`)
 	wechatIDRE      = regexp.MustCompile(`^[A-Za-z0-9_.@+-]+$`)
@@ -37,10 +37,10 @@ func validateWechatID(raw string) (string, error) {
 		return "", errors.New("请填写：微信号")
 	}
 	if n := utf8.RuneCountInString(value); n < 5 || n > 64 {
-		return "", errors.New("微信号需为 5-64 个字符。")
+		return "", errors.New("微信号不正确。")
 	}
 	if !wechatIDRE.MatchString(value) {
-		return "", errors.New("微信号只能包含字母、数字、下划线、短横线、点、@ 或 +。")
+		return "", errors.New("微信号不正确。")
 	}
 	return value, nil
 }

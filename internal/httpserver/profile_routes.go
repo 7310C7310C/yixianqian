@@ -414,7 +414,11 @@ type profileUpdateRequest struct {
 	Position        *string   `json:"position"`
 	Income          *string   `json:"income"`
 	House           *string   `json:"house"`
+	HouseNoteHave   *string   `json:"house_note_have"`
+	HouseNoteNone   *string   `json:"house_note_none"`
 	Driving         *string   `json:"driving"`
+	DrivingNoteHave *string   `json:"driving_note_have"`
+	DrivingNoteNone *string   `json:"driving_note_none"`
 	Personality     *string   `json:"personality"`
 	Family          *string   `json:"family"`
 	LiveWithParents *string   `json:"live_with_parents"`
@@ -444,7 +448,11 @@ func (u profileUpdateRequest) profileUpdate() db.ProfileUpdate {
 		Position:        u.Position,
 		Income:          u.Income,
 		House:           u.House,
+		HouseNoteHave:   u.HouseNoteHave,
+		HouseNoteNone:   u.HouseNoteNone,
 		Driving:         u.Driving,
+		DrivingNoteHave: u.DrivingNoteHave,
+		DrivingNoteNone: u.DrivingNoteNone,
 		Personality:     u.Personality,
 		Family:          u.Family,
 		LiveWithParents: u.LiveWithParents,

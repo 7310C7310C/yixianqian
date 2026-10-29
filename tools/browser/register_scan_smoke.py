@@ -47,7 +47,7 @@ SUCCESS_HTML = "<!doctype html><html lang=\"zh-CN\"><head><title>ok</title></hea
 
 SECTION_TITLES = ["个人照片", "登录密码", "基本资料", "教会与家乡", "工作与生活", "关于我", "理想中的 TA", "其他"]
 LABELS = ["姓名", "昵称", "性别", "生日", "手机号码", "身份证号码", "微信号", "圣名",
-          "经常去的教堂", "参加的团体", "教堂所在市-区", "家乡", "现居/工作城市",
+          "经常去的教堂", "参加的团体", "教堂所在省-市-区", "家乡", "现居/工作城市",
           "家庭成员情况", "身高（cm）", "学历", "从事行业", "职位", "年收入", "房产状况",
           "是否有车", "你结过婚吗？", "婚后是否与父母同住", "我是一个怎样的人", "我的性格",
           "我的爱好", "我的运动", "我的 MBTI 人格", "我理想中的 TA", "TA 的性格",
@@ -102,6 +102,8 @@ def assert_raw_contract(path: str, want_status: int = 200, opener=None, expect_e
         if expect_error not in catalog["text"].get("page.error", ""):
             raise SystemExit(f"{label}: page.error={catalog['text'].get('page.error')!r}, want {expect_error!r}")
     for ref in sorted(set(STATIC_REF.findall(body))):
+        if not ref.split("?", 1)[0].endswith((".css", ".js", ".svg", ".json", ".webmanifest")):
+            continue
         s, data, _ = fetch(ref)
         if s != 200:
             raise SystemExit(f"{label}: asset {ref} status={s}")
@@ -160,6 +162,29 @@ def post_register_error() -> None:
           "2 traits checked, gender selected")
 
 
+def fill_region_codes(page) -> None:
+    """Set the hidden cascade codes so the client-side region guard passes."""
+    page.evaluate("""() => {
+      const set = (name, value) => {
+        const el = document.querySelector('input[name="' + name + '"]');
+        if (el) el.value = value;
+      };
+      set('city_province', '44'); set('city_city', '4403');
+      set('native_place_province', '44'); set('native_place_city', '4401');
+      set('church_location_province', '44');
+      set('church_location_city', '4403');
+      set('church_location_area', '440305');
+    }""")
+
+
+def unlock_angel(page) -> None:
+    """Test-only: bypass the QR long-press gate when staging has an asset."""
+    page.evaluate("""() => {
+      const ack = document.querySelector('input[name="angel_ack"]');
+      if (ack) { ack.disabled = false; ack.checked = true; }
+    }""")
+
+
 def wait_ready(page) -> None:
     page.wait_for_function("() => !document.body.classList.contains('copy-pending')", timeout=15000)
     page.wait_for_function(
@@ -215,6 +240,8 @@ def submit_payload_check(page, viewport: str) -> None:
         route.continue_()
 
     page.route("**/register", handle)
+    fill_region_codes(page)
+    unlock_angel(page)
     page.fill("#f_name", "测试用户")
     page.fill("#f_nickname", "小测")
     page.select_option("#f_gender", label="女性")
@@ -241,6 +268,8 @@ def submit_payload_check(page, viewport: str) -> None:
 def error_rerender_check(page, viewport: str) -> None:
     page.goto(BASE + "/register", wait_until="networkidle")
     wait_ready(page)
+    fill_region_codes(page)
+    unlock_angel(page)
     page.fill("#f_name", "测试用户")
     page.fill("#f_nickname", "小测")
     page.select_option("#f_gender", label="女性")

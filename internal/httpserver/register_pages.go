@@ -48,6 +48,12 @@ type registerFieldSpec struct {
 	// RegionLevel is "pc" (province+city) or "cd" (city+area) for region
 	// fields. Empty for every other kind.
 	RegionLevel string
+	// ShowWhenField/ShowWhenOption conditionally reveal a field when another
+	// select has the option at the zero-based index (0-based among real
+	// options; the rendered select adds a blank option first). Used by the
+	// house/car note fields from the V1 form.
+	ShowWhenField  string
+	ShowWhenOption int
 }
 
 type registerSectionSpec struct {
@@ -145,8 +151,20 @@ func registerSections() []registerSectionSpec {
 					Hint: "如不方便可留空。"},
 				{Name: "house", Label: "房产状况", Kind: registerKindSelect, Options: db.ProfileYesNoOptions,
 					Hint: "如不方便可留空。"},
+				{Name: "house_note_have", Label: "房产补充（有房）", Kind: registerKindText,
+					MaxRunes: 500, Placeholder: "可留空", ShowWhenField: "house", ShowWhenOption: 0,
+					Hint: "可注明城市、平米数；此信息会公开。"},
+				{Name: "house_note_none", Label: "房产补充（无房）", Kind: registerKindText,
+					MaxRunes: 500, Placeholder: "可留空", ShowWhenField: "house", ShowWhenOption: 1,
+					Hint: "可补充说明，可留空；此信息会公开。"},
 				{Name: "driving", Label: "是否有车", Kind: registerKindSelect, Options: db.ProfileYesNoOptions,
 					Hint: "如不方便可留空。"},
+				{Name: "driving_note_have", Label: "车辆补充（有车）", Kind: registerKindText,
+					MaxRunes: 500, Placeholder: "可留空", ShowWhenField: "driving", ShowWhenOption: 0,
+					Hint: "可注明车型等，可留空；此信息会公开。"},
+				{Name: "driving_note_none", Label: "车辆补充（无车）", Kind: registerKindText,
+					MaxRunes: 500, Placeholder: "可留空", ShowWhenField: "driving", ShowWhenOption: 1,
+					Hint: "可补充说明，可留空；此信息会公开。"},
 				{Name: "marriage", Label: "你结过婚吗？", Kind: registerKindSelect, Required: true,
 					Options: registerMarriageOptions,
 					Hint:    "不公开；领结婚证或举行婚配圣事，占其一就算结婚。"},
@@ -246,6 +264,10 @@ type registerFieldView struct {
 	MaxDate string
 	// ShowQR renders the admin-managed 小天使二维码 next to the angel_ack field.
 	ShowQR bool
+	// Conditional house/car note fields.
+	ShowWhenField  string
+	ShowWhenOption int
+	HasShowWhen    bool
 }
 
 type registerSectionView struct {
@@ -265,7 +287,7 @@ type registerPageData struct {
 // Chinese; registerCopyJSON escapes every non-ASCII rune so the rendered HTML
 // stays Han-free outside <title> (scan guard, docs/DECISIONS.md decision 42).
 func registerCopyStatic(data registerPageData) map[string]string {
-	return map[string]string{
+	m := map[string]string{
 		"hero.eyebrow": "一线牵 · 注册",
 		"hero.title":   "填写你的资料",
 		"hero.lead": "亲爱的兄弟姐妹，为了更容易找到另一半，请确保以下资料真实可信。" +
@@ -275,7 +297,7 @@ func registerCopyStatic(data registerPageData) map[string]string {
 		"hero.loginHintEnd": "。",
 		"photos.title":      "个人照片",
 		"photos.hint": fmt.Sprintf(
-			"请上传 %d–%d 张 JPEG/PNG 照片；第一张会作为封面，建议使用横版照片。单张上限 %d MB。",
+			"请上传 %d–%d 张 JPEG/PNG/WebP/GIF/BMP/TIFF 照片；上传后统一转成 JPEG（GIF 只取第一帧），第一张会作为封面，建议使用横版照片。单张上限 %d MB。",
 			data.MinPhotos, data.MaxPhotos, data.MaxMB),
 		"photos.heic": "iPhone 默认的 HEIC 照片无法直接上传：请先在相册转成 JPEG，" +
 			"或在「设置 → 相机 → 格式」选择「兼容性最佳」。",
@@ -299,6 +321,11 @@ func registerCopyStatic(data registerPageData) map[string]string {
 		"submit.altHint": "已经填过？",
 		"submit.altCta":  "登录查看审核状态",
 	}
+	if data.HasAngelQR {
+		m["field.angel_ack.qrHint"] = "长按图片可保存到手机；添加小天使请备注「真实姓名」。"
+		m["field.angel_ack.pressFallback"] = "无法长按？改为手动确认"
+	}
+	return m
 }
 
 // registerCopyCatalog is the JSON payload consumed by /static/register.js.
@@ -415,15 +442,18 @@ func buildRegisterPageData(values url.Values) registerPageData {
 		view := registerSectionView{Title: section.Title}
 		for _, spec := range section.Fields {
 			field := registerFieldView{
-				Name:        spec.Name,
-				Label:       spec.Label,
-				Type:        string(spec.Kind),
-				Required:    spec.Required,
-				MaxLength:   spec.MaxRunes,
-				Placeholder: spec.Placeholder,
-				Hint:        spec.Hint,
-				Rows:        spec.Rows,
-				RegionLevel: spec.RegionLevel,
+				Name:           spec.Name,
+				Label:          spec.Label,
+				Type:           string(spec.Kind),
+				Required:       spec.Required,
+				MaxLength:      spec.MaxRunes,
+				Placeholder:    spec.Placeholder,
+				Hint:           spec.Hint,
+				Rows:           spec.Rows,
+				RegionLevel:    spec.RegionLevel,
+				ShowWhenField:  spec.ShowWhenField,
+				ShowWhenOption: spec.ShowWhenOption,
+				HasShowWhen:    spec.ShowWhenField != "",
 			}
 			if spec.Name == "birthday" {
 				field.MaxDate = time.Now().AddDate(-18, 0, 0).Format("2006-01-02")
@@ -497,7 +527,11 @@ type registerInput struct {
 	Position        string
 	Income          string
 	House           string
+	HouseNoteHave   string
+	HouseNoteNone   string
 	Driving         string
+	DrivingNoteHave string
+	DrivingNoteNone string
 	Marriage        string
 	Family          string
 	LiveWithParents string
@@ -579,7 +613,7 @@ func validateRegisterRegion(values url.Values, name string) (string, *registerFo
 			value, ok = regions.LookupProvinceCity(province, city)
 		}
 		if !ok {
-			return "", registerFormErr(name, "「"+spec.Label+"」地区选择不正确，请重新选择。")
+			return "", registerFormErr(name, "地区不正确，请重新选择。")
 		}
 		return value, nil
 	}
@@ -646,7 +680,7 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	now := time.Now()
 	cutoff := time.Date(now.Year()-18, now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	if birthday.After(cutoff) {
-		return in, registerFormErr("birthday", "需年满 18 岁才能注册。")
+		return in, registerFormErr("birthday", "生日不正确（需年满 18 岁）。")
 	}
 	in.Birthday = birthday
 
@@ -656,7 +690,7 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	}
 	in.Phone = auth.NormalizePhone(phoneRaw)
 	if in.Phone == "" || !mainlandMobileRE.MatchString(in.Phone) {
-		return in, registerFormErr("phone", "手机号码格式不正确，请填写 11 位中国大陆手机号码。")
+		return in, registerFormErr("phone", "手机号码不正确。")
 	}
 
 	// The ID card is normalised before length checking because users often
@@ -670,7 +704,7 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 		return in, registerFormErr("id_card", idErr.Error())
 	}
 	if !sameCalendarDay(idBirth, birthday) {
-		return in, registerFormErr("id_card", "身份证上的出生日期与填写的生日不一致。")
+		return in, registerFormErr("id_card", "身份证号码不正确。")
 	}
 	in.IDCard = normalizedID
 
@@ -707,7 +741,7 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	}
 	height, convErr := strconv.Atoi(heightRaw)
 	if convErr != nil || height < 100 || height > 250 {
-		return in, registerFormErr("height_cm", "身高需在 100-250 公分之间。")
+		return in, registerFormErr("height_cm", "身高不正确。")
 	}
 	in.HeightCM = height
 
@@ -726,9 +760,22 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	if in.House, err = validateRegisterSelect(values, "house"); err != nil {
 		return in, err
 	}
+	if in.HouseNoteHave, err = validateRegisterText(values, "house_note_have"); err != nil {
+		return in, err
+	}
+	if in.HouseNoteNone, err = validateRegisterText(values, "house_note_none"); err != nil {
+		return in, err
+	}
 	if in.Driving, err = validateRegisterSelect(values, "driving"); err != nil {
 		return in, err
 	}
+	if in.DrivingNoteHave, err = validateRegisterText(values, "driving_note_have"); err != nil {
+		return in, err
+	}
+	if in.DrivingNoteNone, err = validateRegisterText(values, "driving_note_none"); err != nil {
+		return in, err
+	}
+	in.clearUnselectedNotes()
 	if in.Marriage, err = validateRegisterSelect(values, "marriage"); err != nil {
 		return in, err
 	}
@@ -795,6 +842,27 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 		return in, registerFormErr("password", passwordPolicyMessage(pwErr))
 	}
 	return in, nil
+}
+
+// clearUnselectedNotes drops the note that belongs to the other option so a
+// user who switches 有/无 cannot leave stale data in the unused column.
+func (in *registerInput) clearUnselectedNotes() {
+	switch in.House {
+	case "有":
+		in.HouseNoteNone = ""
+	case "无":
+		in.HouseNoteHave = ""
+	default:
+		in.HouseNoteHave, in.HouseNoteNone = "", ""
+	}
+	switch in.Driving {
+	case "有":
+		in.DrivingNoteNone = ""
+	case "无":
+		in.DrivingNoteHave = ""
+	default:
+		in.DrivingNoteHave, in.DrivingNoteNone = "", ""
+	}
 }
 
 func sameCalendarDay(a, b time.Time) bool {
