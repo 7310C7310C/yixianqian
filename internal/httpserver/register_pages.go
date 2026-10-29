@@ -114,11 +114,11 @@ func registerSections() []registerSectionSpec {
 				{Name: "church_group", Label: "参加的团体", Kind: registerKindText, MaxRunes: 200,
 					Placeholder: "例如，圣咏团、服务组"},
 				{Name: "church_location", Label: "教堂所在省-市-区", Kind: registerKindRegion, Required: true,
-					RegionLevel: "cd", Hint: "按省、市、区选择；找不到可手动填写。"},
+					RegionLevel: "cd", Hint: "按省、市、区选择。"},
 				{Name: "native_place", Label: "家乡", Kind: registerKindRegion, Required: true,
-					RegionLevel: "pc", Hint: "按省、市选择；找不到可手动填写。"},
+					RegionLevel: "pc", Hint: "按省、市选择。"},
 				{Name: "city", Label: "现居/工作城市", Kind: registerKindRegion, Required: true,
-					RegionLevel: "pc", Hint: "按省、市选择；找不到可手动填写。"},
+					RegionLevel: "pc", Hint: "按省、市选择。"},
 				{Name: "family", Label: "家庭成员情况", Kind: registerKindTextarea, Required: true,
 					MaxRunes: 2000, Rows: 3, Placeholder: "例如，有几个兄弟姐妹"},
 			},
@@ -286,20 +286,18 @@ func registerCopyStatic(data registerPageData) map[string]string {
 		"photos.hint": fmt.Sprintf(
 			"请上传 %d–%d 张照片；第一张会作为封面；单张上限 %d MB。",
 			data.MinPhotos, data.MaxPhotos, data.MaxMB),
-		"photos.label":             "选择照片",
-		"photos.retry":             "若提交失败，需要重新选择照片。",
-		"password.title":           "登录密码",
-		"password.hint":            "注册后即可用手机号码＋这组密码登录，查看审核状态。",
-		"password.label":           "密码",
-		"password.confirmLabel":    "再次输入密码",
-		"password.hint2":           "至少 8 个字元。",
-		"select.required":          "请选择",
-		"select.optional":          "未填",
-		"region.province":          "省 / 直辖市",
-		"region.city":              "市",
-		"region.area":              "区 / 县",
-		"region.manualToggle":      "找不到？手动填写",
-		"region.manualPlaceholder": "请输入地区，例如：香港",
+		"photos.label":          "选择照片",
+		"photos.retry":          "若提交失败，需要重新选择照片。",
+		"password.title":        "登录密码",
+		"password.hint":         "注册后即可用手机号码＋这组密码登录，查看审核状态。",
+		"password.label":        "密码",
+		"password.confirmLabel": "再次输入密码",
+		"password.hint2":        "至少 8 个字元。",
+		"select.required":       "请选择",
+		"select.optional":       "未填",
+		"region.province":       "省 / 直辖市",
+		"region.city":           "市",
+		"region.area":           "区 / 县",
 		"submit.hint": "送出后状态为「待审核」，小天使/管理员审核通过后会以站内通知告知。" +
 			"审核期间请勿重复提交。",
 		"submit.button":  "送出注册资料",
@@ -602,14 +600,8 @@ func validateRegisterRegion(values url.Values, name string) (string, *registerFo
 		}
 		return value, nil
 	}
-	// Manual fallback covers 港澳台/海外/旧地址. The value stays free text but
-	// is length/control-character checked.
-	if manual := strings.TrimSpace(values.Get(name)); manual != "" {
-		if value, ok := regions.ValidateManual(manual); ok {
-			return value, nil
-		}
-		return "", registerFormErr(name, "请选择或填写："+spec.Label)
-	}
+	// Only the dataset is accepted: free text (overseas/old addresses) would
+	// break the city filter. The error is actionable: pick province/city/area.
 	return "", registerFormErr(name, "请选择："+spec.Label)
 }
 

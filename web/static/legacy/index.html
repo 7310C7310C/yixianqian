@@ -397,6 +397,20 @@
     </div>
   </div>
 </div>
+<!-- 城市信息需更新（数据集外的旧值） -->
+<div v-if="showRegionInvalidDialog" style="position:fixed; top:0; left:0; right:0; bottom:0; z-index:9997; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
+  <div class="modal-card" style="max-width:340px;">
+    <div style="padding:24px 18px 16px; text-align:center;">
+      <div style="font-size:44px; margin-bottom:10px;">🏙️</div>
+      <div class="modal-title" style="font-size:17px;">城市信息需要更新</div>
+      <div class="modal-body" style="line-height:1.7;">现居城市或教会所在地不在支持列表，请重新选择，否则无法继续使用</div>
+      <div style="font-size:14px; color:#ff6b81; margin-top:12px; font-weight:600;">{{ regionInvalidCountdown }}秒后自动跳转</div>
+    </div>
+    <div class="modal-divider">
+      <div class="modal-action modal-action-primary" @click="goRegionInvalidNow">立即去修改</div>
+    </div>
+  </div>
+</div>
 <!-- 无含人脸照片全屏强制提示 -->
 <div v-if="showFaceInvalidDialog" style="position:fixed; top:0; left:0; right:0; bottom:0; z-index:9998; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
   <div class="modal-card" style="max-width:340px;">

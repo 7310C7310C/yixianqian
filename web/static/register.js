@@ -83,9 +83,8 @@
   // ---------------------------------------------------------------------
   var COPY_SELECT_BLANK = '\u8bf7\u9009\u62e9';
   var COPY_REGION_LOADING = '\u6b63\u5728\u52a0\u8f7d\u5730\u533a\u2026';
-  var COPY_REGION_FAILED = '\u5730\u533a\u6570\u636e\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u6539\u7528\u624b\u52a8\u586b\u5199\u3002';
+  var COPY_REGION_FAILED = '\u5730\u533a\u6570\u636e\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u5237\u65b0\u91cd\u8bd5\u3002';
   var COPY_REGION_REQUIRED = '\u8bf7\u9009\u62e9\u5b8c\u6574\u7684\u5730\u533a\u3002';
-  var COPY_REGION_MANUALREQUIRED = '\u8bf7\u586b\u5199\u5730\u533a\u3002';
   var COPY_ID_BAD = '\u8eab\u4efd\u8bc1\u53f7\u7801\u4e0d\u6b63\u786e';
   var COPY_PHONE_BAD = '\u624b\u673a\u53f7\u7801\u4e0d\u6b63\u786e';
   var COPY_WECHAT_BAD = '\u5fae\u4fe1\u53f7\u4e0d\u6b63\u786e';
@@ -182,9 +181,7 @@
     var provCode = wrap.querySelector('[name="' + name + '_province"]');
     var cityCode = wrap.querySelector('[name="' + name + '_city"]');
     var areaCode = wrap.querySelector('[name="' + name + '_area"]');
-    var manual = wrap.querySelector('[data-region-manual]');
-    var toggle = wrap.querySelector('[data-region-manual-toggle]');
-    if (!provSel || !citySel || !manual || !toggle) return;
+    if (!provSel || !citySel) return;
 
     function clearCodes() {
       if (provCode) provCode.value = '';
@@ -196,22 +193,7 @@
       if (provSel) provSel.setCustomValidity('');
       if (citySel) citySel.setCustomValidity('');
       if (areaSel) areaSel.setCustomValidity('');
-      if (manual) manual.setCustomValidity('');
       setRegionStatus(wrap, '', false);
-    }
-
-    function applyManual(on) {
-      field.hidden = !!on;
-      manual.hidden = !on;
-      manual.required = !!on;
-      if (on) {
-        clearCodes();
-        if (!manual.value) manual.focus();
-      } else {
-        manual.value = '';
-        syncCodes();
-      }
-      clearValidity();
     }
 
     function syncCodes() {
@@ -264,18 +246,6 @@
       syncCodes();
       clearValidity();
     });
-    manual.addEventListener('input', clearValidity);
-
-    toggle.addEventListener('change', function () {
-      applyManual(toggle.checked);
-    });
-
-    // A manual value survives a rejected POST via data-register-value.
-    if (manual.value && (!provCode || !provCode.value)) {
-      toggle.checked = true;
-      applyManual(true);
-    }
-
     // Last line of defence before submit; the server validates again.
     var form = field.closest('form');
     if (form && !form.getAttribute('data-region-bound')) {
@@ -286,8 +256,6 @@
           var f = fields[i];
           var w = f.closest('.register-field');
           if (!w) continue;
-          var m = w.querySelector('[data-region-manual]');
-          var t = w.querySelector('[data-region-manual-toggle]');
           // Clear a previous custom error before re-validating; otherwise a
           // fixed field would keep blocking the next submit.
           var ps = f.querySelector('[data-region-province]');
@@ -296,38 +264,24 @@
           if (ps) ps.setCustomValidity('');
           if (cs) cs.setCustomValidity('');
           if (as) as.setCustomValidity('');
-          if (m) m.setCustomValidity('');
-          if (t && t.checked) {
-            if (!m.value.trim()) {
-              m.setCustomValidity(COPY_REGION_MANUALREQUIRED);
-              setRegionStatus(w, COPY_REGION_MANUALREQUIRED, true);
-              var manualStatus = w.querySelector('[data-region-status]');
-              if (manualStatus) manualStatus.scrollIntoView({ block: 'center' });
-              event.preventDefault();
-              m.focus();
-              if (manualStatus) manualStatus.focus({ preventScroll: true });
-              return;
+          var p = w.querySelector('[data-region-code="province"]');
+          var c = w.querySelector('[data-region-code="city"]');
+          var a = w.querySelector('[data-region-code="area"]');
+          var areaSel = f.querySelector('[data-region-area]');
+          var needArea = f.getAttribute('data-region-level') === 'cd' && areaSel && areaSel.options.length > 1;
+          if (!p.value || !c.value || (needArea && (!a || !a.value))) {
+            var first = f.querySelector('[data-region-province]');
+            if (first) first.setCustomValidity(COPY_REGION_REQUIRED);
+            setRegionStatus(w, COPY_REGION_REQUIRED, true);
+            var regionStatus = w.querySelector('[data-region-status]');
+            if (regionStatus) {
+              regionStatus.scrollIntoView({ block: 'center' });
+              regionStatus.focus();
             }
-          } else {
-            var p = w.querySelector('[data-region-code="province"]');
-            var c = w.querySelector('[data-region-code="city"]');
-            var a = w.querySelector('[data-region-code="area"]');
-            var areaSel = f.querySelector('[data-region-area]');
-            var needArea = f.getAttribute('data-region-level') === 'cd' && areaSel && areaSel.options.length > 1;
-            if (!p.value || !c.value || (needArea && (!a || !a.value))) {
-              var first = f.querySelector('[data-region-province]');
-              if (first) first.setCustomValidity(COPY_REGION_REQUIRED);
-              setRegionStatus(w, COPY_REGION_REQUIRED, true);
-              var regionStatus = w.querySelector('[data-region-status]');
-              if (regionStatus) {
-                regionStatus.scrollIntoView({ block: 'center' });
-                regionStatus.focus();
-              }
-              event.preventDefault();
-              if (first) first.focus();
-              if (regionStatus) regionStatus.focus({ preventScroll: true });
-              return;
-            }
+            event.preventDefault();
+            if (first) first.focus();
+            if (regionStatus) regionStatus.focus({ preventScroll: true });
+            return;
           }
         }
       }, true);
@@ -357,11 +311,6 @@
           var wrap = fields[k].closest('.register-field');
           if (!wrap) continue;
           setRegionStatus(wrap, COPY_REGION_FAILED, true);
-          var toggle = wrap.querySelector('[data-region-manual-toggle]');
-          if (toggle && !toggle.checked) {
-            toggle.checked = true;
-            toggle.dispatchEvent(new Event('change'));
-          }
         }
       });
   }

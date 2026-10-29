@@ -188,6 +188,9 @@ func (a *App) withSession(next http.Handler) http.Handler {
 				if a.idCardGate(w, r, user) {
 					return
 				}
+				if a.regionGate(w, r, user) {
+					return
+				}
 			case errors.Is(err, db.ErrNotFound):
 				a.clearSessionCookie(w)
 			default:

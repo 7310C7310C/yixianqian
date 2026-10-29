@@ -59,12 +59,6 @@
   <input type="hidden" name="{{.Name}}_province" data-region-code="province" value="{{.ProvinceCode}}">
   <input type="hidden" name="{{.Name}}_city" data-region-code="city" value="{{.CityCode}}">
   <input type="hidden" name="{{.Name}}_area" data-region-code="area" value="{{.AreaCode}}">
-  <input type="text" name="{{.Name}}" data-region-manual data-register-value="{{.Name}}"
-         data-register-placeholder="region.manualPlaceholder" maxlength="60" hidden>
-  <label class="register-region-toggle">
-    <input type="checkbox" data-region-manual-toggle>
-    <span data-register-text="region.manualToggle"></span>
-  </label>
   <p class="hint register-region-status" data-region-status hidden tabindex="-1"></p>
   {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
   {{else if eq .Type "textarea"}}

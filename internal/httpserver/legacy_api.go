@@ -769,6 +769,7 @@ func legacyUserMap(user db.User, profile db.Profile, viewer db.SocialViewer, quo
 		"available_roles": legacyRoles(observerEnabled, observer),
 		"has_face":        hasFace,
 		"id_valid":        profile.IDCardValid,
+		"region_invalid":  regionInvalidProfile(profile),
 		"wechat":          profile.Wechat,
 		"phone":           firstNonEmpty(profile.Phone, user.Phone),
 	}
@@ -885,6 +886,7 @@ func legacyProfileMap(p db.Profile, quota db.LikeQuota, hasFace bool, faces []db
 		"phone":             p.Phone,
 		"register_time":     registerTime,
 		"id_valid":          p.IDCardValid,
+		"region_invalid":    regionInvalidProfile(p),
 		"id_card_mask":      mask,
 		"has_face":          hasFace,
 		"editable":          []any{},

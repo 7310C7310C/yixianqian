@@ -23,6 +23,13 @@ type User struct {
 	// IDCardValid lets the request middleware enforce the P0 ID gate without a
 	// second users lookup; GetSession is the only place that fills it.
 	IDCardValid bool
+	// City/NativePlace/ChurchLocation feed the region gate; GetSession is the
+	// only place that fills them.
+	City           string
+	NativePlace    string
+	ChurchLocation string
+	AccountKind    string
+	AccountStatus  string
 }
 
 // Locked reports whether the account is currently in a failed-login lockout.

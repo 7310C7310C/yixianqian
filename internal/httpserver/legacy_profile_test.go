@@ -88,6 +88,16 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 	if byName[legacyFieldSelfTraits].Type != "multi" {
 		t.Fatalf("traits type = %q", byName[legacyFieldSelfTraits].Type)
 	}
+	city := byName[legacyFieldCity]
+	if city.Type != "region" || city.RegionLevel != "pc" || city.Value != "浙江杭州" ||
+		city.ProvinceCode != "33" || city.CityCode != "3301" || !city.Required {
+		t.Fatalf("city region field = %+v", city)
+	}
+	churchLocation := byName[legacyFieldChurchLocation]
+	if churchLocation.Type != "region" || churchLocation.RegionLevel != "cd" || churchLocation.Value != "杭州上城" ||
+		churchLocation.ProvinceCode != "33" || churchLocation.CityCode != "3301" || churchLocation.AreaCode == "" {
+		t.Fatalf("church region field = %+v", churchLocation)
+	}
 	if got := byName[legacyFieldMBTI].Value.([]string); len(got) != 2 || got[0] != "I" {
 		t.Fatalf("mbti = %#v", got)
 	}
@@ -129,6 +139,22 @@ func TestIDCardGateAllowlistCannotBeBypassedByDotSegments(t *testing.T) {
 		if !idCardGateAllowed(p) {
 			t.Fatalf("%s should be allowed", p)
 		}
+	}
+}
+
+func TestLegacyProfileEditableNoAreaCity(t *testing.T) {
+	fields := legacyProfileEditable(db.Profile{City: "台湾台北", ChurchLocation: "台湾台北"})
+	byName := map[string]legacyEditableField{}
+	for _, field := range fields {
+		byName[field.Field] = field
+	}
+	city := byName[legacyFieldCity]
+	if city.Type != "region" || city.Value != "台湾台北" || city.ProvinceCode == "" || city.CityCode == "" {
+		t.Fatalf("no-area city field = %+v", city)
+	}
+	church := byName[legacyFieldChurchLocation]
+	if church.Type != "region" || church.Value != "台湾台北" || church.AreaCode != "" || church.CityCode == "" {
+		t.Fatalf("no-area church field = %+v", church)
 	}
 }
 
@@ -200,6 +226,8 @@ func TestLegacyProfileUpdateRejectsMalformedValues(t *testing.T) {
 		`{"昵称": 123}`,
 		`{"我是一个怎样的人-性格": "正直"}`,
 		`{"我是一个怎样的人-爱好": [1]}`,
+		`{"现居/工作城市": "不存在市"}`,
+		`{"教堂所在市-区": "广东"}`,
 	}
 	for _, raw := range cases {
 		if _, err := legacyProfileUpdateFromJSON(decodeLegacyMap(t, raw)); err == nil {

@@ -63,15 +63,34 @@ type Province struct {
 }
 
 var (
-	data        []Province
-	jsonData    []byte
-	cityValue   = map[string]string{}
-	cityProv    = map[string]string{}
-	areaValue   = map[string]string{}
-	areaCity    = map[string]string{}
-	cityHasArea = map[string]bool{}
-	jsonETag    string
+	data            []Province
+	jsonData        []byte
+	cityValue       = map[string]string{}
+	cityProv        = map[string]string{}
+	areaValue       = map[string]string{}
+	areaCity        = map[string]string{}
+	cityHasArea     = map[string]bool{}
+	cityByValue     = map[string]cityRef{}
+	cityAmbiguous   = map[string]bool{}
+	areaByValue     = map[string]areaRef{}
+	areaAmbiguous   = map[string]bool{}
+	cityValueNoArea = map[string]cityRef{}
+	cityAlias       = map[string]string{}
+	areaAlias       = map[string]string{}
+	noAreaAlias     = map[string]string{}
+	jsonETag        string
 )
+
+type cityRef struct {
+	Province string
+	City     string
+}
+
+type areaRef struct {
+	Province string
+	City     string
+	Area     string
+}
 
 func init() {
 	var raw []rawProvince
@@ -86,12 +105,69 @@ func init() {
 		for _, c := range p.Cities {
 			cityValue[c.Code] = c.Value
 			cityProv[c.Code] = p.Code
+			ref := cityRef{Province: p.Code, City: c.Code}
+			if _, exists := cityByValue[c.Value]; exists {
+				delete(cityByValue, c.Value) // same display value, different codes
+				cityAmbiguous[c.Value] = true
+			} else if !cityAmbiguous[c.Value] {
+				cityByValue[c.Value] = ref
+			}
 			if len(c.Areas) > 0 {
 				cityHasArea[c.Code] = true
+			} else {
+				cityValueNoArea[c.Value] = cityRef{Province: p.Code, City: c.Code}
 			}
 			for _, a := range c.Areas {
 				areaValue[a.Code] = a.Value
 				areaCity[a.Code] = c.Code
+				ref := areaRef{Province: p.Code, City: c.Code, Area: a.Code}
+				if _, exists := areaByValue[a.Value]; exists {
+					delete(areaByValue, a.Value) // canonical duplicate: cannot preselect a code
+					areaAmbiguous[a.Value] = true
+				} else if !areaAmbiguous[a.Value] {
+					areaByValue[a.Value] = ref
+				}
+			}
+		}
+	}
+	ambiguousAlias := map[string]bool{}
+	addAlias := func(dst map[string]string, alias, value string) {
+		if alias == "" || alias == value || ambiguousAlias[alias] {
+			return
+		}
+		if previous, ok := dst[alias]; ok && previous != value {
+			// The same short name may already exist in another namespace
+			// (district vs no-area city); remove it everywhere.
+			delete(cityAlias, alias)
+			delete(noAreaAlias, alias)
+			delete(areaAlias, alias)
+			ambiguousAlias[alias] = true
+			return
+		}
+		dst[alias] = value
+	}
+	for _, p := range data {
+		for _, c := range p.Cities {
+			if !cityAmbiguous[c.Value] {
+				if short := shortCity(c.Name); short != "" {
+					addAlias(cityAlias, short, c.Value)
+				}
+				addAlias(cityAlias, cityStem(c.Name), c.Value)
+				addAlias(cityAlias, c.Name, c.Value)
+			}
+			if len(c.Areas) == 0 && !cityAmbiguous[c.Value] {
+				if short := shortCity(c.Name); short != "" {
+					addAlias(noAreaAlias, short, c.Value)
+				}
+				addAlias(noAreaAlias, cityStem(c.Name), c.Value)
+				addAlias(noAreaAlias, c.Name, c.Value)
+			}
+			for _, a := range c.Areas {
+				for _, suffix := range []string{"区", "县", "市", "旗"} {
+					addAlias(areaAlias, a.Value+suffix, a.Value)
+				}
+				addAlias(areaAlias, a.Name, a.Value)
+				addAlias(areaAlias, shortArea(a.Name), a.Value)
 			}
 		}
 	}
@@ -200,8 +276,8 @@ func shortCity(name string) string {
 	if name == "市辖区" || name == "县" {
 		return ""
 	}
-	autonomous := strings.HasSuffix(name, "自治州")
-	name = trimSuffix(name, "自治州", "地区", "盟", "市")
+	autonomous := strings.HasSuffix(name, "自治州") || strings.HasSuffix(name, "自治县")
+	name = trimSuffix(name, "自治州", "自治县", "地区", "盟", "市")
 	if autonomous {
 		for changed := true; changed; {
 			changed = false
@@ -211,6 +287,25 @@ func shortCity(name string) string {
 						name = strings.TrimSuffix(name, suffix)
 						changed = true
 					}
+				}
+			}
+		}
+	}
+	return name
+}
+
+// cityStem is the shortest unambiguous name used to detect county/city
+// collisions such as 新竹市 vs 新竹县.
+func cityStem(name string) string {
+	name = trimSuffix(name, "自治州", "自治县", "地区", "盟", "市", "县", "旗")
+	autonomous := true
+	for changed := autonomous; changed; {
+		changed = false
+		for _, ethnic := range ethnicGroups {
+			for _, suffix := range []string{ethnic + "族", ethnic} {
+				if strings.HasSuffix(name, suffix) {
+					name = strings.TrimSuffix(name, suffix)
+					changed = true
 				}
 			}
 		}
@@ -318,6 +413,91 @@ func LookupCityArea(provinceCode, cityCode, areaCode string) (string, bool) {
 	}
 	value, ok := areaValue[areaCode]
 	return value, ok
+}
+
+// NormalizeCityValue maps a province-city value (canonical "广东深圳" or the
+// legacy short form "深圳") back to the canonical value. Values are compared
+// without spaces and hyphens so old "陕西-宝鸡" rows remain editable.
+func NormalizeCityValue(value string) (string, bool) {
+	value = cleanRegionValue(value)
+	if value == "" {
+		return "", false
+	}
+	if _, ok := cityByValue[value]; ok {
+		return value, true
+	}
+	if cityAmbiguous[value] {
+		return value, true
+	}
+	if canonical, ok := cityAlias[value]; ok && !cityAmbiguous[canonical] {
+		return canonical, true
+	}
+	return "", false
+}
+
+// LookupCityValue returns the province/city codes for a canonical or legacy
+// city value. It is used to preselect the profile edit cascade.
+func LookupCityValue(value string) (provinceCode, cityCode string, ok bool) {
+	canonical, ok := NormalizeCityValue(value)
+	if !ok || cityAmbiguous[canonical] {
+		return "", "", false
+	}
+	ref := cityByValue[canonical]
+	return ref.Province, ref.City, true
+}
+
+// NormalizeAreaValue maps a city-area value (canonical "深圳南山" or the legacy
+// "深圳南山区") back to the canonical value.
+func NormalizeAreaValue(value string) (string, bool) {
+	value = cleanRegionValue(value)
+	if value == "" {
+		return "", false
+	}
+	if _, ok := areaByValue[value]; ok {
+		return value, true
+	}
+	if areaAmbiguous[value] {
+		return value, true // a real dataset value, but the code is ambiguous
+	}
+	if canonical, ok := areaAlias[value]; ok {
+		// A short name can be both a district (常州新北) and a no-area city
+		// (台湾新北); never guess. The user must re-select from the cascade.
+		if _, collision := noAreaAlias[value]; collision {
+			return "", false
+		}
+		return canonical, true
+	}
+	if canonical, ok := noAreaAlias[value]; ok {
+		return canonical, true
+	}
+	if _, ok := cityValueNoArea[value]; ok {
+		return value, true
+	}
+	return "", false
+}
+
+// LookupAreaValue returns the province/city/area codes for a canonical or
+// legacy area value.
+func LookupAreaValue(value string) (provinceCode, cityCode, areaCode string, ok bool) {
+	canonical, ok := NormalizeAreaValue(value)
+	if !ok || areaAmbiguous[canonical] {
+		return "", "", "", false
+	}
+	if ref, ok := areaByValue[canonical]; ok {
+		return ref.Province, ref.City, ref.Area, true
+	}
+	if ref, ok := cityValueNoArea[canonical]; ok {
+		if cityAmbiguous[canonical] {
+			return "", "", "", false
+		}
+		return ref.Province, ref.City, "", true
+	}
+	return "", "", "", false
+}
+
+func cleanRegionValue(value string) string {
+	replacer := strings.NewReplacer(" ", "", "\t", "", "-", "", "－", "")
+	return replacer.Replace(strings.TrimSpace(value))
 }
 
 // ValidateManual accepts a manually typed region fallback (港澳台/海外/旧地址).

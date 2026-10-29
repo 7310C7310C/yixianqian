@@ -36,7 +36,8 @@ func (d *DB) GetSession(ctx context.Context, tokenHash string) (Session, User, e
 	err := d.pool.QueryRow(ctx,
 		`SELECT s.id, s.user_id, s.expires_at, s.created_at, s.last_seen_at,
 		        COALESCE(c.must_change_password, false), c.temp_expires_at,
-		        `+qualifiedUserColumns("u")+`
+		        `+qualifiedUserColumns("u")+`,
+		        u.city, u.native_place, u.church_location, u.account_kind, u.account_status
 		 FROM sessions s
 		 JOIN users u ON u.id = s.user_id
 		 LEFT JOIN auth_credentials c ON c.user_id = u.id
@@ -49,7 +50,7 @@ func (d *DB) GetSession(ctx context.Context, tokenHash string) (Session, User, e
 			&s.MustChangePassword, &s.TempExpiresAt,
 			&u.ID, &u.LegacyUserID, &u.Phone, &u.Name, &u.Status,
 			&u.FailedLoginCount, &u.LastFailedAt, &u.LockedUntil, &u.CreatedAt, &u.UpdatedAt,
-			&u.IDCardValid)
+			&u.IDCardValid, &u.City, &u.NativePlace, &u.ChurchLocation, &u.AccountKind, &u.AccountStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Session{}, User{}, ErrNotFound
 	}

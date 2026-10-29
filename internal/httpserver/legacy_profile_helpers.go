@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/regions"
 )
 
 // The v1 profile form speaks Bitable field names. Keep the mapping in one
@@ -50,18 +51,37 @@ const (
 )
 
 type legacyEditableField struct {
-	Field   string `json:"field"`
-	Label   string `json:"label"`
-	Type    string `json:"type"`
-	Options any    `json:"options"`
-	Long    bool   `json:"long"`
-	Value   any    `json:"value"`
-	Hint    string `json:"hint,omitempty"`
+	Field        string `json:"field"`
+	Label        string `json:"label"`
+	Type         string `json:"type"`
+	Options      any    `json:"options"`
+	Long         bool   `json:"long"`
+	Value        any    `json:"value"`
+	Hint         string `json:"hint,omitempty"`
+	Required     bool   `json:"required,omitempty"`
+	RegionLevel  string `json:"region_level,omitempty"`
+	ProvinceCode string `json:"province_code,omitempty"`
+	CityCode     string `json:"city_code,omitempty"`
+	AreaCode     string `json:"area_code,omitempty"`
 }
 
 // legacyProfileEditable mirrors the v1 `_editable_schema` payload. The SPA
 // builds the whole edit form from this list, so it must keep the legacy field
 // names and value types.
+func regionField(name, label, value, level string, required bool) legacyEditableField {
+	field := legacyEditableField{Field: name, Label: label, Type: "region", RegionLevel: level, Required: required}
+	if level == "cd" {
+		if province, city, area, ok := regions.LookupAreaValue(value); ok {
+			field.ProvinceCode, field.CityCode, field.AreaCode = province, city, area
+			field.Value, _ = regions.NormalizeAreaValue(value)
+		}
+	} else if province, city, ok := regions.LookupCityValue(value); ok {
+		field.ProvinceCode, field.CityCode = province, city
+		field.Value, _ = regions.NormalizeCityValue(value)
+	}
+	return field
+}
+
 func legacyProfileEditable(p db.Profile) []legacyEditableField {
 	height := any("")
 	if p.HeightCM != nil && *p.HeightCM > 0 {
@@ -71,10 +91,10 @@ func legacyProfileEditable(p db.Profile) []legacyEditableField {
 		{Field: legacyFieldNickname, Label: "昵称", Type: "text", Value: p.Nickname},
 		{Field: legacyFieldHeight, Label: "身高", Type: "number", Value: height},
 		{Field: legacyFieldEducation, Label: "学历", Type: "select", Options: db.ProfileEducationOptions, Value: p.Education},
-		{Field: legacyFieldCity, Label: "现居/工作城市", Type: "text", Value: p.City},
+		regionField(legacyFieldCity, "现居/工作城市", p.City, "pc", true),
 		{Field: legacyFieldChurch, Label: "经常去的教堂", Type: "text", Value: p.Church},
 		{Field: legacyFieldChurchGroup, Label: "参加的团体", Type: "text", Value: p.ChurchGroup},
-		{Field: legacyFieldChurchLocation, Label: "教堂所在省-市-区", Type: "text", Value: p.ChurchLocation},
+		regionField(legacyFieldChurchLocation, "教堂所在省-市-区", p.ChurchLocation, "cd", false),
 		{Field: legacyFieldIndustry, Label: "从事行业", Type: "text", Value: p.Industry},
 		{Field: legacyFieldPosition, Label: "职位", Type: "text", Value: p.Position},
 		{Field: legacyFieldIncome, Label: "年收入", Type: "select", Options: db.ProfileIncomeOptions, Value: p.Income},
@@ -195,7 +215,11 @@ func legacyProfileUpdateFromJSON(body map[string]any) (db.ProfileUpdate, error) 
 	if v, ok, err := legacyStringValue(body, legacyFieldCity, "city"); err != nil {
 		return upd, err
 	} else if ok {
-		upd.City = v
+		canonical, valid := regions.NormalizeCityValue(*v)
+		if !valid {
+			return upd, fmt.Errorf("请选择现居/工作城市")
+		}
+		upd.City = &canonical
 	}
 	if v, ok, err := legacyStringValue(body, legacyFieldChurch, "church"); err != nil {
 		return upd, err
@@ -210,7 +234,13 @@ func legacyProfileUpdateFromJSON(body map[string]any) (db.ProfileUpdate, error) 
 	if v, ok, err := legacyStringValue(body, legacyFieldChurchLocation, "church_location"); err != nil {
 		return upd, err
 	} else if ok {
-		upd.ChurchLocation = v
+		if *v == "" {
+			upd.ChurchLocation = v
+		} else if canonical, valid := regions.NormalizeAreaValue(*v); valid {
+			upd.ChurchLocation = &canonical
+		} else {
+			return upd, fmt.Errorf("请选择教堂所在省-市-区")
+		}
 	}
 	if v, ok, err := legacyStringValue(body, legacyFieldIndustry, "industry"); err != nil {
 		return upd, err

@@ -293,7 +293,7 @@ func TestRegisterTemplatesRender(t *testing.T) {
 		`data-copy-json=`, `data-register-text="field.id_card.label"`,
 		`data-register-option="gender.0"`, `data-register-value="name"`,
 		`data-region-field="city"`, `name="city_province"`, `name="city_city"`,
-		`name="church_location_area"`, `data-region-manual-toggle`,
+		`name="church_location_area"`,
 		`id="field_house_note_have"`, `data-show-when-field="house"`, `name="house_note_have"`,
 		`id="field_driving_note_none"`, `data-show-when-field="driving"`,
 		`/static/register.js`} {
@@ -654,15 +654,14 @@ func TestParseRegisterRegionFields(t *testing.T) {
 		t.Fatalf("region values = %q / %q / %q", in.City, in.NativePlace, in.ChurchLocation)
 	}
 
-	// Manual fallback covers Hong Kong/Macau/Taiwan/overseas and old addresses.
+	// Free-text fallback is gone: a city must come from the dataset cascade.
 	manual := validRegisterValues(t, "13800138001", id, "1990-01-01")
 	for _, key := range []string{"native_place_province", "native_place_city"} {
 		manual.Del(key)
 	}
 	manual.Set("native_place", "香港")
-	in, ferr = parseRegisterInput(manual)
-	if ferr != nil || in.NativePlace != "香港" {
-		t.Fatalf("manual region = %q, %v", in.NativePlace, ferr)
+	if _, ferr := parseRegisterInput(manual); ferr == nil || ferr.Field != "native_place" {
+		t.Fatalf("manual region should be rejected, got %+v", ferr)
 	}
 
 	// A mismatched province/city pair must be rejected server-side.

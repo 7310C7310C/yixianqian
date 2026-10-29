@@ -1451,6 +1451,9 @@ const yxqApp = createApp({
     const loadingProfileDetail = ref(false);
     const showIdInvalidDialog = ref(false);
     const idInvalidCountdown = ref(5);
+    const showRegionInvalidDialog = ref(false);
+    const regionInvalidCountdown = ref(5);
+    let regionInvalidTimer = null;
     let idInvalidTimer = null;
     const showFaceInvalidDialog = ref(false);
     const faceInvalidCountdown = ref(5);
@@ -1644,13 +1647,52 @@ const yxqApp = createApp({
     const faceChecking = ref(false); // 上传后人脸检测中：此时红字隐藏，显示检测中
     const profilePhotos = ref([]);
     const profilePhotosThumb = ref([]);
+    const regionProvinces = ref([]);
+    let regionLoadPromise = null;
     function syncProfilePhotos() {
       // 同步头像（第一张照片，用缩图）与全局 user，保证保存后首页/消息头像一致
       profileData.value.photo = profilePhotosThumb.value[0] || profilePhotos.value[0] || '';
       if (user.value) user.value.photo = profileData.value.photo;
     }
+    async function ensureRegions(){
+      if (regionProvinces.value.length) return;
+      if (!regionLoadPromise) {
+        regionLoadPromise = fetch('/register/regions', { credentials: 'same-origin' })
+          .then(resp => resp.ok ? resp.json() : Promise.reject(new Error('regions')))
+          .then(data => { regionProvinces.value = (data && data.provinces) || []; })
+          .catch(() => {
+            regionLoadPromise = null;
+            vant.showToast('地区数据加载失败，请刷新重试');
+          });
+      }
+      await regionLoadPromise;
+    }
+    function regionProvince(field){
+      return regionProvinces.value.find(p => p.code === field.province_code) || null;
+    }
+    function regionCity(field){
+      const province = regionProvince(field);
+      return province ? (province.cities || []).find(c => c.code === field.city_code) || null : null;
+    }
+    function regionCities(field){ const province = regionProvince(field); return province ? (province.cities || []) : []; }
+    function regionAreas(field){ const city = regionCity(field); return city ? (city.areas || []) : []; }
+    function onRegionProvince(field){
+      field.city_code = ''; field.area_code = ''; field.value = '';
+    }
+    function onRegionCity(field){
+      field.area_code = '';
+      const city = regionCity(field);
+      if (!city) { field.value = ''; return; }
+      if (field.region_level !== 'cd' || !city.areas || !city.areas.length) field.value = city.value || '';
+      else field.value = '';
+    }
+    function onRegionArea(field){
+      const area = regionAreas(field).find(a => a.code === field.area_code);
+      field.value = area ? area.value : '';
+    }
     function openProfileEdit() {
       editableFields.value = (profileData.value.editable || []).map(f => ({ ...f, value: Array.isArray(f.value) ? [...f.value] : f.value }));
+      ensureRegions();
       profilePhotos.value = (profileData.value.photos && profileData.value.photos.length)
         ? [...profileData.value.photos]
         : (profileData.value.photo ? [profileData.value.photo] : []);
@@ -1886,6 +1928,12 @@ const yxqApp = createApp({
       await _submitProfile(pw);
     }
     async function _submitProfile(currentPassword) {
+      for (const f of editableFields.value) {
+        if (f.type === 'region' && f.required && !f.value) {
+          vant.showToast('请选择' + f.label);
+          return;
+        }
+      }
       const payload = {};
       editableFields.value.forEach(f => { payload[f.field] = f.value; });
       if (currentPassword) payload.current_password = currentPassword;
@@ -2165,6 +2213,10 @@ const yxqApp = createApp({
       if (err.code === 'id_card_required') {
         // 服务端 P0 门禁：任何被拦的 API 都回到身份证补填浮层，由服务端事实驱动。
         try { startIdInvalidOverlay(); } catch(e) {}
+        return;
+      }
+      if (err.code === 'region_required') {
+        try { startRegionInvalidOverlay(); } catch(e) {}
         return;
       }
       if (err.status !== 401) return;
@@ -2520,6 +2572,7 @@ const yxqApp = createApp({
         throw e;
       }
       user.value = data.user;
+      if (data.user && data.user.region_invalid) startRegionInvalidOverlay();
       if (data.user) loadPointsBalance(); // 麦穗余额：入口单元格要显示数字，静默拉，失败不打扰
       if (data.user) loadNotifications(); // 登录后立即载入未读数，消息 tab 红点不等首次切页
       if (data.user && data.user.is_admin) setTimeout(()=>{ try{ refreshReportedCount(); }catch(e){} }, 600);
@@ -4636,6 +4689,7 @@ const yxqApp = createApp({
         profileLoaded.value = true;
         if (user.value && typeof data.id_valid === 'boolean') user.value.id_valid = data.id_valid;
         if (user.value && typeof data.has_face === 'boolean') user.value.has_face = data.has_face;
+        if (user.value && typeof data.region_invalid === 'boolean') user.value.region_invalid = data.region_invalid;
       }
       catch(e) {
         vant.showToast(e.message);
@@ -4732,6 +4786,12 @@ const yxqApp = createApp({
       }catch(e){}
     }
     function guardTabChange(name){
+      const regionInvalid = (user.value && user.value.region_invalid === true)
+        || (profileData.value && profileData.value.region_invalid === true);
+      if(regionInvalid){
+        startRegionInvalidOverlay();
+        return false;
+      }
       // 身份证有误时禁止 tab 跳离修改资料：弹全屏提醒，不切页
       const invalid = (user.value && user.value.id_valid === false)
         || (profileData.value && profileData.value.id_valid === false);
@@ -4753,6 +4813,27 @@ const yxqApp = createApp({
         return yxqEnsurePageChunk(name);
       }
       return true;
+    }
+    function startRegionInvalidOverlay(){
+      if(showRegionInvalidDialog.value) return;
+      showRegionInvalidDialog.value = true;
+      regionInvalidCountdown.value = 5;
+      if(regionInvalidTimer) clearInterval(regionInvalidTimer);
+      regionInvalidTimer = setInterval(()=>{
+        regionInvalidCountdown.value -= 1;
+        if(regionInvalidCountdown.value <= 0){
+          clearInterval(regionInvalidTimer);
+          regionInvalidTimer = null;
+          showRegionInvalidDialog.value = false;
+          if(page.value !== 'profile_edit') goRegionInvalidNow();
+        }
+      }, 1000);
+    }
+    function goRegionInvalidNow(){
+      if(regionInvalidTimer){ clearInterval(regionInvalidTimer); regionInvalidTimer=null; }
+      showRegionInvalidDialog.value = false;
+      if (profileLoaded.value) { openProfileEdit(); return; }
+      openProfileDetail().then(() => openProfileEdit());
     }
     function goIdInvalidNow(){
       if(idInvalidTimer){ clearInterval(idInvalidTimer); idInvalidTimer=null; }
@@ -7120,6 +7201,8 @@ const yxqApp = createApp({
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
       filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,
       showIdInvalidDialog, idInvalidCountdown, goIdInvalidNow, guardTabChange,
+      showRegionInvalidDialog, regionInvalidCountdown, goRegionInvalidNow,
+      regionProvinces, regionCities, regionAreas, onRegionProvince, onRegionCity, onRegionArea,
       showFaceInvalidDialog, faceInvalidCountdown, goFaceInvalidNow,
       slideDir,
       onTouchStart, onTouchMove, onTouchEnd,
