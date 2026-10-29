@@ -90,13 +90,13 @@ func TestIntegrationIDCardGateAndBackfill(t *testing.T) {
 		t.Fatalf("/app status=%d", resp.StatusCode)
 	}
 
-	// Wrong checksum, birthday mismatch and a valid backfill.
+	// Wrong checksum, underage ID and a valid backfill.
 	valid := makeTestIDCard(t, "19900101", "002")
 	badChecksum := valid[:17] + "0"
 	if badChecksum == valid {
 		badChecksum = valid[:17] + "1"
 	}
-	mismatch := makeTestIDCard(t, "19920202", "003")
+	underage := makeTestIDCard(t, "20150101", "003")
 
 	for _, tt := range []struct {
 		name string
@@ -104,7 +104,7 @@ func TestIntegrationIDCardGateAndBackfill(t *testing.T) {
 		want string
 	}{
 		{"checksum", badChecksum, "invalid_id_card"},
-		{"birthday", mismatch, "id_card_birthday_mismatch"},
+		{"underage", underage, "id_card_underage"},
 	} {
 		resp := putJSON(t, client, "/legacy/api/profile", csrf, map[string]any{"身份证号": tt.id})
 		body := readBody(t, resp)
@@ -304,12 +304,13 @@ func TestIntegrationIDCardBackfillDerivesBirthday(t *testing.T) {
 		t.Fatalf("second backfill status=%d", resp.StatusCode)
 	}
 
-	// A birthday that already exists still has to match the number.
+	// An existing birthday that differs from the number is silently corrected
+	// to the ID card date, and the backfill succeeds.
 	mismatch := makeTestIDCard(t, "19920202", randomHTTPDigits(t, 3))
 	resp = putJSON(t, otherClient, "/legacy/api/profile", otherClient.csrfCookie(),
 		map[string]any{"身份证号": mismatch})
-	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(readBody(t, resp), "id_card_birthday_mismatch") {
-		t.Fatalf("birthday mismatch status=%d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("birthday mismatch status=%d body=%s", resp.StatusCode, readBody(t, resp))
 	}
 	var (
 		otherBirthday time.Time
@@ -321,9 +322,22 @@ func TestIntegrationIDCardBackfillDerivesBirthday(t *testing.T) {
 		other.ID).Scan(&otherBirthday, &otherValid, &otherHash); err != nil {
 		t.Fatal(err)
 	}
-	if otherBirthday.Format("2006-01-02") != "1990-01-01" || otherValid || otherHash != nil {
-		t.Fatalf("mismatch wrote state: birthday=%s valid=%v hash=%v",
+	if otherBirthday.Format("2006-01-02") != "1992-02-02" || !otherValid || otherHash == nil {
+		t.Fatalf("mismatch state: birthday=%s valid=%v hash=%v",
 			otherBirthday.Format("2006-01-02"), otherValid, otherHash)
+	}
+	if *otherHash != idCardHash(env.cfg.SessionSecret, mismatch) {
+		t.Fatalf("mismatch hash = %q", *otherHash)
+	}
+	var otherAudit int
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT count(*) FROM audit_log
+		  WHERE action = 'profile.birthday.from_id' AND target_id = $1`,
+		fmt.Sprint(other.ID)).Scan(&otherAudit); err != nil {
+		t.Fatal(err)
+	}
+	if otherAudit != 1 {
+		t.Fatalf("mismatch birthday-from-id audits = %d, want 1", otherAudit)
 	}
 }
 

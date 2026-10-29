@@ -144,16 +144,18 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 			legacyErrorCode(w, http.StatusBadRequest, "invalid_id_card", "身份证号码格式不正确，请填写18位有效身份证号")
 			return
 		}
-		// Registration always asked for a birthday, but migrated v1 accounts
-		// and test/observer accounts can have none, and there is no birthday
-		// editor in the profile form. The ID card is authoritative, so fill a
-		// missing birthday in the same update instead of dead-ending the gate.
-		if profile.Birthday == nil {
-			upd.Birthday = &birth
-			birthdayFromID = true
-		} else if !sameCalendarDay(*profile.Birthday, birth) {
-			legacyErrorCode(w, http.StatusBadRequest, "id_card_birthday_mismatch", "身份证上的出生日期与资料生日不一致，请核对后重试")
+		// The ID card is authoritative for the birth date. Fill a missing
+		// birthday or silently correct a mismatch (migrated v1 accounts and the
+		// profile form have no birthday editor). An ID card showing an underage
+		// person is rejected instead of storing a minor's birth date.
+		birthdayLocal := time.Date(birth.Year(), birth.Month(), birth.Day(), 0, 0, 0, 0, time.Local)
+		if !atLeast18On(birthdayLocal, time.Now()) {
+			legacyErrorCode(w, http.StatusBadRequest, "id_card_underage", "身份证显示未满 18 岁，无法完成核验")
 			return
+		}
+		if profile.Birthday == nil || !sameCalendarDay(*profile.Birthday, birthdayLocal) {
+			upd.Birthday = &birthdayLocal
+			birthdayFromID = true
 		}
 		hash := idCardHash(a.cfg.SessionSecret, normalized)
 		inUse, uerr := a.db.IDCardHashInUse(r.Context(), hash, user.ID)

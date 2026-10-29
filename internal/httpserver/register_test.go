@@ -674,6 +674,30 @@ func TestParseRegisterRegionFields(t *testing.T) {
 	}
 }
 
+func TestAtLeast18OnCalendarDay(t *testing.T) {
+	loc := time.FixedZone("CST", 8*3600)
+	now := time.Date(2026, 10, 29, 7, 0, 0, 0, loc)
+	birth, err := time.Parse("20060102", "20081029") // UTC midnight
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !atLeast18On(birth, now) {
+		t.Fatal("18th birthday today must pass (ID date is UTC, server is CST)")
+	}
+	if atLeast18On(birth, now.AddDate(0, 0, -1)) {
+		t.Fatal("one day before the 18th birthday must be rejected")
+	}
+	leapNow := time.Date(2028, 2, 29, 12, 0, 0, 0, loc)
+	afterLeap, _ := time.Parse("20060102", "20100301")
+	if atLeast18On(afterLeap, leapNow) {
+		t.Fatal("Mar 1 birthday is 17 on Feb 29 (time.Date would normalize to Mar 1)")
+	}
+	beforeLeap, _ := time.Parse("20060102", "20100228")
+	if !atLeast18On(beforeLeap, leapNow) {
+		t.Fatal("Feb 28 birthday is 18 on Feb 29")
+	}
+}
+
 func TestParseRegisterCorrectsBirthdayFromID(t *testing.T) {
 	id := makeTestIDCard(t, "19900101", "002")
 	values := validRegisterValues(t, "13800138000", id, "1990-01-02")

@@ -685,9 +685,7 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	// the birthday field, not an invalid ID card, so correct it silently and
 	// only surface an error if the corrected person is under 18.
 	in.Birthday = time.Date(idBirth.Year(), idBirth.Month(), idBirth.Day(), 0, 0, 0, 0, time.Local)
-	now := time.Now()
-	cutoff := time.Date(now.Year()-18, now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	if in.Birthday.After(cutoff) {
+	if !atLeast18On(in.Birthday, time.Now()) {
 		return in, registerFormErr("birthday", "生日不正确（需年满 18 岁）。")
 	}
 	in.IDCard = normalizedID

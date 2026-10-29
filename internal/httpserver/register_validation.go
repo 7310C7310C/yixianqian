@@ -115,8 +115,29 @@ func normalizeIDCardForHash(raw string) string {
 }
 
 // validateBackfillIDCard is the stricter profile-backfill rule: the legacy
-// 15-digit form is no longer accepted for a new submission, and the embedded
-// birth date must match the profile birthday (checked by the caller).
+// 15-digit form is no longer accepted for a new submission. The embedded birth
+// date is authoritative; the caller silently corrects a missing/mismatched
+// profile birthday and rejects an underage ID card.
+// atLeast18On reports whether the calendar date of birth is at least 18 years
+// before now's calendar day. It compares date fields directly: time.Date
+// normalizes Feb 29 to Mar 1 in non-leap years, which would let a 17-year-old
+// through on a leap day.
+func atLeast18On(birth, now time.Time) bool {
+	by, bm, bd := birth.Date()
+	ny, nm, nd := now.Date()
+	if ny != by+18 {
+		return ny > by+18
+	}
+	if nm != bm {
+		return nm > bm
+	}
+	return nd >= bd
+}
+
+// validateBackfillIDCard is the stricter profile-backfill rule: the legacy
+// 15-digit form is no longer accepted for a new submission. The embedded birth
+// date is authoritative; the caller silently corrects a missing/mismatched
+// profile birthday and rejects an underage ID card.
 func validateBackfillIDCard(raw string) (string, time.Time, error) {
 	raw = strings.ToUpper(strings.TrimSpace(raw))
 	if !idCard18RE.MatchString(raw) {

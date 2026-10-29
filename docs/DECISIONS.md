@@ -55,7 +55,7 @@ sources: []
 
 ### 2.2 身份证门禁：不 grandfather、observer 不豁免
 
-- 决策：迁移用户 `id_card_valid=false` 不自动放行；observer 只豁免 `has_face`，不豁免身份证。资料页可补填 18 位身份证（校验位、生日一致；资料生日为空时按证内生日补全并审计 `profile.birthday.from_id`、`id_card_hash` 唯一）。服务端对非豁免用户拦截 `/legacy/api/*` 与 `/app`、`/admin`，白名单放行首页、版本/埋点、资料（含照片/封面）、`/legacy/api/user/me`、通知、改密、退出与 mutual 微信号表单；其余返回 403 `id_card_required`。observer 资料页只暴露身份证号一个可写字段，补填后恢复只读。
+- 决策：迁移用户 `id_card_valid=false` 不自动放行；observer 只豁免 `has_face`，不豁免身份证。资料页可补填 18 位身份证（校验位；资料生日为空或不一致时以证内生日静默更正并审计 `profile.birthday.from_id`；证内未满 18 岁拒绝；`id_card_hash` 唯一）。服务端对非豁免用户拦截 `/legacy/api/*` 与 `/app`、`/admin`，白名单放行首页、版本/埋点、资料（含照片/封面）、`/legacy/api/user/me`、通知、改密、退出与 mutual 微信号表单；其余返回 403 `id_card_required`。observer 资料页只暴露身份证号一个可写字段，补填后恢复只读。
 - 理由：身份证曾是上线阻断；补填入口与门禁已解除死锁，但仍是 P0 验收项，不能伪造 `id_valid=true`。
 - 不要做：不批量 grandfather；不手工改库绕过；不把明文身份证写日志/审计（只记后四位）。
 - 验证：`TestIntegrationIDCardGateAndBackfill`、`TestIntegrationObserverStillBlockedByIDCard`；未实名账号 `/legacy/api/cards` 403。
