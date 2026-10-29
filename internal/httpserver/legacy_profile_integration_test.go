@@ -91,7 +91,7 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 		Photos   []string              `json:"photos"`
 	}
 	legacyJSONDecode(t, resp, &self)
-	if len(self.Editable) != 29 {
+	if len(self.Editable) != 30 {
 		t.Fatalf("editable schema length = %d", len(self.Editable))
 	}
 	for _, field := range self.Editable {

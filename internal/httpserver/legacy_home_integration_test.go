@@ -102,12 +102,12 @@ func TestIntegrationLegacyHomeSelfCard(t *testing.T) {
 
 	prefix := "首页自卡" + randomHTTPDigits(t, 8)
 	if _, err := env.pool.Exec(env.ctx,
-		`UPDATE users SET gender = '男性', nickname = $2, city = '上海' WHERE id = $1`,
+		`UPDATE users SET gender = '男性', nickname = $2, city = '上海', native_place = '江苏南京', church_location = '上海浦东' WHERE id = $1`,
 		viewer.ID, prefix+"-本人"); err != nil {
 		t.Fatalf("update viewer: %v", err)
 	}
 	if _, err := env.pool.Exec(env.ctx,
-		`UPDATE users SET gender = '女性', nickname = $2, city = '杭州' WHERE id = $1`,
+		`UPDATE users SET gender = '女性', nickname = $2, city = '杭州', native_place = '浙江宁波', church_location = '杭州上城' WHERE id = $1`,
 		candidate.ID, prefix+"-候选"); err != nil {
 		t.Fatalf("update candidate: %v", err)
 	}

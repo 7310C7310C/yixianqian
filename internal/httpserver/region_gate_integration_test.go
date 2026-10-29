@@ -9,21 +9,23 @@ import (
 
 func TestRegionInvalidValues(t *testing.T) {
 	cases := []struct {
-		city, church string
-		want         bool
+		city, native, church string
+		want                 bool
 	}{
-		{"", "", false}, // legacy rows may omit both
-		{"深圳", "", false},
-		{"广东深圳", "深圳南山区", false},
-		{"北京", "北京东城", false},
-		{"当前记录", "", true},
-		{"1", "", true},
-		{"", "广东", true},
-		{"深圳", "潮州", true},
+		{"广东深圳", "广东广州", "深圳南山", false},
+		{"深圳", "广州", "深圳南山区", false},
+		{"北京", "北京", "北京东城", false},
+		{"", "广东广州", "深圳南山", true},
+		{"广东深圳", "", "深圳南山", true},
+		{"广东深圳", "广东广州", "", true},
+		{"当前记录", "广东广州", "深圳南山", true},
+		{"1", "广东广州", "深圳南山", true},
+		{"广东深圳", "广东广州", "广东", true},
+		{"广东深圳", "广东广州", "潮州", true},
 	}
 	for _, tc := range cases {
-		if got := regionInvalid(tc.city, tc.church); got != tc.want {
-			t.Errorf("regionInvalid(%q,%q) = %v, want %v", tc.city, tc.church, got, tc.want)
+		if got := regionInvalid(tc.city, tc.native, tc.church); got != tc.want {
+			t.Errorf("regionInvalid(%q,%q,%q) = %v, want %v", tc.city, tc.native, tc.church, got, tc.want)
 		}
 	}
 }
@@ -35,7 +37,7 @@ func TestIntegrationRegionGateAndProfileFix(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, user.ID)
 	})
 	if _, err := pool.Exec(ctx,
-		`UPDATE users SET city = '当前记录', church_location = '广东', gender = '男性' WHERE id = $1`, user.ID); err != nil {
+		`UPDATE users SET city = '当前记录', native_place = '', church_location = '', gender = '男性' WHERE id = $1`, user.ID); err != nil {
 		t.Fatal(err)
 	}
 	client := loginMessageClient(t, database, server, user)
@@ -72,17 +74,17 @@ func TestIntegrationRegionGateAndProfileFix(t *testing.T) {
 		t.Fatalf("invalid church status=%d body=%s", resp.StatusCode, readBody(t, resp))
 	}
 	resp = profileJSONRequest(t, client, http.MethodPut, "/legacy/api/profile", csrf,
-		map[string]any{"现居/工作城市": "深圳", "教堂所在市-区": "深圳南山区"})
+		map[string]any{"现居/工作城市": "深圳", "家乡": "广州", "教堂所在市-区": "深圳南山区"})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("profile fix status=%d body=%s", resp.StatusCode, readBody(t, resp))
 	}
-	var city, church string
+	var city, native, church string
 	if err := pool.QueryRow(ctx,
-		`SELECT city, church_location FROM users WHERE id = $1`, user.ID).Scan(&city, &church); err != nil {
+		`SELECT city, native_place, church_location FROM users WHERE id = $1`, user.ID).Scan(&city, &native, &church); err != nil {
 		t.Fatal(err)
 	}
-	if city != "广东深圳" || church != "深圳南山" {
-		t.Fatalf("normalized city=%q church=%q", city, church)
+	if city != "广东深圳" || native != "广东广州" || church != "深圳南山" {
+		t.Fatalf("normalized city=%q native=%q church=%q", city, native, church)
 	}
 	resp = client.get("/legacy/api/cards")
 	if resp.StatusCode != http.StatusOK {

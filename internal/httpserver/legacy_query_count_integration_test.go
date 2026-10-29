@@ -16,7 +16,7 @@ func TestIntegrationLegacyQueryBudget(t *testing.T) {
 
 	viewer, client := env.createUser(t, "U-QBUDGET", "预算视角", "active", "user")
 	if _, err := env.pool.Exec(env.ctx,
-		`UPDATE users SET gender = $2, nickname = '预算本人', city = '上海' WHERE id = $1`,
+		`UPDATE users SET gender = $2, nickname = '预算本人', city = '上海', native_place = '江苏南京', church_location = '上海浦东' WHERE id = $1`,
 		viewer.ID, db.GenderMale); err != nil {
 		t.Fatalf("update viewer: %v", err)
 	}

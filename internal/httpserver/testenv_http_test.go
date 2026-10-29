@@ -111,7 +111,9 @@ func (e *profileHTTPEnv) createUser(t *testing.T, legacyPrefix, name, accountSta
 	// explicit ID-gate tests override this with SQL.
 	verified := accountKind != "observer" && accountStatus != "observer"
 	if _, err := e.pool.Exec(e.ctx,
-		`UPDATE users SET account_status = $2, account_kind = $3, id_card_valid = $4 WHERE id = $1`,
+		`UPDATE users SET account_status = $2, account_kind = $3, id_card_valid = $4,
+		        city = '广东深圳', native_place = '广东广州', church_location = '深圳南山'
+		  WHERE id = $1`,
 		user.ID, accountStatus, accountKind, verified); err != nil {
 		t.Fatalf("set account status: %v", err)
 	}
@@ -273,7 +275,9 @@ func createMessageUser(t *testing.T, ctx context.Context, database *db.DB, pool 
 		t.Fatalf("create user %s: %v", name, err)
 	}
 	if _, err := pool.Exec(ctx,
-		`UPDATE users SET account_status = 'active', id_card_valid = true WHERE id = $1`, u.ID); err != nil {
+		`UPDATE users SET account_status = 'active', id_card_valid = true,
+		        city = '广东深圳', native_place = '广东广州', church_location = '深圳南山'
+		  WHERE id = $1`, u.ID); err != nil {
 		t.Fatalf("activate user %s: %v", name, err)
 	}
 	return u
@@ -401,6 +405,7 @@ func (e *pointsHTTPEnv) user(t *testing.T, gender, accountStatus, accountKind st
 	if _, err := e.conn.Exec(e.ctx,
 		`UPDATE users SET gender = $2, account_status = $3, account_kind = $4,
 		                  status = 'active', nickname = $5,
+		                  city = '广东深圳', native_place = '广东广州', church_location = '深圳南山',
 		                  id_card_valid = ($4 <> 'observer') WHERE id = $1`,
 		u.ID, gender, accountStatus, accountKind, legacy); err != nil {
 		t.Fatalf("update fixture user: %v", err)

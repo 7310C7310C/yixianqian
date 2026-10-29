@@ -22,6 +22,7 @@ const (
 	legacyFieldHeight          = "身高（cm）"
 	legacyFieldEducation       = "学历"
 	legacyFieldCity            = "现居/工作城市"
+	legacyFieldNativePlace     = "家乡"
 	legacyFieldChurch          = "经常去的教堂"
 	legacyFieldChurchGroup     = "参加的团体"
 	legacyFieldChurchLocation  = "教堂所在市-区"
@@ -92,9 +93,10 @@ func legacyProfileEditable(p db.Profile) []legacyEditableField {
 		{Field: legacyFieldHeight, Label: "身高", Type: "number", Value: height},
 		{Field: legacyFieldEducation, Label: "学历", Type: "select", Options: db.ProfileEducationOptions, Value: p.Education},
 		regionField(legacyFieldCity, "现居/工作城市", p.City, "pc", true),
+		regionField(legacyFieldNativePlace, "家乡", p.NativePlace, "pc", true),
 		{Field: legacyFieldChurch, Label: "经常去的教堂", Type: "text", Value: p.Church},
 		{Field: legacyFieldChurchGroup, Label: "参加的团体", Type: "text", Value: p.ChurchGroup},
-		regionField(legacyFieldChurchLocation, "教堂所在省-市-区", p.ChurchLocation, "cd", false),
+		regionField(legacyFieldChurchLocation, "教堂所在省-市-区", p.ChurchLocation, "cd", true),
 		{Field: legacyFieldIndustry, Label: "从事行业", Type: "text", Value: p.Industry},
 		{Field: legacyFieldPosition, Label: "职位", Type: "text", Value: p.Position},
 		{Field: legacyFieldIncome, Label: "年收入", Type: "select", Options: db.ProfileIncomeOptions, Value: p.Income},
@@ -221,6 +223,15 @@ func legacyProfileUpdateFromJSON(body map[string]any) (db.ProfileUpdate, error) 
 		}
 		upd.City = &canonical
 	}
+	if v, ok, err := legacyStringValue(body, legacyFieldNativePlace, "native_place"); err != nil {
+		return upd, err
+	} else if ok {
+		canonical, valid := regions.NormalizeCityValue(*v)
+		if !valid {
+			return upd, fmt.Errorf("请选择家乡")
+		}
+		upd.NativePlace = &canonical
+	}
 	if v, ok, err := legacyStringValue(body, legacyFieldChurch, "church"); err != nil {
 		return upd, err
 	} else if ok {
@@ -235,8 +246,9 @@ func legacyProfileUpdateFromJSON(body map[string]any) (db.ProfileUpdate, error) 
 		return upd, err
 	} else if ok {
 		if *v == "" {
-			upd.ChurchLocation = v
-		} else if canonical, valid := regions.NormalizeAreaValue(*v); valid {
+			return upd, fmt.Errorf("请选择教堂所在省-市-区")
+		}
+		if canonical, valid := regions.NormalizeAreaValue(*v); valid {
 			upd.ChurchLocation = &canonical
 		} else {
 			return upd, fmt.Errorf("请选择教堂所在省-市-区")

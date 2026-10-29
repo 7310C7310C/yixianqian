@@ -30,6 +30,7 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 		HeightCM:        legacyTestIntPtr(165),
 		Education:       "本科",
 		City:            "杭州",
+		NativePlace:     "浙江宁波",
 		Church:          "南头堂",
 		ChurchGroup:     "青年组",
 		ChurchLocation:  "上城区",
@@ -53,7 +54,7 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 		Phone:           "13800000000",
 	}
 	fields := legacyProfileEditable(profile)
-	if len(fields) != 30 {
+	if len(fields) != 31 {
 		t.Fatalf("editable fields = %d", len(fields))
 	}
 	byName := map[string]legacyEditableField{}
@@ -61,7 +62,7 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 		byName[field.Field] = field
 	}
 	for _, want := range []string{
-		legacyFieldIDCard, legacyFieldNickname, legacyFieldHeight, legacyFieldEducation, legacyFieldCity,
+		legacyFieldIDCard, legacyFieldNickname, legacyFieldHeight, legacyFieldEducation, legacyFieldCity, legacyFieldNativePlace,
 		legacyFieldChurch, legacyFieldChurchGroup, legacyFieldChurchLocation,
 		legacyFieldIndustry, legacyFieldPosition, legacyFieldIncome, legacyFieldHouse,
 		legacyFieldHouseNoteHave, legacyFieldHouseNoteNone,
@@ -87,6 +88,10 @@ func TestLegacyProfileEditableMirrorsV1Schema(t *testing.T) {
 	}
 	if byName[legacyFieldSelfTraits].Type != "multi" {
 		t.Fatalf("traits type = %q", byName[legacyFieldSelfTraits].Type)
+	}
+	native := byName[legacyFieldNativePlace]
+	if native.Type != "region" || native.RegionLevel != "pc" || native.Value != "浙江宁波" || !native.Required {
+		t.Fatalf("native region field = %+v", native)
 	}
 	city := byName[legacyFieldCity]
 	if city.Type != "region" || city.RegionLevel != "pc" || city.Value != "浙江杭州" ||
@@ -143,10 +148,14 @@ func TestIDCardGateAllowlistCannotBeBypassedByDotSegments(t *testing.T) {
 }
 
 func TestLegacyProfileEditableNoAreaCity(t *testing.T) {
-	fields := legacyProfileEditable(db.Profile{City: "台湾台北", ChurchLocation: "台湾台北"})
+	fields := legacyProfileEditable(db.Profile{City: "台湾台北", NativePlace: "台湾台北", ChurchLocation: "台湾台北"})
 	byName := map[string]legacyEditableField{}
 	for _, field := range fields {
 		byName[field.Field] = field
+	}
+	native := byName[legacyFieldNativePlace]
+	if native.Type != "region" || native.RegionLevel != "pc" || native.Value != "台湾台北" || !native.Required {
+		t.Fatalf("native region field = %+v", native)
 	}
 	city := byName[legacyFieldCity]
 	if city.Type != "region" || city.Value != "台湾台北" || city.ProvinceCode == "" || city.CityCode == "" {
@@ -228,6 +237,8 @@ func TestLegacyProfileUpdateRejectsMalformedValues(t *testing.T) {
 		`{"我是一个怎样的人-爱好": [1]}`,
 		`{"现居/工作城市": "不存在市"}`,
 		`{"教堂所在市-区": "广东"}`,
+		`{"家乡": "广东"}`,
+		`{"教堂所在市-区": ""}`,
 	}
 	for _, raw := range cases {
 		if _, err := legacyProfileUpdateFromJSON(decodeLegacyMap(t, raw)); err == nil {

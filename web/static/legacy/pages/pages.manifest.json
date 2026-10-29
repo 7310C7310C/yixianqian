@@ -3,10 +3,10 @@
   "vue": "3.4.27",
   "root": {
     "file": "app.render.js",
-    "templateSha256": "bc51452463c18c9e827069982dbce2b4d31a9c0cc8c8804823c81dcc7e131643",
-    "templateSize": 52597,
-    "bytes": 183954,
-    "sha256": "bc9a000a61cd116f2a721a8ae5be4cdb3ac47a00a08e414e69b13fb2dc39f245"
+    "templateSha256": "9fc28f9484abf4404439546704b95a93b9c4d8e45d7efc185487f1476ff000fa",
+    "templateSize": 52615,
+    "bytes": 183972,
+    "sha256": "ac60bd021b76495f8a49e1e948a5c4a205e22515599f6849be9f6e685066e7a3"
   },
   "initial": [
     "cards"
@@ -45,8 +45,8 @@
         "profile_edit",
         "points"
       ],
-      "bytes": 69382,
-      "sha256": "354db58815b423c6f6d5d38a547cd6551d84d3c76a217273f2a6621735fec518"
+      "bytes": 69373,
+      "sha256": "e45a937cb1a434413217eaa51567749ce34262afeefbb11cb207760d53796c7a"
     },
     "detail": {
       "file": "pages/detail.render.js",
@@ -161,8 +161,8 @@
     "profile_edit": {
       "group": "profile",
       "file": "pages/profile.render.js",
-      "templateSha256": "6bcc92655e441342cb84546fadf6c1a0fbf870f12263375766ac01e407b0c0de",
-      "templateSize": 6446
+      "templateSha256": "c28369c289e99516cbcb4a8425e253065bfe8568d24127561a2250c0916bde6f",
+      "templateSize": 6437
     },
     "points": {
       "group": "profile",

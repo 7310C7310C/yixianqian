@@ -56,8 +56,8 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 		`UPDATE users
 		 SET nickname = '详情昵称', gender = '女', birthday = '1995-06-15',
 		     height_cm = 165, education = '本科', baptismal_name = '恩典',
-		     church = '测试教会', church_group = '青年组', church_location = '上海',
-		     native_place = '江苏', city = '上海', industry = '教育', position = '教师',
+		     church = '测试教会', church_group = '青年组',
+		     native_place = '江苏南京', city = '上海', church_location = '上海浦东', industry = '教育', position = '教师',
 		     income = '20W - 30W', house = '有', driving = '无', marriage = '未婚',
 		     family = '家庭和睦', live_with_parents = '独立生活', personality = '性格温和',
 		     self_traits = '["喜欢安静","正直"]'::jsonb,

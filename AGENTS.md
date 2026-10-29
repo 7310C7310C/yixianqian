@@ -33,7 +33,7 @@ sources:
 - 用户端复用 v1 Vue 3 + Vant SPA；管理台只经同源 iframe，顶层 `/admin` 一律 303 到 `/?admin=1`。
 - 不恢复已废弃方案：`/welcome` 页面、独立 `/login` 页（并入首页弹框）、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、Redis、飞书 runtime、第二套用户 UI、首卡自我引导气泡（`self-guide-tip`；首卡已自带「这是你 · 他人视角」标签）；不恢复品牌启动页/静态岛，首屏保持旧 hero 图 + 真实卡绘制后交接。
 - PostgreSQL 是唯一权威；R2 只存私有媒体，浏览器只经 `/media/{id}`；不把对象存储 URL 给前端。
-- 城市字段（注册/资料）只能来自 vendored 省-市/区数据集，不接受手动填写；数据集外的旧值由 `region_required` 门禁强制修改。
+- 城市字段（现居/家乡/教堂所在地，注册/资料）均必填且只能来自 vendored 省-市/区数据集，不接受手动填写；数据集外的旧值由 `region_required` 门禁强制修改。
 - 图片入库统一格式：用户照片/活动海报一律重编码 JPEG（透明填白、GIF 首帧），小天使二维码一律 JPEG q92（最长边 720px）；HEIC 由后端 ispe 元数据预检（纯 Go，不解码）后经 heif-convert 子进程转换，不保留原始 HEIC。
 - 不新增 Redis 或消息队列；当前正确性不依赖缓存或队列。
 - migration 只增不改；回滚 binary 不等于回滚 schema；生产大表索引需另行走手工窗口。

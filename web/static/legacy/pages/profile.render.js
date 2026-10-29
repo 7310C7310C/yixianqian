@@ -1020,7 +1020,7 @@ function render(_ctx, _cache) {
     ]),
     _createElementVNode("div", _hoisted_2, [
       (!_ctx.isObserver)
-        ? (_openBlock(), _createElementBlock("div", _hoisted_3, "除姓名、圣名、生日、家乡外，其它资料均可修改；手机号是登录账号，修改需验证当前密码"))
+        ? (_openBlock(), _createElementBlock("div", _hoisted_3, "除姓名、圣名、生日外，其它资料均可修改；手机号是登录账号，修改需验证当前密码"))
         : (_openBlock(), _createElementBlock("div", _hoisted_4, "观察员资料只读，仅可补填身份证号；补填后即可解除访问限制")),
       (!_ctx.isObserver)
         ? (_openBlock(), _createElementBlock("div", _hoisted_5, [
