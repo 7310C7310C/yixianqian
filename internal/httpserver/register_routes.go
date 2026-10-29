@@ -73,15 +73,17 @@ func (a *App) renderRegister(w http.ResponseWriter, r *http.Request, status int,
 	data := buildRegisterPageData(values)
 	data.MaxMB = int(a.cfg.MediaMaxBytes / (1 << 20))
 	if a.db != nil {
-		hasQR, err := a.db.SiteAssetExists(r.Context(), "angel_qr")
+		etag, hasQR, err := a.db.SiteAssetETag(r.Context(), siteAssetAngelQR)
 		if err != nil {
 			a.logger(r).Warn("check angel qr asset failed", "error", err)
 		} else if hasQR {
 			data.HasAngelQR = true
+			data.AngelQRVersion = etag
 			for si := range data.Sections {
 				for fi := range data.Sections[si].Fields {
 					if data.Sections[si].Fields[fi].Name == "angel_ack" {
 						data.Sections[si].Fields[fi].ShowQR = true
+						data.Sections[si].Fields[fi].QRVersion = etag
 					}
 				}
 			}
@@ -565,15 +567,16 @@ func (a *App) cleanupRegistration(r *http.Request, userID int64) {
 }
 
 type registerDoneData struct {
-	Heading     string
-	Message     string
-	Status      string
-	CopyKey     string
-	PhoneMasked string
-	LoggedIn    bool
-	CanEnter    bool
-	Submitted   bool
-	HasAngelQR  bool
+	Heading        string
+	Message        string
+	Status         string
+	CopyKey        string
+	PhoneMasked    string
+	LoggedIn       bool
+	CanEnter       bool
+	Submitted      bool
+	HasAngelQR     bool
+	AngelQRVersion string
 }
 
 // registerDoneCopyKey maps the account state to the public-copy.js table key.
@@ -634,10 +637,11 @@ func (a *App) handleRegisterDone(w http.ResponseWriter, r *http.Request) {
 	}
 	data.CopyKey = registerDoneCopyKey(data.Status, submitted)
 	if a.db != nil {
-		if has, err := a.db.SiteAssetExists(r.Context(), siteAssetAngelQR); err != nil {
+		if etag, has, err := a.db.SiteAssetETag(r.Context(), siteAssetAngelQR); err != nil {
 			a.logger(r).Warn("check angel qr for register done failed", "error", err)
 		} else {
 			data.HasAngelQR = has
+			data.AngelQRVersion = etag
 		}
 	}
 	a.render(w, r, http.StatusOK, "register_done", PageData{

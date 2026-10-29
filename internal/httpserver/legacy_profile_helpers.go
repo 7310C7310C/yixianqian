@@ -74,7 +74,7 @@ func legacyProfileEditable(p db.Profile) []legacyEditableField {
 		{Field: legacyFieldCity, Label: "现居/工作城市", Type: "text", Value: p.City},
 		{Field: legacyFieldChurch, Label: "经常去的教堂", Type: "text", Value: p.Church},
 		{Field: legacyFieldChurchGroup, Label: "参加的团体", Type: "text", Value: p.ChurchGroup},
-		{Field: legacyFieldChurchLocation, Label: "教堂所在市-区", Type: "text", Value: p.ChurchLocation},
+		{Field: legacyFieldChurchLocation, Label: "教堂所在省-市-区", Type: "text", Value: p.ChurchLocation},
 		{Field: legacyFieldIndustry, Label: "从事行业", Type: "text", Value: p.Industry},
 		{Field: legacyFieldPosition, Label: "职位", Type: "text", Value: p.Position},
 		{Field: legacyFieldIncome, Label: "年收入", Type: "select", Options: db.ProfileIncomeOptions, Value: p.Income},

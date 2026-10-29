@@ -212,7 +212,7 @@ func cardSections(c CardView) []CardFieldSection {
 			"家乡", c.NativePlace,
 			"经常去的教堂", c.Church,
 			"参加的团体", c.ChurchGroup,
-			"教堂所在市-区", c.ChurchLocation,
+			"教堂所在省-市-区", c.ChurchLocation,
 		)},
 		{"工作与经济", "💼", cardFieldItems(
 			"从事行业", c.Industry,

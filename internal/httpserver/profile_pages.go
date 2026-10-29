@@ -242,7 +242,7 @@ func profileSections(p db.Profile, includePrivate bool) []profileSectionView {
 		basic = append(basic, profileFieldView{"参加的团体", p.ChurchGroup})
 	}
 	if p.ChurchLocation != "" {
-		basic = append(basic, profileFieldView{"教会所在市区", p.ChurchLocation})
+		basic = append(basic, profileFieldView{"教会所在省-市-区", p.ChurchLocation})
 	}
 
 	work := []profileFieldView{}
@@ -462,7 +462,7 @@ func buildProfileEditView(p db.Profile) profileEditView {
 		text("native_place", "家乡", p.NativePlace),
 		text("church", "经常去的教会", p.Church),
 		text("church_group", "参加的团体", p.ChurchGroup),
-		text("church_location", "教会所在市区", p.ChurchLocation),
+		text("church_location", "教会所在省-市-区", p.ChurchLocation),
 	}
 	work := []profileEditField{
 		text("industry", "从事行业", p.Industry),

@@ -14,10 +14,14 @@
   <section class="card register-section">
     <h2 data-register-text="photos.title"></h2>
     <p class="hint" data-register-text="photos.hint"></p>
-    <p class="hint" data-register-text="photos.heic"></p>
     <div class="register-field">
-      <label for="f_photos"><span data-register-text="photos.label"></span><span class="req" aria-hidden="true">*</span></label>
-      <input id="f_photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff" multiple required>
+      <input id="f_photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff" multiple hidden data-max-mb="{{.Data.MaxMB}}">
+      <div class="register-photo-picker">
+        <label for="f_photos" class="button" data-register-text="photos.label"></label>
+        <span class="hint" data-photo-count></span>
+      </div>
+      <div class="register-photo-grid" data-photo-grid hidden></div>
+      <p class="hint register-photo-status" data-photo-status hidden tabindex="-1"></p>
       <p class="hint" data-register-text="photos.retry"></p>
     </div>
   </section>

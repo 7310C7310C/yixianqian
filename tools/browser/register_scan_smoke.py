@@ -22,10 +22,13 @@ import http.cookiejar
 import json
 import os
 import re
+import struct
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
+import zlib
 from pathlib import Path
 
 try:
@@ -162,6 +165,34 @@ def post_register_error() -> None:
           "2 traits checked, gender selected")
 
 
+PHOTO_DIR = Path(tempfile.mkdtemp(prefix="yxq-register-photos-"))
+
+
+def attach_photos(page) -> None:
+    """Select three tiny PNGs so the new 3-photo submit guard can pass."""
+    def png_bytes(rgb):
+        w, h = 4, 4
+        raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
+        def chunk(tag, data):
+            return (struct.pack(">I", len(data)) + tag + data +
+                    struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+        return (b"\x89PNG\r\n\x1a\n" +
+                chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) +
+                chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+    paths = []
+    for i, color in enumerate(((255, 0, 0), (0, 255, 0), (0, 0, 255))):
+        path = PHOTO_DIR / f"photo-{i}.png"
+        if not path.exists():
+            path.write_bytes(png_bytes(color))
+        paths.append(str(path))
+    page.set_input_files("#f_photos", paths)
+    page.wait_for_selector(".register-photo-card", timeout=10000)
+    page.wait_for_function(
+        "() => Array.from(document.querySelectorAll('.register-photo-card img'))"
+        ".every(img => img.naturalWidth > 0)", timeout=10000)
+
+
 def fill_region_codes(page) -> None:
     """Set the hidden cascade codes so the client-side region guard passes."""
     page.evaluate("""() => {
@@ -240,6 +271,7 @@ def submit_payload_check(page, viewport: str) -> None:
         route.continue_()
 
     page.route("**/register", handle)
+    attach_photos(page)
     fill_region_codes(page)
     unlock_angel(page)
     page.fill("#f_name", "测试用户")
@@ -268,6 +300,7 @@ def submit_payload_check(page, viewport: str) -> None:
 def error_rerender_check(page, viewport: str) -> None:
     page.goto(BASE + "/register", wait_until="networkidle")
     wait_ready(page)
+    attach_photos(page)
     fill_region_codes(page)
     unlock_angel(page)
     page.fill("#f_name", "测试用户")

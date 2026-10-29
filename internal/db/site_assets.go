@@ -49,16 +49,19 @@ func (d *DB) GetSiteAsset(ctx context.Context, key string) (SiteAsset, error) {
 	return asset, nil
 }
 
-// SiteAssetExists is the cheap check used by the register page to avoid
-// rendering an <img> before the first upload.
-func (d *DB) SiteAssetExists(ctx context.Context, key string) (bool, error) {
-	var exists bool
+// SiteAssetETag is the cheap metadata check used by the register page. It
+// avoids loading the image bytes and supplies the cache-busting version.
+func (d *DB) SiteAssetETag(ctx context.Context, key string) (string, bool, error) {
+	var etag string
 	err := d.pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM site_assets WHERE key = $1)`, key).Scan(&exists)
-	if err != nil {
-		return false, fmt.Errorf("db: check site asset: %w", err)
+		`SELECT etag FROM site_assets WHERE key = $1`, key).Scan(&etag)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
 	}
-	return exists, nil
+	if err != nil {
+		return "", false, fmt.Errorf("db: check site asset: %w", err)
+	}
+	return etag, true, nil
 }
 
 // UpsertSiteAsset replaces the bytes and metadata atomically.

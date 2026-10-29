@@ -569,3 +569,104 @@ textarea::placeholder {
 .register-angel-fallback[hidden] {
   display: none;
 }
+
+.register-photo-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.register-photo-picker .button {
+  margin: 0;
+}
+
+.register-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.register-photo-grid[hidden] {
+  display: none;
+}
+
+.register-photo-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #ffe3e8;
+  border-color: var(--shell-brand-line, #ffe3e8);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.register-photo-card img {
+  display: block;
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+}
+
+.register-photo-cover {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #ad2139;
+  background: var(--shell-brand-deep, #ad2139);
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.register-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+}
+
+.register-photo-actions button {
+  flex: 1 1 auto;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 1px solid #dcdee0;
+  border-color: var(--shell-border, #dcdee0);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #323233;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.register-photo-actions button:hover {
+  border-color: #cc304e;
+  color: #ad2139;
+}
+
+.register-photo-status.is-bad {
+  color: #ee0a24;
+}
+
+.register-angel-press.is-warn {
+  color: #ee0a24;
+  font-weight: 600;
+}
+
+.register-photo-status:focus,
+.register-region-status:focus,
+.register-angel-press:focus {
+  outline: 2px solid #cc304e;
+  outline-offset: 2px;
+}
+
+.register-photo-actions button {
+  min-height: 44px;
+}
+
+.register-angel-option input[type="checkbox"]:disabled {
+  pointer-events: none;
+}

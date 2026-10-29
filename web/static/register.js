@@ -96,6 +96,15 @@
   var COPY_ANGEL_PRESS_HINT = '\u8bf7\u5148\u957f\u6309\u4e8c\u7ef4\u7801\u4fdd\u5b58/\u6dfb\u52a0\u5c0f\u5929\u4f7f\uff0c\u518d\u52fe\u9009\u786e\u8ba4\u3002';
   var COPY_ANGEL_PRESS_DONE = '\u5df2\u6539\u4e3a\u624b\u52a8\u786e\u8ba4\uff0c\u8bf7\u52fe\u9009\u5e76\u7ee7\u7eed\u3002';
 
+  var COPY_PHOTO_COUNT = '\u5df2\u9009 %d / 9 \u5f20';
+  var COPY_PHOTO_COVER = '\u5c01\u9762';
+  var COPY_PHOTO_SET_COVER = '\u8bbe\u4e3a\u5c01\u9762';
+  var COPY_PHOTO_DELETE = '\u5220\u9664';
+  var COPY_PHOTO_MIN = '\u81f3\u5c11\u9009\u62e9 3 \u5f20\u7167\u7247\u3002';
+  var COPY_PHOTO_MAX = '\u6700\u591a\u9009\u62e9 9 \u5f20\u7167\u7247\u3002';
+  var COPY_PHOTO_SYNC_FAIL = '\u5f53\u524d\u6d4f\u89c8\u5668\u65e0\u6cd5\u8c03\u6574\u7167\u7247\u987a\u5e8f\uff0c\u8bf7\u5237\u65b0\u540e\u91cd\u65b0\u9009\u62e9\u3002';
+  var COPY_PHOTO_BAD_TYPE = '\u8bf7\u9009\u62e9\u56fe\u7247\u6587\u4ef6\u3002';
+  var COPY_PHOTO_TOO_LARGE = '\u6709\u7167\u7247\u8d85\u8fc7\u5927\u5c0f\u4e0a\u9650\uff0c\u8bf7\u538b\u7f29\u540e\u518d\u9009\u3002';
   var REGION_CACHE = null;
 
   function statusNode(input) {
@@ -292,8 +301,11 @@
             if (!m.value.trim()) {
               m.setCustomValidity(COPY_REGION_MANUALREQUIRED);
               setRegionStatus(w, COPY_REGION_MANUALREQUIRED, true);
+              var manualStatus = w.querySelector('[data-region-status]');
+              if (manualStatus) manualStatus.scrollIntoView({ block: 'center' });
               event.preventDefault();
               m.focus();
+              if (manualStatus) manualStatus.focus({ preventScroll: true });
               return;
             }
           } else {
@@ -306,8 +318,14 @@
               var first = f.querySelector('[data-region-province]');
               if (first) first.setCustomValidity(COPY_REGION_REQUIRED);
               setRegionStatus(w, COPY_REGION_REQUIRED, true);
+              var regionStatus = w.querySelector('[data-region-status]');
+              if (regionStatus) {
+                regionStatus.scrollIntoView({ block: 'center' });
+                regionStatus.focus();
+              }
               event.preventDefault();
               if (first) first.focus();
+              if (regionStatus) regionStatus.focus({ preventScroll: true });
               return;
             }
           }
@@ -516,6 +534,147 @@
   }
 
 
+
+  function initPhotoPicker() {
+    var input = document.getElementById('f_photos');
+    var grid = document.querySelector('[data-photo-grid]');
+    var status = document.querySelector('[data-photo-status]');
+    var count = document.querySelector('[data-photo-count]');
+    var picker = document.querySelector('.register-photo-picker');
+    if (!input || !grid) return;
+    var files = [];
+    var urls = [];
+    var canSync = true;
+    try { new DataTransfer(); } catch (e) { canSync = false; }
+    if (!canSync) {
+      input.hidden = false;
+      if (picker) picker.hidden = true;
+      grid.hidden = true;
+      return;
+    }
+
+    function setStatus(text, bad) {
+      if (!status) return;
+      status.textContent = text || '';
+      status.hidden = !text;
+      if (bad) status.classList.add('is-bad'); else status.classList.remove('is-bad');
+    }
+
+    function revoke() {
+      for (var i = 0; i < urls.length; i++) URL.revokeObjectURL(urls[i]);
+      urls = [];
+    }
+
+    function sync() {
+      try {
+        var dt = new DataTransfer();
+        for (var i = 0; i < files.length; i++) dt.items.add(files[i]);
+        input.files = dt.files;
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function render() {
+      revoke();
+      grid.innerHTML = '';
+      for (var i = 0; i < files.length; i++) {
+        var card = document.createElement('div');
+        card.className = 'register-photo-card';
+        var img = document.createElement('img');
+        var url = URL.createObjectURL(files[i]);
+        urls.push(url);
+        img.src = url;
+        img.alt = '';
+        card.appendChild(img);
+        if (i === 0) {
+          var badge = document.createElement('span');
+          badge.className = 'register-photo-cover';
+          badge.textContent = COPY_PHOTO_COVER;
+          card.appendChild(badge);
+        }
+        var actions = document.createElement('div');
+        actions.className = 'register-photo-actions';
+        if (i > 0) {
+          var cover = document.createElement('button');
+          cover.type = 'button';
+          cover.textContent = COPY_PHOTO_SET_COVER;
+          cover.addEventListener('click', (function (index) {
+            return function () {
+              var item = files.splice(index, 1)[0];
+              files.unshift(item);
+              sync();
+              render();
+            };
+          })(i));
+          actions.appendChild(cover);
+        }
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.textContent = COPY_PHOTO_DELETE;
+        del.addEventListener('click', (function (index) {
+          return function () {
+            files.splice(index, 1);
+            sync();
+            render();
+          };
+        })(i));
+        actions.appendChild(del);
+        card.appendChild(actions);
+        grid.appendChild(card);
+      }
+      grid.hidden = files.length === 0;
+      if (count) {
+        count.textContent = files.length ? COPY_PHOTO_COUNT.replace('%d', String(files.length)) : '';
+      }
+      if (files.length && files.length < 3) setStatus(COPY_PHOTO_MIN, true);
+      else setStatus('', false);
+    }
+
+    input.addEventListener('change', function () {
+      var picked = Array.prototype.slice.call(input.files || []);
+      var maxMB = parseInt(input.getAttribute('data-max-mb'), 10) || 10;
+      var errorText = '';
+      var overflow = files.length + picked.length > 9;
+      for (var i = 0; i < picked.length; i++) {
+        var file = picked[i];
+        if (!file.type || file.type.indexOf('image/') !== 0) {
+          errorText = COPY_PHOTO_BAD_TYPE;
+          continue;
+        }
+        if (file.size > maxMB * 1024 * 1024) {
+          errorText = COPY_PHOTO_TOO_LARGE;
+          continue;
+        }
+        if (files.length >= 9) break;
+        var duplicate = files.some(function (f) {
+          return f.name === file.name && f.size === file.size && f.lastModified === file.lastModified;
+        });
+        if (!duplicate) files.push(file);
+      }
+      if (!sync()) errorText = COPY_PHOTO_SYNC_FAIL;
+      if (overflow && !errorText) errorText = COPY_PHOTO_MAX;
+      render();
+      if (errorText) setStatus(errorText, true);
+    });
+
+    var form = input.closest('form');
+    if (form) {
+      form.addEventListener('submit', function (event) {
+        if (files.length < 3 || files.length > 9) {
+          event.preventDefault();
+          setStatus(files.length < 3 ? COPY_PHOTO_MIN : COPY_PHOTO_MAX, true);
+          if (status) {
+            status.scrollIntoView({ block: 'center' });
+            status.focus();
+          }
+        }
+      }, true);
+    }
+    render();
+  }
+
   function initAngelQR() {
     var img = document.querySelector('[data-angel-qr-image]');
     var ack = document.querySelector('input[name="angel_ack"]');
@@ -561,6 +720,19 @@
         ack.focus();
       });
     }
+    var option = img.closest('.register-angel-option');
+    if (option) {
+      option.addEventListener('click', function () {
+        if (!ack.disabled) return;
+        setStatus(COPY_ANGEL_PRESS_HINT);
+        if (status) {
+          status.classList.remove('is-warn');
+          void status.offsetWidth;
+          status.classList.add('is-warn');
+          setTimeout(function () { status.classList.remove('is-warn'); }, 1200);
+        }
+      });
+    }
     img.addEventListener('contextmenu', function () {
       unlock(false);
     });
@@ -578,7 +750,12 @@
         if (ack.disabled) {
           event.preventDefault();
           setStatus(COPY_ANGEL_PRESS_HINT);
+          if (status) {
+            status.scrollIntoView({ block: 'center' });
+            status.focus();
+          }
           if (fallback) fallback.focus();
+          if (status) status.focus({ preventScroll: true });
         }
       }, true);
     }
@@ -615,6 +792,7 @@
     fillError();
     fillAria();
     initConditionalFields();
+    initPhotoPicker();
     initAngelQR();
     bindValidation();
     loadRegions();

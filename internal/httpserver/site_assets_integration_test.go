@@ -41,7 +41,7 @@ func TestIntegrationAngelQRUploadAndPublicServe(t *testing.T) {
 	plainClient := loginMessageClient(t, database, server, plain)
 	modCSRF := modClient.pageCSRF("/admin")
 	plainCSRF := plainClient.pageCSRF("/register")
-	png := testAngelPNG(t)
+	png := testAngelPNGSize(t, 1074, 1458)
 	resp = plainClient.postMultipart("/admin/settings/angel-qr", plainCSRF, "angel.png", "image/png", png)
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("plain upload status = %d, want 403", resp.StatusCode)
@@ -56,8 +56,12 @@ func TestIntegrationAngelQRUploadAndPublicServe(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
 		t.Fatalf("angel-qr after upload status=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
-	if resp.Header.Get("ETag") == "" || len(body) != len(png) {
-		t.Fatalf("angel-qr etag=%q bytes=%d want %d", resp.Header.Get("ETag"), len(body), len(png))
+	if resp.Header.Get("ETag") == "" || len(body) == 0 {
+		t.Fatalf("angel-qr etag=%q bytes=%d", resp.Header.Get("ETag"), len(body))
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(body))
+	if err != nil || format != "png" || cfg.Width > 720 || cfg.Height > 720 {
+		t.Fatalf("angel-qr format=%q size=%dx%d err=%v, want png <=720", format, cfg.Width, cfg.Height, err)
 	}
 	etag := resp.Header.Get("ETag")
 	resp = anonymous.getWithHeaders("/angel-qr", map[string]string{"If-None-Match": etag})
@@ -89,9 +93,9 @@ func TestIntegrationAngelQRUploadAndPublicServe(t *testing.T) {
 	}
 }
 
-func testAngelPNG(t *testing.T) []byte {
+func testAngelPNGSize(t *testing.T, w, h int) []byte {
 	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, 120, 160))
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatal(err)

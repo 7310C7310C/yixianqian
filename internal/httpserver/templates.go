@@ -40,8 +40,11 @@ import (
 // home.js/register.css/register.js/admin.css and added the register.js region
 // loader. 53 covered the review fixes to home.js/register.js; 54 covers the
 // house/car notes, QR long-press gate and unified image-format changes. 55
-// covers the SPA compression white-fill fix. Keep admin @import values in sync.
-const assetVersion = "55"
+// covered the SPA compression white-fill fix. 56 covers the photo preview,
+// simplified hints, church province/city and QR compression changes. 57
+// covered the CSP/preview/feedback fixes. 58 covers the region focus/church
+// revert changes. Keep admin @import values in sync.
+const assetVersion = "58"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

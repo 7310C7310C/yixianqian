@@ -23,9 +23,9 @@
     </label>
     {{if .ShowQR}}
     <div class="register-angel-qr">
-      <img src="/angel-qr?v={{assetVersion}}" alt="" width="220" height="299" loading="lazy" data-angel-qr-image>
+      <img src="/angel-qr?v={{.QRVersion}}" alt="" width="220" height="299" loading="lazy" data-angel-qr-image>
       <p class="hint" data-register-text="field.angel_ack.qrHint"></p>
-      <p class="hint register-angel-press" data-angel-press-status hidden></p>
+      <p class="hint register-angel-press" data-angel-press-status hidden tabindex="-1"></p>
       <button type="button" class="register-angel-fallback" data-angel-fallback hidden>
         <span data-register-text="field.angel_ack.pressFallback"></span>
       </button>
@@ -65,7 +65,7 @@
     <input type="checkbox" data-region-manual-toggle>
     <span data-register-text="region.manualToggle"></span>
   </label>
-  <p class="hint register-region-status" data-region-status hidden></p>
+  <p class="hint register-region-status" data-region-status hidden tabindex="-1"></p>
   {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
   {{else if eq .Type "textarea"}}
   <label for="f_{{.Name}}"><span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>

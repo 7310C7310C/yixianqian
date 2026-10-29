@@ -296,7 +296,7 @@ func TestRegisterTemplatesRender(t *testing.T) {
 		`name="church_location_area"`, `data-region-manual-toggle`,
 		`id="field_house_note_have"`, `data-show-when-field="house"`, `name="house_note_have"`,
 		`id="field_driving_note_none"`, `data-show-when-field="driving"`,
-		`list="dl_industry"`, `list="dl_referral_source"`,
+		`list="dl_referral_source"`,
 		`/static/register.js`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("register missing %q", want)

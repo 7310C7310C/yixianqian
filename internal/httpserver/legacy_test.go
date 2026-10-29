@@ -207,6 +207,12 @@ func TestSecurityPolicyRelaxesLegacySPAOnly(t *testing.T) {
 	if !strings.Contains(strict, "base-uri 'none'") {
 		t.Fatalf("strict policy lost base-uri: %s", strict)
 	}
+	if !strings.Contains(securityPolicy("/register"), "img-src 'self' data: blob:") {
+		t.Fatalf("/register must allow blob: previews: %s", securityPolicy("/register"))
+	}
+	if strings.Contains(securityPolicy("/activate"), "blob:") {
+		t.Fatalf("/activate must not allow blob:: %s", securityPolicy("/activate"))
+	}
 }
 
 // 活动管理 native SPA 只在 native_admin=1 的同源 iframe 场景放宽 framing；

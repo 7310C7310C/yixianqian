@@ -66,8 +66,14 @@ func securityPolicyWithQuery(path string, query url.Values) string {
 			"img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; " +
 			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; object-src 'none'"
 	}
+	// /register creates blob: previews for selected photos; every other
+	// scan-safe page keeps the stricter data:-only image policy.
+	imgSrc := "'self' data:"
+	if path == "/register" {
+		imgSrc += " blob:"
+	}
 	return "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors " + frameAncestors + "; " +
-		"img-src 'self' data:; style-src 'self'; font-src 'self' data:; script-src 'self'; object-src 'none'"
+		"img-src " + imgSrc + "; style-src 'self'; font-src 'self' data:; script-src 'self'; object-src 'none'"
 }
 
 // embeddablePage lists server-rendered pages that the user SPA opens in a

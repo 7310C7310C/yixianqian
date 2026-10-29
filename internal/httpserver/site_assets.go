@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"image"
+	"image/draw"
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	_ "golang.org/x/image/bmp"
+	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 
@@ -24,6 +26,10 @@ import (
 const (
 	siteAssetAngelQR  = "angel_qr"
 	siteAssetCacheTTL = 60 * time.Second
+	// qrMaxSide bounds the stored QR edge. It is displayed at <=220px and
+	// long-pressed to save; 720px keeps scanning reliable without shipping a
+	// 500KB image to every register-page view.
+	qrMaxSide = 720
 	// maxSiteAssetBytes is also the DB CHECK upper bound in 0012_site_assets.
 	maxSiteAssetBytes = 2 << 20
 	siteAssetMinSide  = 60
@@ -87,7 +93,7 @@ func registerSiteAssets(a *App, mux *http.ServeMux) {
 
 // handleAngelQR streams the admin-managed 小天使二维码. The bytes live in
 // PostgreSQL (0012_site_assets), so the public read path never needs R2
-// credentials or a bucket URL. Five-minute caching lets an upload propagate
+// credentials or a bucket URL. One-hour caching lets an upload propagate
 // quickly while still absorbing repeated register-page views.
 func (a *App) handleAngelQR(w http.ResponseWriter, r *http.Request) {
 	asset, ok := a.siteAssets.get(siteAssetAngelQR)
@@ -107,7 +113,7 @@ func (a *App) handleAngelQR(w http.ResponseWriter, r *http.Request) {
 	}
 	etag := `"` + asset.ETag + `"`
 	w.Header().Set("Content-Type", asset.ContentType)
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
 	w.Header().Set("ETag", etag)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if r.Header.Get("If-None-Match") == etag {
@@ -224,11 +230,27 @@ func (a *App) handleAdminAngelQRUpload(w http.ResponseWriter, r *http.Request, a
 	}
 	bounds := src.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
+	if width > qrMaxSide || height > qrMaxSide {
+		scale := float64(qrMaxSide) / float64(max(width, height))
+		nw := int(float64(width)*scale + 0.5)
+		nh := int(float64(height)*scale + 0.5)
+		if nw < 1 {
+			nw = 1
+		}
+		if nh < 1 {
+			nh = 1
+		}
+		dst := image.NewRGBA(image.Rect(0, 0, nw, nh))
+		xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, bounds, draw.Src, nil)
+		src = dst
+		width, height = nw, nh
+	}
 	var encoded bytes.Buffer
 	// QR assets are always stored as PNG: lossless edges scan more reliably
 	// than JPEG artifacts, regardless of the uploaded format.
 	contentType := "image/png"
-	err = png.Encode(&encoded, src)
+	encoder := png.Encoder{CompressionLevel: png.BestCompression}
+	err = encoder.Encode(&encoded, src)
 	if err != nil {
 		a.renderAdminAngelQR(w, r, access, http.StatusInternalServerError, "图片处理失败，请重试。")
 		return

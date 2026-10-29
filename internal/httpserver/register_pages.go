@@ -81,17 +81,6 @@ var (
 		"是的，我替子女报名，我会让子女注册",
 		"不是，我为自己报名",
 	}
-	// registerIndustryOptions follows the 20 NBS industry categories. The field
-	// stays a combobox (datalist) so old free-text values and "其他" remain
-	// possible, while new users get a consistent set of choices.
-	registerIndustryOptions = []string{
-		"农、林、牧、渔业", "采矿业", "制造业", "电力、热力、燃气及水生产和供应业",
-		"建筑业", "批发和零售业", "交通运输、仓储和邮政业", "住宿和餐饮业",
-		"信息传输、软件和信息技术服务业", "金融业", "房地产业", "租赁和商务服务业",
-		"科学研究和技术服务业", "水利、环境和公共设施管理业",
-		"居民服务、修理和其他服务业", "教育", "卫生和社会工作",
-		"文化、体育和娱乐业", "公共管理、社会保障和社会组织", "国际组织", "其他",
-	}
 	registerReferralOptions = []string{
 		"朋友介绍", "小天使介绍", "教堂/团体", "微信公众号/朋友圈", "飞书版老用户", "其他",
 	}
@@ -144,8 +133,7 @@ func registerSections() []registerSectionSpec {
 				{Name: "education", Label: "学历", Kind: registerKindSelect, Required: true,
 					Options: db.ProfileEducationOptions},
 				{Name: "industry", Label: "从事行业", Kind: registerKindText, Required: true, MaxRunes: 200,
-					Options: registerIndustryOptions, Placeholder: "可输入或选择",
-					Hint: "如自己做生意，请注明。"},
+					Placeholder: "例如，互联网", Hint: "如自己做生意，请注明。"},
 				{Name: "position", Label: "职位", Kind: registerKindText, Required: true, MaxRunes: 200},
 				{Name: "income", Label: "年收入", Kind: registerKindSelect, Options: db.ProfileIncomeOptions,
 					Hint: "如不方便可留空。"},
@@ -213,7 +201,7 @@ func registerSections() []registerSectionSpec {
 					Placeholder: "例如：U-0001", Hint: "没有邀请人可留空。"},
 				{Name: "angel_ack", Label: "记得加小天使微信号，并备注「真实姓名」。", Kind: registerKindCheckbox,
 					Required: true, Options: []string{registerAngelAck},
-					Hint: "请先长按或扫描二维码添加小天使，并备注「真实姓名」。"},
+					Hint: "请先添加小天使微信，并备注「真实姓名」。"},
 			},
 		},
 	}
@@ -263,7 +251,8 @@ type registerFieldView struct {
 	// MaxDate is the latest allowed date (YYYY-MM-DD) for date inputs.
 	MaxDate string
 	// ShowQR renders the admin-managed 小天使二维码 next to the angel_ack field.
-	ShowQR bool
+	ShowQR    bool
+	QRVersion string
 	// Conditional house/car note fields.
 	ShowWhenField  string
 	ShowWhenOption int
@@ -276,11 +265,12 @@ type registerSectionView struct {
 }
 
 type registerPageData struct {
-	Sections   []registerSectionView
-	MinPhotos  int
-	MaxPhotos  int
-	MaxMB      int
-	HasAngelQR bool
+	Sections       []registerSectionView
+	MinPhotos      int
+	MaxPhotos      int
+	MaxMB          int
+	HasAngelQR     bool
+	AngelQRVersion string
 }
 
 // registerCopyStatic is the hand-authored page copy. Go source may contain
@@ -297,10 +287,8 @@ func registerCopyStatic(data registerPageData) map[string]string {
 		"hero.loginHintEnd": "。",
 		"photos.title":      "个人照片",
 		"photos.hint": fmt.Sprintf(
-			"请上传 %d–%d 张 JPEG/PNG/WebP/GIF/BMP/TIFF 照片；上传后统一转成 JPEG（GIF 只取第一帧），第一张会作为封面，建议使用横版照片。单张上限 %d MB。",
+			"请上传 %d–%d 张照片；第一张会作为封面；单张上限 %d MB。",
 			data.MinPhotos, data.MaxPhotos, data.MaxMB),
-		"photos.heic": "iPhone 默认的 HEIC 照片无法直接上传：请先在相册转成 JPEG，" +
-			"或在「设置 → 相机 → 格式」选择「兼容性最佳」。",
 		"photos.label":             "选择照片",
 		"photos.retry":             "若提交失败，需要重新选择照片。",
 		"password.title":           "登录密码",

@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-28
+last_verified: 2026-10-29
 sources: []
 -->
 
@@ -133,9 +133,10 @@ sources: []
 - 决策：大图 viewer 用 API `photos_meta` 定框；缩图先显、原图后台升级；无 meta 时回退自然尺寸，10s timeout/cancel 保留。
 - 不要做：不把中文写回公开页源码；不恢复二维码；不恢复 `/welcome` 独立页；不给公开页引入含中文注释的 `app.css`/`shell.css`。
 - 决策（2026-10-29）：独立 `/login` 页并入匿名首页登录弹框；`GET /login` 303 `/?login=1`（保留 `next`/`logged_out`/`activated`），`POST /login` 契约不变；弹框文案仍由 `home.js` 注入，首页保持 0 汉字。
-- 决策（2026-10-29）：注册页「小天使二维码」由后台「内容与安全 → 小天使二维码」上传/更换；资产存 `site_assets`，公开只读 `/angel-qr`（5 分钟缓存）；与已废弃的首页二维码无关，首页仍不展示二维码。
+- 决策（2026-10-29）：注册页「小天使二维码」由后台「内容与安全 → 小天使二维码」上传/更换；资产存 `site_assets`，公开只读 `/angel-qr`（1 小时缓存）；与已废弃的首页二维码无关，首页仍不展示二维码。
 - 决策（2026-10-29）：注册地区改省-市 / 市-区联动（值保持 `广东深圳`/`深圳南山`），行业/来源改 combobox，身份证即时校验并限 18+，手机限 11 位大陆号码；地区数据 vendored（2023，WTFPL）。
 - 决策（2026-10-29）：注册校验每个字段只给一条通用错误（身份证不再提示校验位/证内生日/省份子原因）；房/车补充内容为条件字段；用户照片统一转 JPEG，二维码统一转 PNG，支持 JPEG/PNG/WebP/GIF/BMP/TIFF（HEIC 仍需转换）。
+- 决策（2026-10-29）：注册照片说明只保留「3–9 张 / 首张封面 / 10MB」；选后本地预览可删/设封面；教堂选省-市-区，行业纯文本；二维码存 720px PNG（BestCompression）+ 1 小时浏览器缓存。
 - 不要做：不恢复独立登录页；不把二维码放回首页；不把身份证改回选填（与门禁冲突）；不再按输入格式分叉存储图片。
 - 验证：`TestPublicScanPagesAreHanFree`、`TestRegisterCopyCatalogIsASCII`、`TestParseRegisterRegionFields`、`TestRegisterRegionsEndpoint`、Playwright `public_scan_pages_smoke.py`。
 
