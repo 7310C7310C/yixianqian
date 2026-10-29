@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	webassets "github.com/7310C7310C/yixianqian/web"
@@ -248,7 +249,6 @@ func TestParseRegisterInputRejectsInvalidFields(t *testing.T) {
 		{"short password", func(v url.Values) { v.Set("password", "short"); v.Set("password_confirm", "short") }, "至少需要 8"},
 		{"bad height", func(v url.Values) { v.Set("height_cm", "99") }, "身高"},
 		{"bad birthday", func(v url.Values) { v.Set("birthday", "1990-13-01") }, "生日格式"},
-		{"id birthday mismatch", func(v url.Values) { v.Set("birthday", "1990-01-02") }, "身份证号码"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -674,11 +674,32 @@ func TestParseRegisterRegionFields(t *testing.T) {
 	}
 }
 
+func TestParseRegisterCorrectsBirthdayFromID(t *testing.T) {
+	id := makeTestIDCard(t, "19900101", "002")
+	values := validRegisterValues(t, "13800138000", id, "1990-01-02")
+	in, ferr := parseRegisterInput(values)
+	if ferr != nil {
+		t.Fatalf("mismatched birthday should be corrected, got %v", ferr)
+	}
+	if !sameCalendarDay(in.Birthday, time.Date(1990, 1, 1, 0, 0, 0, 0, time.Local)) {
+		t.Fatalf("birthday = %v, want 1990-01-01 from the ID card", in.Birthday)
+	}
+	if in.IDCard != id {
+		t.Fatalf("id card = %q, want %q", in.IDCard, id)
+	}
+}
+
 func TestParseRegisterRejectsUnderageAndNonMobile(t *testing.T) {
 	id := makeTestIDCard(t, "20150101", "002")
 	values := validRegisterValues(t, "13800138000", id, "2015-01-01")
 	if _, ferr := parseRegisterInput(values); ferr == nil || !strings.Contains(ferr.Message, "18") {
 		t.Fatalf("underage error = %v", ferr)
+	}
+	// The typed birthday claims 18+, but the ID card is underage. The corrected
+	// (ID-card) birthday must be checked and the error must stay on birthday.
+	values = validRegisterValues(t, "13800138000", id, "1990-01-01")
+	if _, ferr := parseRegisterInput(values); ferr == nil || ferr.Field != "birthday" || !strings.Contains(ferr.Message, "18") {
+		t.Fatalf("underage ID with adult birthday error = %+v", ferr)
 	}
 	id = makeTestIDCard(t, "19900101", "002")
 	values = validRegisterValues(t, "12345678", id, "1990-01-01")

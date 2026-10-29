@@ -92,7 +92,9 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	csrf := anon.pageCSRF("/register")
 
 	phone := randomHTTPPhone(t)
-	birthday := "1990-01-01"
+	// Intentionally one day off: registration must silently use the ID card's
+	// birth date instead of reporting an ID card error.
+	birthday := "1990-01-02"
 	idCard := makeTestIDCard(t, "19900101", "002")
 	password := "register-pass-123"
 	fields := validRegisterValues(t, phone, idCard, birthday)
@@ -170,6 +172,15 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	}
 	if !photos[0].IsCover {
 		t.Fatal("first registration photo is not the cover")
+	}
+	var storedBirthday string
+	if err := env.conn.QueryRow(ctx,
+		`SELECT to_char(birthday, 'YYYY-MM-DD') FROM users WHERE id = $1`, user.ID).
+		Scan(&storedBirthday); err != nil {
+		t.Fatalf("load birthday: %v", err)
+	}
+	if storedBirthday != "1990-01-01" {
+		t.Fatalf("stored birthday = %q, want ID card date 1990-01-01", storedBirthday)
 	}
 	var jpegPhotos, heicWidth int
 	if err := env.conn.QueryRow(ctx,

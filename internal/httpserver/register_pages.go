@@ -662,13 +662,6 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	if perr != nil || birthday.Year() < 1900 || birthday.After(time.Now().AddDate(0, 0, 1)) {
 		return in, registerFormErr("birthday", "生日格式不正确。")
 	}
-	now := time.Now()
-	cutoff := time.Date(now.Year()-18, now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	if birthday.After(cutoff) {
-		return in, registerFormErr("birthday", "生日不正确（需年满 18 岁）。")
-	}
-	in.Birthday = birthday
-
 	phoneRaw, err := validateRegisterText(values, "phone")
 	if err != nil {
 		return in, err
@@ -688,8 +681,14 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	if idErr != nil {
 		return in, registerFormErr("id_card", idErr.Error())
 	}
-	if !sameCalendarDay(idBirth, birthday) {
-		return in, registerFormErr("id_card", "身份证号码不正确。")
+	// The ID card is authoritative for the birth date. A mismatch is a typo in
+	// the birthday field, not an invalid ID card, so correct it silently and
+	// only surface an error if the corrected person is under 18.
+	in.Birthday = time.Date(idBirth.Year(), idBirth.Month(), idBirth.Day(), 0, 0, 0, 0, time.Local)
+	now := time.Now()
+	cutoff := time.Date(now.Year()-18, now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	if in.Birthday.After(cutoff) {
+		return in, registerFormErr("birthday", "生日不正确（需年满 18 岁）。")
 	}
 	in.IDCard = normalizedID
 

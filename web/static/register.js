@@ -422,18 +422,23 @@
       setStatus(input, COPY_ID_BAD, true);
       return;
     }
-    if (!validDate(birthday) || !ageAtLeast18(birthday)) {
+    if (!validDate(birthday)) {
       setStatus(input, COPY_ID_BAD, true);
       return;
     }
+    // The ID card is authoritative: silently overwrite a mismatched birthday
+    // instead of reporting the ID card as invalid.
     var birthdayInput = document.getElementById('f_birthday');
     if (birthdayInput) {
-      if (!birthdayInput.value) {
-        birthdayInput.value = birthday;
-      } else if (birthdayInput.value !== birthday) {
-        setStatus(input, COPY_ID_BAD, true);
-        return;
+      birthdayInput.value = birthday;
+      if (!ageAtLeast18(birthday)) {
+        setStatus(birthdayInput, COPY_BIRTHDAY_BAD, true);
+      } else {
+        setStatus(birthdayInput, '', false);
       }
+    } else if (!ageAtLeast18(birthday)) {
+      setStatus(input, COPY_ID_BAD, true);
+      return;
     }
     setStatus(input, '', false);
   }
