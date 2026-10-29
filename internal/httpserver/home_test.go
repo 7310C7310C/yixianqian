@@ -65,11 +65,13 @@ func assertPublicLandingContract(t *testing.T, body string) {
 	}
 	for _, want := range []string{
 		`lang="zh-CN"`,
-		`class="shell-body public-landing home-pending"`,
+		`class="shell-body public-landing home-pending`,
 		`/static/home.css`,
 		`/static/home.js`,
 		`href="/register?from=home"`,
-		`href="/login"`,
+		`data-login-open`,
+		`data-login-modal`,
+		`action="/login"`,
 		`id="feishu"`,
 		`data-home-text="hero.ctaRegister"`,
 		`data-home-aria="features.label"`,
@@ -133,7 +135,7 @@ func TestHomeAdminQueryRedirectsAnonymousToLogin(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if got := rec.Header().Get("Location"); got != "/login?next=%2F%3Fadmin%3D1" {
+	if got := rec.Header().Get("Location"); got != "/?login=1&next=%2F%3Fadmin%3D1" {
 		t.Fatalf("location = %q", got)
 	}
 }
@@ -161,42 +163,56 @@ func TestHomeServesSPAForSignedInUser(t *testing.T) {
 	}
 }
 
-func TestLoginPageShowsRegisterCTA(t *testing.T) {
+func TestLoginPageRedirectsToLandingDialog(t *testing.T) {
 	app := newHomeTestApp(t, nil)
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	req := httptest.NewRequest(http.MethodGet, "/login?logged_out=1&next=%2Fx", nil)
 	app.handleLoginPage(rec, req)
 
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/?logged_out=1&login=1&next=%2Fx" {
+		t.Fatalf("location = %q", got)
+	}
+}
+
+func TestHomeLoginDialogRendersErrorCode(t *testing.T) {
+	app := newHomeTestApp(t, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/?login=1&error=bad&next=%2F%3Fadmin%3D1", nil)
+	app.handleHome(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		`name="csrf_token"`,
-		`href="/register"`,
-		`class="button primary block"`,
-		`data-copy-page="login"`,
-		`data-copy-text="login.altCta"`,
-		publicFeishuAppURL,
-		"<title>登录 · 一线牵</title>",
+		`class="shell-body public-landing home-pending login-open"`,
+		`data-login-error="bad"`,
+		`name="next" value="/?admin=1"`,
+		`data-login-modal`,
 	} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("missing %q in login page", want)
+			t.Fatalf("missing %q in landing login dialog", want)
 		}
 	}
-	// Scan contract: the login page is Han-free outside <title>; the visible
-	// Chinese copy is injected by /static/public-copy.js.
-	assertHanFreePublicBody(t, body)
-	for _, want := range []string{`/static/home.css`, `/static/auth.css`, `/static/public-copy.js`} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("login page should load %q", want)
-		}
+	assertPublicLandingContract(t, body)
+}
+
+func TestHomeLoginDialogDropsHanPhoneEcho(t *testing.T) {
+	app := newHomeTestApp(t, nil)
+	// safePhoneEcho is the unit boundary: the handler never echoes Han.
+	if got := safePhoneEcho("138 0013 8000"); got != "138 0013 8000" {
+		t.Fatalf("safePhoneEcho kept %q", got)
 	}
-	for _, unwanted := range []string{`/static/app.css`, `/static/shell.css`, `/static/home.js`} {
-		if strings.Contains(body, unwanted) {
-			t.Fatalf("login page must not load %q", unwanted)
-		}
+	if got := safePhoneEcho("张三"); got != "" {
+		t.Fatalf("safePhoneEcho echoed Han: %q", got)
 	}
+	// A normal login error still opens the dialog and stays Han-free.
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/?login=1&error=bad", nil)
+	app.handleHome(rec, req)
+	assertPublicLandingContract(t, rec.Body.String())
 }
 
 // TestPublicLandingAssetsAreHanFree guards the second half of the scan

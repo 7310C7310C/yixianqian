@@ -147,7 +147,7 @@ func TestIntegrationPublicPasswordErrorPages(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("invalid session status = %d, want 303", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/login") {
+	if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/?login=1") {
 		t.Fatalf("invalid session location = %q", loc)
 	}
 	if body := readBody(t, resp); strings.Contains(body, "data-copy-page") {

@@ -27,6 +27,9 @@ type App struct {
 	store media.Store
 	// thumbCache 只缓存 ?size=thumb 的字节；nil = 未配置缓存。
 	thumbCache *media.ThumbCache
+	// siteAssets 缓存公开小图（当前只有小天使二维码），避免匿名请求反复
+	// 从 PostgreSQL 读取最多 2MB 的 bytea；上传成功后主动失效。
+	siteAssets siteAssetCache
 	// 命中/未命中计数（运维观察用，不参与逻辑）。
 	thumbCacheHits   atomic.Int64
 	thumbCacheMisses atomic.Int64

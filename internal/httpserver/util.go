@@ -24,7 +24,7 @@ func safeNext(raw string) string {
 		return "/"
 	}
 	for _, r := range raw {
-		if r == '\r' || r == '\n' || r == 0 {
+		if r > 0x7f || r == '\r' || r == '\n' || r == 0 {
 			return "/"
 		}
 	}

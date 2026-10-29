@@ -75,7 +75,7 @@ func loadLegacyCSS() ([]byte, error) {
 func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	user, authenticated := currentUser(r)
 	if !authenticated {
-		http.Redirect(w, r, "/login?next=/", http.StatusSeeOther)
+		http.Redirect(w, r, "/?login=1&next=/", http.StatusSeeOther)
 		return
 	}
 	body, err := loadLegacyIndex()

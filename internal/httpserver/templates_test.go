@@ -15,7 +15,7 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load templates: %v", err)
 	}
-	for _, page := range []string{"home", "login", "activate", "error"} {
+	for _, page := range []string{"home", "activate", "error", "admin_site_assets"} {
 		if !tpl.HasPage(page) {
 			t.Fatalf("missing page %q", page)
 		}
@@ -29,26 +29,6 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 		notWant []string
 	}{
 		{
-			name: "login",
-			page: "login",
-			data: PageData{
-				Title: "登录", CSRFToken: "csrf-value", Next: "/x", Phone: "138",
-				FeishuURL: publicFeishuAppURL, ScanSafe: true, CopyPage: "login",
-			},
-			want: []string{
-				"<!doctype html>", "<title>登录 · 一线牵</title>", `name="csrf_token" value="csrf-value"`,
-				`name="next" value="/x"`, `value="138" required autofocus`,
-				`href="/register"`, `class="button primary block"`,
-				`data-copy-text="login.title"`, `data-copy-text="login.altCta"`,
-				`data-copy-page="login"`, `/static/auth.css`, `/static/public-copy.js`,
-				publicFeishuAppURL,
-			},
-			notWant: []string{
-				`value="138" placeholder=`, "注册新账号", "已在飞书版使用过",
-				`class="shell-header"`, `/static/app.css`, `/static/shell.css`,
-			},
-		},
-		{
 			name: "home",
 			page: "home",
 			data: PageData{
@@ -61,7 +41,7 @@ func TestLoadTemplatesAndRenderPages(t *testing.T) {
 				"<!doctype html>", `lang="zh-CN"`, "<title>" + publicLandingTitle + "</title>",
 				`class="shell-body public-landing home-pending"`,
 				`/static/home.css`, `/static/home.js`,
-				`href="/register?from=home"`, `href="/login"`, `id="feishu"`,
+				`href="/register?from=home"`, `data-login-open`, `data-login-modal`, `action="/login"`, `id="feishu"`,
 				`data-home-text="hero.ctaRegister"`, `data-home-aria="features.label"`,
 				publicFeishuAppURL, `target="_blank"`, `rel="noopener noreferrer"`,
 			},
@@ -175,8 +155,8 @@ func TestTemplatesVersionStaticAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	data := PageData{Title: "登录", PageCSS: "admin.css", ActiveNav: "admin"}
-	if err := tpl.Render(&buf, "login", data); err != nil {
+	data := PageData{Title: "错误", PageCSS: "admin.css", ActiveNav: "admin"}
+	if err := tpl.Render(&buf, "error", data); err != nil {
 		t.Fatal(err)
 	}
 	html := buf.String()
@@ -251,7 +231,9 @@ func TestTemplatesEscapeUserData(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	phone := `<script>alert(1)</script>`
-	if err := tpl.Render(&buf, "login", PageData{Title: "登录", Phone: phone}); err != nil {
+	if err := tpl.Render(&buf, "home", PageData{
+		Title: publicLandingTitle, PublicLanding: true, LoginOpen: true, Phone: phone,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()

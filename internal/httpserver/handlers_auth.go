@@ -23,52 +23,53 @@ const (
 	loginLockDuration     = 15 * time.Minute
 )
 
+// handleLoginPage redirects the retired standalone login page to the landing
+// page login dialog. Fixed query flags are preserved so old links such as
+// /login?logged_out=1 and /login?next=/x keep working.
 func (a *App) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	if _, ok := currentUser(r); ok {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	noticeKey := ""
+	q := url.Values{}
+	q.Set("login", "1")
+	if next := homeNext(r.URL.Query().Get("next")); next != "" {
+		q.Set("next", next)
+	}
 	switch r.URL.Query().Get("logged_out") {
 	case "1":
-		noticeKey = "login.notice.logged_out"
-	case "":
-		if r.URL.Query().Get("activated") == "1" {
-			noticeKey = "login.notice.activated"
-		}
+		q.Set("logged_out", "1")
 	}
-	next := safeNext(r.URL.Query().Get("next"))
-	if next == "/" {
-		next = ""
+	switch r.URL.Query().Get("activated") {
+	case "1":
+		q.Set("activated", "1")
 	}
-	a.render(w, r, http.StatusOK, "login", PageData{
-		Title:         "登录",
-		NoticeCopyKey: noticeKey,
-		Next:          next,
-		ScanSafe:      true,
-		CopyPage:      "login",
-	})
+	http.Redirect(w, r, "/?"+q.Encode(), http.StatusSeeOther)
 }
 
-func (a *App) renderLogin(w http.ResponseWriter, r *http.Request, status int, message, phone, next string) {
-	a.render(w, r, status, "login", PageData{
-		Title:    "登录",
-		Error:    message,
-		Phone:    phone,
-		Next:     next,
-		ScanSafe: true,
-		CopyPage: "login",
+// renderLogin re-renders the landing page with the login dialog open. code is
+// a fixed key from homeLoginError; the phone is echoed only when it is ASCII
+// digits/punctuation so the scan-safe landing page stays Han-free.
+func (a *App) renderLogin(w http.ResponseWriter, r *http.Request, status int, code, phone, next string) {
+	a.render(w, r, status, "home", PageData{
+		Title:         publicHomeTitle,
+		PageCSS:       "register.css",
+		PublicLanding: true,
+		LoginOpen:     true,
+		LoginError:    code,
+		Phone:         safePhoneEcho(phone),
+		Next:          homeNext(next),
 	})
 }
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 	if err := r.ParseForm(); err != nil {
-		a.renderLogin(w, r, http.StatusBadRequest, "登录资料格式不正确。", "", "")
+		a.renderLogin(w, r, http.StatusBadRequest, "bad_request", "", "")
 		return
 	}
 	if !a.formCSRFValid(r) {
-		a.renderLogin(w, r, http.StatusForbidden, "表单已过期，请重新整理后再试。", "", "")
+		a.renderLogin(w, r, http.StatusForbidden, "csrf", "", "")
 		return
 	}
 
@@ -77,19 +78,19 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.PostFormValue("next"))
 	phone := auth.NormalizePhone(phoneRaw)
 	if phone == "" || password == "" {
-		a.renderLogin(w, r, http.StatusBadRequest, "请输入手机号码与密码。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusBadRequest, "missing", phoneRaw, next)
 		return
 	}
 
 	ip := clientIP(r)
 	if ok, retry := a.loginIPLimiter.Allow("ip:" + ip); !ok {
 		w.Header().Set("Retry-After", retryAfterSeconds(int(retry.Seconds())+1))
-		a.renderLogin(w, r, http.StatusTooManyRequests, "尝试次数过多，请稍后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusTooManyRequests, "rate", phoneRaw, next)
 		return
 	}
 	if ok, retry := a.loginPhoneLimiter.Allow("phone:" + phone); !ok {
 		w.Header().Set("Retry-After", retryAfterSeconds(int(retry.Seconds())+1))
-		a.renderLogin(w, r, http.StatusTooManyRequests, "尝试次数过多，请稍后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusTooManyRequests, "rate", phoneRaw, next)
 		return
 	}
 	if utf8.RuneCountInString(password) > auth.MaxPasswordLength {
@@ -98,11 +99,9 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		auth.EqualizeTiming(password)
 		a.releaseHash()
-		a.renderLogin(w, r, http.StatusUnauthorized, "手机号码或密码错误。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusUnauthorized, "bad", phoneRaw, next)
 		return
 	}
-
-	const genericFailure = "手机号码或密码错误。"
 
 	ctx := r.Context()
 	user, err := a.db.GetUserByPhone(ctx, phone)
@@ -115,12 +114,12 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		a.audit(r, nil, "auth.login.failed", "phone", auth.MaskPhone(phone),
 			map[string]any{"reason": "unknown_account"})
 		a.logger(r).Warn("login failed", "reason", "unknown_account", "phone", auth.MaskPhone(phone))
-		a.renderLogin(w, r, http.StatusUnauthorized, genericFailure, phoneRaw, next)
+		a.renderLogin(w, r, http.StatusUnauthorized, "bad", phoneRaw, next)
 		return
 	}
 	if err != nil {
 		a.logger(r).Error("load user for login failed", "error", err)
-		a.renderLogin(w, r, http.StatusInternalServerError, "系统暂时无法登录，请稍后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusInternalServerError, "server", phoneRaw, next)
 		return
 	}
 
@@ -128,7 +127,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", retryAfterSeconds(int(loginLockDuration.Seconds())))
 		a.audit(r, &user.ID, "auth.login.locked", "user", strconv.FormatInt(user.ID, 10),
 			map[string]any{"reason": "lockout_active"})
-		a.renderLogin(w, r, http.StatusTooManyRequests, "尝试次数过多，请 15 分钟后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusTooManyRequests, "locked", phoneRaw, next)
 		return
 	}
 
@@ -142,12 +141,12 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		a.audit(r, &user.ID, "auth.login.failed", "user", strconv.FormatInt(user.ID, 10),
 			map[string]any{"reason": "no_credential"})
 		a.logger(r).Warn("login failed", "reason", "no_credential", "user_id", user.ID)
-		a.renderLogin(w, r, http.StatusUnauthorized, genericFailure, phoneRaw, next)
+		a.renderLogin(w, r, http.StatusUnauthorized, "bad", phoneRaw, next)
 		return
 	}
 	if err != nil {
 		a.logger(r).Error("load credential failed", "error", err, "user_id", user.ID)
-		a.renderLogin(w, r, http.StatusInternalServerError, "系统暂时无法登录，请稍后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusInternalServerError, "server", phoneRaw, next)
 		return
 	}
 
@@ -158,7 +157,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	a.releaseHash()
 	if err != nil {
 		a.logger(r).Error("verify password failed", "error", err, "user_id", user.ID)
-		a.renderLogin(w, r, http.StatusInternalServerError, "系统暂时无法登录，请稍后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusInternalServerError, "server", phoneRaw, next)
 		return
 	}
 	if !valid {
@@ -172,10 +171,10 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		a.logger(r).Warn("login failed", "reason", "bad_password", "user_id", user.ID)
 		if ferr == nil && lockedUntil != nil && lockedUntil.After(a.clock.Now()) {
 			w.Header().Set("Retry-After", retryAfterSeconds(int(loginLockDuration.Seconds())))
-			a.renderLogin(w, r, http.StatusTooManyRequests, "尝试次数过多，请 15 分钟后再试。", phoneRaw, next)
+			a.renderLogin(w, r, http.StatusTooManyRequests, "locked", phoneRaw, next)
 			return
 		}
-		a.renderLogin(w, r, http.StatusUnauthorized, genericFailure, phoneRaw, next)
+		a.renderLogin(w, r, http.StatusUnauthorized, "bad", phoneRaw, next)
 		return
 	}
 
@@ -183,20 +182,20 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		a.audit(r, &user.ID, "auth.login.failed", "user", strconv.FormatInt(user.ID, 10),
 			map[string]any{"reason": "account_disabled"})
 		a.logger(r).Warn("login rejected for disabled account", "user_id", user.ID)
-		a.renderLogin(w, r, http.StatusUnauthorized, genericFailure, phoneRaw, next)
+		a.renderLogin(w, r, http.StatusUnauthorized, "bad", phoneRaw, next)
 		return
 	}
 
 	mustChange, tempExpiresAt, err := a.db.GetCredentialState(ctx, user.ID)
 	if err != nil && !errors.Is(err, db.ErrNotFound) {
 		a.logger(r).Error("load credential state failed", "error", err, "user_id", user.ID)
-		a.renderLogin(w, r, http.StatusInternalServerError, "系统暂时无法登录，请稍后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusInternalServerError, "server", phoneRaw, next)
 		return
 	}
 	if mustChange && tempExpiresAt != nil && !tempExpiresAt.After(a.clock.Now()) {
 		a.audit(r, &user.ID, "auth.login.failed", "user", strconv.FormatInt(user.ID, 10),
 			map[string]any{"reason": "temp_password_expired"})
-		a.renderLogin(w, r, http.StatusUnauthorized, "临时密码已过期，请联络管理员重新设定。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusUnauthorized, "temp_expired", phoneRaw, next)
 		return
 	}
 
@@ -212,13 +211,13 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	raw, tokenHash, err := auth.NewToken()
 	if err != nil {
 		a.logger(r).Error("create session token failed", "error", err)
-		a.renderLogin(w, r, http.StatusInternalServerError, "系统暂时无法登录，请稍后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusInternalServerError, "server", phoneRaw, next)
 		return
 	}
 	session, err := a.db.CreateSession(ctx, user.ID, tokenHash, a.cfg.SessionTTL, ip, r.UserAgent())
 	if err != nil {
 		a.logger(r).Error("create session failed", "error", err, "user_id", user.ID)
-		a.renderLogin(w, r, http.StatusInternalServerError, "系统暂时无法登录，请稍后再试。", phoneRaw, next)
+		a.renderLogin(w, r, http.StatusInternalServerError, "server", phoneRaw, next)
 		return
 	}
 	a.setSessionCookie(w, raw, session.ExpiresAt)
@@ -258,7 +257,7 @@ func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	a.clearSessionCookie(w)
 	a.clearCSRFCookie(w)
-	http.Redirect(w, r, "/login?logged_out=1", http.StatusSeeOther)
+	http.Redirect(w, r, "/?login=1&logged_out=1", http.StatusSeeOther)
 }
 
 func (a *App) handleActivatePage(w http.ResponseWriter, r *http.Request) {
@@ -469,13 +468,13 @@ func (a *App) handleActivate(w http.ResponseWriter, r *http.Request) {
 	raw, tokenHash, err := auth.NewToken()
 	if err != nil {
 		a.logger(r).Error("create activation session token failed", "error", err)
-		http.Redirect(w, r, "/login?activated=1", http.StatusSeeOther)
+		http.Redirect(w, r, "/?login=1&activated=1", http.StatusSeeOther)
 		return
 	}
 	session, err := a.db.CreateSession(r.Context(), user.ID, tokenHash, a.cfg.SessionTTL, ip, r.UserAgent())
 	if err != nil {
 		a.logger(r).Error("create activation session failed", "error", err, "user_id", user.ID)
-		http.Redirect(w, r, "/login?activated=1", http.StatusSeeOther)
+		http.Redirect(w, r, "/?login=1&activated=1", http.StatusSeeOther)
 		return
 	}
 	a.setSessionCookie(w, raw, session.ExpiresAt)
@@ -550,9 +549,9 @@ func (a *App) requireUserHTML(w http.ResponseWriter, r *http.Request) (db.User, 
 			next = uri
 		}
 	}
-	dest := "/login"
+	dest := "/?login=1"
 	if next != "/" {
-		dest += "?next=" + url.QueryEscape(next)
+		dest += "&next=" + url.QueryEscape(next)
 	}
 	http.Redirect(w, r, dest, http.StatusSeeOther)
 	return db.User{}, false

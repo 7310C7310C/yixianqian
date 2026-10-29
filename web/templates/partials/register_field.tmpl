@@ -15,6 +15,11 @@
     </div>
   </fieldset>
   {{else if eq .Type "checkbox"}}
+  {{if .ShowQR}}
+  <div class="register-angel-qr">
+    <img src="/angel-qr?v={{assetVersion}}" alt="" width="220" height="299" loading="lazy">
+  </div>
+  {{end}}
   <label class="register-check">
     <input type="checkbox" name="{{.Name}}" data-register-option="{{.Name}}.0"{{if .Checked}} checked{{end}}{{if .Required}} required{{end}}>
     <span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}
@@ -29,6 +34,24 @@
     {{end}}
   </select>
   {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
+  {{else if eq .Type "region"}}
+  <label><span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
+  <div class="register-region" data-region-field="{{.Name}}" data-region-level="{{.RegionLevel}}">
+    <select data-region-province data-register-aria="region.province"></select>
+    <select data-region-city data-register-aria="region.city"></select>
+    {{if eq .RegionLevel "cd"}}<select data-region-area data-register-aria="region.area"></select>{{end}}
+  </div>
+  <input type="hidden" name="{{.Name}}_province" data-region-code="province" value="{{.ProvinceCode}}">
+  <input type="hidden" name="{{.Name}}_city" data-region-code="city" value="{{.CityCode}}">
+  <input type="hidden" name="{{.Name}}_area" data-region-code="area" value="{{.AreaCode}}">
+  <input type="text" name="{{.Name}}" data-region-manual data-register-value="{{.Name}}"
+         data-register-placeholder="region.manualPlaceholder" maxlength="60" hidden>
+  <label class="register-region-toggle">
+    <input type="checkbox" data-region-manual-toggle>
+    <span data-register-text="region.manualToggle"></span>
+  </label>
+  <p class="hint register-region-status" data-region-status hidden></p>
+  {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
   {{else if eq .Type "textarea"}}
   <label for="f_{{.Name}}"><span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
   <textarea id="f_{{.Name}}" name="{{.Name}}" rows="{{.Rows}}"{{if .MaxLength}} maxlength="{{.MaxLength}}"{{end}}{{if .Required}} required{{end}}{{if .Placeholder}} data-register-placeholder="field.{{.Name}}.placeholder"{{end}} data-register-value="{{.Name}}"></textarea>
@@ -41,7 +64,7 @@
   {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
   {{else if eq .Type "date"}}
   <label for="f_{{.Name}}"><span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
-  <input id="f_{{.Name}}" name="{{.Name}}" type="date" data-register-value="{{.Name}}"{{if .Required}} required{{end}}>
+  <input id="f_{{.Name}}" name="{{.Name}}" type="date" data-register-value="{{.Name}}"{{if .MaxDate}} max="{{.MaxDate}}"{{end}}{{if .Required}} required{{end}}>
   {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
   {{else if eq .Type "tel"}}
   <label for="f_{{.Name}}"><span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
@@ -51,7 +74,12 @@
   {{else}}
   <label for="f_{{.Name}}"><span data-register-text="field.{{.Name}}.label"></span>{{if .Required}} <span class="req" aria-hidden="true">*</span>{{end}}</label>
   <input id="f_{{.Name}}" name="{{.Name}}" type="text"
-         data-register-value="{{.Name}}"{{if .Placeholder}} data-register-placeholder="field.{{.Name}}.placeholder"{{end}}{{if .MaxLength}} maxlength="{{.MaxLength}}"{{end}}{{if .Required}} required{{end}}>
+         data-register-value="{{.Name}}"{{if .Placeholder}} data-register-placeholder="field.{{.Name}}.placeholder"{{end}}{{if .MaxLength}} maxlength="{{.MaxLength}}"{{end}}{{if .Required}} required{{end}}{{if .Options}} list="dl_{{.Name}}"{{end}}>
+  {{if .Options}}
+  <datalist id="dl_{{.Name}}">
+    {{range $i, $option := .Options}}<option data-register-option="{{$field.Name}}.{{$i}}"></option>{{end}}
+  </datalist>
+  {{end}}
   {{if .Hint}}<p class="hint" data-register-text="field.{{.Name}}.hint"></p>{{end}}
   {{end}}
 </div>

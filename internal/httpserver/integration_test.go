@@ -262,7 +262,7 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 	server := httptest.NewServer(app.Handler())
 	defer server.Close()
 
-	phone := "1" + randomHTTPDigits(t, 10)
+	phone := randomHTTPPhone(t)
 	legacy := "U-HTTP-" + randomHTTPDigits(t, 10)
 	user, err := database.UpsertLegacyUser(ctx, legacy, phone, "测试用户")
 	if err != nil {
@@ -432,7 +432,7 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 
 	// Login: four 401s, then lockout, then reset and succeed.
 	loginClient := newWSClient(t, server.URL)
-	loginCSRF := loginClient.pageCSRF("/login")
+	loginCSRF := loginClient.pageCSRF("/")
 	for i := 1; i <= 4; i++ {
 		resp = loginClient.postForm("/login", url.Values{
 			"csrf_token": {loginCSRF}, "phone": {phone}, "password": {"wrong-password"},
@@ -491,6 +491,11 @@ func readBody(t *testing.T, resp *http.Response) string {
 		t.Fatal(err)
 	}
 	return string(body)
+}
+
+func randomHTTPPhone(t *testing.T) string {
+	t.Helper()
+	return "138" + randomHTTPDigits(t, 8)
 }
 
 func randomHTTPDigits(t *testing.T, n int) string {

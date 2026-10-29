@@ -269,7 +269,7 @@ func TestIntegrationShellBootstrapETagAndAnon(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("anon status=%d want 303", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/login?next=/" {
+	if loc := resp.Header.Get("Location"); loc != "/?login=1&next=/" {
 		t.Fatalf("anon location=%q", loc)
 	}
 }

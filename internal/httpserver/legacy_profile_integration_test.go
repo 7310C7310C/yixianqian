@@ -98,7 +98,7 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 		}
 	}
 
-	newPhone := "1" + randomHTTPDigits(t, 10)
+	newPhone := randomHTTPPhone(t)
 	update := map[string]any{
 		"昵称":                 "小美",
 		"身高（cm）":             168,

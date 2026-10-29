@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/7310C7310C/yixianqian/internal/auth"
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/regions"
 )
 
 const (
@@ -30,6 +32,7 @@ const (
 	registerKindSelect   registerFieldKind = "select"
 	registerKindMulti    registerFieldKind = "multi"
 	registerKindCheckbox registerFieldKind = "checkbox"
+	registerKindRegion   registerFieldKind = "region"
 )
 
 type registerFieldSpec struct {
@@ -42,11 +45,27 @@ type registerFieldSpec struct {
 	Hint        string
 	Options     []string
 	Rows        int
+	// RegionLevel is "pc" (province+city) or "cd" (city+area) for region
+	// fields. Empty for every other kind.
+	RegionLevel string
 }
 
 type registerSectionSpec struct {
 	Title  string
 	Fields []registerFieldSpec
+}
+
+var regionCodeRE = regexp.MustCompile(`^[0-9]{1,6}$`)
+
+// safeRegionCode keeps only the ASCII digit codes the cascade submits. It is
+// also the reflection guard for rejected POST re-renders: a crafted
+// "*_province=广东" must never reach the scan-safe HTML.
+func safeRegionCode(value string) string {
+	value = strings.TrimSpace(value)
+	if regionCodeRE.MatchString(value) {
+		return value
+	}
+	return ""
 }
 
 var (
@@ -55,6 +74,20 @@ var (
 	registerChildOptions    = []string{
 		"是的，我替子女报名，我会让子女注册",
 		"不是，我为自己报名",
+	}
+	// registerIndustryOptions follows the 20 NBS industry categories. The field
+	// stays a combobox (datalist) so old free-text values and "其他" remain
+	// possible, while new users get a consistent set of choices.
+	registerIndustryOptions = []string{
+		"农、林、牧、渔业", "采矿业", "制造业", "电力、热力、燃气及水生产和供应业",
+		"建筑业", "批发和零售业", "交通运输、仓储和邮政业", "住宿和餐饮业",
+		"信息传输、软件和信息技术服务业", "金融业", "房地产业", "租赁和商务服务业",
+		"科学研究和技术服务业", "水利、环境和公共设施管理业",
+		"居民服务、修理和其他服务业", "教育", "卫生和社会工作",
+		"文化、体育和娱乐业", "公共管理、社会保障和社会组织", "国际组织", "其他",
+	}
+	registerReferralOptions = []string{
+		"朋友介绍", "小天使介绍", "教堂/团体", "微信公众号/朋友圈", "飞书版老用户", "其他",
 	}
 )
 
@@ -88,12 +121,12 @@ func registerSections() []registerSectionSpec {
 					Placeholder: "例如，深圳南头堂"},
 				{Name: "church_group", Label: "参加的团体", Kind: registerKindText, MaxRunes: 200,
 					Placeholder: "例如，圣咏团、服务组"},
-				{Name: "church_location", Label: "教堂所在市-区", Kind: registerKindText, Required: true, MaxRunes: 200,
-					Placeholder: "例如，深圳南山"},
-				{Name: "native_place", Label: "家乡", Kind: registerKindText, Required: true, MaxRunes: 200,
-					Placeholder: "例如，广东广州"},
-				{Name: "city", Label: "现居/工作城市", Kind: registerKindText, Required: true, MaxRunes: 200,
-					Placeholder: "例如，广东深圳"},
+				{Name: "church_location", Label: "教堂所在省-市-区", Kind: registerKindRegion, Required: true,
+					RegionLevel: "cd", Hint: "按省、市、区选择；找不到可手动填写。"},
+				{Name: "native_place", Label: "家乡", Kind: registerKindRegion, Required: true,
+					RegionLevel: "pc", Hint: "按省、市选择；找不到可手动填写。"},
+				{Name: "city", Label: "现居/工作城市", Kind: registerKindRegion, Required: true,
+					RegionLevel: "pc", Hint: "按省、市选择；找不到可手动填写。"},
 				{Name: "family", Label: "家庭成员情况", Kind: registerKindTextarea, Required: true,
 					MaxRunes: 2000, Rows: 3, Placeholder: "例如，有几个兄弟姐妹"},
 			},
@@ -105,6 +138,7 @@ func registerSections() []registerSectionSpec {
 				{Name: "education", Label: "学历", Kind: registerKindSelect, Required: true,
 					Options: db.ProfileEducationOptions},
 				{Name: "industry", Label: "从事行业", Kind: registerKindText, Required: true, MaxRunes: 200,
+					Options: registerIndustryOptions, Placeholder: "可输入或选择",
 					Hint: "如自己做生意，请注明。"},
 				{Name: "position", Label: "职位", Kind: registerKindText, Required: true, MaxRunes: 200},
 				{Name: "income", Label: "年收入", Kind: registerKindSelect, Options: db.ProfileIncomeOptions,
@@ -114,7 +148,8 @@ func registerSections() []registerSectionSpec {
 				{Name: "driving", Label: "是否有车", Kind: registerKindSelect, Options: db.ProfileYesNoOptions,
 					Hint: "如不方便可留空。"},
 				{Name: "marriage", Label: "你结过婚吗？", Kind: registerKindSelect, Required: true,
-					Options: registerMarriageOptions, Hint: "不公开。"},
+					Options: registerMarriageOptions,
+					Hint:    "不公开；领结婚证或举行婚配圣事，占其一就算结婚。"},
 				{Name: "live_with_parents", Label: "婚后是否与父母同住", Kind: registerKindSelect, Required: true,
 					Options: db.ProfileLiveWithOptions},
 			},
@@ -123,7 +158,8 @@ func registerSections() []registerSectionSpec {
 			Title: "关于我",
 			Fields: []registerFieldSpec{
 				{Name: "personality", Label: "我是一个怎样的人", Kind: registerKindTextarea, Required: true,
-					MaxRunes: 2000, Rows: 5},
+					MaxRunes: 2000, Rows: 5,
+					Hint: "可参考：职业、家乡、性格、兴趣爱好、为什么想找另一半。"},
 				{Name: "self_traits", Label: "我的性格", Kind: registerKindMulti, Required: true,
 					Options: db.ProfileTraitOptions, Hint: "可多选。"},
 				{Name: "self_hobbies", Label: "我的爱好", Kind: registerKindMulti, Required: true,
@@ -138,7 +174,8 @@ func registerSections() []registerSectionSpec {
 			Title: "理想中的 TA",
 			Fields: []registerFieldSpec{
 				{Name: "partner_criteria", Label: "我理想中的 TA", Kind: registerKindTextarea, Required: true,
-					MaxRunes: 2000, Rows: 5},
+					MaxRunes: 2000, Rows: 5,
+					Hint: "可参考：希望对方善良、有共同信仰、愿意一起服务。"},
 				{Name: "partner_traits", Label: "TA 的性格", Kind: registerKindMulti, Required: true,
 					Options: db.ProfileTraitOptions, Hint: "可多选。"},
 				{Name: "partner_hobbies", Label: "TA 的爱好", Kind: registerKindMulti, Required: true,
@@ -153,11 +190,12 @@ func registerSections() []registerSectionSpec {
 				{Name: "is_for_child", Label: "您替子女注册吗？", Kind: registerKindSelect, Required: true,
 					Options: registerChildOptions, Hint: "如替子女注册，请使用子女的手机号码。"},
 				{Name: "referral_source", Label: "你是怎么知道一线牵的？", Kind: registerKindText, Required: true,
-					MaxRunes: 200},
+					MaxRunes: 200, Options: registerReferralOptions, Placeholder: "可输入或选择"},
 				{Name: "inviter", Label: "邀请人 ID", Kind: registerKindText, MaxRunes: 50,
 					Placeholder: "例如：U-0001", Hint: "没有邀请人可留空。"},
 				{Name: "angel_ack", Label: "记得加小天使微信号，并备注「真实姓名」。", Kind: registerKindCheckbox,
-					Required: true, Options: []string{registerAngelAck}},
+					Required: true, Options: []string{registerAngelAck},
+					Hint: "请先长按或扫描二维码添加小天使，并备注「真实姓名」。"},
 			},
 		},
 	}
@@ -198,6 +236,16 @@ type registerFieldView struct {
 	Hint        string
 	Rows        int
 	Options     []registerOptionView
+	// Region fields: level plus the server-echoed codes so a rejected POST can
+	// repopulate the cascade without trusting free text.
+	RegionLevel  string
+	ProvinceCode string
+	CityCode     string
+	AreaCode     string
+	// MaxDate is the latest allowed date (YYYY-MM-DD) for date inputs.
+	MaxDate string
+	// ShowQR renders the admin-managed 小天使二维码 next to the angel_ack field.
+	ShowQR bool
 }
 
 type registerSectionView struct {
@@ -206,10 +254,11 @@ type registerSectionView struct {
 }
 
 type registerPageData struct {
-	Sections  []registerSectionView
-	MinPhotos int
-	MaxPhotos int
-	MaxMB     int
+	Sections   []registerSectionView
+	MinPhotos  int
+	MaxPhotos  int
+	MaxMB      int
+	HasAngelQR bool
 }
 
 // registerCopyStatic is the hand-authored page copy. Go source may contain
@@ -230,15 +279,20 @@ func registerCopyStatic(data registerPageData) map[string]string {
 			data.MinPhotos, data.MaxPhotos, data.MaxMB),
 		"photos.heic": "iPhone 默认的 HEIC 照片无法直接上传：请先在相册转成 JPEG，" +
 			"或在「设置 → 相机 → 格式」选择「兼容性最佳」。",
-		"photos.label":          "选择照片",
-		"photos.retry":          "若提交失败，需要重新选择照片。",
-		"password.title":        "登录密码",
-		"password.hint":         "注册后即可用手机号码＋这组密码登录，查看审核状态。",
-		"password.label":        "密码",
-		"password.confirmLabel": "再次输入密码",
-		"password.hint2":        "至少 8 个字元。",
-		"select.required":       "请选择",
-		"select.optional":       "未填",
+		"photos.label":             "选择照片",
+		"photos.retry":             "若提交失败，需要重新选择照片。",
+		"password.title":           "登录密码",
+		"password.hint":            "注册后即可用手机号码＋这组密码登录，查看审核状态。",
+		"password.label":           "密码",
+		"password.confirmLabel":    "再次输入密码",
+		"password.hint2":           "至少 8 个字元。",
+		"select.required":          "请选择",
+		"select.optional":          "未填",
+		"region.province":          "省 / 直辖市",
+		"region.city":              "市",
+		"region.area":              "区 / 县",
+		"region.manualToggle":      "找不到？手动填写",
+		"region.manualPlaceholder": "请输入地区，例如：香港",
 		"submit.hint": "送出后状态为「待审核」，小天使/管理员审核通过后会以站内通知告知。" +
 			"审核期间请勿重复提交。",
 		"submit.button":  "送出注册资料",
@@ -281,7 +335,7 @@ func registerCopyJSON(data registerPageData, message string) string {
 			case registerKindCheckbox:
 				cat.Options[field.Name+".0"] = field.Option
 			case registerKindText, registerKindTextarea, registerKindTel,
-				registerKindDate, registerKindNumber:
+				registerKindDate, registerKindNumber, registerKindRegion:
 				if field.Value != "" {
 					cat.Values[field.Name] = field.Value
 				}
@@ -341,6 +395,15 @@ func registerFormValues(values url.Values) url.Values {
 			copied = append(copied, item)
 		}
 		clean[spec.Name] = copied
+		if spec.Kind == registerKindRegion {
+			for _, suffix := range []string{"_province", "_city", "_area"} {
+				if aux, ok := values[spec.Name+suffix]; ok && len(aux) > 0 {
+					if code := safeRegionCode(aux[0]); code != "" {
+						clean[spec.Name+suffix] = []string{code}
+					}
+				}
+			}
+		}
 	}
 	return clean
 }
@@ -360,6 +423,10 @@ func buildRegisterPageData(values url.Values) registerPageData {
 				Placeholder: spec.Placeholder,
 				Hint:        spec.Hint,
 				Rows:        spec.Rows,
+				RegionLevel: spec.RegionLevel,
+			}
+			if spec.Name == "birthday" {
+				field.MaxDate = time.Now().AddDate(-18, 0, 0).Format("2006-01-02")
 			}
 			switch spec.Kind {
 			case registerKindMulti:
@@ -387,8 +454,16 @@ func buildRegisterPageData(values url.Values) registerPageData {
 						Value: option, Selected: option == value,
 					})
 				}
+			case registerKindRegion:
+				field.Value = strings.TrimSpace(values.Get(spec.Name))
+				field.ProvinceCode = safeRegionCode(values.Get(spec.Name + "_province"))
+				field.CityCode = safeRegionCode(values.Get(spec.Name + "_city"))
+				field.AreaCode = safeRegionCode(values.Get(spec.Name + "_area"))
 			default:
 				field.Value = strings.TrimSpace(values.Get(spec.Name))
+				for _, option := range spec.Options {
+					field.Options = append(field.Options, registerOptionView{Value: option})
+				}
 			}
 			view.Fields = append(view.Fields, field)
 		}
@@ -483,6 +558,42 @@ func validateRegisterSelect(values url.Values, name string) (string, *registerFo
 	return raw, nil
 }
 
+func validateRegisterRegion(values url.Values, name string) (string, *registerFormError) {
+	spec, ok := registerSpecByName(name)
+	if !ok {
+		return "", registerFormErr(name, "表单字段不正确。")
+	}
+	province := safeRegionCode(values.Get(name + "_province"))
+	city := safeRegionCode(values.Get(name + "_city"))
+	area := safeRegionCode(values.Get(name + "_area"))
+	// Structured codes win when complete: the UI shows the cascade, so the DB
+	// must store what the user sees. A mismatched pair is an error rather than
+	// silently falling back to free text.
+	if province != "" && city != "" {
+		var value string
+		var ok bool
+		switch spec.RegionLevel {
+		case "cd":
+			value, ok = regions.LookupCityArea(province, city, area)
+		default:
+			value, ok = regions.LookupProvinceCity(province, city)
+		}
+		if !ok {
+			return "", registerFormErr(name, "「"+spec.Label+"」地区选择不正确，请重新选择。")
+		}
+		return value, nil
+	}
+	// Manual fallback covers 港澳台/海外/旧地址. The value stays free text but
+	// is length/control-character checked.
+	if manual := strings.TrimSpace(values.Get(name)); manual != "" {
+		if value, ok := regions.ValidateManual(manual); ok {
+			return value, nil
+		}
+		return "", registerFormErr(name, "请选择或填写："+spec.Label)
+	}
+	return "", registerFormErr(name, "请选择："+spec.Label)
+}
+
 func validateRegisterMulti(values url.Values, name string) ([]string, *registerFormError) {
 	spec, ok := registerSpecByName(name)
 	if !ok {
@@ -528,9 +639,14 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	if err != nil {
 		return in, err
 	}
-	birthday, perr := time.Parse("2006-01-02", birthdayRaw)
+	birthday, perr := time.ParseInLocation("2006-01-02", birthdayRaw, time.Local)
 	if perr != nil || birthday.Year() < 1900 || birthday.After(time.Now().AddDate(0, 0, 1)) {
 		return in, registerFormErr("birthday", "生日格式不正确。")
+	}
+	now := time.Now()
+	cutoff := time.Date(now.Year()-18, now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	if birthday.After(cutoff) {
+		return in, registerFormErr("birthday", "需年满 18 岁才能注册。")
 	}
 	in.Birthday = birthday
 
@@ -539,8 +655,8 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 		return in, err
 	}
 	in.Phone = auth.NormalizePhone(phoneRaw)
-	if in.Phone == "" {
-		return in, registerFormErr("phone", "手机号码格式不正确。")
+	if in.Phone == "" || !mainlandMobileRE.MatchString(in.Phone) {
+		return in, registerFormErr("phone", "手机号码格式不正确，请填写 11 位中国大陆手机号码。")
 	}
 
 	// The ID card is normalised before length checking because users often
@@ -572,13 +688,13 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	if in.ChurchGroup, err = validateRegisterText(values, "church_group"); err != nil {
 		return in, err
 	}
-	if in.ChurchLocation, err = validateRegisterText(values, "church_location"); err != nil {
+	if in.ChurchLocation, err = validateRegisterRegion(values, "church_location"); err != nil {
 		return in, err
 	}
-	if in.NativePlace, err = validateRegisterText(values, "native_place"); err != nil {
+	if in.NativePlace, err = validateRegisterRegion(values, "native_place"); err != nil {
 		return in, err
 	}
-	if in.City, err = validateRegisterText(values, "city"); err != nil {
+	if in.City, err = validateRegisterRegion(values, "city"); err != nil {
 		return in, err
 	}
 	if in.Family, err = validateRegisterText(values, "family"); err != nil {

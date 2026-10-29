@@ -1,0 +1,55 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="admin-page-head">
+  <div class="admin-page-head-main">
+    <p class="admin-eyebrow">内容与安全</p>
+    <h1 class="admin-page-title">小天使二维码</h1>
+    <p class="admin-subtitle">注册页与注册完成页展示的二维码。上传后立即替换；浏览器最多缓存 5 分钟。</p>
+  </div>
+</section>
+
+{{template "flash" .}}
+
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">当前二维码</h2>
+      <p class="admin-section-desc">建议使用 PNG，保留足够留白，确保微信可长按识别。</p>
+    </div>
+    {{if .Data.Asset}}<span class="admin-section-meta">{{.Data.Asset.Width}}×{{.Data.Asset.Height}} · {{.Data.Asset.ByteSize}} 字节</span>{{end}}
+  </div>
+  {{if .Data.Asset}}
+  <div class="admin-angel-qr">
+    <img src="/angel-qr?v={{.Data.Version}}" alt="当前小天使二维码" width="220" height="299">
+    <p class="hint">更新于 {{.Data.Asset.UpdatedAt}}</p>
+  </div>
+  {{else}}
+  <div class="admin-empty">
+    <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_feedback"}}</span>
+    <h2 class="admin-empty-title">尚未上传二维码</h2>
+    <p>注册页暂时不显示二维码；上传后立即出现。</p>
+  </div>
+  {{end}}
+</section>
+
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">上传 / 更换</h2>
+      <p class="admin-section-desc">PNG 或 JPEG，60–2000 像素，单张不超过 2MB。</p>
+    </div>
+  </div>
+  <form method="post" action="/admin/settings/angel-qr" enctype="multipart/form-data" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <div class="admin-field">
+      <label class="admin-field-label" for="angel_qr_file">选择图片</label>
+      <input id="angel_qr_file" name="file" type="file" accept="image/png,image/jpeg" required>
+    </div>
+    <div class="admin-form-actions">
+      <button type="submit" class="button primary">上传并替换</button>
+      <p class="admin-form-hint">替换会写入审计日志；旧图片不保留。</p>
+    </div>
+  </form>
+</section>
+{{end}}

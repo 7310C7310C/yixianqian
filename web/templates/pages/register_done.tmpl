@@ -24,6 +24,13 @@
     {{end}}
   </div>
 
+  {{if .Data.HasAngelQR}}
+  <div class="register-angel-qr">
+    <img src="/angel-qr?v={{assetVersion}}" alt="" width="220" height="299" loading="lazy">
+    <p class="hint" data-copy-text="register_done.angelHint"></p>
+  </div>
+  {{end}}
+
   <div class="register-note">
     <h2 data-copy-text="register_done.nextTitle"></h2>
     <p data-copy-text="register_done.nextBody"></p>

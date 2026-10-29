@@ -320,7 +320,7 @@ func TestIntegrationPhoneChangeRequiresPassword(t *testing.T) {
 		t.Fatalf("set password: %v", err)
 	}
 	csrf := ownerClient.csrfCookie()
-	newPhone := "1" + randomHTTPDigits(t, 10)
+	newPhone := randomHTTPPhone(t)
 
 	// No password: rejected before anything is written.
 	resp := profileJSONRequest(t, ownerClient, http.MethodPut, "/legacy/api/profile", csrf,

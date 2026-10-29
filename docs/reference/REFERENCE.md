@@ -74,6 +74,8 @@ sources: []
 | POST | `/admin/reports/{id}/handle` | `internal/httpserver/admin_routes.go` |
 | GET | `/admin/roles` | `internal/httpserver/admin_routes.go` |
 | POST | `/admin/roles/assign` | `internal/httpserver/admin_routes.go` |
+| GET | `/admin/settings/angel-qr` | `internal/httpserver/site_assets.go` |
+| POST | `/admin/settings/angel-qr` | `internal/httpserver/site_assets.go` |
 | GET | `/admin/suggestions` | `internal/httpserver/admin_routes.go` |
 | POST | `/admin/suggestions/{id}/handle` | `internal/httpserver/admin_routes.go` |
 | GET | `/admin/users` | `internal/httpserver/admin_routes.go` |
@@ -84,6 +86,7 @@ sources: []
 | GET | `/admin/users/{id}/photos/{mediaID}` | `internal/httpserver/admin_user_detail.go` |
 | POST | `/admin/users/{id}/reject` | `internal/httpserver/admin_routes.go` |
 | POST | `/admin/users/{id}/temp-password` | `internal/httpserver/admin_routes.go` |
+| GET | `/angel-qr` | `internal/httpserver/site_assets.go` |
 | GET | `/api/admin/group/chat-overview` | `internal/httpserver/grouping_admin_routes.go` |
 | GET | `/api/admin/group/latest_round` | `internal/httpserver/grouping_admin_routes.go` |
 | GET | `/api/admin/group/preview` | `internal/httpserver/grouping_admin_routes.go` |
@@ -215,6 +218,7 @@ sources: []
 | GET | `/register` | `internal/httpserver/register_routes.go` |
 | POST | `/register` | `internal/httpserver/register_routes.go` |
 | GET | `/register/done` | `internal/httpserver/register_routes.go` |
+| GET | `/register/regions` | `internal/httpserver/register_routes.go` |
 | GET | `/static/` | `internal/httpserver/routes.go` |
 | GET | `/welcome` | `internal/httpserver/register_routes.go` |
 | GET | `/{$}` | `internal/httpserver/routes.go` |
@@ -223,11 +227,11 @@ sources: []
 
 | 前缀 | 数量 |
 |---|---:|
-| `/admin` | 36 |
+| `/admin` | 38 |
 | `/api` | 28 |
 | `/legacy` | 87 |
-| 其他 | 23 |
-| **合计** | **174** |
+| 其他 | 25 |
+| **合计** | **178** |
 
 ## 4. 环境变量（key 集合对比）
 
@@ -295,6 +299,7 @@ sources: []
 | 0009 | `0009_perf_indexes_b7.sql` | 性能批次7：按 EXPLAIN 证据补通知/赞美/留言/报名热路径索引。 |
 | 0010 | `0010_photo_authz_indexes.sql` | 批次10：跨用户照片授权（/cards/photo、/profile/photo）的索引。 |
 | 0011 | `0011_photo_upload_daily.sql` | 照片上传每日配额（PM 2026-10-28，决策 44）：每账号每自然日最多 N 张。 |
+| 0012 | `0012_site_assets.sql` | 站点公开资产（当前：小天使二维码）。PM 2026-10-29：注册页展示二维码， |
 
 ## 6. make targets
 
@@ -355,6 +360,7 @@ sources: []
 | `internal/matching` | matching | Package matching implements the legacy grouping algorithm. |
 | `internal/media` | media | — |
 | `internal/platform` | platform | — |
+| `internal/regions` | regions | Package regions serves the mainland China province/city/area cascade used by |
 | `internal/tencentface` | tencentface | Package tencentface 实现腾讯云「照片内容合规判定」：先做图像标签 |
 | `migrations` | — | — |
 | `tools` | — | — |

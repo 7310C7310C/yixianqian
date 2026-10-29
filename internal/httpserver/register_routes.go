@@ -17,6 +17,7 @@ import (
 	"github.com/7310C7310C/yixianqian/internal/db"
 	"github.com/7310C7310C/yixianqian/internal/media"
 	"github.com/7310C7310C/yixianqian/internal/platform"
+	"github.com/7310C7310C/yixianqian/internal/regions"
 )
 
 var (
@@ -33,6 +34,7 @@ func registerRegistration(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("GET /welcome", handleWelcomeRedirect)
 	mux.HandleFunc("GET /register", a.handleRegisterPage)
 	mux.HandleFunc("POST /register", a.handleRegisterSubmit)
+	mux.HandleFunc("GET /register/regions", a.handleRegisterRegions)
 	mux.HandleFunc("GET /register/done", a.handleRegisterDone)
 }
 
@@ -50,9 +52,41 @@ func (a *App) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 	a.renderRegister(w, r, http.StatusOK, nil, "")
 }
 
+// handleRegisterRegions serves the vendored province/city/area cascade. It is
+// public and cacheable; the payload is not part of the scan-safe page source
+// (register.js fetches it at runtime).
+func (a *App) handleRegisterRegions(w http.ResponseWriter, r *http.Request) {
+	etag := `"` + regions.ETag() + `"`
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	if _, err := w.Write(regions.JSON()); err != nil {
+		a.logger(r).Debug("write regions payload failed", "error", err)
+	}
+}
+
 func (a *App) renderRegister(w http.ResponseWriter, r *http.Request, status int, values url.Values, message string) {
 	data := buildRegisterPageData(values)
 	data.MaxMB = int(a.cfg.MediaMaxBytes / (1 << 20))
+	if a.db != nil {
+		hasQR, err := a.db.SiteAssetExists(r.Context(), "angel_qr")
+		if err != nil {
+			a.logger(r).Warn("check angel qr asset failed", "error", err)
+		} else if hasQR {
+			data.HasAngelQR = true
+			for si := range data.Sections {
+				for fi := range data.Sections[si].Fields {
+					if data.Sections[si].Fields[fi].Name == "angel_ack" {
+						data.Sections[si].Fields[fi].ShowQR = true
+					}
+				}
+			}
+		}
+	}
 	a.render(w, r, status, "register", PageData{
 		Title:    "注册",
 		Error:    message,
@@ -86,7 +120,9 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 
 	values := url.Values(r.MultipartForm.Value)
 	if !a.formCSRFValid(r) {
-		a.renderRegister(w, r, http.StatusForbidden, values, "表单已过期，请重新整理后再提交。")
+		// Never echo values from a request that failed CSRF: the scan-safe
+		// re-render must not reflect attacker-controlled bytes.
+		a.renderRegister(w, r, http.StatusForbidden, nil, "表单已过期，请重新整理后再提交。")
 		return
 	}
 
@@ -527,6 +563,7 @@ type registerDoneData struct {
 	LoggedIn    bool
 	CanEnter    bool
 	Submitted   bool
+	HasAngelQR  bool
 }
 
 // registerDoneCopyKey maps the account state to the public-copy.js table key.
@@ -586,6 +623,13 @@ func (a *App) handleRegisterDone(w http.ResponseWriter, r *http.Request) {
 		data.Message = "一线牵采人工审核，确认资料真实后才会开通使用。"
 	}
 	data.CopyKey = registerDoneCopyKey(data.Status, submitted)
+	if a.db != nil {
+		if has, err := a.db.SiteAssetExists(r.Context(), siteAssetAngelQR); err != nil {
+			a.logger(r).Warn("check angel qr for register done failed", "error", err)
+		} else {
+			data.HasAngelQR = has
+		}
+	}
 	a.render(w, r, http.StatusOK, "register_done", PageData{
 		Title:    data.Heading,
 		ScanSafe: true,
@@ -599,8 +643,8 @@ func (a *App) handleRegisterDone(w http.ResponseWriter, r *http.Request) {
 // be stopped before entering the app.
 func registrationGateApplies(path string) bool {
 	switch path {
-	case "/welcome", "/register", "/register/done", "/login", "/logout",
-		"/activate", "/password", "/healthz", "/favicon.ico":
+	case "/welcome", "/register", "/register/done", "/register/regions", "/login", "/logout",
+		"/activate", "/password", "/healthz", "/favicon.ico", "/angel-qr":
 		return false
 	}
 	if strings.HasPrefix(path, "/static/") || strings.HasPrefix(path, "/media/") {

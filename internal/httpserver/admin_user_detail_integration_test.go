@@ -190,7 +190,7 @@ func TestIntegrationAdminUserDetailHTTP(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("anonymous document photo status = %d, want login redirect", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/login?next="+url.QueryEscape(fullPath) {
+	if loc := resp.Header.Get("Location"); loc != "/?login=1&next="+url.QueryEscape(fullPath) {
 		t.Fatalf("anonymous document photo location = %q", loc)
 	}
 	// 页面路由本身仍是顶层 303 回 SPA，媒体豁免没有放宽管理台页面。

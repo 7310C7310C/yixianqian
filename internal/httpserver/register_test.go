@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"html"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strings"
@@ -32,43 +34,47 @@ func makeTestIDCard(t *testing.T, birth, seq string) string {
 func validRegisterValues(t *testing.T, phone, idCard, birthday string) url.Values {
 	t.Helper()
 	return url.Values{
-		"name":              {"测试用户"},
-		"nickname":          {"小测"},
-		"gender":            {"女性"},
-		"birthday":          {birthday},
-		"phone":             {phone},
-		"id_card":           {idCard},
-		"wechat":            {"wx-test"},
-		"baptismal_name":    {"玛利亚"},
-		"church":            {"南头堂"},
-		"church_group":      {"圣咏团"},
-		"church_location":   {"深圳南山"},
-		"native_place":      {"广东广州"},
-		"city":              {"广东深圳"},
-		"family":            {"两个兄弟姐妹"},
-		"height_cm":         {"165"},
-		"education":         {"本科"},
-		"industry":          {"资讯科技"},
-		"position":          {"工程师"},
-		"income":            {"20W - 30W"},
-		"house":             {"有"},
-		"driving":           {"无"},
-		"marriage":          {"没结过婚"},
-		"live_with_parents": {"独立生活"},
-		"personality":       {"性格开朗，喜欢服务。"},
-		"self_traits":       {"积极乐观", "容易相处"},
-		"self_hobbies":      {"听音乐", "看书"},
-		"self_sports":       {"羽毛球", "跑步"},
-		"mbti":              {"E", "N", "F", "J"},
-		"partner_criteria":  {"希望对方善良、愿意一起服务。"},
-		"partner_traits":    {"正直", "积极乐观"},
-		"partner_hobbies":   {"看书"},
-		"partner_sports":    {"爬山"},
-		"is_for_child":      {"不是，我为自己报名"},
-		"referral_source":   {"朋友介绍"},
-		"angel_ack":         {registerAngelAck},
-		"password":          {"register-pass-123"},
-		"password_confirm":  {"register-pass-123"},
+		"name":                     {"测试用户"},
+		"nickname":                 {"小测"},
+		"gender":                   {"女性"},
+		"birthday":                 {birthday},
+		"phone":                    {phone},
+		"id_card":                  {idCard},
+		"wechat":                   {"wx-test"},
+		"baptismal_name":           {"玛利亚"},
+		"church":                   {"南头堂"},
+		"church_group":             {"圣咏团"},
+		"church_location_province": {"44"},
+		"church_location_city":     {"4403"},
+		"church_location_area":     {"440305"},
+		"native_place_province":    {"44"},
+		"native_place_city":        {"4401"},
+		"city_province":            {"44"},
+		"city_city":                {"4403"},
+		"family":                   {"两个兄弟姐妹"},
+		"height_cm":                {"165"},
+		"education":                {"本科"},
+		"industry":                 {"资讯科技"},
+		"position":                 {"工程师"},
+		"income":                   {"20W - 30W"},
+		"house":                    {"有"},
+		"driving":                  {"无"},
+		"marriage":                 {"没结过婚"},
+		"live_with_parents":        {"独立生活"},
+		"personality":              {"性格开朗，喜欢服务。"},
+		"self_traits":              {"积极乐观", "容易相处"},
+		"self_hobbies":             {"听音乐", "看书"},
+		"self_sports":              {"羽毛球", "跑步"},
+		"mbti":                     {"E", "N", "F", "J"},
+		"partner_criteria":         {"希望对方善良、愿意一起服务。"},
+		"partner_traits":           {"正直", "积极乐观"},
+		"partner_hobbies":          {"看书"},
+		"partner_sports":           {"爬山"},
+		"is_for_child":             {"不是，我为自己报名"},
+		"referral_source":          {"朋友介绍"},
+		"angel_ack":                {registerAngelAck},
+		"password":                 {"register-pass-123"},
+		"password_confirm":         {"register-pass-123"},
 	}
 }
 
@@ -277,6 +283,9 @@ func TestRegisterTemplatesRender(t *testing.T) {
 		`name="csrf_token" value="csrf-value"`, `name="photos"`, `id="register-form"`,
 		`data-copy-json=`, `data-register-text="field.id_card.label"`,
 		`data-register-option="gender.0"`, `data-register-value="name"`,
+		`data-region-field="city"`, `name="city_province"`, `name="city_city"`,
+		`name="church_location_area"`, `data-region-manual-toggle`,
+		`list="dl_industry"`, `list="dl_referral_source"`,
 		`/static/register.js`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("register missing %q", want)
@@ -288,6 +297,7 @@ func TestRegisterTemplatesRender(t *testing.T) {
 		"field.id_card.label": "身份证号码",
 		"field.name.hint":     "不公开，请填写真实姓名。",
 		"select.required":     "请选择",
+		"region.province":     "省 / 直辖市",
 		"page.error":          "",
 	} {
 		if got := catalog.Text[key]; got != want {
@@ -343,7 +353,7 @@ func TestRegisterTemplatesRender(t *testing.T) {
 }
 
 var registerCopyAttrPattern = regexp.MustCompile(`data-copy-json="([^"]*)"`)
-var registerHookPattern = regexp.MustCompile(`data-register-(text|placeholder|option|option-text|value)="([^"]+)"`)
+var registerHookPattern = regexp.MustCompile(`data-register-(text|placeholder|aria|option|option-text|value)="([^"]+)"`)
 var registerStaticRefPattern = regexp.MustCompile(`(?:src|href)="(/static/[^"?#]+)`)
 
 // registerCatalogFromBody decodes the ASCII-only catalog the register page
@@ -453,7 +463,7 @@ func TestRegisterCopyCoversTemplateKeys(t *testing.T) {
 	for _, hook := range hooks {
 		kind, key := hook[1], hook[2]
 		switch kind {
-		case "text", "placeholder":
+		case "text", "placeholder", "aria":
 			textHooks[key] = true
 			if _, ok := catalog.Text[key]; !ok {
 				t.Fatalf("catalog has no text for %s=%q", kind, key)
@@ -556,8 +566,8 @@ func TestRegisterCopyCarriesPostError(t *testing.T) {
 }
 
 func TestRegistrationGatePaths(t *testing.T) {
-	for _, path := range []string{"/welcome", "/register", "/register/done", "/login", "/logout",
-		"/activate", "/password", "/static/app.css", "/media/abc"} {
+	for _, path := range []string{"/welcome", "/register", "/register/done", "/register/regions",
+		"/login", "/logout", "/activate", "/password", "/angel-qr", "/static/app.css", "/media/abc"} {
 		if registrationGateApplies(path) {
 			t.Fatalf("%s should be exempt", path)
 		}
@@ -590,4 +600,108 @@ func TestRegisterFormValuesDropSecrets(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRegisterRegionsEndpoint(t *testing.T) {
+	app := newHomeTestApp(t, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/register/regions", nil)
+	app.handleRegisterRegions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("content-type = %q", ct)
+	}
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("missing ETag")
+	}
+	if !strings.Contains(rec.Body.String(), `"provinces"`) ||
+		!strings.Contains(rec.Body.String(), `广东`) {
+		t.Fatalf("payload missing provinces: %s", rec.Body.String()[:120])
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/register/regions", nil)
+	req.Header.Set("If-None-Match", etag)
+	app.handleRegisterRegions(rec, req)
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("conditional status = %d", rec.Code)
+	}
+}
+
+func TestParseRegisterRegionFields(t *testing.T) {
+	id := makeTestIDCard(t, "19900101", "002")
+	values := validRegisterValues(t, "13800138000", id, "1990-01-01")
+	in, ferr := parseRegisterInput(values)
+	if ferr != nil {
+		t.Fatalf("structured parse: %v", ferr)
+	}
+	if in.City != "广东深圳" || in.NativePlace != "广东广州" || in.ChurchLocation != "深圳南山" {
+		t.Fatalf("region values = %q / %q / %q", in.City, in.NativePlace, in.ChurchLocation)
+	}
+
+	// Manual fallback covers Hong Kong/Macau/Taiwan/overseas and old addresses.
+	manual := validRegisterValues(t, "13800138001", id, "1990-01-01")
+	for _, key := range []string{"native_place_province", "native_place_city"} {
+		manual.Del(key)
+	}
+	manual.Set("native_place", "香港")
+	in, ferr = parseRegisterInput(manual)
+	if ferr != nil || in.NativePlace != "香港" {
+		t.Fatalf("manual region = %q, %v", in.NativePlace, ferr)
+	}
+
+	// A mismatched province/city pair must be rejected server-side.
+	bad := validRegisterValues(t, "13800138002", id, "1990-01-01")
+	bad.Set("city_province", "44")
+	bad.Set("city_city", "1101")
+	if _, ferr := parseRegisterInput(bad); ferr == nil || !strings.Contains(ferr.Message, "地区选择") {
+		t.Fatalf("mismatched region error = %v", ferr)
+	}
+}
+
+func TestParseRegisterRejectsUnderageAndNonMobile(t *testing.T) {
+	id := makeTestIDCard(t, "20150101", "002")
+	values := validRegisterValues(t, "13800138000", id, "2015-01-01")
+	if _, ferr := parseRegisterInput(values); ferr == nil || !strings.Contains(ferr.Message, "18") {
+		t.Fatalf("underage error = %v", ferr)
+	}
+	id = makeTestIDCard(t, "19900101", "002")
+	values = validRegisterValues(t, "12345678", id, "1990-01-01")
+	if _, ferr := parseRegisterInput(values); ferr == nil || !strings.Contains(ferr.Message, "手机号码") {
+		t.Fatalf("non-mobile error = %v", ferr)
+	}
+}
+
+func TestRegisterAngelQRMarkupWhenAssetExists(t *testing.T) {
+	tpl, err := LoadTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := makeTestIDCard(t, "19900101", "002")
+	data := buildRegisterPageData(validRegisterValues(t, "13800138000", id, "1990-01-01"))
+	data.HasAngelQR = true
+	for si := range data.Sections {
+		for fi := range data.Sections[si].Fields {
+			if data.Sections[si].Fields[fi].Name == "angel_ack" {
+				data.Sections[si].Fields[fi].ShowQR = true
+			}
+		}
+	}
+	var buf bytes.Buffer
+	if err := tpl.Render(&buf, "register", PageData{
+		Title: "注册", CSRFToken: "csrf", PageCSS: "register.css",
+		ScanSafe: true, CopyJSON: registerCopyJSON(data, ""), Data: data,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, `src="/angel-qr?v=`) {
+		t.Fatal("register page missing angel QR image")
+	}
+	if !strings.Contains(body, `class="register-angel-qr"`) {
+		t.Fatal("register page missing QR container")
+	}
+	assertHanFreePublicBody(t, body)
 }

@@ -101,7 +101,7 @@ func setupActivitiesHTTPEnvWithOptions(t *testing.T, mutate func(*config.Config)
 func (e *profileHTTPEnv) createUser(t *testing.T, legacyPrefix, name, accountStatus, accountKind string) (db.User, *wsClient) {
 	t.Helper()
 	legacy := legacyPrefix + "-" + randomHTTPDigits(t, 10)
-	phone := "1" + randomHTTPDigits(t, 10)
+	phone := randomHTTPPhone(t)
 	user, err := e.database.UpsertLegacyUser(e.ctx, legacy, phone, name)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
@@ -388,7 +388,7 @@ func openPointsHTTPEnv(t *testing.T) *pointsHTTPEnv {
 func (e *pointsHTTPEnv) user(t *testing.T, gender, accountStatus, accountKind string) (db.User, *wsClient) {
 	t.Helper()
 	legacy := "U-PTS-HTTP-" + randomHTTPDigits(t, 10)
-	phone := "1" + randomHTTPDigits(t, 10)
+	phone := randomHTTPPhone(t)
 	u, err := e.database.UpsertLegacyUser(e.ctx, legacy, phone, "麦穗测试")
 	if err != nil {
 		t.Fatalf("upsert user: %v", err)

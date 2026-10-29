@@ -36,7 +36,11 @@ import (
 // the static island and adding the pure heart + 一线牵 splash.
 // 2026-10-29 (old hero restore): 51 invalidated index/app.css/app.min.js after
 // removing the brand splash and returning to the pre-static-island hero.
-const assetVersion = "51"
+// 2026-10-29 (login dialog + register regions/QR): 52 invalidated home.css/
+// home.js/register.css/register.js/admin.css and added the register.js region
+// loader. 53 covers the review fixes to home.js/register.js. Keep admin
+// @import query values in sync.
+const assetVersion = "53"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
@@ -84,6 +88,14 @@ type PageData struct {
 	// (currently /register). The layout exposes it as <body data-copy-json> and
 	// loads /static/register.js to inject it.
 	CopyJSON string
+	// LoginOpen opens the landing-page login dialog. The login page was merged
+	// into the anonymous home page; old /login links 303 to /?login=1.
+	LoginOpen bool
+	// LoginError is a fixed error code rendered by home.js (never free text,
+	// so the landing page stays Han-free).
+	LoginError string
+	// LoginNotice is a fixed notice code (logged_out / activated).
+	LoginNotice string
 	// NoticeCopyKey renders a JS-injected notice instead of the server-side
 	// Chinese Notice string on scan-safe pages (e.g. /login?logged_out=1).
 	NoticeCopyKey string

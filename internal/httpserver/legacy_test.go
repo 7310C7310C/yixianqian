@@ -148,7 +148,7 @@ func TestLegacyAppRedirectsAnonymous(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if got := rec.Header().Get("Location"); got != "/login?next=/" {
+	if got := rec.Header().Get("Location"); got != "/?login=1&next=/" {
 		t.Fatalf("location = %q", got)
 	}
 }

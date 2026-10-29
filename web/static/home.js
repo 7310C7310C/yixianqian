@@ -9,6 +9,10 @@
 (function () {
   'use strict';
 
+  function has(table, key) {
+    return Object.prototype.hasOwnProperty.call(table, key);
+  }
+
   // Plain-text copy: assigned with textContent.
   var TEXT = {
     'hero.title': '\u4e00\u7ebf\u7275',
@@ -27,7 +31,27 @@
     'feishu.step1': '\u6253\u5f00\u98de\u4e66\u7248\u4e00\u7ebf\u7275\uff08\u4e0b\u65b9\u94fe\u63a5\uff09\u3002',
     'feishu.step2': '\u5728\u98de\u4e66\u7248\u4e2d\u8bbe\u7f6e\u597d\u767b\u5f55\u5bc6\u7801\u3002',
     'feishu.step3': '\u56de\u5230\u672c\u9875\uff0c\u7528\u624b\u673a\u53f7\u7801\uff0b\u5bc6\u7801\u767b\u5f55\u3002',
-    'feishu.cta': '\u6253\u5f00\u98de\u4e66\u7248\u4e00\u7ebf\u7275 \u2197'
+    'feishu.cta': '\u6253\u5f00\u98de\u4e66\u7248\u4e00\u7ebf\u7275 \u2197',
+    'login.title': '\u767b\u5f55',
+    'login.lead': '\u4f7f\u7528\u624b\u673a\u53f7\u7801\u4e0e\u5bc6\u7801\u767b\u5f55\u3002',
+    'login.phoneLabel': '\u624b\u673a\u53f7\u7801',
+    'login.passwordLabel': '\u5bc6\u7801',
+    'login.submit': '\u767b\u5f55',
+    'login.registerHint': '\u8fd8\u6ca1\u6709\u8d26\u53f7\uff1f',
+    'login.registerCta': '\u6ce8\u518c\u65b0\u8d26\u53f7',
+    'login.feishuHint': '\u5df2\u5728\u98de\u4e66\u7248\u4f7f\u7528\u8fc7\uff1f',
+    'login.feishuCta': '\u6253\u5f00\u98de\u4e66\u7248',
+    'login.close': '\u5173\u95ed\u767b\u5f55',
+    'login.notice.logged_out': '\u5df2\u9000\u51fa\u767b\u5f55\u3002',
+    'login.notice.activated': '\u8d26\u53f7\u5df2\u542f\u7528\uff0c\u8bf7\u4f7f\u7528\u65b0\u5bc6\u7801\u767b\u5f55\u3002',
+    'login.error.bad': '\u624b\u673a\u53f7\u7801\u6216\u5bc6\u7801\u9519\u8bef\u3002',
+    'login.error.missing': '\u8bf7\u8f93\u5165\u624b\u673a\u53f7\u7801\u4e0e\u5bc6\u7801\u3002',
+    'login.error.bad_request': '\u767b\u5f55\u8d44\u6599\u683c\u5f0f\u4e0d\u6b63\u786e\u3002',
+    'login.error.csrf': '\u8868\u5355\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u6574\u7406\u540e\u518d\u8bd5\u3002',
+    'login.error.rate': '\u5c1d\u8bd5\u6b21\u6570\u8fc7\u591a\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
+    'login.error.locked': '\u5c1d\u8bd5\u6b21\u6570\u8fc7\u591a\uff0c\u8bf7 15 \u5206\u949f\u540e\u518d\u8bd5\u3002',
+    'login.error.server': '\u7cfb\u7edf\u6682\u65f6\u65e0\u6cd5\u767b\u5f55\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
+    'login.error.temp_expired': '\u4e34\u65f6\u5bc6\u7801\u5df2\u8fc7\u671f\uff0c\u8bf7\u8054\u7edc\u7ba1\u7406\u5458\u91cd\u65b0\u8bbe\u5b9a\u3002',
   };
 
   // Copy that needs markup (<br>): assigned with innerHTML.
@@ -56,8 +80,71 @@
     if (document.body) document.body.classList.remove('home-pending');
   }
 
+
+  // Login dialog: the standalone /login page 303s to /?login=1; this file is
+  // the only place the dialog copy lives. Chosen error/notice codes are fixed
+  // server-side keys, never raw query text.
+  var loginModal = document.querySelector('[data-login-modal]');
+  var loginErrorBox = document.querySelector('[data-login-error-box]');
+  var loginNoticeBox = document.querySelector('[data-login-notice-box]');
+  var loginBody = document.body;
+
+  function setLoginBox(box, text) {
+    if (!box) return;
+    box.textContent = text || '';
+    box.hidden = !text;
+  }
+
+  function openLogin(focus) {
+    if (!loginModal) return;
+    loginModal.hidden = false;
+    if (loginBody) loginBody.classList.add('login-modal-open');
+    if (!focus) return;
+    var phone = document.getElementById('home_login_phone');
+    if (phone && !phone.value) {
+      phone.focus();
+      return;
+    }
+    var password = document.getElementById('home_login_password');
+    if (password) password.focus();
+  }
+
+  function closeLogin() {
+    if (!loginModal) return;
+    loginModal.hidden = true;
+    if (loginBody) loginBody.classList.remove('login-modal-open');
+  }
+
+  function initLogin() {
+    if (!loginModal) return;
+    var errCode = loginBody && loginBody.getAttribute('data-login-error');
+    var noticeCode = loginBody && loginBody.getAttribute('data-login-notice');
+    if (errCode && has(TEXT, 'login.error.' + errCode)) {
+      setLoginBox(loginErrorBox, TEXT['login.error.' + errCode]);
+    }
+    if (noticeCode && has(TEXT, 'login.notice.' + noticeCode)) {
+      setLoginBox(loginNoticeBox, TEXT['login.notice.' + noticeCode]);
+    }
+    var openers = document.querySelectorAll('[data-login-open]');
+    for (var i = 0; i < openers.length; i++) {
+      openers[i].addEventListener('click', function (event) {
+        event.preventDefault();
+        openLogin(true);
+      });
+    }
+    var closers = document.querySelectorAll('[data-login-close]');
+    for (var j = 0; j < closers.length; j++) {
+      closers[j].addEventListener('click', closeLogin);
+    }
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !loginModal.hidden) closeLogin();
+    });
+    if (loginBody && loginBody.classList.contains('login-open')) openLogin(false);
+  }
+
   function start() {
     fill(document);
+    initLogin();
   }
 
   if (document.readyState === 'loading') {

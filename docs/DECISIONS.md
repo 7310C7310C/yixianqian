@@ -127,12 +127,16 @@ sources: []
 
 ### 3.5 公开页扫描防护
 
-- 决策：匿名 `/`、`/login`、`/activate`、`/password`、`/register/done`、404、公开 GET 错误页、`/register` 表单页：响应体除 `<title>` 外 **0 汉字**；引用同源 CSS/JS 也 0 汉字；中文由 `home.js`/`public-copy.js`/`register.js` 注入。
+- 决策：匿名 `/`、`/?login=1`（`/login` 303）、`/activate`、`/password`、`/register/done`、404、公开 GET 错误页、`/register` 表单页：响应体除 `<title>` 外 **0 汉字**；引用同源 CSS/JS 也 0 汉字；中文由 `home.js`/`public-copy.js`/`register.js` 注入。
 - 决策：`/register` 由服务端生成 ASCII 文案目录（`data-copy-json`，非 ASCII 全 `\uXXXX`），option 的中文 value 由 JS 写入后按原契约提交；POST 失败重渲染也 0 汉字。POST 表单错误消息、内部 500、管理台错误页是明示例外。
 - 决策：`/welcome` 已并入首页，`GET /welcome` 301 → `/`；首页只保留飞书入口链接，不展示二维码。
 - 决策：大图 viewer 用 API `photos_meta` 定框；缩图先显、原图后台升级；无 meta 时回退自然尺寸，10s timeout/cancel 保留。
 - 不要做：不把中文写回公开页源码；不恢复二维码；不恢复 `/welcome` 独立页；不给公开页引入含中文注释的 `app.css`/`shell.css`。
-- 验证：`TestPublicScanPagesAreHanFree`、`TestRegisterCopyCatalogIsASCII`、`TestIntegrationPublicActivateErrorPages`、Playwright `public_scan_pages_smoke.py`。
+- 决策（2026-10-29）：独立 `/login` 页并入匿名首页登录弹框；`GET /login` 303 `/?login=1`（保留 `next`/`logged_out`/`activated`），`POST /login` 契约不变；弹框文案仍由 `home.js` 注入，首页保持 0 汉字。
+- 决策（2026-10-29）：注册页「小天使二维码」由后台「内容与安全 → 小天使二维码」上传/更换；资产存 `site_assets`，公开只读 `/angel-qr`（5 分钟缓存）；与已废弃的首页二维码无关，首页仍不展示二维码。
+- 决策（2026-10-29）：注册地区改省-市 / 市-区联动（值保持 `广东深圳`/`深圳南山`），行业/来源改 combobox，身份证即时校验并限 18+，手机限 11 位大陆号码；地区数据 vendored（2023，WTFPL）。
+- 不要做：不恢复独立登录页；不把二维码放回首页；不把身份证改回选填（与门禁冲突）。
+- 验证：`TestPublicScanPagesAreHanFree`、`TestRegisterCopyCatalogIsASCII`、`TestParseRegisterRegionFields`、`TestRegisterRegionsEndpoint`、Playwright `public_scan_pages_smoke.py`。
 
 ## 4. 性能与前端构建
 

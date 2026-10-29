@@ -382,7 +382,7 @@ func TestIntegrationAdminHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	loginClient := newWSClient(t, server.URL)
-	loginCSRF := loginClient.pageCSRF("/login")
+	loginCSRF := loginClient.pageCSRF("/")
 	resp = loginClient.postForm("/login", url.Values{
 		"csrf_token": {loginCSRF},
 		"phone":      {loginTarget.Phone},

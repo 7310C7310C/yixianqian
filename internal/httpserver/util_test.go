@@ -147,7 +147,7 @@ func TestRequireUserRedirects(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if loc != "/login?next=%2Fmedia%3Fsize%3Dthumb" {
+	if loc != "/?login=1&next=%2Fmedia%3Fsize%3Dthumb" {
 		t.Fatalf("location = %q", loc)
 	}
 
@@ -156,8 +156,8 @@ func TestRequireUserRedirects(t *testing.T) {
 	if _, ok := app.requireUserHTML(rec, req); ok {
 		t.Fatal("anonymous POST should not be authenticated")
 	}
-	if loc := rec.Header().Get("Location"); loc != "/login" {
-		t.Fatalf("POST redirect = %q, want /login without next", loc)
+	if loc := rec.Header().Get("Location"); loc != "/?login=1" {
+		t.Fatalf("POST redirect = %q, want /?login=1 without next", loc)
 	}
 }
 

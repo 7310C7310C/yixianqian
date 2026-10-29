@@ -445,3 +445,85 @@ textarea::placeholder {
     padding: 20px;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Structured region picker + realtime field status
+   -------------------------------------------------------------------------- */
+
+.register-region {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.register-region select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #dcdee0;
+  border-color: var(--shell-border, #dcdee0);
+  border-radius: 10px;
+  background: #ffffff;
+  background: var(--shell-surface, #ffffff);
+  color: #323233;
+  color: var(--shell-text, #323233);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.register-region select:focus {
+  border-color: #cc304e;
+  border-color: var(--shell-focus, #cc304e);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 107, 129, 0.24);
+}
+
+.register-region-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #6b7280;
+  color: var(--shell-muted, #6b7280);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.register-region-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.register-field-status {
+  margin: 6px 0 0;
+}
+
+.register-field-status.is-bad {
+  color: #ee0a24;
+}
+
+.register-angel-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 16px;
+  text-align: center;
+}
+
+.register-angel-qr img {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  border: 1px solid #ffe3e8;
+  border-color: var(--shell-brand-line, #ffe3e8);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.register-angel-qr .hint {
+  margin: 0;
+}

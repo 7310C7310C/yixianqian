@@ -90,7 +90,7 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	}
 	csrf := anon.pageCSRF("/register")
 
-	phone := "1" + randomHTTPDigits(t, 10)
+	phone := randomHTTPPhone(t)
 	birthday := "1990-01-01"
 	idCard := makeTestIDCard(t, "19900101", "002")
 	password := "register-pass-123"
@@ -272,7 +272,7 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("logout status = %d", resp.StatusCode)
 	}
-	loginCSRF := anon.pageCSRF("/login")
+	loginCSRF := anon.pageCSRF("/")
 	resp = anon.postForm("/login", url.Values{
 		"csrf_token": {loginCSRF},
 		"phone":      {phone},
@@ -307,7 +307,7 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 
 	// A fresh login after approval goes straight to the app.
 	loginClient := newWSClient(t, env.server.URL)
-	loginCSRF = loginClient.pageCSRF("/login")
+	loginCSRF = loginClient.pageCSRF("/")
 	resp = loginClient.postForm("/login", url.Values{
 		"csrf_token": {loginCSRF},
 		"phone":      {phone},
@@ -315,5 +315,25 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	})
 	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
 		t.Fatalf("approved login status=%d location=%q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+}
+
+func TestIntegrationRegisterCSRFDoesNotReflectHanRegionCodes(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	anonymous := newWSClient(t, env.server.URL)
+	fields := url.Values{
+		"csrf_token":    {"invalid"},
+		"city":          {""},
+		"city_province": {"广东"},
+		"city_city":     {"4403"},
+	}
+	resp := postRegisterMultipart(t, anonymous, fields, nil)
+	body := readBody(t, resp)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d body=%s", resp.StatusCode, body)
+	}
+	assertHanFreePublicBody(t, body)
+	if strings.Contains(body, "广东") {
+		t.Fatal("Han region code was reflected into the scan-safe page")
 	}
 }

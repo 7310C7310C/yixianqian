@@ -86,8 +86,8 @@ func TestAdminHTMLMediaAllowsDocumentNavigation(t *testing.T) {
 		t.Fatalf("document media: status = %d, want login redirect (auth first, never 303 to SPA)", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if !strings.HasPrefix(loc, "/login?next=") || loc == "/?admin=1" {
-		t.Fatalf("document media: location = %q, want /login?next=...", loc)
+	if !strings.HasPrefix(loc, "/?login=1&next=") || loc == "/?admin=1" {
+		t.Fatalf("document media: location = %q, want /?login=1&next=...", loc)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestAdminHTMLIframeAndHeaderlessRenderSSR(t *testing.T) {
 		if loc == "/?admin=1" {
 			t.Fatalf("%s: unexpectedly redirected to SPA (%q)", tc.name, loc)
 		}
-		if want := "/login?next=" + url.QueryEscape(tc.target); loc != want {
+		if want := "/?login=1&next=" + url.QueryEscape(tc.target); loc != want {
 			t.Fatalf("%s: location = %q, want %q", tc.name, loc, want)
 		}
 	}

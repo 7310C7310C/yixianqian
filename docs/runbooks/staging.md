@@ -164,8 +164,10 @@ nginx -t && systemctl reload nginx
 
 ```sh
 curl -sS https://next.nantou.love/healthz
-curl -sk -o /dev/null -w '%{http_code}\n' https://next.nantou.love/login          # 200
+curl -sk -o /dev/null -w '%{http_code} %{redirect_url}\n' https://next.nantou.love/login  # 303 …/?login=1
 curl -sS -o /tmp/yxq_home.html -w '%{http_code}\n' https://next.nantou.love/     # 200
+curl -sS https://next.nantou.love/register/regions | head -c 40                    # {"provinces":...
+curl -sS https://next.nantou.love/register | grep -c 'data-region-field'           # ≥3（匿名源码 0 汉字）
 grep -c 'applink.feishu.cn/T996FhMkTERp' /tmp/yxq_home.html                       # ≥1
 grep -Eci '<img[^>]+(qr|qrcode)' /tmp/yxq_home.html                               # 0（无二维码）
 curl -sk -o /dev/null -w '%{http_code}\n' https://172.245.223.118/ -H 'Host: next.nantou.love'  # 403

@@ -2,7 +2,7 @@
 """用户端 App 启动骨架 / 改密子页 / 管理台内嵌回归（Playwright）。
 
 覆盖：
-1. 未登录访问 / 渲染公开首页（200，含注册/登录 CTA 与飞书说明，不含二维码图片），点登录进入 /login 后出现注册入口；
+1. 未登录访问 / 渲染公开首页（200，含注册/登录 CTA 与飞书说明，不含二维码图片），点登录打开首页弹框并出现注册入口；
 2. 已登录刷新：home 接口被挂起时先出现 App 骨架（品牌顶栏 + 卡片 shimmer +
    四 tab 占位），没有「正在登录」；接口放行后进入主界面，普通 reload 同样不闪登录页；
 3. 登录后未读红点显示数字；进入消息 tab 后红点清零；
@@ -333,7 +333,7 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
         register_class = register.get_attribute("class") or ""
         if "primary" not in register_class or "block" not in register_class:
             raise SmokeFailure(f"{width}px 未登录: 注册按钮不是 primary block（{register_class}）")
-        page.locator('.home-hero a[href="/login"]').wait_for(state="visible", timeout=10000)
+        page.locator('.home-hero [data-login-open]').wait_for(state="visible", timeout=10000)
         feishu = page.locator('.home-feishu a[href="https://applink.feishu.cn/T996FhMkTERp"]')
         feishu.wait_for(state="visible", timeout=10000)
         if feishu.get_attribute("target") != "_blank":
@@ -345,15 +345,14 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
         assert_no_login_flash(page, f"{width}px 未登录")
         page.screenshot(path=str(out_dir / f"home-anon-{tag}.png"), full_page=True)
 
-        page.locator('.home-hero a[href="/login"]').click()
-        page.wait_for_url(lambda url: "/login" in url, timeout=10000)
-        login_register = page.locator('a[href="/register"]')
-        login_register.wait_for(state="visible", timeout=10000)
-        login_class = login_register.get_attribute("class") or ""
-        if "primary" not in login_class or "block" not in login_class:
-            raise SmokeFailure(f"{width}px 登录页: 注册按钮不是 primary block（{login_class}）")
-        page.get_by_text("已在飞书版使用过", exact=False).first.wait_for(state="visible", timeout=10000)
-        page.screenshot(path=str(out_dir / f"login-anon-{tag}.png"), full_page=True)
+        page.locator('.home-hero [data-login-open]').click()
+        modal = page.locator('[data-login-modal]')
+        modal.wait_for(state="visible", timeout=10000)
+        if not modal.locator('#home_login_phone').count() or not modal.locator('#home_login_password').count():
+            raise SmokeFailure(f"{width}px 登录弹框: 缺少手机号/密码输入框")
+        if "已在飞书版使用过" not in modal.inner_text():
+            raise SmokeFailure(f"{width}px 登录弹框: 缺少飞书老用户说明")
+        page.screenshot(path=str(out_dir / f"login-dialog-anon-{tag}.png"), full_page=True)
         assert_no_console_errors(errors, f"{width}px 未登录")
         return []
     except Exception as exc:  # noqa: BLE001 - report all viewport failures together

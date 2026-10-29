@@ -3,10 +3,11 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-28
+last_verified: 2026-10-29
 sources: []
 -->
 
+> 2026-10-29 登录弹框 + 注册结构化：`/login` 303 到 `/?login=1`；注册页省市区联动、行业/来源 combobox、身份证/手机即时校验 + 18+；小天使二维码 + 后台上传（migration 12）。
 > 本文件只写**当前**阶段、已实现/已验收、P0 与缺口。历史批次、旧快照、
 > 测试输出与 commit sha 叙事看 `git log` 和 commit message；机械事实用下方命令复核。
 > **不要写死运行版本/SHA**；版本以 `/healthz` 与 `deployed.sha` 为准。
@@ -20,7 +21,7 @@ sources: []
 | 运行版本 | `curl -sS https://next.nantou.love/healthz`（`version=staging-<sha>`） |
 | 代码部署提交 | 以 `/healthz` 的 version 为准；`deployed.sha` 可能因 docs-only 提交更大 |
 | 服务器 `src` HEAD | `git -C /opt/yixianqian-next/src rev-parse --short HEAD` |
-| migration 最大版本 | `11`（`0011_photo_upload_daily`） |
+| migration 最大版本 | `12`（`0012_site_assets`） |
 | 用户 | `1115`：active 普通用户 `1111`、observer `4` |
 | 资料照片 | `1028` / `has_face=1019` / `unchecked=0` |
 | 自动部署 | `yxq-autodeploy.timer` enabled/active；CI + Docs 绿后部署 |

@@ -9,7 +9,7 @@
   <p class="welcome-lead" data-home-text="hero.lead"></p>
   <div class="welcome-actions">
     <a class="button primary block" href="/register?from=home" data-home-text="hero.ctaRegister"></a>
-    <a class="button block" href="/login" data-home-text="hero.ctaLogin"></a>
+    <button type="button" class="button block" data-login-open data-home-text="hero.ctaLogin"></button>
   </div>
   <p class="welcome-note" data-home-text="hero.note"></p>
 </section>
@@ -42,4 +42,33 @@
   </ol>
   <a class="button block home-feishu-link" href="{{.FeishuURL}}" target="_blank" rel="noopener noreferrer" data-home-text="feishu.cta"></a>
 </section>
+
+<div class="home-login" data-login-modal hidden>
+  <div class="home-login-backdrop" data-login-close></div>
+  <section class="home-login-card" role="dialog" aria-modal="true" aria-labelledby="home-login-title">
+    <button type="button" class="home-login-close" data-login-close data-home-aria="login.close">&#215;</button>
+    <h2 id="home-login-title" data-home-text="login.title"></h2>
+    <p class="hint" data-home-text="login.lead"></p>
+    <div class="home-login-notice" data-login-notice-box role="status" hidden></div>
+    <div class="home-login-error" data-login-error-box role="alert" hidden></div>
+    <form method="post" action="/login" class="stack" data-login-form>
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="next" value="{{.Next}}">
+      <label for="home_login_phone" data-home-text="login.phoneLabel"></label>
+      <input id="home_login_phone" name="phone" type="tel" inputmode="tel" autocomplete="username"
+             value="{{.Phone}}" required>
+      <label for="home_login_password" data-home-text="login.passwordLabel"></label>
+      <input id="home_login_password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit" class="button primary block" data-home-text="login.submit"></button>
+    </form>
+    <p class="home-login-alt">
+      <span data-home-text="login.registerHint"></span>
+      <a href="/register" data-home-text="login.registerCta"></a>
+    </p>
+    <p class="home-login-feishu hint">
+      <span data-home-text="login.feishuHint"></span>
+      <a href="{{.FeishuURL}}" target="_blank" rel="noopener noreferrer" data-home-text="login.feishuCta"></a>
+    </p>
+  </section>
+</div>
 {{end}}

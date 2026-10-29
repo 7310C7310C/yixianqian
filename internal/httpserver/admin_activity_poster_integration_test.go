@@ -523,7 +523,7 @@ func TestIntegrationAdminActivityPosterAccess(t *testing.T) {
 	anonymous := newWSClient(t, server.URL)
 	resp = anonymous.get(posterPath)
 	_ = readBody(t, resp)
-	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login?next=") {
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/?login=1&next=") {
 		t.Fatalf("anonymous admin poster status=%d location=%q",
 			resp.StatusCode, resp.Header.Get("Location"))
 	}

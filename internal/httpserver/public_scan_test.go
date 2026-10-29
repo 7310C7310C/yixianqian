@@ -76,22 +76,6 @@ func TestPublicScanPagesAreHanFree(t *testing.T) {
 		data PageData
 	}{
 		{
-			name: "login",
-			page: "login",
-			data: PageData{
-				Title: "登录", CSRFToken: "csrf", Next: "/x", FeishuURL: publicFeishuAppURL,
-				ScanSafe: true, CopyPage: "login",
-			},
-		},
-		{
-			name: "login notice",
-			page: "login",
-			data: PageData{
-				Title: "登录", CSRFToken: "csrf", FeishuURL: publicFeishuAppURL,
-				ScanSafe: true, CopyPage: "login", NoticeCopyKey: "login.notice.logged_out",
-			},
-		},
-		{
 			name: "activate",
 			page: "activate",
 			data: PageData{
@@ -196,20 +180,6 @@ func TestPublicScanPagesAreHanFree(t *testing.T) {
 	}
 	if !assets["/static/public-copy.js"] || !assets["/static/auth.css"] {
 		t.Fatalf("scan-safe pages must reference public-copy.js + auth.css, got %v", assets)
-	}
-}
-
-// TestPublicCopyCoversEveryNoticeKey keeps the Go notice keys and the JS copy
-// table in sync.
-func TestPublicCopyCoversEveryNoticeKey(t *testing.T) {
-	js, err := fs.ReadFile(webassets.FS, "static/public-copy.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{"login.notice.logged_out", "login.notice.activated"} {
-		if !strings.Contains(string(js), "'"+key+"'") {
-			t.Fatalf("public-copy.js missing %q", key)
-		}
 	}
 }
 

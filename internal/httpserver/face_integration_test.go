@@ -216,7 +216,7 @@ func registerFaceUserPayloadTimeout(t *testing.T, env *profileHTTPEnv, seq strin
 		t.Fatalf("register page status = %d body=%s", resp.StatusCode, readBody(t, resp))
 	}
 	csrf := anon.pageCSRF("/register")
-	phone = "1" + randomHTTPDigits(t, 10)
+	phone = randomHTTPPhone(t)
 	birthday := "1990-01-01"
 	fields := validRegisterValues(t, phone, makeTestIDCard(t, "19900101", seq), birthday)
 	fields.Set("csrf_token", csrf)

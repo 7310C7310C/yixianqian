@@ -20,6 +20,10 @@ var (
 	idCard18RE      = regexp.MustCompile(`^[0-9]{17}[0-9X]$`)
 	idCard15RE      = regexp.MustCompile(`^[0-9]{15}$`)
 	wechatIDRE      = regexp.MustCompile(`^[A-Za-z0-9_.@+-]+$`)
+	// mainlandMobileRE is the registration rule for a mainland China mobile
+	// number. auth.NormalizePhone stays permissive for login (migrated users),
+	// but new registrations must be a usable 11-digit number.
+	mainlandMobileRE = regexp.MustCompile(`^1[3-9][0-9]{9}$`)
 )
 
 // validateWechatID applies the WeChat ID rules used by the registration and

@@ -87,7 +87,7 @@ func TestIntegrationAdminMatchingPagesAccessAndEntryLinks(t *testing.T) {
 	for _, path := range []string{"/admin/matching", groupPath, onetoonePath} {
 		resp := anon.get(path)
 		if resp.StatusCode != http.StatusSeeOther ||
-			!strings.HasPrefix(resp.Header.Get("Location"), "/login?next=") {
+			!strings.HasPrefix(resp.Header.Get("Location"), "/?login=1&next=") {
 			t.Fatalf("anonymous %s status=%d location=%q", path, resp.StatusCode, resp.Header.Get("Location"))
 		}
 	}

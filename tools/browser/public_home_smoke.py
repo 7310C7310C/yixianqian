@@ -7,7 +7,7 @@
    页面引用的同源 CSS/JS 响应体也必须 0 汉字；
 3. 无中文 shell header / skip link；注册是 primary block 主按钮，登录入口与飞书链接（target/rel）都在，
    页面不再展示二维码图片；390/1280 双视口无横向滚动、无 console error；
-4. 点登录进入 /login，注册按钮仍是 primary block，登录页保持中文，飞书老用户说明存在。
+4. 点登录打开首页弹框（不离开首页），手机号/密码/注册入口/飞书说明可见。
 已登录（设置 SESSION_COOKIE 时）：
 5. GET / 仍是 v1 Vue SPA，__YXQ_AUTHENTICATED__=true，不渲染公开首页。
 
@@ -192,10 +192,10 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
         if register.inner_text().strip() != "立即注册":
             raise SmokeFailure(f"{width}px: 注册按钮文案 = {register.inner_text()!r}")
 
-        login_link = page.locator('.home-hero a[href="/login"]')
-        login_link.wait_for(state="visible", timeout=10000)
-        if login_link.inner_text().strip() != "已有账号，登录":
-            raise SmokeFailure(f"{width}px: 登录按钮文案 = {login_link.inner_text()!r}")
+        login_button = page.locator('.home-hero [data-login-open]')
+        login_button.wait_for(state="visible", timeout=10000)
+        if login_button.inner_text().strip() != "已有账号，登录":
+            raise SmokeFailure(f"{width}px: 登录按钮文案 = {login_button.inner_text()!r}")
 
         feishu = page.locator(f'.home-feishu a[href="{FEISHU_URL}"]')
         feishu.wait_for(state="visible", timeout=10000)
@@ -211,19 +211,25 @@ def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path
         page.screenshot(path=str(out_dir / f"home-anon-{tag}.png"), full_page=True)
         print(f"PASS {width}px 匿名首页：中文注入、标题唯一、静态资源 0 汉字（{len(checked)} 个）")
 
-        page.locator('.home-hero a[href="/login"]').click()
-        page.wait_for_url(lambda url: "/login" in url, timeout=10000)
-        login_register = page.locator('a[href="/register"]')
-        login_register.wait_for(state="visible", timeout=10000)
-        assert_primary_block(login_register, f"{width}px 登录页注册按钮")
-        page.get_by_text("已在飞书版使用过", exact=False).first.wait_for(state="visible", timeout=10000)
-        login_html = page.content()
-        if not HAN_RE.search(login_html):
-            raise SmokeFailure(f"{width}px: 登录页应保持中文")
-        if "/static/home.js" in login_html:
-            raise SmokeFailure(f"{width}px: 登录页不应加载首页注入脚本")
-        assert_no_horizontal_scroll(page, width, "登录页")
-        page.screenshot(path=str(out_dir / f"login-anon-{tag}.png"), full_page=True)
+        page.locator('.home-hero [data-login-open]').click()
+        modal = page.locator('[data-login-modal]')
+        modal.wait_for(state="visible", timeout=10000)
+        for selector, label in [
+            ("#home_login_phone", "手机号输入框"),
+            ("#home_login_password", "密码输入框"),
+            ('button[type="submit"]', "登录提交按钮"),
+            ('a[href="/register"]', "注册链接"),
+        ]:
+            if not modal.locator(selector).count():
+                raise SmokeFailure(f"{width}px: 登录弹框缺少{label}（{selector}）")
+        modal_text = modal.inner_text()
+        for copy in ("登录", "手机号码", "密码", "注册新账号", "已在飞书版使用过", "打开飞书版"):
+            if copy not in modal_text:
+                raise SmokeFailure(f"{width}px: 登录弹框缺少文案 {copy!r}")
+        if page.url.rstrip("/") != base_url.rstrip("/"):
+            raise SmokeFailure(f"{width}px: 登录弹框不应离开首页（url={page.url}）")
+        assert_no_horizontal_scroll(page, width, "登录弹框")
+        page.screenshot(path=str(out_dir / f"login-dialog-anon-{tag}.png"), full_page=True)
 
         assert_no_console_errors(errors, f"{width}px 匿名")
         return []

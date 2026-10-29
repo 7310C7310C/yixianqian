@@ -22,15 +22,12 @@ func TestIntegrationPublicHomeAndLoginEntry(t *testing.T) {
 
 	resp = anonymous.get("/login")
 	body = readBody(t, resp)
-	if resp.StatusCode != http.StatusOK ||
-		!strings.Contains(body, `data-copy-text="login.altCta"`) ||
-		!strings.Contains(body, publicFeishuAppURL) {
-		t.Fatalf("login page status=%d missing register/feishu entry: %s", resp.StatusCode, body)
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/?login=1" {
+		t.Fatalf("login page status=%d location=%q body=%s", resp.StatusCode, resp.Header.Get("Location"), body)
 	}
-	assertHanFreePublicBody(t, body)
 
 	resp = anonymous.get("/app")
-	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/login?next=/" {
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/?login=1&next=/" {
 		t.Fatalf("anonymous /app status=%d location=%q", resp.StatusCode, resp.Header.Get("Location"))
 	}
 

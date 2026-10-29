@@ -3600,3 +3600,28 @@ body.admin-shell .admin-form-grid.admin-audit-filter {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* --------------------------------------------------------------------------
+   小天使二维码（站点公开资产）
+   -------------------------------------------------------------------------- */
+
+.admin-angel-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.admin-angel-qr img {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  border: 1px solid var(--adm-line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.admin-angel-qr .hint {
+  margin: 0;
+}

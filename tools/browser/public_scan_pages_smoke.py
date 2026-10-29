@@ -4,7 +4,7 @@
 契约（DECISIONS 38/39 + Reviewer 2026-10-27 修复）：
 - 公开页面（GET）HTTP body 除 <title> 外 0 汉字；引用同源 CSS/JS 0 汉字；
   中文文案由 /static/public-copy.js 在浏览器注入。
-- 覆盖：/login、/activate（含 400/410 错误页）、/password（含 409 无 credential）、
+- 覆盖：/login 303 到首页弹框、/activate（含 400/410 错误页）、/password（含 409 无 credential）、
   /register/done、404。
 - POST 表单错误消息仍为中文（明示例外）。
 
@@ -26,7 +26,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 try:
     from playwright.sync_api import sync_playwright
@@ -67,6 +67,26 @@ STATIC_REF = re.compile(r'(?:src|href)="(/static/[^"?#]+)')
 IGNORED_CONSOLE = ("Failed to load resource", "net::ERR", "favicon", "ResizeObserver")
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+def assert_login_redirect() -> None:
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        opener.open(BASE + "/login?logged_out=1", timeout=20)
+        raise SystemExit("/login: expected 303 redirect")
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        location = exc.headers.get("Location", "")
+    parsed = urlparse(location)
+    query = parse_qs(parsed.query)
+    if status != 303 or parsed.path != "/" or query.get("login") != ["1"]:
+        raise SystemExit(f"/login: status={status} location={location!r}, want 303 /?login=1...")
+    print("PASS /login -> /?login=1 (303)")
+
+
 def fetch(path: str, cookie: str = "") -> tuple[int, str, str]:
     headers = {}
     if cookie:
@@ -98,6 +118,9 @@ def assert_raw_contract(path: str, want_status: int = 200, cookie: str = "", wan
     if want_code and f'data-error-code="{want_code}"' not in body:
         raise SystemExit(f"{label}: missing data-error-code={want_code}")
     for ref in set(STATIC_REF.findall(body)):
+        # Binary assets (favicon etc.) are exempt, same as the Go scan test.
+        if not ref.split("?", 1)[0].endswith((".css", ".js", ".svg", ".json", ".webmanifest")):
+            continue
         s, data, _ = fetch(ref)
         if s != 200:
             raise SystemExit(f"{label}: asset {ref} status={s}")
@@ -108,7 +131,9 @@ def assert_raw_contract(path: str, want_status: int = 200, cookie: str = "", wan
 
 def rendered_checks(page, viewport: str, path: str, shot: str, expect: list[str]) -> None:
     page.goto(BASE + path, wait_until="networkidle")
-    page.wait_for_function("() => !document.body.classList.contains('copy-pending')", timeout=15000)
+    page.wait_for_function(
+        "() => !document.body.classList.contains('copy-pending')"
+        " && !document.body.classList.contains('home-pending')", timeout=15000)
     text = page.inner_text("main")
     for want in expect:
         if want not in text:
@@ -136,7 +161,7 @@ def rendered_error_check(page, viewport: str, path: str, code: str) -> None:
 
 def main() -> int:
     # 1) Raw HTML / referenced assets contract (no JS, matches scanner view).
-    assert_raw_contract("/login")
+    assert_login_redirect()
     assert_raw_contract("/activate", 400, want_code="activate_missing")
     assert_raw_contract("/activate?token=" + INVALID_TOKEN, 400, want_code="activate_invalid")
     assert_raw_contract("/register/done")
@@ -177,17 +202,20 @@ def main() -> int:
                 return context, page
 
             anon_ctx, anon_page = new_page()
-            rendered_checks(anon_page, viewport, "/login", "login",
+            rendered_checks(anon_page, viewport, "/?login=1", "login-dialog",
                             ["登录", "手机号码", "密码", "注册新账号", "已在飞书版使用过", "打开飞书版"])
-            # Login form is submittable; server-side errors stay Chinese (documented exception).
-            anon_page.fill("#phone", "13700000099")
-            anon_page.fill("#password", "wrong-password")
+            # Login form is submittable; the 401 re-render opens the same dialog
+            # with a fixed Chinese error (server message stays a documented exception).
+            anon_page.fill("#home_login_phone", "13700000099")
+            anon_page.fill("#home_login_password", "wrong-password")
             with anon_page.expect_navigation():
-                anon_page.click("button[type=submit]")
-            anon_page.wait_for_function("() => !document.body.classList.contains('copy-pending')", timeout=15000)
-            if "手机号码或密码错误" not in anon_page.inner_text("main"):
+                anon_page.click('[data-login-form] button[type="submit"]')
+            anon_page.wait_for_function(
+                "() => !document.body.classList.contains('home-pending')"
+                " && !document.body.classList.contains('copy-pending')", timeout=15000)
+            if "手机号码或密码错误" not in anon_page.inner_text("[data-login-modal]"):
                 raise SystemExit(f"login [{viewport}]: server error message missing after submit")
-            print(f"PASS submit /login [{viewport}]: 401 re-render keeps Chinese server error")
+            print(f"PASS submit /?login=1 [{viewport}]: 401 re-render keeps Chinese server error")
             rendered_error_check(anon_page, viewport, "/activate", "activate_missing")
             rendered_error_check(anon_page, viewport, "/activate?token=" + INVALID_TOKEN, "activate_invalid")
             if ACTIVATION_USED:
