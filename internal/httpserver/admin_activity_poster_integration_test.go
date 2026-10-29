@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -233,7 +234,7 @@ func TestIntegrationAdminActivityCreateWithPoster(t *testing.T) {
 	}
 	thumbURL := "/admin/activities/" + strconv.FormatInt(activityID, 10) + "/poster?size=thumb"
 	for _, want := range []string{
-		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff"`,
+		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,.heic,.heif"`,
 		`src="` + thumbURL + `"`, "活动海报.png", "最大 10 MB",
 	} {
 		if !strings.Contains(editHTML, want) {
@@ -357,9 +358,13 @@ func TestIntegrationAdminActivityUpdatePosterReplace(t *testing.T) {
 
 	// Reload the stored row so the second update posts the persisted fields
 	// (including any formatting changes made by the first update).
+	heicPoster, err := os.ReadFile("../media/testdata/sample.heic")
+	if err != nil {
+		t.Fatalf("read HEIC fixture: %v", err)
+	}
 	resp = postAdminActivityMultipart(t, client, updatePath,
 		adminActivityUpdateValues(csrf, first),
-		&adminPosterPart{Filename: "第二张.png", ContentType: "image/png", Data: testPNG(t)})
+		&adminPosterPart{Filename: "第二张.heic", ContentType: "image/heic", Data: heicPoster})
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("second poster update status = %d body=%s", resp.StatusCode, readBody(t, resp))
 	}
@@ -372,6 +377,16 @@ func TestIntegrationAdminActivityUpdatePosterReplace(t *testing.T) {
 	}
 	if *second.PosterMediaID == firstMediaID {
 		t.Fatalf("poster media id did not change: %s", firstMediaID)
+	}
+	var posterType string
+	var posterW, posterH int
+	if err := pool.QueryRow(ctx,
+		`SELECT content_type, width, height FROM media WHERE id = $1`, *second.PosterMediaID).
+		Scan(&posterType, &posterW, &posterH); err != nil {
+		t.Fatalf("load HEIC poster media: %v", err)
+	}
+	if posterType != "image/jpeg" || posterW != 64 || posterH != 64 {
+		t.Fatalf("HEIC poster type=%q size=%dx%d, want jpeg 64x64", posterType, posterW, posterH)
 	}
 	rawMeta, meta := posterAuditMeta(t, ctx, pool, manager.ID, second.ActivityNo)
 	if meta["source"] != "edit" {
@@ -564,7 +579,7 @@ func TestAdminActivityEditTemplatePosterForm(t *testing.T) {
 	}
 	editHTML := buf.String()
 	for _, want := range []string{
-		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff"`,
+		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,.heic,.heif"`,
 		`src="/admin/activities/5/poster?size=thumb"`, "活动海报.png", "最大 10 MB",
 	} {
 		if !strings.Contains(editHTML, want) {
@@ -585,7 +600,7 @@ func TestAdminActivityEditTemplatePosterForm(t *testing.T) {
 	}
 	newHTML := buf.String()
 	for _, want := range []string{
-		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff"`,
+		`enctype="multipart/form-data"`, `name="poster"`, `accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,.heic,.heif"`,
 	} {
 		if !strings.Contains(newHTML, want) {
 			t.Fatalf("new template missing %q", want)

@@ -186,6 +186,8 @@ BASE_URL=https://next.nantou.love SESSION_COOKIE=<管理员> USER_SESSION_COOKIE
 
 - 顶层 `/admin`（document）应 303 `/?admin=1`；iframe 请求（`Sec-Fetch-Dest: iframe`）才渲染 SSR。
 - 受权媒体（照片原图、活动海报）document 直接串流是例外，应 200 `image/*`。
+- HEIC：server1 需 `libheif-examples` + `libheif-plugin-libde265`（HEVC 解码插件；`heif-convert --version`）；env `HEIC_ENABLED`/`HEIF_CONVERT_PATH`/`HEIC_TIMEOUT`；`/api/media` 上传 HEIC 应 201、表单路径 303，媒体为 JPEG。
+- 二維碼：`/angel-qr` 上传后统一 JPEG q92 ≤720px；检查 `Cache-Control: max-age=3600` 与 ETag。
 - 管理台页面清单：`/admin`、`/admin/users`、`/admin/users/{id}`、`/admin/matching`、`/admin/points`、
   `/admin/audit`、`/admin/reports`、`/admin/suggestions`、`/admin/roles`；`/admin/activities` 的 iframe
   请求应 303 到 `/app?native_admin=1&p=group_admin`。

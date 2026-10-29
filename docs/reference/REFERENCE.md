@@ -247,6 +247,9 @@ sources: []
 | `FACE_MODEL_PATH` | — | 是（注释默认值） |
 | `FACE_PROBE_CMD` | 是 | 是 |
 | `FACE_PROBE_TIMEOUT` | 是 | 是 |
+| `HEIC_ENABLED` | 是 | 是 |
+| `HEIC_TIMEOUT` | 是 | 是 |
+| `HEIF_CONVERT_PATH` | 是 | 是 |
 | `HTTP_ADDR` | 是 | 是 |
 | `LOG_FORMAT` | 是 | 是 |
 | `LOG_LEVEL` | 是 | 是 |

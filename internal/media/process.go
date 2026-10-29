@@ -47,20 +47,40 @@ func Process(data []byte, thumbSize int) (Processed, error) {
 	return ProcessWithLimits(data, thumbSize, DefaultMaxDimension, DefaultMaxPixels)
 }
 
+// ProcessWithLimitsHEIC is the server path: HEIC/HEIF is converted by a
+// sandboxed heif-convert subprocess, then handled exactly like any other image.
+// ProcessWithLimits remains the no-converter variant used by tests.
+func ProcessWithLimitsHEIC(data []byte, thumbSize, maxDim int, maxPixels int64, heic HEICOptions) (Processed, error) {
+	if isHEIC(data) {
+		heic.MaxDimension = maxDim
+		heic.MaxPixels = maxPixels
+		converted, err := ConvertHEIC(data, heic)
+		if err != nil {
+			return Processed{}, err
+		}
+		data = converted
+	}
+	return processImage(data, thumbSize, maxDim, maxPixels)
+}
+
 // ProcessWithLimits sniffs the container, decodes dimensions, then rewrites the
 // original without metadata (EXIF/GPS/XMP/IPTC) and creates a white-backed JPEG
 // thumbnail constrained to thumbSize. EXIF orientation is applied to both the
 // re-encoded original and the thumbnail. The caller is expected to bound
 // concurrency; decoding a 16-bit image can allocate hundreds of MiB.
 func ProcessWithLimits(data []byte, thumbSize, maxDim int, maxPixels int64) (Processed, error) {
+	if isHEIC(data) {
+		return Processed{}, ErrHEIC
+	}
+	return processImage(data, thumbSize, maxDim, maxPixels)
+}
+
+func processImage(data []byte, thumbSize, maxDim int, maxPixels int64) (Processed, error) {
 	if maxDim <= 0 || maxPixels <= 0 {
 		return Processed{}, ErrImageDimensions
 	}
 	if len(data) == 0 {
 		return Processed{}, ErrUnsupportedImage
-	}
-	if isHEIC(data) {
-		return Processed{}, ErrHEIC
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {

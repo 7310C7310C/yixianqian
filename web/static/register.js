@@ -639,7 +639,8 @@
       var overflow = files.length + picked.length > 9;
       for (var i = 0; i < picked.length; i++) {
         var file = picked[i];
-        if (!file.type || file.type.indexOf('image/') !== 0) {
+        var heicName = /\.(heic|heif)$/i.test(file.name || '');
+        if ((!file.type || file.type.indexOf('image/') !== 0) && !heicName) {
           errorText = COPY_PHOTO_BAD_TYPE;
           continue;
         }

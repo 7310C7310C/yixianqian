@@ -219,7 +219,12 @@ func (a *App) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = os.RemoveAll(stageDir) }()
-	staged, err := a.stageRegistrationPhotos(photos, stageDir)
+	// Bound HEIC subprocess time for the whole request: a public registration
+	// can carry up to 9 photos and must not hold the global media gate for
+	// minutes. Client disconnects cancel through r.Context().
+	heicCtx, cancelHEIC := context.WithTimeout(r.Context(), registrationHEICBudget)
+	staged, err := a.stageRegistrationPhotos(heicCtx, photos, stageDir)
+	cancelHEIC()
 	if err != nil {
 		status, message := registrationPhotoError(err)
 		if status >= 500 {
@@ -423,7 +428,9 @@ type stagedRegistrationPhoto struct {
 // stageRegistrationPhotos validates every photo (format, HEIC, size, pixels)
 // and writes the re-encoded original + thumbnail into dir. Caller owns mediaSem
 // and dir cleanup; no database or object-store write happens here.
-func (a *App) stageRegistrationPhotos(files []*multipart.FileHeader, dir string) ([]stagedRegistrationPhoto, error) {
+const registrationHEICBudget = 60 * time.Second
+
+func (a *App) stageRegistrationPhotos(ctx context.Context, files []*multipart.FileHeader, dir string) ([]stagedRegistrationPhoto, error) {
 	staged := make([]stagedRegistrationPhoto, 0, len(files))
 	for i, header := range files {
 		file, err := header.Open()
@@ -441,8 +448,8 @@ func (a *App) stageRegistrationPhotos(files []*multipart.FileHeader, dir string)
 		if int64(len(data)) > a.cfg.MediaMaxBytes {
 			return nil, media.ErrFileTooLarge
 		}
-		processed, err := media.ProcessWithLimits(data, a.cfg.MediaThumbSize,
-			a.cfg.MediaMaxDim, a.cfg.MediaMaxPixels)
+		processed, err := media.ProcessWithLimitsHEIC(data, a.cfg.MediaThumbSize,
+			a.cfg.MediaMaxDim, a.cfg.MediaMaxPixels, a.heicOptions(ctx))
 		if err != nil {
 			return nil, err
 		}

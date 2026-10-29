@@ -6,10 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"image"
+	"image/color"
 	"image/draw"
 	_ "image/gif"
-	_ "image/jpeg"
-	"image/png"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"sync"
@@ -21,6 +22,7 @@ import (
 	_ "golang.org/x/image/webp"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/media"
 )
 
 const (
@@ -32,8 +34,12 @@ const (
 	qrMaxSide = 720
 	// maxSiteAssetBytes is also the DB CHECK upper bound in 0012_site_assets.
 	maxSiteAssetBytes = 2 << 20
-	siteAssetMinSide  = 60
-	siteAssetMaxSide  = 2000
+	// maxSiteAssetInputBytes follows the photo upload limit; the stored JPEG
+	// is still bounded by maxSiteAssetBytes after the 720px downscale.
+	maxSiteAssetInputBytes = 10 << 20
+	siteAssetMinSide       = 60
+	siteAssetMaxSide       = 8000
+	siteAssetMaxPixels     = 12_500_000
 )
 
 type cachedSiteAsset struct {
@@ -176,10 +182,16 @@ func (a *App) renderAdminAngelQR(w http.ResponseWriter, r *http.Request, access 
 }
 
 func (a *App) handleAdminAngelQRUpload(w http.ResponseWriter, r *http.Request, access adminAccess) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxSiteAssetBytes+(1<<20))
-	if err := r.ParseMultipartForm(maxSiteAssetBytes); err != nil {
+	// Same concurrency gate as photo uploads: HEIC conversion spawns a decoder
+	// subprocess, so keep at most one media decode in flight per process.
+	if !a.acquireMedia(w, r, false) {
+		return
+	}
+	defer a.releaseMedia()
+	r.Body = http.MaxBytesReader(w, r.Body, maxSiteAssetInputBytes+(1<<20))
+	if err := r.ParseMultipartForm(maxSiteAssetInputBytes); err != nil {
 		a.renderAdminAngelQR(w, r, access, http.StatusRequestEntityTooLarge,
-			"图片超过 2MB，请压缩后再上传。")
+			"图片超过 10MB，请压缩后再上传。")
 		return
 	}
 	defer func() { _ = r.MultipartForm.RemoveAll() }()
@@ -193,7 +205,7 @@ func (a *App) handleAdminAngelQRUpload(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, maxSiteAssetBytes+1))
+	data, err := io.ReadAll(io.LimitReader(file, maxSiteAssetInputBytes+1))
 	if err != nil {
 		a.renderAdminAngelQR(w, r, access, http.StatusBadRequest, "读取图片失败，请重试。")
 		return
@@ -202,32 +214,50 @@ func (a *App) handleAdminAngelQRUpload(w http.ResponseWriter, r *http.Request, a
 		a.renderAdminAngelQR(w, r, access, http.StatusBadRequest, "请选择要上传的图片。")
 		return
 	}
-	if len(data) > maxSiteAssetBytes {
+	if len(data) > maxSiteAssetInputBytes {
 		a.renderAdminAngelQR(w, r, access, http.StatusRequestEntityTooLarge,
-			"图片超过 2MB，请压缩后再上传。")
+			"图片超过 10MB，请压缩后再上传。")
 		return
+	}
+	if media.IsHEIC(data) {
+		opts := a.heicOptions(r.Context())
+		opts.MaxDimension = siteAssetMaxSide
+		opts.MaxPixels = siteAssetMaxPixels
+		data, err = media.ConvertHEIC(data, opts)
+		if err != nil {
+			message := "HEIC 处理失败，请重试；仍失败请在相册转成 JPEG 后再上传。"
+			if errors.Is(err, media.ErrImageDimensions) {
+				message = "图片尺寸需在 60-8000 像素之间。"
+			}
+			a.renderAdminAngelQR(w, r, access, http.StatusBadRequest, message)
+			return
+		}
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || !qrFormatSupported(format) {
 		a.renderAdminAngelQR(w, r, access, http.StatusBadRequest,
-			"图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF。")
+			"图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC。")
 		return
 	}
-	// Reject oversized dimensions before a full decode: a 2MB PNG/JPEG header
+	// Reject oversized dimensions before a full decode: a 10MB HEIC/PNG/JPEG header
 	// can claim huge dimensions, and decoding it would allocate width*height.
 	if cfg.Width < siteAssetMinSide || cfg.Height < siteAssetMinSide ||
-		cfg.Width > siteAssetMaxSide || cfg.Height > siteAssetMaxSide {
+		cfg.Width > siteAssetMaxSide || cfg.Height > siteAssetMaxSide ||
+		int64(cfg.Width)*int64(cfg.Height) > siteAssetMaxPixels {
 		a.renderAdminAngelQR(w, r, access, http.StatusBadRequest,
-			"图片尺寸需在 60-2000 像素之间。")
+			"图片尺寸需在 60-8000 像素之间。")
 		return
 	}
-	// Fully decode and re-encode to strip EXIF/metadata (media rule 2.4). PNG
-	// stays lossless; JPEG uses q92, which keeps a QR scannable.
+	// Fully decode and re-encode to strip EXIF/metadata (media rule 2.4). The
+	// final QR is JPEG q92 after the 720px cap.
 	src, decodedFormat, err := image.Decode(bytes.NewReader(data))
 	if err != nil || decodedFormat != format {
 		a.renderAdminAngelQR(w, r, access, http.StatusBadRequest, "图片无法解码，请重新导出。")
 		return
 	}
+	// JPEG has no alpha: transparent QR backgrounds must become white, never
+	// black. Flatten before scaling so downscaled edges keep a white base.
+	src = flattenOnWhite(src)
 	bounds := src.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
 	if width > qrMaxSide || height > qrMaxSide {
@@ -246,18 +276,17 @@ func (a *App) handleAdminAngelQRUpload(w http.ResponseWriter, r *http.Request, a
 		width, height = nw, nh
 	}
 	var encoded bytes.Buffer
-	// QR assets are always stored as PNG: lossless edges scan more reliably
-	// than JPEG artifacts, regardless of the uploaded format.
-	contentType := "image/png"
-	encoder := png.Encoder{CompressionLevel: png.BestCompression}
-	err = encoder.Encode(&encoded, src)
+	// QR follows the photo policy: unified JPEG q92 after the 720px cap.
+	// Scanning is verified against the real QR in staging smoke.
+	contentType := "image/jpeg"
+	err = jpeg.Encode(&encoded, src, &jpeg.Options{Quality: 92})
 	if err != nil {
 		a.renderAdminAngelQR(w, r, access, http.StatusInternalServerError, "图片处理失败，请重试。")
 		return
 	}
 	if encoded.Len() > maxSiteAssetBytes {
 		a.renderAdminAngelQR(w, r, access, http.StatusRequestEntityTooLarge,
-			"图片超过 2MB，请压缩后再上传。")
+			"图片压缩后仍超过 2MB，请换一张更简单的图片。")
 		return
 	}
 	data = encoded.Bytes()
@@ -286,4 +315,14 @@ func (a *App) handleAdminAngelQRUpload(w http.ResponseWriter, r *http.Request, a
 			"height":       height,
 		})
 	http.Redirect(w, r, "/admin/settings/angel-qr?saved=1", http.StatusSeeOther)
+}
+
+// flattenOnWhite composites an image onto an opaque white background so a
+// transparent PNG/WebP QR stays scannable after JPEG encoding.
+func flattenOnWhite(src image.Image) *image.RGBA {
+	bounds := src.Bounds()
+	dst := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	draw.Draw(dst, dst.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(dst, dst.Bounds(), src, bounds.Min, draw.Over)
+	return dst
 }

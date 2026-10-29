@@ -225,6 +225,9 @@ func testConfig() config.Config {
 		SessionTTL:        time.Hour,
 		MediaMaxBytes:     10 << 20,
 		MediaThumbSize:    128,
+		HEICEnabled:       true,
+		HEIFConvertPath:   "heif-convert",
+		HEICTimeout:       20 * time.Second,
 		ActivationTTL:     time.Hour,
 		LogLevel:          slog.LevelError,
 		LogFormat:         "text",
@@ -375,7 +378,9 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&apiErr); err != nil {
 		t.Fatal(err)
 	}
-	if apiErr.Error.Code != "heic_not_supported" {
+	// A malformed HEIC container is detected, then the converter fails; the
+	// user still gets the actionable "convert to JPEG" message.
+	if apiErr.Error.Code != "heic_conversion_failed" {
 		t.Fatalf("heic code = %q", apiErr.Error.Code)
 	}
 	if !strings.Contains(apiErr.Error.Message, "HEIC") || !strings.Contains(apiErr.Error.Message, "JPEG") || !strings.Contains(apiErr.Error.Message, "高效") {

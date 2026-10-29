@@ -1678,16 +1678,15 @@ const yxqApp = createApp({
         }
       }, 2000);
     }
-    // 最佳实践：前端 canvas 预压缩至 1080 + XHR 进度 + 分段文案；HEIC 服务端不支持，上传前明确提示
-    const HEIC_HINT = 'iPhone HEIC 照片请先在相册转成 JPEG，或关闭「高效」格式后再上传';
+    // 最佳实践：前端 canvas 预压缩至 1080 + XHR 进度 + 分段文案；HEIC 交给后端转换
     function isHEICFile(file) {
       const type = (file.type||'').toLowerCase();
       const name = (file.name||'').toLowerCase();
       return type==='image/heic' || type==='image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
     }
     async function compressImage(file, maxWidth=1080, quality=0.82) {
-      // HEIC/HEIF 无法在 canvas 解码，服务端也不支持：直接抛出可操作提示，避免上传后 400
-      if (isHEICFile(file)) throw new Error(HEIC_HINT);
+      // HEIC/HEIF 无法用 canvas 解码；直接上传原文件，由后端 heif-convert 处理。
+      if (isHEICFile(file)) return file;
       try {
         const img = await new Promise((res, rej)=>{
           const u = URL.createObjectURL(file);
@@ -1747,7 +1746,7 @@ const yxqApp = createApp({
       const file = e.target.files && e.target.files[0];
       if (uploadingPhoto.value) { e.target.value = ''; return; }   // 上传在途：不叠加第二次上传
       if (!file) return;
-      if (!file.type || !file.type.startsWith('image/')) { vant.showToast('请选择图片文件'); return; }
+      if ((!file.type || !file.type.startsWith('image/')) && !isHEICFile(file)) { vant.showToast('请选择图片文件'); return; }
       if (file.size > 10 * 1024 * 1024) { vant.showToast('图片不能超过10MB'); return; }
       uploadingPhoto.value = true; uploadProgress.value = 0; uploadStage.value = 'compress';
       try {

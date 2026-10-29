@@ -77,9 +77,14 @@ type Config struct {
 	ReadCacheBytes   int64
 	MediaMaxPixels   int64
 	MediaMaxDim      int
-	MaxHashes        int
-	MaxMedia         int
-	ActivationTTL    time.Duration
+	// HEIC/HEIF 通过 heif-convert 子进程转 PNG 后进入统一 JPEG 管线；
+	// 关闭时保持旧的「请转 JPEG」提示。ConvertPath 默认 heif-convert。
+	HEICEnabled     bool
+	HEIFConvertPath string
+	HEICTimeout     time.Duration
+	MaxHashes       int
+	MaxMedia        int
+	ActivationTTL   time.Duration
 
 	// PhotoDailyLimit 是每账号每自然日可上传的照片数（v1 PHOTO_DAILY_LIMIT 语义）；
 	// 0 关闭限制。PhotoQuotaLocation 是判定自然日边界的时区（默认 Asia/Shanghai），
@@ -222,6 +227,20 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("config: MEDIA_MAX_DIMENSION: %w", err))
 	} else {
 		cfg.MediaMaxDim = int(v)
+	}
+	if v, err := parseBool(getenv("HEIC_ENABLED"), true); err != nil {
+		errs = append(errs, fmt.Errorf("config: HEIC_ENABLED: %w", err))
+	} else {
+		cfg.HEICEnabled = v
+	}
+	cfg.HEIFConvertPath = get("HEIF_CONVERT_PATH", "heif-convert")
+	if v, err := parseDuration(getenv("HEIC_TIMEOUT"), 20*time.Second); err != nil {
+		errs = append(errs, fmt.Errorf("config: HEIC_TIMEOUT: %w", err))
+	} else {
+		cfg.HEICTimeout = v
+	}
+	if cfg.HEICTimeout < time.Second || cfg.HEICTimeout > time.Minute {
+		errs = append(errs, errors.New("config: HEIC_TIMEOUT must be between 1s and 60s"))
 	}
 	if cfg.MediaMaxDim < 1000 || cfg.MediaMaxDim > 12000 {
 		errs = append(errs, errors.New("config: MEDIA_MAX_DIMENSION must be between 1000 and 12000"))

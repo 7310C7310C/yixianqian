@@ -3,10 +3,12 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
+	"image"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -198,7 +200,11 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 
 	// The bundled SPA posts uploads to the absolute /api/profile/photo alias
 	// (uploadWithProgress does not prepend BASE_PATH); keep both paths working.
-	resp = legacyPhotoUpload(t, ownerClient, "/api/profile/photo", csrf, "1", testJPEG(t))
+	heicPhoto, err := os.ReadFile("../media/testdata/sample.heic")
+	if err != nil {
+		t.Fatalf("read HEIC fixture: %v", err)
+	}
+	resp = legacyPhotoUpload(t, ownerClient, "/api/profile/photo", csrf, "1", heicPhoto)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("legacy cover upload status = %d", resp.StatusCode)
 	}
@@ -209,6 +215,15 @@ func TestIntegrationLegacyProfileFlow(t *testing.T) {
 	}
 	if second.Photos[0] == "/profile/photo/"+firstID {
 		t.Fatal("cover=1 upload did not move the new photo to the front")
+	}
+	heicID := strings.TrimPrefix(second.Photos[0], "/profile/photo/")
+	resp = ownerClient.get("/profile/photo/" + heicID)
+	heicBody := readBodyBytes(t, resp)
+	heicCfg, heicFormat, err := image.DecodeConfig(bytes.NewReader(heicBody))
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" ||
+		err != nil || heicFormat != "jpeg" || heicCfg.Width != 64 || heicCfg.Height != 64 {
+		t.Fatalf("HEIC profile photo status=%d type=%q format=%q size=%dx%d err=%v",
+			resp.StatusCode, resp.Header.Get("Content-Type"), heicFormat, heicCfg.Width, heicCfg.Height, err)
 	}
 
 	resp = profileJSONRequest(t, ownerClient, http.MethodPost, "/legacy/api/profile/photo/cover", csrf,

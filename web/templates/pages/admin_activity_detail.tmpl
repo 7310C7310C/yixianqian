@@ -542,7 +542,7 @@
       <div class="admin-section-head">
         <div>
           <h2 class="admin-section-title">活动海报</h2>
-          <p class="admin-section-desc">支持 JPEG/PNG/WebP/GIF/BMP/TIFF，上传后统一转 JPEG，最大 {{.MediaMaxMB}} MB；经应用私有代理显示。</p>
+          <p class="admin-section-desc">支持 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC，上传后统一转 JPEG，最大 {{.MediaMaxMB}} MB；经应用私有代理显示。</p>
         </div>
       </div>
       {{if .Data.Activity.PosterMediaID}}
@@ -560,7 +560,7 @@
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <label class="admin-field">
           <span class="admin-field-label">选择图片</span>
-          <input type="file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff" required>
+          <input type="file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,.heic,.heif" required>
         </label>
         <div class="admin-actions">
           <button type="submit" class="button primary">{{if .Data.Activity.PosterMediaID}}替换海报{{else}}上传海报{{end}}</button>

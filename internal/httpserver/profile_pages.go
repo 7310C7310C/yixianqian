@@ -681,11 +681,11 @@ func profileFlash(r *http.Request) (notice, errMessage string) {
 	switch q.Get("photo_error") {
 	case "":
 	case "heic":
-		errMessage = "iPhone HEIC 照片请先在相册转成 JPEG，或关闭「高效」格式后再上传。"
+		errMessage = "HEIC 处理失败，请重试；仍失败请在相册转成 JPEG（或关闭「高效」格式）。"
 	case "too_large":
 		errMessage = "文件超过大小上限。"
 	case "unsupported":
-		errMessage = "图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF。"
+		errMessage = "图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC。"
 	case "dimensions":
 		errMessage = "图片尺寸过大。"
 	case "no_file":

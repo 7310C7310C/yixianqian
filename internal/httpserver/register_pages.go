@@ -81,9 +81,6 @@ var (
 		"是的，我替子女报名，我会让子女注册",
 		"不是，我为自己报名",
 	}
-	registerReferralOptions = []string{
-		"朋友介绍", "小天使介绍", "教堂/团体", "微信公众号/朋友圈", "飞书版老用户", "其他",
-	}
 )
 
 // registerSections mirrors the legacy Feishu registration form. The order and
@@ -196,7 +193,7 @@ func registerSections() []registerSectionSpec {
 				{Name: "is_for_child", Label: "您替子女注册吗？", Kind: registerKindSelect, Required: true,
 					Options: registerChildOptions, Hint: "如替子女注册，请使用子女的手机号码。"},
 				{Name: "referral_source", Label: "你是怎么知道一线牵的？", Kind: registerKindText, Required: true,
-					MaxRunes: 200, Options: registerReferralOptions, Placeholder: "可输入或选择"},
+					MaxRunes: 200, Placeholder: "例如，朋友介绍"},
 				{Name: "inviter", Label: "邀请人 ID", Kind: registerKindText, MaxRunes: 50,
 					Placeholder: "例如：U-0001", Hint: "没有邀请人可留空。"},
 				{Name: "angel_ack", Label: "记得加小天使微信号，并备注「真实姓名」。", Kind: registerKindCheckbox,

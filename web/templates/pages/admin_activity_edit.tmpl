@@ -147,7 +147,7 @@
       <div class="admin-section-head">
         <div>
           <h2 class="admin-section-title" id="form-poster">活动海报</h2>
-          <p class="admin-section-desc">支持 JPEG/PNG/WebP/GIF/BMP/TIFF，上传后统一转 JPEG，最大 {{.MediaMaxMB}} MB；经应用私有代理显示。</p>
+          <p class="admin-section-desc">支持 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC，上传后统一转 JPEG，最大 {{.MediaMaxMB}} MB；经应用私有代理显示。</p>
         </div>
       </div>
       {{if .Data.Activity.PosterMediaID}}
@@ -163,7 +163,7 @@
       {{end}}
       <label class="admin-field">
         <span class="admin-field-label">活动海报（可选）</span>
-        <input type="file" name="poster" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff">
+        <input type="file" name="poster" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,.heic,.heif">
         <span class="admin-field-hint">{{if .Data.IsNew}}不选择则不上传海报。{{else}}不选择则保留当前海报。{{end}}</span>
       </label>
     </section>

@@ -433,8 +433,10 @@ func (a *App) legacyPhotoUploadError(w http.ResponseWriter, r *http.Request, err
 	switch {
 	case errors.Is(err, errNoFile):
 		legacyError(w, http.StatusBadRequest, "未收到图片")
-	case errors.Is(err, media.ErrHEIC):
-		legacyError(w, http.StatusBadRequest, "iPhone HEIC 照片请先在相册转成 JPEG，或关闭「高效」格式后再上传。")
+	case errors.Is(err, media.ErrHEICUnavailable):
+		legacyError(w, http.StatusBadRequest, "HEIC 暂不可用，请先在相册转成 JPEG（或关闭「高效」格式）。")
+	case errors.Is(err, media.ErrHEICConvert), errors.Is(err, media.ErrHEIC):
+		legacyError(w, http.StatusBadRequest, "HEIC 处理失败，请重试；仍失败请在相册转成 JPEG（或关闭「高效」格式）。")
 	case errors.Is(err, media.ErrFileTooLarge):
 		legacyError(w, http.StatusBadRequest, "图片不能超过10MB")
 	case errors.Is(err, media.ErrUnsupportedImage):

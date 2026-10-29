@@ -154,6 +154,17 @@ func (a *App) discardMedia(r *http.Request, userID int64, mediaID string) {
 	a.removeObject(r, m.ID, m.ThumbKey)
 }
 
+// heicOptions is shared by the photo and QR upload paths. The request context
+// cancels a running converter when the client disconnects.
+func (a *App) heicOptions(ctx context.Context) media.HEICOptions {
+	return media.HEICOptions{
+		Enabled:     a.cfg.HEICEnabled,
+		ConvertPath: a.cfg.HEIFConvertPath,
+		Timeout:     a.cfg.HEICTimeout,
+		Context:     ctx,
+	}
+}
+
 func (a *App) receiveUpload(r *http.Request, user db.User) (db.Media, error) {
 	return a.receiveUploadField(r, user, "file")
 }
@@ -175,8 +186,8 @@ func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (d
 		return db.Media{}, media.ErrFileTooLarge
 	}
 
-	processed, err := media.ProcessWithLimits(data, a.cfg.MediaThumbSize,
-		a.cfg.MediaMaxDim, a.cfg.MediaMaxPixels)
+	processed, err := media.ProcessWithLimitsHEIC(data, a.cfg.MediaThumbSize,
+		a.cfg.MediaMaxDim, a.cfg.MediaMaxPixels, a.heicOptions(r.Context()))
 	if err != nil {
 		return db.Media{}, err
 	}
@@ -256,7 +267,8 @@ func (a *App) failUpload(w http.ResponseWriter, r *http.Request, user db.User, e
 		return
 	}
 	switch {
-	case errors.Is(err, media.ErrHEIC):
+	case errors.Is(err, media.ErrHEIC), errors.Is(err, media.ErrHEICUnavailable),
+		errors.Is(err, media.ErrHEICConvert):
 		http.Redirect(w, r, "/?upload_error=heic", http.StatusSeeOther)
 	case errors.Is(err, media.ErrUnsupportedImage), errors.Is(err, errNoFile):
 		http.Redirect(w, r, "/?upload_error=unsupported", http.StatusSeeOther)
@@ -270,12 +282,16 @@ func (a *App) failUpload(w http.ResponseWriter, r *http.Request, user db.User, e
 
 func uploadErrorDetails(err error) (status int, code, message string) {
 	switch {
+	case errors.Is(err, media.ErrHEICUnavailable):
+		return http.StatusBadRequest, "heic_unavailable", "HEIC 暂不可用，请先在相册转成 JPEG（或关闭「高效」格式）。"
+	case errors.Is(err, media.ErrHEICConvert):
+		return http.StatusBadRequest, "heic_conversion_failed", "HEIC 处理失败，请重试；仍失败请在相册转成 JPEG（或关闭「高效」格式）。"
 	case errors.Is(err, media.ErrHEIC):
-		return http.StatusBadRequest, "heic_not_supported", "iPhone HEIC 照片请先在相册转成 JPEG，或关闭「高效」格式后再上传。"
+		return http.StatusBadRequest, "heic_not_supported", "HEIC 处理失败，请重试；仍失败请在相册转成 JPEG（或关闭「高效」格式）。"
 	case errors.Is(err, media.ErrFileTooLarge):
 		return http.StatusRequestEntityTooLarge, "file_too_large", "文件超过大小上限。"
 	case errors.Is(err, media.ErrUnsupportedImage):
-		return http.StatusBadRequest, "unsupported_type", "图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF。"
+		return http.StatusBadRequest, "unsupported_type", "图片格式不支持，请使用 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC。"
 	case errors.Is(err, media.ErrImageDimensions):
 		return http.StatusBadRequest, "image_dimensions", "图片尺寸过大。"
 	case errors.Is(err, errNoFile):

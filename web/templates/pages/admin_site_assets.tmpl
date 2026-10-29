@@ -15,7 +15,7 @@
   <div class="admin-section-head">
     <div class="admin-section-head-main">
       <h2 class="admin-section-title">当前二维码</h2>
-      <p class="admin-section-desc">建议使用 PNG，保留足够留白，确保微信可长按识别。</p>
+      <p class="admin-section-desc">建议使用清晰的原图（PNG/JPEG），保留足够留白，确保微信可长按识别。</p>
     </div>
     {{if .Data.Asset}}<span class="admin-section-meta">{{.Data.Asset.Width}}×{{.Data.Asset.Height}} · {{.Data.Asset.ByteSize}} 字节</span>{{end}}
   </div>
@@ -37,14 +37,14 @@
   <div class="admin-section-head">
     <div class="admin-section-head-main">
       <h2 class="admin-section-title">上传 / 更换</h2>
-      <p class="admin-section-desc">支持 JPEG/PNG/WebP/GIF/BMP/TIFF，上传后统一转 PNG；60–2000 像素，单张不超过 2MB。</p>
+      <p class="admin-section-desc">支持 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC，上传后统一转 JPEG；最长边 720px，单张输入不超过 10MB。</p>
     </div>
   </div>
   <form method="post" action="/admin/settings/angel-qr" enctype="multipart/form-data" class="admin-form">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div class="admin-field">
       <label class="admin-field-label" for="angel_qr_file">选择图片</label>
-      <input id="angel_qr_file" name="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff" required>
+      <input id="angel_qr_file" name="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,.heic,.heif" required>
     </div>
     <div class="admin-form-actions">
       <button type="submit" class="button primary">上传并替换</button>

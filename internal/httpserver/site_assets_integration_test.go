@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"image"
+	"image/color"
 	"image/png"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 )
@@ -53,15 +55,18 @@ func TestIntegrationAngelQRUploadAndPublicServe(t *testing.T) {
 
 	resp = anonymous.get("/angel-qr")
 	body := readBodyBytes(t, resp)
-	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("angel-qr after upload status=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "max-age=3600") {
+		t.Fatalf("angel-qr cache-control = %q", cc)
 	}
 	if resp.Header.Get("ETag") == "" || len(body) == 0 {
 		t.Fatalf("angel-qr etag=%q bytes=%d", resp.Header.Get("ETag"), len(body))
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(body))
-	if err != nil || format != "png" || cfg.Width > 720 || cfg.Height > 720 {
-		t.Fatalf("angel-qr format=%q size=%dx%d err=%v, want png <=720", format, cfg.Width, cfg.Height, err)
+	if err != nil || format != "jpeg" || cfg.Width > 720 || cfg.Height > 720 {
+		t.Fatalf("angel-qr format=%q size=%dx%d err=%v, want jpeg <=720", format, cfg.Width, cfg.Height, err)
 	}
 	etag := resp.Header.Get("ETag")
 	resp = anonymous.getWithHeaders("/angel-qr", map[string]string{"If-None-Match": etag})
@@ -69,10 +74,30 @@ func TestIntegrationAngelQRUploadAndPublicServe(t *testing.T) {
 		t.Fatalf("angel-qr conditional status = %d", resp.StatusCode)
 	}
 
+	// HEIC input goes through the subprocess converter and is stored as JPEG.
+	heic, err := os.ReadFile("../media/testdata/sample.heic")
+	if err != nil {
+		t.Fatalf("read HEIC fixture: %v", err)
+	}
+	resp = modClient.postMultipart("/admin/settings/angel-qr", modCSRF, "angel.heic", "image/heic", heic)
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/admin/settings/angel-qr?saved=1" {
+		t.Fatalf("HEIC angel upload status=%d location=%q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	resp = anonymous.get("/angel-qr")
+	body = readBodyBytes(t, resp)
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" {
+		t.Fatalf("HEIC angel-qr status=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	cfg, format, err = image.DecodeConfig(bytes.NewReader(body))
+	if err != nil || format != "jpeg" || cfg.Width != 64 || cfg.Height != 64 {
+		t.Fatalf("HEIC angel-qr format=%q size=%dx%d err=%v", format, cfg.Width, cfg.Height, err)
+	}
+	etag = resp.Header.Get("ETag")
+
 	resp = anonymous.get("/register")
 	register := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(register, `src="/angel-qr?v=`) {
-		t.Fatalf("register page missing angel QR: status=%d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(register, `src="/angel-qr?v=`+strings.Trim(etag, `"`)+`"`) {
+		t.Fatalf("register page missing versioned angel QR: status=%d", resp.StatusCode)
 	}
 	assertHanFreePublicBody(t, register)
 
@@ -88,8 +113,20 @@ func TestIntegrationAngelQRUploadAndPublicServe(t *testing.T) {
 		 WHERE action = 'admin.site_asset.update' AND target_id = 'angel_qr'`).Scan(&audits); err != nil {
 		t.Fatalf("count audit: %v", err)
 	}
-	if audits != 1 {
-		t.Fatalf("site asset audit rows = %d, want 1", audits)
+	if audits != 2 {
+		t.Fatalf("site asset audit rows = %d, want 2", audits)
+	}
+}
+
+func TestFlattenOnWhite(t *testing.T) {
+	src := image.NewNRGBA(image.Rect(0, 0, 4, 4))
+	src.SetNRGBA(2, 2, color.NRGBA{R: 200, A: 255})
+	flat := flattenOnWhite(src)
+	if r, g, b, a := flat.At(0, 0).RGBA(); r != 0xffff || g != 0xffff || b != 0xffff || a != 0xffff {
+		t.Fatalf("transparent corner = %04x %04x %04x %04x, want white", r, g, b, a)
+	}
+	if r, _, _, _ := flat.At(2, 2).RGBA(); r == 0 || r == 0xffff {
+		t.Fatalf("opaque pixel lost: r=%04x", r)
 	}
 }
 

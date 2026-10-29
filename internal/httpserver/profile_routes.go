@@ -590,7 +590,8 @@ func profilePhotoUploadRedirectCode(err error) string {
 	switch {
 	case errors.Is(err, db.ErrPhotoLimit):
 		return "limit"
-	case errors.Is(err, media.ErrHEIC):
+	case errors.Is(err, media.ErrHEIC), errors.Is(err, media.ErrHEICUnavailable),
+		errors.Is(err, media.ErrHEICConvert):
 		return "heic"
 	case errors.Is(err, media.ErrFileTooLarge):
 		return "too_large"

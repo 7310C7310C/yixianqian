@@ -48,6 +48,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.MediaMaxPixels != 12_500_000 || cfg.MediaMaxDim != 8000 {
 		t.Fatalf("media pixel defaults: %d / %d", cfg.MediaMaxPixels, cfg.MediaMaxDim)
 	}
+	if !cfg.HEICEnabled || cfg.HEIFConvertPath != "heif-convert" || cfg.HEICTimeout != 20*time.Second {
+		t.Fatalf("HEIC defaults: %+v", cfg)
+	}
 	if len(cfg.TrustedProxies) != 1 || cfg.TrustedProxies[0] != "45.125.16.205/32" {
 		t.Fatalf("trusted proxies = %v", cfg.TrustedProxies)
 	}

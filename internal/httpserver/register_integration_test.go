@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -96,6 +97,10 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	password := "register-pass-123"
 	fields := validRegisterValues(t, phone, idCard, birthday)
 	fields.Set("inviter", inviterRef)
+	heicPhoto, err := os.ReadFile("../media/testdata/sample.heic")
+	if err != nil {
+		t.Fatalf("read HEIC fixture: %v", err)
+	}
 
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -127,9 +132,10 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 		t.Fatalf("user created with too few photos: err=%v", err)
 	}
 
-	// Valid submission creates a pending, login-enabled account with photos.
+	// Valid submission creates a pending, login-enabled account with photos;
+	// one input is a real HEVC HEIC and must be stored as JPEG.
 	resp = postRegisterMultipart(t, anon, fields,
-		[][]byte{testJPEG(t), testJPEG(t), testJPEG(t)})
+		[][]byte{testJPEG(t), heicPhoto, testJPEG(t)})
 	if resp.StatusCode != http.StatusSeeOther ||
 		resp.Header.Get("Location") != "/register/done?submitted=1" {
 		t.Fatalf("register status=%d location=%q body=%s",
@@ -164,6 +170,16 @@ func TestIntegrationHTTPRegisterFlow(t *testing.T) {
 	}
 	if !photos[0].IsCover {
 		t.Fatal("first registration photo is not the cover")
+	}
+	var jpegPhotos, heicWidth int
+	if err := env.conn.QueryRow(ctx,
+		`SELECT count(*) FILTER (WHERE content_type = 'image/jpeg'),
+		        count(*) FILTER (WHERE width = 64 AND height = 64)
+		   FROM media WHERE user_id = $1`, user.ID).Scan(&jpegPhotos, &heicWidth); err != nil {
+		t.Fatalf("check registered media: %v", err)
+	}
+	if jpegPhotos != 3 || heicWidth != 1 {
+		t.Fatalf("registered media jpeg=%d heic64=%d, want 3/1", jpegPhotos, heicWidth)
 	}
 
 	var sealedID []byte
