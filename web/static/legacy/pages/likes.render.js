@@ -330,7 +330,7 @@ function render(_ctx, _cache) {
                     return (_openBlock(), _createElementBlock("article", {
                       key: l.openid,
                       class: "msg-row clickable",
-                      onClick: $event => (_ctx.openLikeProfile(l))
+                      onClick: $event => (_ctx.openUserDetailFromPage(l.openid, 'like_inbox'))
                     }, [
                       _createElementVNode("div", _hoisted_10, [
                         (l.photo)
@@ -386,7 +386,7 @@ function render(_ctx, _cache) {
                       return (_openBlock(), _createElementBlock("article", {
                         key: m.initiator_openid,
                         class: "msg-row clickable",
-                        onClick: $event => (_ctx.openLikeProfile(m))
+                        onClick: $event => (_ctx.openUserDetailFromPage(m.initiator_openid, 'like_inbox'))
                       }, [
                         _hoisted_24,
                         _createElementVNode("div", _hoisted_25, [
@@ -467,7 +467,7 @@ function render(_ctx, _cache) {
                       return (_openBlock(), _createElementBlock("article", {
                         key: i,
                         class: _normalizeClass(["msg-row", {clickable: l.real}]),
-                        onClick: $event => (l.real && _ctx.openLikeProfile(l))
+                        onClick: $event => (l.real && _ctx.openUserDetailFromPage(l.initiator_openid, 'like_inbox'))
                       }, [
                         _createElementVNode("div", _hoisted_38, _toDisplayString(l.real ? '💌' : '👤'), 1 /* TEXT */),
                         _createElementVNode("div", _hoisted_39, [

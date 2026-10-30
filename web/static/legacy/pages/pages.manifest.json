@@ -3,10 +3,10 @@
   "vue": "3.4.27",
   "root": {
     "file": "app.render.js",
-    "templateSha256": "17f71024ba133d955e49d948c4f8f5729e01c5b026a65d6658f9d158d710f4ec",
-    "templateSize": 52632,
-    "bytes": 184028,
-    "sha256": "1266805c7b8b81b48abeb0261f9e8290ee2866b9cfca7b3180271906edf34684"
+    "templateSha256": "9fc28f9484abf4404439546704b95a93b9c4d8e45d7efc185487f1476ff000fa",
+    "templateSize": 52615,
+    "bytes": 183972,
+    "sha256": "ac60bd021b76495f8a49e1e948a5c4a205e22515599f6849be9f6e685066e7a3"
   },
   "initial": [
     "cards"
@@ -21,8 +21,8 @@
         "reported_messages",
         "message_thread"
       ],
-      "bytes": 61501,
-      "sha256": "430aed637f3181cbe7e9830b38d5ceed30aae9b5697ab2e26efa88b521d94305"
+      "bytes": 61605,
+      "sha256": "b69dfb3084c2ba2444f806398ecef889d52b880c4977a8cf3a3eaf3220240fbf"
     },
     "home": {
       "file": "pages/home.render.js",
@@ -87,8 +87,8 @@
     "like_inbox": {
       "group": "likes",
       "file": "pages/likes.render.js",
-      "templateSha256": "c3ffe8c352c374cea69a1d7f56ff0d0ade63fdd1bef8c0eec43af0e2eafb4786",
-      "templateSize": 5121
+      "templateSha256": "1d7ebf2ec60cede7c2e7c0dd2757cf4260cc975224206168e4e3d2adf86b792f",
+      "templateSize": 5225
     },
     "message_inbox": {
       "group": "likes",

@@ -20,7 +20,7 @@
     </div>
     <van-empty v-else-if="!myLikesList.length" description="还没有喜欢过谁"></van-empty>
     <div v-else class="msg-inbox">
-      <article v-for="l in myLikesList" :key="l.openid" class="msg-row clickable" @click="openLikeProfile(l)">
+      <article v-for="l in myLikesList" :key="l.openid" class="msg-row clickable" @click="openUserDetailFromPage(l.openid, 'like_inbox')">
         <div class="msg-row-avatar">
           <img v-if="l.photo" :src="l.photo" alt="" loading="lazy" @error="retryImg($event, 2, ()=>{l.photo=''})">
           <span v-else>{{ (l.nickname || '?')[0] }}</span>
@@ -47,7 +47,7 @@
     <van-empty v-else-if="!likesData.mutual.length" description="还没有相互喜欢的人"></van-empty>
     <div v-else class="msg-inbox">
       <article v-for="m in likesData.mutual" :key="m.initiator_openid" class="msg-row clickable"
-        @click="openLikeProfile(m)">
+        @click="openUserDetailFromPage(m.initiator_openid, 'like_inbox')">
         <div class="msg-row-avatar">💕</div>
         <div class="msg-row-main">
           <div class="msg-row-top">
@@ -81,7 +81,7 @@
     <van-empty v-else-if="!likesData.liked_me.length" description="还没有人喜欢你"></van-empty>
     <div v-else class="msg-inbox">
       <article v-for="(l, i) in likesData.liked_me" :key="i" class="msg-row"
-        :class="{clickable: l.real}" @click="l.real && openLikeProfile(l)">
+        :class="{clickable: l.real}" @click="l.real && openUserDetailFromPage(l.initiator_openid, 'like_inbox')">
         <div class="msg-row-avatar">{{ l.real ? '💌' : '👤' }}</div>
         <div class="msg-row-main">
           <div class="msg-row-top">

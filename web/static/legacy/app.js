@@ -2078,7 +2078,6 @@ const yxqApp = createApp({
     const unreadCount = ref(0);
     const unreadMessages = ref(0);
     const unreadBadge = computed(() => unreadMessages.value > 99 ? '99+' : (unreadMessages.value > 0 ? String(unreadMessages.value) : ''));
-    const msgTabDot = computed(() => unreadMessages.value <= 0 && unreadCount.value > 0);
     const likeScope = ref('mine');        // mine | mutual | liked
     const msgScope = ref('received');     // received | sent
     const messageThreadFrom = ref('likes');
@@ -3847,15 +3846,19 @@ const yxqApp = createApp({
     }
     let notificationsPromise = null;
     let readAllPromise = null;
+    let pendingReadIds = new Set();
+    let messageReadInFlight = false;
     let notificationStream = null;
     let notificationPollTimer = null;
     let notificationReconnectTimer = null;
     let notificationSyncStarted = false;
 
     function applyNotificationSnapshot(data) {
-      notifications.value = data.notifications || [];
-      unreadCount.value = Number(data.unread) || 0;
-      unreadMessages.value = Number(data.unread_messages) || 0;
+      const rows = data.notifications || [];
+      const pendingUnread = rows.filter(n => !n.read && pendingReadIds.has(n.id)).length;
+      notifications.value = rows.map(n => pendingReadIds.has(n.id) ? { ...n, read: true } : n);
+      unreadCount.value = Math.max(0, (Number(data.unread) || 0) - pendingUnread);
+      if (!messageReadInFlight) unreadMessages.value = Number(data.unread_messages) || 0;
     }
     function loadNotifications() {
       if (notificationsPromise) return notificationsPromise;
@@ -3870,6 +3873,7 @@ const yxqApp = createApp({
       if (readAllPromise) return readAllPromise;
       if (unreadCount.value <= 0) return Promise.resolve();
       readAllPromise = api('/api/notifications/read-all', { method: 'POST' }).then((data) => {
+        pendingReadIds.clear();
         unreadCount.value = Number(data.unread) || 0;
         if (typeof data.unread_messages === 'number') unreadMessages.value = data.unread_messages;
         notifications.value = notifications.value.map(n => ({ ...n, read: true }));
@@ -3917,11 +3921,10 @@ const yxqApp = createApp({
         try { data = JSON.parse(ev.data || '{}'); } catch (e) { return; }
         const next = Number(data.unread) || 0;
         const nextMessages = Number(data.unread_messages) || 0;
-        const feedChanged = next !== unreadCount.value;
         const messagesIncreased = nextMessages > unreadMessages.value;
-        unreadCount.value = next;
-        unreadMessages.value = nextMessages;
-        if (page.value === 'likes' && feedChanged) loadNotifications();
+        if (pendingReadIds.size || page.value === 'likes') loadNotifications();
+        else unreadCount.value = next;
+        if (!messageReadInFlight) unreadMessages.value = nextMessages;
         if (page.value === 'message_inbox' && msgScope.value === 'received' && messagesIncreased) {
           loadReceivedMessages({ markRead: false, quiet: true });
         }
@@ -4641,7 +4644,7 @@ const yxqApp = createApp({
           mutual: normalizeMutualItems(data.mutual),
         };
       } catch (e) {
-        vant.showToast(e.message || '保存失败，请稍后再试');
+        vant.showToast(e.message || '保存失败');
       } finally {
         m.submitting = false;
       }
@@ -4669,8 +4672,6 @@ const yxqApp = createApp({
       } catch(e) { vant.showToast(e.message); }
       loadingMyLikes.value = false;
     }
-    function openMutual() { openLikeInbox('mutual'); }
-    function openLikedMe() { openLikeInbox('liked'); }
     // 取消喜欢已下线：喜欢的有效期是制度性的（匿名 3 个月自动失效、实名永久），
     // 不由用户手动撤销。相关入口和接口都已删除，这里不再保留空壳函数。
 
@@ -5773,13 +5774,17 @@ const yxqApp = createApp({
       }
     }
     async function markMessagesRead(targetRef) {
+      messageReadInFlight = true;
+      unreadMessages.value = 0;
       try {
         const q = targetRef ? ('?target=' + encodeURIComponent(targetRef)) : '';
         const data = await api('/api/messages/read' + q, { method: 'POST' });
-        if (data && typeof data.unread_messages === 'number') {
-          unreadMessages.value = data.unread_messages;
-        }
-      } catch (e) {}
+        if (data && typeof data.unread_messages === 'number') unreadMessages.value = data.unread_messages;
+        setTimeout(() => { messageReadInFlight = false; loadNotifications(); }, 1500);
+      } catch (e) {
+        messageReadInFlight = false;
+        loadNotifications();
+      }
     }
     function switchMsgScope(scope) {
       if (msgScope.value === scope) return;
@@ -5801,10 +5806,6 @@ const yxqApp = createApp({
       likeScope.value = scope;
       if (scope === 'mine') loadMyLikesList();
       else loadLikes();
-    }
-    function openLikeProfile(item) {
-      const ref = item && (item.initiator_openid || item.openid);
-      if (ref) openUserDetailFromPage(ref, 'like_inbox');
     }
     function openMessageInbox(scope) {
       msgScope.value = scope || 'received';
@@ -5986,14 +5987,10 @@ const yxqApp = createApp({
     }
     function notificationIcon(n) {
       const k = (n && n.kind) || '';
+      if (k.indexOf('broadcast') >= 0) return '📣';
       if (k.indexOf('message') === 0) return '💬';
-      if (k === 'like' || k === 'like_sent') return '💕';
-      if (k === 'mutual' || k === 'wechat_exchange') return '💞';
-      if (k === 'admin_broadcast' || k === 'activity_broadcast') return '📣';
+      if (k.indexOf('like') === 0 || k === 'mutual' || k === 'wechat_exchange') return '💕';
       if (k === 'points') return '🌾';
-      if (k === 'review') return '✅';
-      if (k === 'security') return '🔐';
-      if (k === 'signup') return '🎟️';
       return '🔔';
     }
     function notificationImage(n) {
@@ -6006,9 +6003,17 @@ const yxqApp = createApp({
     }
     function markOneNotificationRead(n) {
       if (!n || n.read) return;
+      pendingReadIds.add(n.id);
       n.read = true;
       unreadCount.value = Math.max(0, unreadCount.value - 1);
-      api('/api/notifications/' + n.id + '/read', { method: 'POST' }).catch(() => {});
+      api('/api/notifications/' + n.id + '/read', { method: 'POST' }).then((data) => {
+        if (typeof data.unread === 'number') unreadCount.value = Math.min(unreadCount.value, data.unread);
+        setTimeout(() => pendingReadIds.delete(n.id), 5000);
+      }).catch(() => {
+        pendingReadIds.delete(n.id);
+        n.read = false;
+        loadNotifications();
+      });
     }
     function openNotification(n) {
       if (!n) return;
@@ -6021,9 +6026,9 @@ const yxqApp = createApp({
         openMessageThread(targetRef, payload.message_id);
         return;
       }
-      if (kind === 'like') { openLikedMe(); return; }
+      if (kind === 'like') { openLikeInbox('liked'); return; }
       if (kind === 'like_sent') { openLikeInbox('mine'); return; }
-      if (kind === 'mutual' || kind === 'wechat_exchange') { openMutual(); return; }
+      if (kind === 'mutual' || kind === 'wechat_exchange') { openLikeInbox('mutual'); return; }
       if (kind === 'signup' || kind === 'activity_broadcast') {
         if (n.activity_id) openActivity(n.activity_id);
         return;
@@ -6048,6 +6053,7 @@ const yxqApp = createApp({
       } catch (e) { return; }
       try {
         const data = await api('/api/notifications/clear', { method: 'POST' });
+        pendingReadIds.clear();
         notifications.value = [];
         unreadCount.value = 0;
         if (data && typeof data.unread_messages === 'number') unreadMessages.value = data.unread_messages;
@@ -7535,8 +7541,8 @@ const yxqApp = createApp({
       reportedMessages, loadingReported, reportedCount, openReportedMessages, loadReportedMessages, handleReported,
       showSuggestionDialog, suggestionType, suggestionText, openSuggestionDialog, onSuggestionBeforeClose, suggestionSubmitting,
       likesData, loadingLikes, notifications, unreadCount, unreadMessages, unreadBadge, markNotificationsRead,
-      msgScope, switchMsgScope, likeScope, switchLikeScope, openLikeInbox, openMessageInbox, openLikeProfile,
-      msgTabDot, receivedUnreadIds, isReceivedUnread,
+      msgScope, switchMsgScope, likeScope, switchLikeScope, openLikeInbox, openMessageInbox,
+      receivedUnreadIds, isReceivedUnread,
       inlineReplyId, inlineReplyText, inlineReplyBusy, startInlineReply, sendInlineReply,
       messageThread, threadText, threadSending, threadReplyTarget,
       threadedThreadMessages, openMessageThread, loadMessageThread, replyThreadTo,
@@ -7545,7 +7551,7 @@ const yxqApp = createApp({
       embedOpen, embedUrl, embedTitle, embedLoading, embedReady, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
       embedFailed, retryEmbed, returnAdminHome,
       nativeAdmin, gaBack,
-      myLikesList, loadingMyLikes, openMutual, openLikedMe, submitMutualWechat,
+      myLikesList, loadingMyLikes, submitMutualWechat,
       myActivitiesList, loadingMyActivities, openMyActivities,
       myGroupsList, loadingMyGroups, openMyGroups, hasGroupEntry,
       onetooneResult, onetooneResultLoading,

@@ -923,7 +923,7 @@
 <van-tabbar v-model="page" :before-change="guardTabChange" fixed safe-area-inset-bottom active-color="#ff6b81" inactive-color="#969799"
   v-if="!nativeAdmin && !subPages.includes(page)">
   <van-tabbar-item name="cards" icon="like-o">牵线</van-tabbar-item>
-  <van-tabbar-item name="likes" icon="chat-o" :badge="unreadBadge" :dot="msgTabDot">消息</van-tabbar-item>
+  <van-tabbar-item name="likes" icon="chat-o" :badge="unreadBadge">消息</van-tabbar-item>
   <van-tabbar-item name="home" icon="home-o">活动</van-tabbar-item>
   <van-tabbar-item name="profile" icon="user-o">我的</van-tabbar-item>
 </van-tabbar>
