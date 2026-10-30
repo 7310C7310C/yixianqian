@@ -3089,19 +3089,7 @@ function render(_ctx, _cache) {
                           _createTextVNode(_toDisplayString(_ctx.currentActivity.status), 1 /* TEXT */)
                         ]),
                         _: 1 /* STABLE */
-                      }),
-                      (_ctx.currentActivity.group_status)
-                        ? (_openBlock(), _createBlock(_component_van_tag, {
-                            key: 0,
-                            plain: "",
-                            type: "primary"
-                          }, {
-                            default: _withCtx(() => [
-                              _createTextVNode(_toDisplayString(_ctx.currentActivity.group_status), 1 /* TEXT */)
-                            ]),
-                            _: 1 /* STABLE */
-                          }))
-                        : _createCommentVNode("v-if", true)
+                      })
                     ]),
                     _createElementVNode("div", _hoisted_8, _toDisplayString(_ctx.currentActivity.description || '暂无描述'), 1 /* TEXT */),
                     _createElementVNode("div", _hoisted_9, [

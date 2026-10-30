@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-28
+last_verified: 2026-10-30
 sources:
   - deploy/**
   - .env.example
@@ -47,6 +47,8 @@ server1 的 `yxq-autodeploy.timer` 每 60 秒检查 `origin/main`：
 
 - 与 `/opt/yixianqian-next/deployed.sha` 相同 → 退出。
 - 不同 → 要求该范围代码提交的 CI（`lint-build`/`unit`/`integration`）与 Docs 均 success；
+  其中 `integration` job 在同一 runner 内用两个独立测试库并行跑 `internal/db` 与
+  `internal/httpserver`（各 `-p 1`），`lint-build` 不安装 HEIC 转换器（仅 unit/integration 需要）；
   再执行 gofmt/vet → 构建 5 个 binary（server/seed/token/facebackfill/thumbwarm）→ 备份 `server.prev` → 切换 → restart → 轮询 `/healthz`。
 - 失败不写 `deployed.sha`；切换后失败自动用 `server.prev` 回滚并重启。
 - 部署闸：代码提交必须含 `Reviewed-By: <reviewer>`；docs-only 豁免；`--force` 仅限回滚/热修。

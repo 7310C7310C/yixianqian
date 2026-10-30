@@ -15,7 +15,6 @@
         <h3>{{ currentActivity.name }}</h3>
         <div class="activity-meta">
           <van-tag type="primary" color="var(--yxq-brand-ink)">{{ currentActivity.status }}</van-tag>
-          <van-tag v-if="currentActivity.group_status" plain type="primary">{{ currentActivity.group_status }}</van-tag>
         </div>
         <div class="activity-desc">{{ currentActivity.description || '暂无描述' }}</div>
         <div class="detail-meta">

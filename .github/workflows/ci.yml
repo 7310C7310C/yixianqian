@@ -30,8 +30,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: HEIC converter
-        run: sudo apt-get update && sudo apt-get install -y libheif-examples libheif-plugin-libde265
       - name: 静态资源版本
         env:
           PUSH_BEFORE: ${{ github.event.before }}
@@ -127,6 +125,24 @@ jobs:
           cache-dependency-path: go.sum
       - name: 下载依赖
         run: go mod download
-      # 两个包共用一个测试库；必须 -p 1，不能并行。
-      - name: 集成测试（PostgreSQL）
-        run: go test -race -p 1 -count=1 ./internal/db ./internal/httpserver
+      # 两个包曾在同一测试库串行跑（-p 1）。现在各用独立数据库并行：
+      # internal/db 用 service 默认库，httpserver 用同实例的第二个库，
+      # 既保留 -race 与包内串行，又把该 job 的墙钟时间减半。
+      - name: 集成测试（PostgreSQL，并行双库）
+        env:
+          TEST_DATABASE_URL_HTTP: postgres://yixianqian:yixianqian@localhost:5432/yixianqian_test_http?sslmode=disable
+        run: |
+          set -uo pipefail
+          docker exec "${{ job.services.postgres.id }}" \
+            createdb -U yixianqian yixianqian_test_http
+          go test -race -p 1 -count=1 ./internal/db > /tmp/integration-db.log 2>&1 &
+          db_pid=$!
+          TEST_DATABASE_URL="$TEST_DATABASE_URL_HTTP" \
+            go test -race -p 1 -count=1 ./internal/httpserver > /tmp/integration-http.log 2>&1 &
+          http_pid=$!
+          status=0
+          wait "$db_pid" || status=1
+          wait "$http_pid" || status=1
+          cat /tmp/integration-db.log
+          cat /tmp/integration-http.log
+          exit "$status"

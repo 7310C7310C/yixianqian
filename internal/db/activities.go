@@ -221,12 +221,15 @@ func activityRefQueryArgs(ref string) (string, int64) {
 	return ref, numeric
 }
 
-// ListActivities returns every non-cancelled activity in signup order: open
-// events first, then full/upcoming/past ones.
 // ListActivitiesForUser returns the public activity list with the viewer's
 // active signup attached in one statement. It replaces ListActivities +
-// ListMyActivities on the home aggregate; ordering and cancellation filters
-// stay identical to those two queries.
+// ListMyActivities on the home aggregate; cancellation filters stay identical
+// to those two queries.
+// User-facing order (PM 2026-10-30): newest published first, ended last.
+// publish_at falls back to created_at because quick-created activities leave
+// publish_at empty. end_at already passed counts as ended even before the
+// hourly close job persists the 已结束 status, so the list does not jump when
+// the job runs.
 func (d *DB) ListActivitiesForUser(ctx context.Context, userID int64) ([]MyActivity, error) {
 	rows, err := d.pool.Query(ctx,
 		`SELECT `+qualifiedActivityColumns("a")+`,
@@ -238,16 +241,11 @@ func (d *DB) ListActivitiesForUser(ctx context.Context, userID int64) ([]MyActiv
 		      ORDER BY id DESC LIMIT 1
 		   ) s ON true
 		  WHERE a.status <> $3
-		  ORDER BY CASE a.status
-		            WHEN $4 THEN 0
-		            WHEN $5 THEN 1
-		            WHEN $6 THEN 2
-		            WHEN $7 THEN 3
-		            ELSE 4 END,
-		          a.start_at NULLS LAST, a.id`,
-		userID, SignupStatusCancelled, ActivityStatusCancelled,
-		ActivityStatusOpen, ActivityStatusNotStarted,
-		ActivityStatusFull, ActivityStatusFinished)
+		  ORDER BY CASE WHEN a.status = $4
+		                  OR (a.end_at IS NOT NULL AND a.end_at <= now())
+		                THEN 1 ELSE 0 END,
+		          COALESCE(a.publish_at, a.created_at) DESC, a.id DESC`,
+		userID, SignupStatusCancelled, ActivityStatusCancelled, ActivityStatusFinished)
 	if err != nil {
 		return nil, fmt.Errorf("db: list activities for user: %w", err)
 	}
@@ -280,6 +278,9 @@ func (d *DB) ListActivitiesForUser(ctx context.Context, userID int64) ([]MyActiv
 	return out, nil
 }
 
+// ListActivities returns every non-cancelled activity in signup order: open
+// events first, then full/upcoming/past ones. Admin SSR pages use it; the
+// user-facing list order lives in ListActivitiesForUser / ListMyActivities.
 func (d *DB) ListActivities(ctx context.Context) ([]Activity, error) {
 	rows, err := d.pool.Query(ctx,
 		"SELECT "+activityColumns+` FROM activities
@@ -354,6 +355,8 @@ func (d *DB) GetActivitySigninCode(ctx context.Context, activityID int64) (strin
 
 // ListMyActivities returns the caller's active signups, cancelled rows filtered
 // and one row per activity (the schema already enforces one signup per user).
+// It follows the same user-facing order as ListActivitiesForUser: newest
+// published first, ended last.
 func (d *DB) ListMyActivities(ctx context.Context, userID int64) ([]MyActivity, error) {
 	rows, err := d.pool.Query(ctx,
 		`SELECT `+qualifiedActivityColumns("a")+`,
@@ -363,16 +366,11 @@ func (d *DB) ListMyActivities(ctx context.Context, userID int64) ([]MyActivity, 
 		  WHERE s.user_id = $1
 		    AND s.status <> $2
 		    AND a.status <> $3
-		  ORDER BY CASE a.status
-		            WHEN $4 THEN 0
-		            WHEN $5 THEN 1
-		            WHEN $6 THEN 2
-		            WHEN $7 THEN 3
-		            ELSE 4 END,
-		          a.start_at NULLS LAST, a.id`,
-		userID, SignupStatusCancelled, ActivityStatusCancelled,
-		ActivityStatusOpen, ActivityStatusNotStarted,
-		ActivityStatusFull, ActivityStatusFinished)
+		  ORDER BY CASE WHEN a.status = $4
+		                  OR (a.end_at IS NOT NULL AND a.end_at <= now())
+		                THEN 1 ELSE 0 END,
+		          COALESCE(a.publish_at, a.created_at) DESC, a.id DESC`,
+		userID, SignupStatusCancelled, ActivityStatusCancelled, ActivityStatusFinished)
 	if err != nil {
 		return nil, fmt.Errorf("db: list my activities: %w", err)
 	}

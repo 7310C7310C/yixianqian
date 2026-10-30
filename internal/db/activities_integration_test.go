@@ -59,6 +59,7 @@ type activityFixtureOptions struct {
 	MaxSignup     int
 	SigninEnabled bool
 	SigninCode    string
+	PublishAt     *time.Time
 	StartAt       *time.Time
 	EndAt         *time.Time
 }
@@ -72,12 +73,12 @@ func createActivityFixture(t *testing.T, d *DB, ctx context.Context, opts activi
 	a, err := scanActivity(d.pool.QueryRow(ctx,
 		`INSERT INTO activities (legacy_record_id, activity_no, name, description, location,
 		                        condition, max_signup, current_signup, fee, food, status,
-		                        signin_enabled, signin_code, start_at, end_at)
+		                        signin_enabled, signin_code, publish_at, start_at, end_at)
 		 VALUES ($1, $2, $3, '测试活动描述', '测试地点', '测试条件', $4, 0, '100', '自理',
-		         $5, $6, $7, $8, $9)
+		         $5, $6, $7, $8, $9, $10)
 		 RETURNING `+activityColumns,
 		activityNo+"-REC", activityNo, "活动 "+activityNo, opts.MaxSignup, opts.Status,
-		opts.SigninEnabled, opts.SigninCode, opts.StartAt, opts.EndAt))
+		opts.SigninEnabled, opts.SigninCode, opts.PublishAt, opts.StartAt, opts.EndAt))
 	if err != nil {
 		t.Fatalf("create activity: %v", err)
 	}
@@ -225,6 +226,75 @@ func TestIntegrationActivityRefAndClosedSignup(t *testing.T) {
 	if !errors.As(err, &statusErr) || statusErr.Status != ActivityStatusNotStarted {
 		t.Fatalf("expected status error, got %v", err)
 	}
+}
+
+func TestIntegrationUserActivityOrderNewestPublishedEndedLast(t *testing.T) {
+	d, ctx := openActivitiesTestDB(t)
+	now := time.Now()
+	at := func(offset time.Duration) *time.Time {
+		ts := now.Add(offset)
+		return &ts
+	}
+	published := func(offset time.Duration, opts activityFixtureOptions) Activity {
+		opts.PublishAt = at(offset)
+		return createActivityFixture(t, d, ctx, opts)
+	}
+
+	endedByStatusNewest := published(0, activityFixtureOptions{Status: ActivityStatusFinished})
+	activeNewest := published(-time.Hour, activityFixtureOptions{})
+	endedByEndAt := published(-2*time.Hour, activityFixtureOptions{EndAt: at(-time.Hour)})
+	activeOlder := published(-3*time.Hour, activityFixtureOptions{})
+	notStartedNewest := published(-30*time.Minute, activityFixtureOptions{Status: ActivityStatusNotStarted})
+	endedByStatusOldest := published(-5*time.Hour, activityFixtureOptions{Status: ActivityStatusFinished})
+
+	want := []Activity{
+		notStartedNewest, activeNewest, activeOlder,
+		endedByStatusNewest, endedByEndAt, endedByStatusOldest,
+	}
+	assertOrder := func(label string, positions map[int64]int) {
+		t.Helper()
+		last := -1
+		for _, act := range want {
+			pos, ok := positions[act.ID]
+			if !ok {
+				t.Fatalf("%s: activity %d missing from list", label, act.ID)
+			}
+			if pos <= last {
+				t.Fatalf("%s: activity %d at %d is not after previous %d (want %+v)",
+					label, act.ID, pos, last, positions)
+			}
+			last = pos
+		}
+	}
+
+	items, err := d.ListActivitiesForUser(ctx, createActivityFixtureUser(t, d, ctx, "排序"))
+	if err != nil {
+		t.Fatalf("list activities for user: %v", err)
+	}
+	positions := make(map[int64]int, len(items))
+	for i, item := range items {
+		positions[item.ID] = i
+	}
+	assertOrder("home list", positions)
+
+	user := createActivityFixtureUser(t, d, ctx, "排序报名")
+	for _, act := range want {
+		if _, err := d.pool.Exec(ctx,
+			`INSERT INTO signups (activity_id, user_id, nickname, status)
+			 VALUES ($1, $2, $3, $4)`,
+			act.ID, user, "排序", SignupStatusSigned); err != nil {
+			t.Fatalf("seed signup: %v", err)
+		}
+	}
+	mine, err := d.ListMyActivities(ctx, user)
+	if err != nil {
+		t.Fatalf("list my activities: %v", err)
+	}
+	minePositions := make(map[int64]int, len(mine))
+	for i, item := range mine {
+		minePositions[item.ID] = i
+	}
+	assertOrder("my activities", minePositions)
 }
 
 func TestIntegrationSelfSigninRules(t *testing.T) {

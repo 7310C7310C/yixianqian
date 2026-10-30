@@ -33,8 +33,8 @@
         "my_activities",
         "my_groups"
       ],
-      "bytes": 29047,
-      "sha256": "2b0ca09c2ee9a5e1475052f0ba5cdbcd25798dbb2ef933460f2f2b5c372239f6"
+      "bytes": 27063,
+      "sha256": "d29600e5435bc5b02de433bac24dd961483728ad0ed7cafb66200a0dfacffe5b"
     },
     "profile": {
       "file": "pages/profile.render.js",
@@ -69,8 +69,8 @@
         "activity_detail",
         "points_admin"
       ],
-      "bytes": 214316,
-      "sha256": "b609939aebd3d6e7bd820dd2cc0e274c8443bf828d1f5a7863e458d75e1f0a65"
+      "bytes": 213695,
+      "sha256": "f82e485c56d9f29c86742ffa5a73ec8f649ef623abffdab61bf20a30e1e259b0"
     }
   },
   "pages": {
@@ -125,20 +125,20 @@
     "home": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "e10e2f029ce442202ddccffdf1d8f0ee3e4b263121a9e72bdc03aed24223e19c",
-      "templateSize": 3377
+      "templateSha256": "5e4075165771759467e2d5c82f1b279d9500683b7766e37d48266b434070f9cd",
+      "templateSize": 3280
     },
     "my_activities": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "b95deccea3ff20bc758faff24e026c4a403552029bac2f3fb295483f92bc024b",
-      "templateSize": 3252
+      "templateSha256": "268f3ab44a274184097dbbf9979bebc003dce91bd1fb0362d9a7f38e2ff66519",
+      "templateSize": 3048
     },
     "my_groups": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "bcf0ee481c140e749d46e65aebdc9a83750ea9c2a0938455e0a72858b1ccca18",
-      "templateSize": 2155
+      "templateSha256": "eb353645d42f8a3a055cdaace918b1db13f5eeb1202e7e2ec4d3b4c04d56568d",
+      "templateSize": 2132
     },
     "profile": {
       "group": "profile",
@@ -221,8 +221,8 @@
     "activity_detail": {
       "group": "group",
       "file": "pages/group.render.js",
-      "templateSha256": "02229205949285ad82c3fb6efe534829863867c2f6aa4974cffbb20a4255148f",
-      "templateSize": 5664
+      "templateSha256": "28ac56c46670769f4ea8c29c4855bf731fa79ec79088519ab5b80c84abe0b153",
+      "templateSize": 5543
     },
     "points_admin": {
       "group": "group",

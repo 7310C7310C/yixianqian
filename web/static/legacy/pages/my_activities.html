@@ -13,8 +13,6 @@
           <h3>{{ act.name }}</h3>
           <div class="activity-meta">
             <van-tag type="primary" color="var(--yxq-brand-ink)">{{ act.status }}</van-tag>
-            <van-tag v-if="act.group_status" plain type="primary">{{ act.group_status }}</van-tag>
-            <van-tag v-if="act.onetoone_status" plain type="primary">{{ act.onetoone_status }}</van-tag>
           </div>
           <div style="font-size:13px; color:#48484a;">{{ activityListTime(act) }}</div>
           <div style="font-size:13px; color:#969799;">📍 {{ act.location || '待定' }}</div>

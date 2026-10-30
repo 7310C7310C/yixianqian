@@ -91,19 +91,7 @@ function render(_ctx, _cache) {
                         _createTextVNode(_toDisplayString(act.status), 1 /* TEXT */)
                       ]),
                       _: 2 /* DYNAMIC */
-                    }, 1024 /* DYNAMIC_SLOTS */),
-                    (act.group_status)
-                      ? (_openBlock(), _createBlock(_component_van_tag, {
-                          key: 0,
-                          plain: "",
-                          type: "primary"
-                        }, {
-                          default: _withCtx(() => [
-                            _createTextVNode(_toDisplayString(act.group_status), 1 /* TEXT */)
-                          ]),
-                          _: 2 /* DYNAMIC */
-                        }, 1024 /* DYNAMIC_SLOTS */))
-                      : _createCommentVNode("v-if", true)
+                    }, 1024 /* DYNAMIC_SLOTS */)
                   ]),
                   _createElementVNode("div", _hoisted_8, _toDisplayString(act.description || '暂无描述'), 1 /* TEXT */),
                   _createElementVNode("div", _hoisted_9, _toDisplayString(_ctx.activityListTime(act)), 1 /* TEXT */),
@@ -301,31 +289,7 @@ function render(_ctx, _cache) {
                           _createTextVNode(_toDisplayString(act.status), 1 /* TEXT */)
                         ]),
                         _: 2 /* DYNAMIC */
-                      }, 1024 /* DYNAMIC_SLOTS */),
-                      (act.group_status)
-                        ? (_openBlock(), _createBlock(_component_van_tag, {
-                            key: 0,
-                            plain: "",
-                            type: "primary"
-                          }, {
-                            default: _withCtx(() => [
-                              _createTextVNode(_toDisplayString(act.group_status), 1 /* TEXT */)
-                            ]),
-                            _: 2 /* DYNAMIC */
-                          }, 1024 /* DYNAMIC_SLOTS */))
-                        : _createCommentVNode("v-if", true),
-                      (act.onetoone_status)
-                        ? (_openBlock(), _createBlock(_component_van_tag, {
-                            key: 1,
-                            plain: "",
-                            type: "primary"
-                          }, {
-                            default: _withCtx(() => [
-                              _createTextVNode(_toDisplayString(act.onetoone_status), 1 /* TEXT */)
-                            ]),
-                            _: 2 /* DYNAMIC */
-                          }, 1024 /* DYNAMIC_SLOTS */))
-                        : _createCommentVNode("v-if", true)
+                      }, 1024 /* DYNAMIC_SLOTS */)
                     ]),
                     _createElementVNode("div", _hoisted_7, _toDisplayString(_ctx.activityListTime(act)), 1 /* TEXT */),
                     _createElementVNode("div", _hoisted_8, "📍 " + _toDisplayString(act.location || '待定'), 1 /* TEXT */)
@@ -439,9 +403,12 @@ const _hoisted_3 = {
 }
 const _hoisted_4 = { key: 2 }
 const _hoisted_5 = { class: "activity-body" }
-const _hoisted_6 = { class: "activity-meta" }
-const _hoisted_7 = {
+const _hoisted_6 = {
   key: 0,
+  class: "activity-meta"
+}
+const _hoisted_7 = {
+  key: 1,
   style: {"font-size":"13px","color":"#969799"}
 }
 const _hoisted_8 = {
@@ -491,41 +458,34 @@ function render(_ctx, _cache) {
                 }, [
                   _createElementVNode("div", _hoisted_5, [
                     _createElementVNode("h3", null, _toDisplayString(act.name), 1 /* TEXT */),
-                    _createElementVNode("div", _hoisted_6, [
-                      _createVNode(_component_van_tag, {
-                        type: "primary",
-                        color: "var(--yxq-brand-ink)"
-                      }, {
-                        default: _withCtx(() => [
-                          _createTextVNode(_toDisplayString(act.group_status), 1 /* TEXT */)
-                        ]),
-                        _: 2 /* DYNAMIC */
-                      }, 1024 /* DYNAMIC_SLOTS */),
-                      (act.male_per_group)
-                        ? (_openBlock(), _createBlock(_component_van_tag, {
-                            key: 0,
-                            plain: "",
-                            type: "primary"
-                          }, {
-                            default: _withCtx(() => [
-                              _createTextVNode("每组 " + _toDisplayString(act.male_per_group) + "男" + _toDisplayString(act.female_per_group) + "女", 1 /* TEXT */)
-                            ]),
-                            _: 2 /* DYNAMIC */
-                          }, 1024 /* DYNAMIC_SLOTS */))
-                        : _createCommentVNode("v-if", true),
-                      (act.signin_enabled && !_ctx.isActivityEnded(act))
-                        ? (_openBlock(), _createBlock(_component_van_tag, {
-                            key: 1,
-                            type: _ctx.isAttendancePresent(act.my_attendance) ? 'success' : 'warning',
-                            plain: ""
-                          }, {
-                            default: _withCtx(() => [
-                              _createTextVNode(_toDisplayString(_ctx.isAttendancePresent(act.my_attendance) ? '已到' : (act.my_attendance==='未到' ? '未到' : '未签到')), 1 /* TEXT */)
-                            ]),
-                            _: 2 /* DYNAMIC */
-                          }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["type"]))
-                        : _createCommentVNode("v-if", true)
-                    ]),
+                    (act.male_per_group || (act.signin_enabled && !_ctx.isActivityEnded(act)))
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_6, [
+                          (act.male_per_group)
+                            ? (_openBlock(), _createBlock(_component_van_tag, {
+                                key: 0,
+                                plain: "",
+                                type: "primary"
+                              }, {
+                                default: _withCtx(() => [
+                                  _createTextVNode("每组 " + _toDisplayString(act.male_per_group) + "男" + _toDisplayString(act.female_per_group) + "女", 1 /* TEXT */)
+                                ]),
+                                _: 2 /* DYNAMIC */
+                              }, 1024 /* DYNAMIC_SLOTS */))
+                            : _createCommentVNode("v-if", true),
+                          (act.signin_enabled && !_ctx.isActivityEnded(act))
+                            ? (_openBlock(), _createBlock(_component_van_tag, {
+                                key: 1,
+                                type: _ctx.isAttendancePresent(act.my_attendance) ? 'success' : 'warning',
+                                plain: ""
+                              }, {
+                                default: _withCtx(() => [
+                                  _createTextVNode(_toDisplayString(_ctx.isAttendancePresent(act.my_attendance) ? '已到' : (act.my_attendance==='未到' ? '未到' : '未签到')), 1 /* TEXT */)
+                                ]),
+                                _: 2 /* DYNAMIC */
+                              }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["type"]))
+                            : _createCommentVNode("v-if", true)
+                        ]))
+                      : _createCommentVNode("v-if", true),
                     (act.my_choice_count > 0)
                       ? (_openBlock(), _createElementBlock("div", _hoisted_7, "已提交 " + _toDisplayString(act.my_choice_count) + " 个志愿", 1 /* TEXT */))
                       : _createCommentVNode("v-if", true)

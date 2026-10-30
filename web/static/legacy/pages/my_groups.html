@@ -11,8 +11,7 @@
       <div v-for="act in myGroupsList" :key="act.record_id" class="activity-card">
         <div class="activity-body">
           <h3>{{ act.name }}</h3>
-          <div class="activity-meta">
-            <van-tag type="primary" color="var(--yxq-brand-ink)">{{ act.group_status }}</van-tag>
+          <div class="activity-meta" v-if="act.male_per_group || (act.signin_enabled && !isActivityEnded(act))">
             <van-tag v-if="act.male_per_group" plain type="primary">每组 {{ act.male_per_group }}男{{ act.female_per_group }}女</van-tag>
             <van-tag v-if="act.signin_enabled && !isActivityEnded(act)" :type="isAttendancePresent(act.my_attendance) ? 'success' : 'warning'" plain>{{ isAttendancePresent(act.my_attendance) ? '已到' : (act.my_attendance==='未到' ? '未到' : '未签到') }}</van-tag>
           </div>

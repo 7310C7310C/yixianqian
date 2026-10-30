@@ -249,3 +249,26 @@ func mustRead(t *testing.T, name string) []byte {
 	}
 	return raw
 }
+
+// 活动卡片不展示「收集中」「已完成」等匹配工作流标签（PM 2026-10-30）。
+// 结果入口按钮仍以状态为条件，因此只禁止渲染状态文本，不禁条件表达式。
+func TestActivityCardsHideMatchingStatusText(t *testing.T) {
+	needles := []string{
+		"_toDisplayString(act.group_status)",
+		"_toDisplayString(act.onetoone_status)",
+		"_toDisplayString(_ctx.currentActivity.group_status)",
+		"_toDisplayString(_ctx.currentActivity.onetoone_status)",
+	}
+	for _, name := range []string{
+		"static/legacy/pages/home.render.js",
+		"static/legacy/pages/detail.render.js",
+		"static/legacy/pages/group.render.js",
+	} {
+		body := string(mustRead(t, name))
+		for _, needle := range needles {
+			if strings.Contains(body, needle) {
+				t.Errorf("%s still renders %s; 活动卡片不显示匹配工作流状态", name, needle)
+			}
+		}
+	}
+}

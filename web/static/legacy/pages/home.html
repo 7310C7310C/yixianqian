@@ -10,7 +10,6 @@
         <h3>{{ act.name }}</h3>
         <div class="activity-meta">
           <van-tag type="primary" color="var(--yxq-brand-ink)">{{ act.status }}</van-tag>
-          <van-tag v-if="act.group_status" plain type="primary">{{ act.group_status }}</van-tag>
         </div>
         <div class="activity-desc">{{ act.description || '暂无描述' }}</div>
         <div style="font-size:13px; color:#48484a;">{{ activityListTime(act) }}</div>
