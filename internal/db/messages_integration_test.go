@@ -124,7 +124,7 @@ func TestIntegrationMessagesAndReports(t *testing.T) {
 		t.Fatalf("mine = %+v err=%v", mine, err)
 	}
 	received, err := database.ListMessagesReceived(ctx, target.ID, 10)
-	if err != nil || len(received) != 3 {
+	if err != nil || len(received) != 2 {
 		t.Fatalf("received len=%d err=%v", len(received), err)
 	}
 	if ok, err := database.HasAuthoredMessage(ctx, author.ID, target.ID); err != nil || !ok {

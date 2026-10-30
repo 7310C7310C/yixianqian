@@ -242,7 +242,9 @@ func (d *DB) CreateNotificationsOnce(ctx context.Context, inputs []NotificationI
 	return created, nil
 }
 
-// ListNotifications returns the current user's notifications, newest first.
+// ListNotifications returns the current user's visible notifications, newest
+// first. Rows cleared by the user stay in the table for dedupe/audit but are
+// never rendered again.
 func (d *DB) ListNotifications(ctx context.Context, userID int64, limit int) ([]Notification, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
@@ -250,7 +252,7 @@ func (d *DB) ListNotifications(ctx context.Context, userID int64, limit int) ([]
 	rows, err := d.pool.Query(ctx,
 		`SELECT id, user_id, kind, title, body, link, payload, read_at, created_at
 		 FROM notifications
-		 WHERE user_id = $1
+		 WHERE user_id = $1 AND cleared_at IS NULL
 		 ORDER BY created_at DESC, id DESC
 		 LIMIT $2`, userID, limit)
 	if err != nil {
@@ -280,11 +282,12 @@ func (d *DB) ListNotifications(ctx context.Context, userID int64, limit int) ([]
 	return out, nil
 }
 
-// UnreadNotificationCount counts unread rows for one owner.
+// UnreadNotificationCount counts unread visible rows for one owner.
 func (d *DB) UnreadNotificationCount(ctx context.Context, userID int64) (int, error) {
 	var count int
 	err := d.pool.QueryRow(ctx,
-		`SELECT count(*) FROM notifications WHERE user_id = $1 AND read_at IS NULL`,
+		`SELECT count(*) FROM notifications
+		  WHERE user_id = $1 AND read_at IS NULL AND cleared_at IS NULL`,
 		userID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("db: count unread notifications: %w", err)
@@ -304,7 +307,7 @@ func (d *DB) MarkNotificationRead(ctx context.Context, userID, notificationID in
 	defer func() { _ = tx.Rollback(ctx) }()
 	tag, err := tx.Exec(ctx,
 		`UPDATE notifications SET read_at = now()
-		 WHERE id = $1 AND user_id = $2 AND read_at IS NULL`,
+		 WHERE id = $1 AND user_id = $2 AND read_at IS NULL AND cleared_at IS NULL`,
 		notificationID, userID)
 	if err != nil {
 		return false, fmt.Errorf("db: mark notification read: %w", err)
@@ -320,8 +323,10 @@ func (d *DB) MarkNotificationRead(ctx context.Context, userID, notificationID in
 	}
 	var exists bool
 	err = tx.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM notifications WHERE id = $1 AND user_id = $2)`,
-		notificationID, userID).Scan(&exists)
+		`SELECT EXISTS (
+		   SELECT 1 FROM notifications
+		    WHERE id = $1 AND user_id = $2 AND cleared_at IS NULL
+		 )`, notificationID, userID).Scan(&exists)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -340,7 +345,7 @@ func (d *DB) MarkAllNotificationsRead(ctx context.Context, userID int64) (int64,
 	defer func() { _ = tx.Rollback(ctx) }()
 	tag, err := tx.Exec(ctx,
 		`UPDATE notifications SET read_at = now()
-		 WHERE user_id = $1 AND read_at IS NULL`, userID)
+		 WHERE user_id = $1 AND read_at IS NULL AND cleared_at IS NULL`, userID)
 	if err != nil {
 		return 0, fmt.Errorf("db: mark all notifications read: %w", err)
 	}
@@ -351,6 +356,32 @@ func (d *DB) MarkAllNotificationsRead(ctx context.Context, userID int64) (int64,
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("db: mark all notifications read: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// ClearNotifications hides every current feed row for one user. The rows are
+// kept (dedupe keys must keep working); cleared_at makes them invisible to
+// both the list and the unread count on every future login.
+func (d *DB) ClearNotifications(ctx context.Context, userID int64) (int64, error) {
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("db: begin clear notifications: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx,
+		`UPDATE notifications SET cleared_at = now()
+		 WHERE user_id = $1 AND cleared_at IS NULL`, userID)
+	if err != nil {
+		return 0, fmt.Errorf("db: clear notifications: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		if err := notifyUserTx(ctx, tx, userID); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("db: commit clear notifications: %w", err)
 	}
 	return tag.RowsAffected(), nil
 }

@@ -947,6 +947,36 @@ func (d *DB) HandleAdminReport(ctx context.Context, reportID, handlerID int64, a
 	return next, nil
 }
 
+// ReportNotice is the minimal report context needed to tell the reporter and
+// the message author about a moderation outcome.
+type ReportNotice struct {
+	ReporterID      int64
+	TargetMessageID *int64
+	MessageAuthorID *int64
+	MessageContent  string
+	MessageStatus   string
+}
+
+// GetReportNotice loads the report context after a successful handle action.
+func (d *DB) GetReportNotice(ctx context.Context, reportID int64) (ReportNotice, error) {
+	var n ReportNotice
+	err := d.pool.QueryRow(ctx,
+		`SELECT COALESCE(rp.reporter_id, 0), rp.target_message_id, m.author_id,
+		        COALESCE(m.content, ''), COALESCE(m.status, '')
+		   FROM reports rp
+		   LEFT JOIN messages m ON m.id = rp.target_message_id
+		  WHERE rp.id = $1`, reportID).
+		Scan(&n.ReporterID, &n.TargetMessageID, &n.MessageAuthorID,
+			&n.MessageContent, &n.MessageStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ReportNotice{}, ErrNotFound
+	}
+	if err != nil {
+		return ReportNotice{}, fmt.Errorf("db: get report notice: %w", err)
+	}
+	return n, nil
+}
+
 // ListAdminSuggestions returns feedback rows, optionally filtered by status.
 func (d *DB) ListAdminSuggestions(ctx context.Context, status string, limit int) ([]AdminSuggestion, error) {
 	if limit <= 0 || limit > 500 {

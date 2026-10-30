@@ -18,10 +18,11 @@ const (
 )
 
 type legacyNotificationStreamPayload struct {
-	Unread      int    `json:"unread"`
-	LatestID    int64  `json:"latest_id"`
-	LatestTitle string `json:"latest_title,omitempty"`
-	LatestKind  string `json:"latest_kind,omitempty"`
+	Unread         int    `json:"unread"`
+	UnreadMessages int    `json:"unread_messages"`
+	LatestID       int64  `json:"latest_id"`
+	LatestTitle    string `json:"latest_title,omitempty"`
+	LatestKind     string `json:"latest_kind,omitempty"`
 }
 
 // handleLegacyNotificationsStream keeps a v1-compatible SSE connection open so
@@ -56,11 +57,15 @@ func (a *App) handleLegacyNotificationsStream(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			return legacyNotificationStreamPayload{}, err
 		}
+		unreadMessages, err := a.db.CountUnreadReceivedMessages(ctx, user.ID)
+		if err != nil {
+			return legacyNotificationStreamPayload{}, err
+		}
 		rows, err := a.db.ListNotifications(ctx, user.ID, 1)
 		if err != nil {
 			return legacyNotificationStreamPayload{}, err
 		}
-		payload := legacyNotificationStreamPayload{Unread: unread}
+		payload := legacyNotificationStreamPayload{Unread: unread, UnreadMessages: unreadMessages}
 		if len(rows) > 0 {
 			payload.LatestID = rows[0].ID
 			payload.LatestTitle = rows[0].Title

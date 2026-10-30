@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -897,11 +898,52 @@ func (a *App) handleAdminReportHandle(w http.ResponseWriter, r *http.Request, ac
 	}
 	a.audit(r, &access.User.ID, "admin.report.handle", "report",
 		strconv.FormatInt(reportID, 10), meta)
+	a.notifyReportHandled(r, reportID, status)
 	notice := "handled"
 	if status == db.ReportStatusRejected {
 		notice = "dismissed"
 	}
 	http.Redirect(w, r, "/admin/reports?status=pending&notice="+notice, http.StatusSeeOther)
+}
+
+// notifyReportHandled tells the reporter the outcome and, when a message is
+// deleted, tells its author why it disappeared. These are necessary account
+// messages, so they go through the same in-app feed as every other notice.
+func (a *App) notifyReportHandled(r *http.Request, reportID int64, status string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+	defer cancel()
+	n, err := a.db.GetReportNotice(ctx, reportID)
+	if err != nil {
+		a.logger(r).Warn("load report notice failed", "error", err, "report_id", reportID)
+		return
+	}
+	if n.ReporterID > 0 {
+		body := "你举报的留言经核实已被删除。"
+		if status == db.ReportStatusRejected {
+			body = "你举报的留言经核实后予以保留。"
+		}
+		if _, err := a.db.CreateNotificationOnce(ctx, db.NotificationInput{
+			UserID:    n.ReporterID,
+			Kind:      "report",
+			Title:     "举报已处理",
+			Body:      body,
+			DedupeKey: fmt.Sprintf("report-handled:%d:reporter", reportID),
+		}); err != nil {
+			a.logger(r).Warn("notify report reporter failed", "error", err, "report_id", reportID)
+		}
+	}
+	if status == db.ReportStatusApproved && n.MessageAuthorID != nil &&
+		*n.MessageAuthorID != n.ReporterID && strings.TrimSpace(n.MessageContent) != "" {
+		if _, err := a.db.CreateNotificationOnce(ctx, db.NotificationInput{
+			UserID:    *n.MessageAuthorID,
+			Kind:      "message_moderation",
+			Title:     "你的留言已被删除",
+			Body:      "经举报核实，你的一条留言已被管理员删除：" + truncateRunes(n.MessageContent, 120),
+			DedupeKey: fmt.Sprintf("report-handled:%d:author", reportID),
+		}); err != nil {
+			a.logger(r).Warn("notify report author failed", "error", err, "report_id", reportID)
+		}
+	}
 }
 
 func (a *App) renderAdminReportError(w http.ResponseWriter, r *http.Request, err error) {

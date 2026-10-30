@@ -3625,3 +3625,12 @@ body.admin-shell .admin-form-grid.admin-audit-filter {
 .admin-angel-qr .hint {
   margin: 0;
 }
+
+/* 全员消息：发送记录里的配图缩略图 */
+.admin-broadcast-thumb {
+  display: block;
+  max-width: 160px;
+  max-height: 120px;
+  margin-top: 6px;
+  border-radius: 8px;
+}

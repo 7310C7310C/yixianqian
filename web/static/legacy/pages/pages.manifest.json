@@ -19,12 +19,11 @@
         "mutual",
         "liked_me",
         "my_likes",
-        "my_messages",
-        "received_messages",
-        "reported_messages"
+        "reported_messages",
+        "message_thread"
       ],
-      "bytes": 41705,
-      "sha256": "4cb407b8783d2b5fc318bafd6db259894525aae40612277b47fd4cc91a29c0f5"
+      "bytes": 58590,
+      "sha256": "eb2dd98c92357ea3c17f50c9d28bd0ccd2a7cf55c45cb3c536251b31f77322cd"
     },
     "home": {
       "file": "pages/home.render.js",
@@ -83,8 +82,8 @@
     "likes": {
       "group": "likes",
       "file": "pages/likes.render.js",
-      "templateSha256": "9d77842134d61901579d5dc0a52583f446925847cf39ed9c129c43590d99c09f",
-      "templateSize": 3173
+      "templateSha256": "249c999baaf79913a5a14f077811e3ca24321b63fe2b7d3bd359b07d4891ea2c",
+      "templateSize": 6022
     },
     "mutual": {
       "group": "likes",
@@ -104,23 +103,17 @@
       "templateSha256": "5f50b07a4afe8b4d88473a68f4b683175f0f8ab23d00efdb3973c3164d98dc8e",
       "templateSize": 1190
     },
-    "my_messages": {
-      "group": "likes",
-      "file": "pages/likes.render.js",
-      "templateSha256": "38ae76a707e75683107ff015e9ad5dceba4599a81aa5b4d9c140626e13e9766d",
-      "templateSize": 1303
-    },
-    "received_messages": {
-      "group": "likes",
-      "file": "pages/likes.render.js",
-      "templateSha256": "0f4731bcb164a7203226e597416f87d24786850a1534ad96b173e28c7f42e1fa",
-      "templateSize": 1155
-    },
     "reported_messages": {
       "group": "likes",
       "file": "pages/likes.render.js",
       "templateSha256": "fedbb58e7d083331dbd011180498165ee9c567865b76e84e63e6c0e94c887502",
       "templateSize": 2745
+    },
+    "message_thread": {
+      "group": "likes",
+      "file": "pages/likes.render.js",
+      "templateSha256": "e72ff055c1565770f28a10c2be6922d286b50fcab580e0723814f45db437317d",
+      "templateSize": 5245
     },
     "home": {
       "group": "home",

@@ -62,6 +62,8 @@ sources: []
 | POST | `/admin/activities/{id}/poster` | `internal/httpserver/admin_routes.go` |
 | GET | `/admin/audit` | `internal/httpserver/admin_audit.go` |
 | GET | `/admin/audit.csv` | `internal/httpserver/admin_audit.go` |
+| GET | `/admin/broadcasts` | `internal/httpserver/admin_broadcasts.go` |
+| POST | `/admin/broadcasts` | `internal/httpserver/admin_broadcasts.go` |
 | GET | `/admin/matching` | `internal/httpserver/admin_matching_pages.go` |
 | GET | `/admin/matching/group/{id}` | `internal/httpserver/admin_matching_pages.go` |
 | GET | `/admin/matching/onetoone/{id}` | `internal/httpserver/admin_matching_pages.go` |
@@ -178,6 +180,7 @@ sources: []
 | GET | `/legacy/api/messages` | `internal/httpserver/legacy_social_api.go` |
 | POST | `/legacy/api/messages` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/messages/mine` | `internal/httpserver/legacy_social_api.go` |
+| POST | `/legacy/api/messages/read` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/messages/received` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/messages/reported` | `internal/httpserver/legacy_social_api.go` |
 | DELETE | `/legacy/api/messages/{id}` | `internal/httpserver/legacy_social_api.go` |
@@ -185,6 +188,7 @@ sources: []
 | POST | `/legacy/api/messages/{id}/report` | `internal/httpserver/legacy_social_api.go` |
 | POST | `/legacy/api/mutual/wechat` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/notifications` | `internal/httpserver/legacy_social_api.go` |
+| POST | `/legacy/api/notifications/clear` | `internal/httpserver/legacy_social_api.go` |
 | POST | `/legacy/api/notifications/read-all` | `internal/httpserver/legacy_social_api.go` |
 | GET | `/legacy/api/notifications/stream` | `internal/httpserver/legacy_social_api.go` |
 | POST | `/legacy/api/notifications/{id}/read` | `internal/httpserver/legacy_social_api.go` |
@@ -227,11 +231,11 @@ sources: []
 
 | 前缀 | 数量 |
 |---|---:|
-| `/admin` | 38 |
+| `/admin` | 40 |
 | `/api` | 28 |
-| `/legacy` | 87 |
+| `/legacy` | 89 |
 | 其他 | 25 |
-| **合计** | **178** |
+| **合计** | **182** |
 
 ## 4. 环境变量（key 集合对比）
 
@@ -303,6 +307,7 @@ sources: []
 | 0010 | `0010_photo_authz_indexes.sql` | 批次10：跨用户照片授权（/cards/photo、/profile/photo）的索引。 |
 | 0011 | `0011_photo_upload_daily.sql` | 照片上传每日配额（PM 2026-10-28，决策 44）：每账号每自然日最多 N 张。 |
 | 0012 | `0012_site_assets.sql` | 站点公开资产（当前：小天使二维码）。PM 2026-10-29：注册页展示二维码， |
+| 0013 | `0013_message_inbox_broadcast.sql` | 消息中心改版：动态可清空、收到留言的已读游标、管理员全员图文消息。 |
 
 ## 6. make targets
 

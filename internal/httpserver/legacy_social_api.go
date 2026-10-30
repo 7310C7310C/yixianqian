@@ -30,12 +30,14 @@ func registerLegacySocial(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("POST /legacy/api/messages/{id}/report", a.handleLegacyMessageReport)
 	mux.HandleFunc("GET /legacy/api/messages/mine", a.handleLegacyMessagesMine)
 	mux.HandleFunc("GET /legacy/api/messages/received", a.handleLegacyMessagesReceived)
+	mux.HandleFunc("POST /legacy/api/messages/read", a.handleLegacyMessagesRead)
 	mux.HandleFunc("GET /legacy/api/messages/reported", a.handleLegacyMessagesReported)
 
 	mux.HandleFunc("GET /legacy/api/notifications", a.handleLegacyNotificationsList)
 	mux.HandleFunc("GET /legacy/api/notifications/stream", a.handleLegacyNotificationsStream)
 	mux.HandleFunc("POST /legacy/api/notifications/{id}/read", a.handleLegacyNotificationRead)
 	mux.HandleFunc("POST /legacy/api/notifications/read-all", a.handleLegacyNotificationsReadAll)
+	mux.HandleFunc("POST /legacy/api/notifications/clear", a.handleLegacyNotificationsClear)
 }
 
 type legacySocialLikeRequest struct {
@@ -599,7 +601,27 @@ func (a *App) handleLegacyMessages(w http.ResponseWriter, r *http.Request) {
 		legacyServerError(a, w, r, err, "legacy message avatars failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"messages": legacyThreadMessages(msgs, user.ID, admin, avatars)})
+	targetView := map[string]any{
+		"openid":   strconv.FormatInt(target.ID, 10),
+		"nickname": target.Name,
+		"uid":      "",
+		"avatar":   "",
+		"is_self":  target.ID == user.ID,
+	}
+	if profile, perr := a.db.GetSocialProfile(r.Context(), target.ID); perr == nil {
+		name := profile.Nickname
+		if strings.TrimSpace(name) == "" {
+			name = profile.Name
+		}
+		targetView["openid"] = legacyMessageRef(profile.LegacyOpenID, profile.LegacyID, profile.ID)
+		targetView["nickname"] = name
+		targetView["uid"] = profile.LegacyID
+		targetView["avatar"] = legacyMessageAvatar(profile, true)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"messages": legacyThreadMessages(msgs, user.ID, admin, avatars),
+		"target":   targetView,
+	})
 }
 
 func (a *App) handleLegacyMessagesMine(w http.ResponseWriter, r *http.Request) {
@@ -636,12 +658,66 @@ func (a *App) handleLegacyMessagesReceived(w http.ResponseWriter, r *http.Reques
 		legacyServerError(a, w, r, err, "legacy received messages failed")
 		return
 	}
-	avatars, err := a.legacyMessageAvatars(r.Context(), msgs)
+	avatars, err := a.legacyReceivedAvatars(r.Context(), msgs)
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy message avatars failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"messages": legacyReceivedMessages(msgs, user.ID, avatars)})
+	unread, err := a.db.CountUnreadReceivedMessages(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy received unread failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"messages": legacyReceivedMessages(msgs, user.ID, avatars),
+		"unread":   unread,
+	})
+}
+
+// handleLegacyMessagesRead clears the inbox unread state. Without a target it
+// marks every received message read; with ?target= it marks that card thread.
+func (a *App) handleLegacyMessagesRead(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.legacyActor(w, r)
+	if !ok {
+		return
+	}
+	if !a.legacyWriteCSRF(w, r) {
+		return
+	}
+	if !a.legacyMessageViewGate(w, r, user) {
+		return
+	}
+	targetRef := strings.TrimSpace(r.URL.Query().Get("target"))
+	var updated int64
+	var err error
+	if targetRef == "" {
+		updated, err = a.db.MarkReceivedMessagesRead(r.Context(), user.ID)
+	} else {
+		target, terr := a.db.FindUserByRef(r.Context(), targetRef)
+		if errors.Is(terr, db.ErrNotFound) {
+			legacyError(w, http.StatusBadRequest, "目标用户不存在")
+			return
+		}
+		if terr != nil {
+			legacyServerError(a, w, r, terr, "legacy message read target failed")
+			return
+		}
+		updated, err = a.db.MarkThreadMessagesRead(r.Context(), user.ID, target.ID)
+	}
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy messages read failed")
+		return
+	}
+	unread, err := a.db.CountUnreadReceivedMessages(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy messages unread failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":              true,
+		"updated":         updated,
+		"unread_messages": unread,
+	})
 }
 
 func (a *App) handleLegacyMessagesReported(w http.ResponseWriter, r *http.Request) {
@@ -791,9 +867,15 @@ func (a *App) handleLegacyNotificationsList(w http.ResponseWriter, r *http.Reque
 		legacyServerError(a, w, r, err, "legacy notifications unread failed")
 		return
 	}
+	unreadMessages, err := a.db.CountUnreadReceivedMessages(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications messages unread failed")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"notifications": legacyNotifications(rows),
-		"unread":        unread,
+		"notifications":   legacyNotifications(rows),
+		"unread":          unread,
+		"unread_messages": unreadMessages,
 	})
 }
 
@@ -847,4 +929,33 @@ func (a *App) handleLegacyNotificationsReadAll(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "updated": updated, "unread": 0})
+}
+
+func (a *App) handleLegacyNotificationsClear(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.legacyActor(w, r)
+	if !ok {
+		return
+	}
+	if !a.legacyWriteCSRF(w, r) {
+		return
+	}
+	if !a.legacyMessageViewGate(w, r, user) {
+		return
+	}
+	cleared, err := a.db.ClearNotifications(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications clear failed")
+		return
+	}
+	unreadMessages, err := a.db.CountUnreadReceivedMessages(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications clear unread failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":              true,
+		"cleared":         cleared,
+		"unread":          0,
+		"unread_messages": unreadMessages,
+	})
 }

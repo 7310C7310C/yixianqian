@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-29
+last_verified: 2026-10-30
 sources:
   - tools/spa_minify/**
   - tools/spa_precompile/**
@@ -52,7 +52,7 @@ make ci
 - `app.js` 必须是 classic script：用 esbuild `transform`，不要 bundle 成 IIFE/ESM；否则顶层全局会变作用域。
 - `@vue/compiler-dom` 必须与 `web/static/legacy/lib/vue.global.prod.js` 完全一致（当前 3.4.27，`package-lock.json` 锁定）；升级 Vue 必须同步重建。
 - 不要生成 sourcemap 到 `web/`（会被 `go:embed` 发布）；需要时写 `/tmp`。
-- 不要退回 `vant.full.min.*`；不要把 26 个页面模板塞回根包；不要静态 `defer` 主脚本或把大段 CSS/JS 内联回壳。
+- 不要退回 `vant.full.min.*`；不要把 25 个页面模板塞回根包；不要静态 `defer` 主脚本或把大段 CSS/JS 内联回壳。
 - 模板改动未重建会让 `TestPageChunksMatchTemplates`、`TestGeneratedBundleHashes`、`TestVantSubsetCoversTemplate` 变红。
 
 ## 3. 性能护栏

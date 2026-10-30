@@ -1,0 +1,88 @@
+<div key="message_thread" class="thread-page">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+
+  <template v-if="messageThread">
+    <div class="thread-card">
+      <div class="thread-head">
+        <div class="thread-avatar" @click="openUserDetailFromPage(messageThread.target_ref, 'message_thread')">
+          <img v-if="messageThread.target_avatar" :src="messageThread.target_avatar" alt="">
+          <span v-else>{{ (messageThread.target_name || '?')[0] }}</span>
+        </div>
+        <div class="thread-head-main" @click="openUserDetailFromPage(messageThread.target_ref, 'message_thread')">
+          <div class="thread-name">{{ messageThread.target_name }}</div>
+          <div class="thread-sub">
+            {{ messageThread.target_is_self ? '我的卡片' : '卡片留言' }}
+            <span v-if="messageThread.target_uid"> · {{ messageThread.target_uid }}</span>
+          </div>
+        </div>
+        <button type="button" class="thread-profile-btn" @click="openUserDetailFromPage(messageThread.target_ref, 'message_thread')">资料</button>
+      </div>
+
+      <div class="thread-msg-scroll">
+        <div v-if="messageThreadLoading" class="msg-tip" aria-label="正在加载"></div>
+        <div v-else-if="!threadedThreadMessages.length" class="msg-tip">暂无留言</div>
+        <div v-else>
+          <div v-for="m in threadedThreadMessages" :key="m.id" class="thread-thread">
+            <div class="thread-msg" :class="{highlight: isThreadHighlight(m.id)}"
+              :data-thread-mid="m.id" @click="replyThreadTo(m, m)">
+              <div class="msg-head">
+                <div class="msg-avatar-sm msg-avatar-click" @click.stop="openUserDetailFromPage(m.author_openid, 'message_thread')">
+                  <img v-if="m.author_avatar" :src="m.author_avatar" alt="">
+                  <span v-else class="msg-avatar-sm-fallback">{{ (m.author_nickname || '?')[0] }}</span>
+                </div>
+                <span class="msg-author">{{ m.author_nickname }}<span v-if="m.author_uid"> · {{ m.author_uid }}</span></span>
+                <span style="flex:1"></span>
+                <span v-if="m.can_delete" class="msg-del" @click.stop="deleteThreadMessage(m)">删除</span>
+                <span v-else-if="!m.is_mine" class="msg-report" @click.stop="openReportDialog(m)">举报</span>
+              </div>
+              <div class="msg-content">{{ m.content }}</div>
+              <div class="msg-foot">
+                <span class="msg-time">{{ fmtTimeAgo(m.created_at) }}</span>
+                <span class="msg-reply-btn" @click.stop="replyThreadTo(m, m)">回复</span>
+              </div>
+            </div>
+            <div v-for="r in m.replies" :key="r.id" class="thread-msg thread-msg-reply"
+              :class="{highlight: isThreadHighlight(r.id)}"
+              :data-thread-mid="r.id" @click="replyThreadTo(r, m)">
+              <div class="msg-head">
+                <div class="msg-avatar-sm msg-avatar-click" @click.stop="openUserDetailFromPage(r.author_openid, 'message_thread')">
+                  <img v-if="r.author_avatar" :src="r.author_avatar" alt="">
+                  <span v-else class="msg-avatar-sm-fallback">{{ (r.author_nickname || '?')[0] }}</span>
+                </div>
+                <span class="msg-author">{{ r.author_nickname }}<span v-if="r.author_uid"> · {{ r.author_uid }}</span></span>
+                <span style="flex:1"></span>
+                <span v-if="r.can_delete" class="msg-del" @click.stop="deleteThreadMessage(r)">删除</span>
+                <span v-else-if="!r.is_mine" class="msg-report" @click.stop="openReportDialog(r)">举报</span>
+              </div>
+              <div class="msg-content">
+                <span v-if="r.reply_to_nickname && r.reply_to_id && r.reply_to_id !== m.id" class="msg-reply-tag">回复
+                  <span class="msg-reply-target">@{{ r.reply_to_nickname }}<span v-if="r.reply_to_uid"> · {{ r.reply_to_uid }}</span></span>：</span>{{ r.content }}
+              </div>
+              <div class="msg-foot">
+                <span class="msg-time">{{ fmtTimeAgo(r.created_at) }}</span>
+                <span class="msg-reply-btn" @click.stop="replyThreadTo(r, m)">回复</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="thread-reply-bar" v-if="threadReplyTarget">
+        <span>正在回复 {{ threadReplyTarget.author_nickname }}</span>
+        <span class="msg-reply-cancel" @click="cancelThreadReply">取消</span>
+      </div>
+      <div class="thread-input-bar" v-if="!messageThread.target_is_self || threadReplyTarget">
+        <input v-model="threadText" class="thread-input" maxlength="500"
+          :placeholder="threadReplyTarget ? '回复 ' + threadReplyTarget.author_nickname + '：' : '写留言…'"
+          @keyup.enter="sendThreadMessage">
+        <button type="button" class="msg-send" :disabled="!threadText.trim() || threadSending"
+          @click="sendThreadMessage">{{ threadSending ? '发送中…' : '发送' }}</button>
+      </div>
+    </div>
+  </template>
+  <div v-else class="thread-loading">
+    <van-loading size="24px">加载中...</van-loading>
+  </div>
+</div>

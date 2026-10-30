@@ -52,6 +52,15 @@ type Message struct {
 	CreatedAt          time.Time
 }
 
+// ReceivedMessage is one message in a user's inbox plus its per-user unread
+// state. A message can be received because it is on the user's card or because
+// it replies to a message the user wrote elsewhere.
+type ReceivedMessage struct {
+	Message
+	Unread  bool
+	Replied bool
+}
+
 // Report is one user-submitted report against a message.
 type Report struct {
 	ID                int64
@@ -221,19 +230,166 @@ func (d *DB) ListMessagesByAuthor(ctx context.Context, authorID int64, limit int
 	return collectMessages(rows)
 }
 
-// ListMessagesReceived returns comments left on the current user's card.
-func (d *DB) ListMessagesReceived(ctx context.Context, targetUserID int64, limit int) ([]Message, error) {
+// receivedMessageWhere is the inbox predicate. A user receives a message when
+// someone writes on their card, or when someone replies to a message they
+// wrote on any card. Own messages and deleted messages never enter the inbox.
+//
+// $1 = viewer user id, $2 = deleted status.
+const receivedMessageWhere = `
+	m.status <> $2
+	AND m.author_id <> $1
+	AND (
+		m.target_user_id = $1
+		OR m.reply_to_id IN (
+			SELECT id FROM messages WHERE author_id = $1 AND status <> $2
+		)
+		OR (
+			m.reply_to_id IS NULL
+			AND m.parent_id IN (
+				SELECT id FROM messages WHERE author_id = $1 AND status <> $2
+			)
+		)
+	)`
+
+const receivedMessageSelect = `
+SELECT m.id, m.target_user_id,
+       COALESCE(NULLIF(t.nickname, ''), t.name), COALESCE(t.legacy_user_id, ''),
+       COALESCE(t.legacy_open_id, ''),
+       m.author_id,
+       COALESCE(NULLIF(m.author_name, ''), NULLIF(a.nickname, ''), a.name),
+       COALESCE(a.legacy_user_id, ''), COALESCE(a.legacy_open_id, ''),
+       m.parent_id, m.reply_to_id,
+       COALESCE(NULLIF(r.author_name, ''), NULLIF(ra.nickname, ''), ra.name, ''),
+       COALESCE(ra.legacy_user_id, ''),
+       m.content, m.status, m.created_at,
+       NOT EXISTS (
+         SELECT 1 FROM message_reads mr
+          WHERE mr.message_id = m.id AND mr.user_id = $1
+       ) AS unread,
+       EXISTS (
+         SELECT 1 FROM messages rep
+          WHERE rep.reply_to_id = m.id AND rep.author_id = $1 AND rep.status <> $2
+       ) AS replied
+FROM messages m
+JOIN users t ON t.id = m.target_user_id
+JOIN users a ON a.id = m.author_id
+LEFT JOIN messages r ON r.id = m.reply_to_id
+LEFT JOIN users ra ON ra.id = r.author_id`
+
+func scanReceivedMessage(row rowScanner) (ReceivedMessage, error) {
+	var m ReceivedMessage
+	err := row.Scan(&m.ID, &m.TargetUserID, &m.TargetName, &m.TargetLegacyID,
+		&m.TargetLegacyOpenID, &m.AuthorID, &m.AuthorName, &m.AuthorLegacyID,
+		&m.AuthorLegacyOpenID, &m.ParentID, &m.ReplyToID, &m.ReplyToName,
+		&m.ReplyToLegacyID, &m.Content, &m.Status, &m.CreatedAt, &m.Unread, &m.Replied)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ReceivedMessage{}, ErrNotFound
+	}
+	if err != nil {
+		return ReceivedMessage{}, err
+	}
+	return m, nil
+}
+
+// ListMessagesReceived returns the current user's inbox, newest first.
+func (d *DB) ListMessagesReceived(ctx context.Context, userID int64, limit int) ([]ReceivedMessage, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
 	rows, err := d.pool.Query(ctx,
-		messageSelect+" WHERE m.target_user_id = $1 AND m.status <> $2 ORDER BY m.created_at DESC, m.id DESC LIMIT $3",
-		targetUserID, MessageStatusDeleted, limit)
+		receivedMessageSelect+" WHERE "+receivedMessageWhere+
+			" ORDER BY m.created_at DESC, m.id DESC LIMIT $3",
+		userID, MessageStatusDeleted, limit)
 	if err != nil {
 		return nil, fmt.Errorf("db: list received messages: %w", err)
 	}
 	defer rows.Close()
-	return collectMessages(rows)
+	out := make([]ReceivedMessage, 0)
+	for rows.Next() {
+		m, err := scanReceivedMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CountUnreadReceivedMessages counts inbox rows without a message_reads row.
+func (d *DB) CountUnreadReceivedMessages(ctx context.Context, userID int64) (int, error) {
+	var count int
+	err := d.pool.QueryRow(ctx,
+		`SELECT count(*) FROM messages m
+		  WHERE `+receivedMessageWhere+`
+		    AND NOT EXISTS (
+		      SELECT 1 FROM message_reads mr
+		       WHERE mr.message_id = m.id AND mr.user_id = $1
+		    )`, userID, MessageStatusDeleted).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("db: count unread received messages: %w", err)
+	}
+	return count, nil
+}
+
+// MarkReceivedMessagesRead marks every current inbox row read for the user.
+func (d *DB) MarkReceivedMessagesRead(ctx context.Context, userID int64) (int64, error) {
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("db: begin mark received messages read: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO message_reads (user_id, message_id)
+		 SELECT $1, m.id FROM messages m
+		  WHERE `+receivedMessageWhere+`
+		    AND NOT EXISTS (
+		      SELECT 1 FROM message_reads mr
+		       WHERE mr.message_id = m.id AND mr.user_id = $1
+		    )
+		 ON CONFLICT DO NOTHING`, userID, MessageStatusDeleted)
+	if err != nil {
+		return 0, fmt.Errorf("db: mark received messages read: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		if err := notifyUserTx(ctx, tx, userID); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("db: commit mark received messages read: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// MarkThreadMessagesRead marks every message on one card read for the viewer.
+// The thread page shows the whole card conversation, so opening it should clear
+// both card-inbox rows and replies to the viewer's messages in that thread.
+func (d *DB) MarkThreadMessagesRead(ctx context.Context, userID, targetUserID int64) (int64, error) {
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("db: begin mark thread messages read: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO message_reads (user_id, message_id)
+		 SELECT $1, m.id FROM messages m
+		  WHERE m.target_user_id = $2 AND m.status <> $3 AND m.author_id <> $1
+		 ON CONFLICT DO NOTHING`, userID, targetUserID, MessageStatusDeleted)
+	if err != nil {
+		return 0, fmt.Errorf("db: mark thread messages read: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		if err := notifyUserTx(ctx, tx, userID); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("db: commit mark thread messages read: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 func collectMessages(rows pgx.Rows) ([]Message, error) {
@@ -282,10 +438,12 @@ func (d *DB) CreateMessage(ctx context.Context, p CreateMessageParams) (Message,
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var authorName string
+	var authorName, authorRef string
 	err = tx.QueryRow(ctx,
-		`SELECT COALESCE(NULLIF(nickname, ''), name) FROM users WHERE id = $1 AND status = 'active'`,
-		p.AuthorID).Scan(&authorName)
+		`SELECT COALESCE(NULLIF(nickname, ''), name),
+		        COALESCE(NULLIF(legacy_open_id, ''), legacy_user_id, '')
+		   FROM users WHERE id = $1 AND status = 'active'`,
+		p.AuthorID).Scan(&authorName, &authorRef)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Message{}, ErrNotFound
 	}
@@ -293,25 +451,30 @@ func (d *DB) CreateMessage(ctx context.Context, p CreateMessageParams) (Message,
 		return Message{}, fmt.Errorf("db: load message author: %w", err)
 	}
 
-	var targetExists bool
+	var targetName, targetRef string
 	err = tx.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND status = 'active')`,
-		p.TargetUserID).Scan(&targetExists)
+		`SELECT COALESCE(NULLIF(nickname, ''), name),
+		        COALESCE(NULLIF(legacy_open_id, ''), legacy_user_id, '')
+		   FROM users WHERE id = $1 AND status = 'active'`,
+		p.TargetUserID).Scan(&targetName, &targetRef)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Message{}, ErrNotFound
+	}
 	if err != nil {
 		return Message{}, fmt.Errorf("db: load message target: %w", err)
 	}
-	if !targetExists {
-		return Message{}, ErrNotFound
-	}
 
+	// replyAuthorID is the person whose message this submission directly
+	// replies to. It is used for the inbox notification on other people's cards.
+	var replyAuthorID int64
 	parentID, replyToID := p.ParentID, p.ReplyToID
 	if replyToID != nil {
 		var replyParent *int64
 		var replyStatus string
 		var replyTarget int64
 		err = tx.QueryRow(ctx,
-			`SELECT parent_id, status, target_user_id FROM messages WHERE id = $1`, *replyToID).
-			Scan(&replyParent, &replyStatus, &replyTarget)
+			`SELECT parent_id, status, target_user_id, author_id FROM messages WHERE id = $1`, *replyToID).
+			Scan(&replyParent, &replyStatus, &replyTarget, &replyAuthorID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Message{}, ErrNotFound
 		}
@@ -331,10 +494,10 @@ func (d *DB) CreateMessage(ctx context.Context, p CreateMessageParams) (Message,
 	if parentID != nil {
 		var rootParent *int64
 		var parentStatus string
-		var parentTarget int64
+		var parentTarget, parentAuthorID int64
 		err = tx.QueryRow(ctx,
-			`SELECT parent_id, status, target_user_id FROM messages WHERE id = $1`, *parentID).
-			Scan(&rootParent, &parentStatus, &parentTarget)
+			`SELECT parent_id, status, target_user_id, author_id FROM messages WHERE id = $1`, *parentID).
+			Scan(&rootParent, &parentStatus, &parentTarget, &parentAuthorID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Message{}, ErrNotFound
 		}
@@ -343,6 +506,9 @@ func (d *DB) CreateMessage(ctx context.Context, p CreateMessageParams) (Message,
 		}
 		if parentStatus == MessageStatusDeleted || parentTarget != p.TargetUserID {
 			return Message{}, ErrNotFound
+		}
+		if replyToID == nil {
+			replyAuthorID = parentAuthorID
 		}
 		// Never create a third-level chain: a reply's parent is its thread root.
 		if rootParent != nil {
@@ -380,10 +546,52 @@ func (d *DB) CreateMessage(ctx context.Context, p CreateMessageParams) (Message,
 	if err != nil {
 		return Message{}, fmt.Errorf("db: create message: %w", err)
 	}
+
+	// Inbox notifications are written in the same transaction as the message:
+	// a committed message must never leave the recipient without a feed row.
+	excerpt := messageNotificationExcerpt(content)
+	link := "/app"
+	basePayload := map[string]any{
+		"message_id":     id,
+		"target_user_id": p.TargetUserID,
+		"target_ref":     targetRef,
+		"target_name":    targetName,
+		"author_id":      p.AuthorID,
+		"author_name":    authorName,
+		"author_ref":     authorRef,
+	}
+	notify := func(recipientID int64, kind, title string) error {
+		payload := make(map[string]any, len(basePayload)+1)
+		for k, v := range basePayload {
+			payload[k] = v
+		}
+		eventKey := fmt.Sprintf("message:%d:%d", id, recipientID)
+		payload["event_key"] = eventKey
+		return insertNotificationTx(ctx, tx, recipientID, kind, title, excerpt, link, payload, eventKey)
+	}
+	if p.TargetUserID != p.AuthorID {
+		if err := notify(p.TargetUserID, "message", authorName+" 在你的卡片留言"); err != nil {
+			return Message{}, err
+		}
+	}
+	if replyAuthorID != 0 && replyAuthorID != p.AuthorID && replyAuthorID != p.TargetUserID {
+		if err := notify(replyAuthorID, "message_reply", authorName+" 回复了你的留言"); err != nil {
+			return Message{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Message{}, fmt.Errorf("db: commit message: %w", err)
 	}
 	return d.GetMessageByID(ctx, id)
+}
+
+func messageNotificationExcerpt(content string) string {
+	const max = 160
+	runes := []rune(strings.TrimSpace(content))
+	if len(runes) <= max {
+		return string(runes)
+	}
+	return string(runes[:max]) + "…"
 }
 
 // DeleteMessage soft-deletes a message and every reply below it.

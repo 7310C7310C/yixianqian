@@ -31,6 +31,9 @@ sources:
 
 - 不写密钥；密码、token、cookie、`.env`、R2 key 不得进入 repo、日志、报告或文档。
 - 用户端复用 v1 Vue 3 + Vant SPA；管理台只经同源 iframe，顶层 `/admin` 一律 303 到 `/?admin=1`。
+- **消息中心（2026-10-30 起）**：用户端「消息」只有「留言 / 动态」两段。收到的留言 = 别人在我卡片上的留言 + 任何人在别人卡片上回复我的留言；已读游标存 `message_reads`，不要用 notifications.read_at 冒充。Tabbar 数字只表示收到留言未读；动态未读只用小红点。消息页不显示各项总数。
+- 动态清空必须用 `notifications.cleared_at` 持久隐藏，不删除行（dedupe key 与审计仍需保留）；清空不得清除收到留言的未读。
+- 全员图文广播只经管理台 `/admin/broadcasts`（`content.moderate`），写 `broadcasts` + 批量 notifications + 审计；广播图片只对已被 broadcasts 引用的 media 放宽到登录用户，不得整体放宽 `/media/{id}`。
 - 不恢复已废弃方案：`/welcome` 页面、独立 `/login` 页（并入首页弹框）、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、Redis、飞书 runtime、第二套用户 UI、首卡自我引导气泡（`self-guide-tip`；首卡已自带「这是你 · 他人视角」标签）；不恢复品牌启动页/静态岛，首屏保持旧 hero 图 + 真实卡绘制后交接。
 - PostgreSQL 是唯一权威；R2 只存私有媒体，浏览器只经 `/media/{id}`；不把对象存储 URL 给前端。
 - 城市字段（现居/家乡/教堂所在地，注册/资料）均必填且只能来自 vendored 省-市/区数据集，不接受手动填写；数据集外的旧值由 `region_required` 门禁强制修改。

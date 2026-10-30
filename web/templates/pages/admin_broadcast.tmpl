@@ -1,0 +1,79 @@
+{{define "content"}}
+{{template "admin_nav" .}}
+
+<section class="admin-page-head">
+  <div class="admin-page-head-main">
+    <p class="admin-eyebrow">内容与安全</p>
+    <h1 class="admin-page-title">全员消息</h1>
+    <p class="admin-subtitle">发送一条图文消息给所有正常使用的用户；收件人会在「消息 → 动态」看到，并可自行清空。</p>
+  </div>
+</section>
+
+{{template "flash" .}}
+
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">新建广播</h2>
+      <p class="admin-section-desc">标题必填；正文与配图可选。发送后立即写入所有在用用户的动态。</p>
+    </div>
+  </div>
+  <form method="post" action="/admin/broadcasts" enctype="multipart/form-data" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <div class="admin-field">
+      <label class="admin-field-label" for="broadcast_title">标题 <span class="req">*</span></label>
+      <input class="admin-input" id="broadcast_title" name="title" maxlength="100" required
+             value="{{.Data.FormTitle}}" placeholder="例如：本周活动提醒">
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="broadcast_body">正文</label>
+      <textarea class="admin-textarea" id="broadcast_body" name="body" rows="5" maxlength="2000"
+                placeholder="写给所有用户的消息…">{{.Data.FormBody}}</textarea>
+    </div>
+    <div class="admin-field">
+      <label class="admin-field-label" for="broadcast_image">配图</label>
+      <input id="broadcast_image" name="image" type="file"
+             accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,.heic,.heif">
+      <p class="admin-field-hint">可留空。支持常见图片格式，上传后统一转 JPEG；单张不超过 {{.MediaMaxMB}}MB。</p>
+    </div>
+    <label class="admin-check">
+      <input type="checkbox" name="confirm" value="1" required>
+      <span>确认发送给全部正常使用的用户</span>
+    </label>
+    <div class="admin-form-actions">
+      <button type="submit" class="button primary">发送广播</button>
+      <p class="admin-form-hint">发送后不可撤回；用户可在自己的动态中清空。</p>
+    </div>
+  </form>
+</section>
+
+<section class="admin-section">
+  <div class="admin-section-head">
+    <div class="admin-section-head-main">
+      <h2 class="admin-section-title">发送记录</h2>
+      <p class="admin-section-desc">最近 50 条全员消息。</p>
+    </div>
+    <span class="admin-section-meta">{{len .Data.Broadcasts}} 条</span>
+  </div>
+  {{if .Data.Broadcasts}}
+  <div class="admin-record-list">
+    {{range .Data.Broadcasts}}
+    <article class="admin-record">
+      <div class="admin-record-main">
+        <h3 class="admin-record-title">{{.Title}}</h3>
+        <p class="admin-record-sub">{{.CreatedAt}} · {{.CreatorName}} · 已发送 {{.RecipientCount}} 人</p>
+        {{if .Body}}<p class="admin-record-sub">{{.Body}}</p>{{end}}
+        {{if .MediaID}}<p class="admin-record-sub"><img class="admin-broadcast-thumb" src="/media/{{.MediaID}}?size=thumb" alt=""></p>{{end}}
+      </div>
+    </article>
+    {{end}}
+  </div>
+  {{else}}
+  <div class="admin-empty">
+    <span class="admin-empty-icon" aria-hidden="true">{{template "admin_icon_feedback"}}</span>
+    <h2 class="admin-empty-title">还没有发送过全员消息</h2>
+    <p>填写上方表单后，记录会出现在这里。</p>
+  </div>
+  {{end}}
+</section>
+{{end}}

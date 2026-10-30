@@ -66,8 +66,8 @@ func TestAdminDashboardGroupedNavigation(t *testing.T) {
 		`href="/admin/users?status=pending"`,
 		`href="/admin/roles"`,
 		`href="/app?native_admin=1&amp;p=group_admin"`, `href="/admin/activities/new"`,
-		`href="/admin/points"`, `href="/admin/audit"`,
-		"super_admin", "新建活动", "活动列表",
+		`href="/admin/points"`, `href="/admin/audit"`, `href="/admin/broadcasts"`,
+		"super_admin", "新建活动", "活动列表", "全员消息",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("dashboard missing %q", want)

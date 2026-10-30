@@ -313,7 +313,7 @@ func (a *App) handleMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := a.db.GetMediaForUser(r.Context(), id, user.ID)
+	m, err := a.db.GetMediaForViewer(r.Context(), id, user.ID)
 	if errors.Is(err, db.ErrNotFound) {
 		http.NotFound(w, r)
 		return

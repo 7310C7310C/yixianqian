@@ -3,17 +3,17 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-29
+last_verified: 2026-10-30
 sources: []
 -->
 
+> 2026-10-30 消息中心改版：留言/动态两段；收到=卡上留言+回复我的留言（`message_reads`）；只显示收到未读数；动态支持全员图文广播与持久清空（migration 13）。待 PM 验收。
 > 2026-10-29 登录弹框 + 注册结构化：`/login` 303 到 `/?login=1`；注册页省市区联动、行业/来源 combobox、身份证/手机即时校验 + 18+；小天使二维码 + 后台上传（migration 12）。
 > 2026-10-29 注册表单细化：单字段单错误（生日与身份证不一致时以证内生日静默更正）；房/车补充内容（4 个既有 DB 字段）接入注册与资料编辑；小天使二维码并入选项并加长按解锁；照片预览可删/设封面；教堂省-市-区、行业纯文本；图片统一 JPEG（二维码 720px q92），支持 WebP/GIF/BMP/TIFF/HEIC。
 > 本文件只写**当前**阶段、已实现/已验收、P0 与缺口。历史批次、旧快照、
 > 测试输出与 commit sha 叙事看 `git log` 和 commit message；机械事实用下方命令复核。
 > **不要写死运行版本/SHA**；版本以 `/healthz` 与 `deployed.sha` 为准。
 > 更新时机：阶段、P0/缺口、验收状态变化；不要每次部署后补一条 STATUS 提交。
-
 ## 1. 当前快照（最后核对 2026-10-28）
 
 | 项目 | 值 |
@@ -22,7 +22,7 @@ sources: []
 | 运行版本 | `curl -sS https://next.nantou.love/healthz`（`version=staging-<sha>`） |
 | 代码部署提交 | 以 `/healthz` 的 version 为准；`deployed.sha` 可能因 docs-only 提交更大 |
 | 服务器 `src` HEAD | `git -C /opt/yixianqian-next/src rev-parse --short HEAD` |
-| migration 最大版本 | `12`（`0012_site_assets`） |
+| migration 最大版本 | `13`（`0013_message_inbox_broadcast`） |
 | 用户 | `1115`：active 普通用户 `1111`、observer `4` |
 | 资料照片 | `1028` / `has_face=1019` / `unchecked=0` |
 | 自动部署 | `yxq-autodeploy.timer` enabled/active；CI + Docs 绿后部署 |
@@ -62,7 +62,7 @@ M6 进入条件：上述验收项完成，`docs/PRODUCT.md` 有证据地签核�
 
 | 范围 | 已实现 | 已验收 |
 |---|---|---|
-| 用户端：登录/注册/资料/照片/卡片/喜欢/留言/活动/分组/一对一/麦穗/通知/观察员 | 是 | 否（0/83） |
+| 用户端：登录/注册/资料/照片/卡片/喜欢/留言/消息中心/动态/活动/分组/一对一/麦穗/通知/观察员 | 是 | 否（0/83） |
 | 管理台：审核/活动原生 SPA/匹配/麦穗/举报/反馈/角色/审计 | 是 | 否 |
 | 公开页：匿名首页、登录/注册/启用/错误页扫描防护 | 是 | 否 |
 | 平台：CI/自动部署/relay/R2/人脸/腾讯合规/照片每日配额 | 是 | 视对应验收项 |

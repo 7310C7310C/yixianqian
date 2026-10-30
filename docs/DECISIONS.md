@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-29
+last_verified: 2026-10-30
 sources: []
 -->
 
@@ -171,17 +171,18 @@ sources: []
 - 验证：`TestReadCache*`、`TestIntegrationLegacyHomeCardsReadCache`、`make perf-bench`。
 
 ### 4.5 顶层 SPA 虚拟历史栈
-
 - 决策：顶层 SPA 默认虚拟历史栈；子页/浮层/应用内返回统一用 `pushHistory`、`hist.replace`、`handleBack`，不直接调用 `window.history.pushState/replaceState/back`；`native_admin` iframe 与 `?history=legacy` / `localStorage.yxq_history_mode='legacy'` 保持真实历史。
 - 不要做：不在新增子页直接读写 `history.state`；不删除启动哨兵；不改 `native_admin` 内部历史语义。
 - 验证：`tools/browser/no_history_smoke.py`；Via 真机进度条需 PM 复验。
-
 ### 4.6 通知 SSE
-
 - 决策：`/legacy/api/notifications/stream` 用 PostgreSQL `LISTEN/NOTIFY`；只有应用写入通知/标记已读时在同一事务 `pg_notify`；保留 30s 兜底（未连接 15s）与 15s 心跳；绕过应用直插 DB 最坏等 25–30s。
 - 不要做：不恢复 4s 轮询；不在无订阅者时查业务；多实例前需共享 fan-out 或 pub/sub。
 - 验证：SSE 集成用例、`TestNotificationHub*`；直插数据后需显式 `SELECT pg_notify(...)`。
-
+### 4.7 消息中心、动态与全员广播
+- 决策：消息页只留「留言/动态」；收到留言 = 卡上留言 + 回复我的留言，已读存 `message_reads`；tabbar 数字只表示收到留言未读，动态只用点，不显示各入口总数。
+- 决策：动态清空写 `notifications.cleared_at` 持久隐藏（保 dedupe/审计）；全员图文广播只经 `/admin/broadcasts`（content.moderate），写 broadcasts + 批量 notifications + 审计，广播图片仅对已引用 media 放宽。
+- 不要做：不用 notifications.read_at 冒充已读；不删行清空；不整体放宽 `/media/{id}`。
+- 验证：`TestIntegrationMessageInboxAndNotifications`、`TestIntegrationLegacyMessageInboxHTTP`、`TestIntegrationAdminBroadcast`；staging Playwright 走跳转/内联回复/清空/广播。
 ## 5. 被取代决策索引
 
 | 旧条目 | 现行为 | 说明 |
@@ -192,7 +193,6 @@ sources: []
 | 25 | 26 / 27（现行 3.1、3.2） | E2/D10 先暂缓，后按 v1 原版重新纳入 |
 | 28–33 | 2.1、2.5、4.1–4.4、4.6（现行） | 性能批次 4–10 的实现细节已合并为现行约束；全文见 git log |
 | 34–44 | 1.2、2.2–2.7、3.1–3.5、4.5（现行） | 历史栈、活动状态、保存返回、扫描防护、腾讯合规、照片配额等已并入现行条目 |
-
 ## 6. 不要复活
 
 - 顶层 `/admin` SSR 或 404；第二套管理 UI。
@@ -201,7 +201,6 @@ sources: []
 - `vant.full.min.*`；未预编译的运行时模板；手改生成物。
 - Redis、消息队列、微服务/K8s；飞书 runtime；第二套用户 UI；短信 OTP/IM。
 - 未授权生产部署、批量 grandfather 身份证、静默回填腾讯合规。
-
 ## 7. 新增决策
 
 1. 先确认是否真的改变现行行为；能由 code/git 推导的事实不写进本文件。

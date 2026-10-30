@@ -128,7 +128,7 @@ const GaLoading = {
 var YXQ_PAGE_GROUPS = {
   cards: null,
   likes: 'likes', mutual: 'likes', liked_me: 'likes', my_likes: 'likes',
-  my_messages: 'likes', received_messages: 'likes', reported_messages: 'likes',
+  reported_messages: 'likes', message_thread: 'likes',
   home: 'home', my_activities: 'home', my_groups: 'home',
   profile: 'profile', password: 'profile', profile_detail: 'profile',
   profile_edit: 'profile', points: 'profile',
@@ -577,7 +577,7 @@ const yxqApp = createApp({
       return '⚠️';
     });
     function retryGate() { retryBoot(); }   // 原地重试，不整页刷新
-    const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_likes','my_activities','my_groups','user_detail','mutual','liked_me','points','points_admin','group_admin','group_detail','group_roster','checkin','password'];
+    const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_likes','my_activities','my_groups','user_detail','mutual','liked_me','points','points_admin','group_admin','group_detail','group_roster','checkin','password','message_thread'];
     // 修改密码：App 内子页。不在 URL/hash 留状态，返回用 history 落在 profile。
     const passwordForm = ref({ current: '', password: '', confirm: '' });
     const passwordErrors = ref({ current: '', password: '', confirm: '' });
@@ -2072,9 +2072,24 @@ const yxqApp = createApp({
 
     // 消息-动态
     const notifications = ref([]);
-    // 未读角标：SSE 推送 / 轮询兜底 / 进入消息页时更新；0 时隐藏
+    // 未读角标：SSE 推送 / 轮询兜底 / 进入消息页时更新；0 时隐藏。
+    // unreadCount = 动态未读（feed），unreadMessages = 收到的留言未读。
+    // Tabbar 只显示后者，符合「只有收到的留言给数字红点」的产品约定。
     const unreadCount = ref(0);
-    const unreadBadge = computed(() => unreadCount.value > 99 ? '99+' : (unreadCount.value > 0 ? String(unreadCount.value) : ''));
+    const unreadMessages = ref(0);
+    const unreadBadge = computed(() => unreadMessages.value > 99 ? '99+' : (unreadMessages.value > 0 ? String(unreadMessages.value) : ''));
+    const msgTab = ref('messages');       // messages | feed
+    const msgScope = ref('received');     // received | sent
+    const receivedUnreadIds = ref([]);    // 本次加载时仍未读的留言 id（保留红点视觉）
+    const inlineReplyId = ref(null);      // 收到列表内联回复的留言 id
+    const inlineReplyText = ref('');
+    const inlineReplyBusy = ref(false);
+    const messageThread = ref(null);      // 留言详情页：目标卡片 + 消息
+    const messageThreadLoading = ref(false);
+    const threadText = ref('');
+    const threadSending = ref(false);
+    const threadReplyTarget = ref(null);
+    let messageThreadSeq = 0;
 
     // 站内嵌入页（仅管理后台）：同源 iframe + 返回栏，不整页跳出 SPA
     const embedOpen = ref(false);
@@ -3839,6 +3854,7 @@ const yxqApp = createApp({
     function applyNotificationSnapshot(data) {
       notifications.value = data.notifications || [];
       unreadCount.value = Number(data.unread) || 0;
+      unreadMessages.value = Number(data.unread_messages) || 0;
     }
     function loadNotifications() {
       if (notificationsPromise) return notificationsPromise;
@@ -3854,14 +3870,21 @@ const yxqApp = createApp({
       if (unreadCount.value <= 0) return Promise.resolve();
       readAllPromise = api('/api/notifications/read-all', { method: 'POST' }).then((data) => {
         unreadCount.value = Number(data.unread) || 0;
+        if (typeof data.unread_messages === 'number') unreadMessages.value = data.unread_messages;
+        notifications.value = notifications.value.map(n => ({ ...n, read: true }));
       }).catch(() => {}).then(() => {
         readAllPromise = null;
       });
       return readAllPromise;
     }
     function refreshNotifications() {
+      const beforeMessages = unreadMessages.value;
       return loadNotifications().then(() => {
-        if (page.value === 'likes' && unreadCount.value > 0) return markNotificationsRead();
+        if (page.value !== 'likes') return;
+        if (msgTab.value === 'feed' && unreadCount.value > 0) return markNotificationsRead();
+        if (msgTab.value === 'messages' && unreadMessages.value > beforeMessages) {
+          return loadReceivedMessages({ markRead: false, quiet: true });
+        }
       });
     }
     function stopNotificationPolling() {
@@ -3893,12 +3916,20 @@ const yxqApp = createApp({
         let data = null;
         try { data = JSON.parse(ev.data || '{}'); } catch (e) { return; }
         const next = Number(data.unread) || 0;
-        const changed = next !== unreadCount.value;
+        const nextMessages = Number(data.unread_messages) || 0;
+        const feedChanged = next !== unreadCount.value;
+        const messagesIncreased = nextMessages > unreadMessages.value;
         unreadCount.value = next;
+        unreadMessages.value = nextMessages;
         if (page.value === 'likes') {
-          // 正在看消息页：把新到达的通知同步进列表并置为已读
-          loadNotifications().then(() => { if (unreadCount.value > 0) markNotificationsRead(); });
-        } else if (changed && data.latest_id) {
+          if (msgTab.value === 'feed') {
+            // 正在看动态：同步列表并置为已读（留言未读由独立游标维持）
+            loadNotifications().then(() => { if (unreadCount.value > 0) markNotificationsRead(); });
+          } else if (messagesIncreased) {
+            loadReceivedMessages({ markRead: false, quiet: true });
+          }
+          if (feedChanged && msgTab.value !== 'feed') loadNotifications();
+        } else if (feedChanged && data.latest_id) {
           loadNotifications();
         }
       });
@@ -5354,7 +5385,8 @@ const yxqApp = createApp({
         return;
       }
       const parentMap = {
-        'mutual': 'likes', 'liked_me': 'likes', 'my_likes': 'likes', 'my_messages': 'likes', 'received_messages': 'likes',
+        'mutual': 'likes', 'liked_me': 'likes', 'my_likes': 'likes',
+        'message_thread': 'likes',
         'my_activities': 'profile', 'my_groups': 'profile', 'points': 'profile', 'points_admin': 'profile',
         'group_admin': 'profile', 'group_detail': 'group_admin', 'group_roster': 'group_detail', 'checkin': 'group_admin',
         'profile_detail': 'profile', 'profile_edit': 'profile_detail', 'password': 'profile',
@@ -5385,7 +5417,13 @@ const yxqApp = createApp({
       if (p === 'checkin' && gaDetailId.value) loadSigninRoster(true);
       if (p === 'home') loadActivities();
       if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
-      if (p === 'likes') { loadLikes(); loadNotifications().then(markNotificationsRead); refreshMyMessagesCount(); refreshReceivedCount(); }
+      if (p === 'likes') {
+        loadLikes();
+        loadNotifications();
+        refreshMyMessagesCount();
+        if (msgTab.value === 'messages') loadReceivedMessages({ markRead: msgScope.value === 'received' });
+        else loadNotifications().then(() => { if (unreadCount.value > 0) markNotificationsRead(); });
+      }
       if (p === 'profile') { checkGroupEntry(); loadPraiseState(); if (user.value && user.value.is_admin) refreshReportedCount(); if (user.value && user.value.can_admin) refreshAdminBadge(); }
       // 任何页进入即验身份证/人脸照片，不达标则倒计时跳修改资料
       if(p !== 'profile_edit' && !showIdInvalidDialog.value){
@@ -5517,13 +5555,16 @@ const yxqApp = createApp({
     const msgText = ref('');
     const replyTarget = ref(null);
     let msgLoadedFor = null;  // 已加载留言的卡片 openid（切卡片前不重复请求）
-    const threadedMessages = computed(() => {
-      const ids = new Set(messages.value.map(m => m.id));
+    function buildThreadedMessages(list) {
+      const source = list || [];
+      const ids = new Set(source.map(m => m.id));
       // 父留言已删除的「孤儿回复」也作顶级显示，保证列表条数与角标一致
-      const tops = messages.value.filter(m => !m.parent_id || !ids.has(m.parent_id));
-      const replies = messages.value.filter(m => m.parent_id && ids.has(m.parent_id));
+      const tops = source.filter(m => !m.parent_id || !ids.has(m.parent_id));
+      const replies = source.filter(m => m.parent_id && ids.has(m.parent_id));
       return tops.map(t => ({ ...t, replies: replies.filter(r => r.parent_id === t.id) }));
-    });
+    }
+    const threadedMessages = computed(() => buildThreadedMessages(messages.value));
+    const threadedThreadMessages = computed(() => buildThreadedMessages(messageThread.value ? messageThread.value.messages : []));
     function fmtTimeAgo(ts) {
       if (!ts) return '';
       const diff = Date.now() - ts;
@@ -5704,20 +5745,6 @@ const yxqApp = createApp({
       } catch (e) {}
       if (isFirst) loadingMyMessages.value = false;
     }
-    async function openMyMessages() {
-      page.value = 'my_messages';
-      if (myMessagesLoaded.value) return;
-      loadingMyMessages.value = true;
-      try {
-        const data = await api('/api/messages/mine');
-        myMessagesList.value = data.messages || [];
-        myMessagesLoaded.value = true;
-      } catch (e) {
-        vant.showToast(e.message || '加载失败');
-      } finally {
-        loadingMyMessages.value = false;
-      }
-    }
     async function deleteMyMessage(m) {
       try {
         await vant.showConfirmDialog({ title: '删除留言', message: '确定删除这条留言吗？', confirmButtonColor: '#ee0a24' });
@@ -5752,28 +5779,279 @@ const yxqApp = createApp({
         vant.showToast(e.message || '删除失败');
       }
     }
-    async function refreshReceivedCount() {
-      const isFirst = !receivedMessagesLoaded.value;
-      if (isFirst) loadingReceivedMessages.value = true;
+    async function loadReceivedMessages(opts) {
+      opts = opts || {};
+      const first = !receivedMessagesLoaded.value;
+      if (first && !opts.quiet) loadingReceivedMessages.value = true;
       try {
         const data = await api('/api/messages/received');
         receivedMessagesList.value = data.messages || [];
+        unreadMessages.value = Number(data.unread) || 0;
+        // 保留本次进入时未读的红点，避免刚打开列表红点就全消失。
+        receivedUnreadIds.value = receivedMessagesList.value
+          .filter(m => m.unread)
+          .map(m => String(m.id));
         receivedMessagesLoaded.value = true;
-      } catch (e) {}
-      if (isFirst) loadingReceivedMessages.value = false;
-    }
-    async function openReceivedMessages() {
-      page.value = 'received_messages';
-      if (receivedMessagesLoaded.value) return;
-      loadingReceivedMessages.value = true;
-      try {
-        const data = await api('/api/messages/received');
-        receivedMessagesList.value = data.messages || [];
-        receivedMessagesLoaded.value = true;
+        // 打开「收到的」即视为已阅：服务端游标落地，重新登录不会重现红点。
+        if (opts.markRead && unreadMessages.value > 0) await markMessagesRead();
       } catch (e) {
-        vant.showToast(e.message || '加载失败');
+        if (!opts.quiet) vant.showToast(e.message || '加载失败');
       } finally {
         loadingReceivedMessages.value = false;
+      }
+    }
+    async function markMessagesRead(targetRef) {
+      try {
+        const q = targetRef ? ('?target=' + encodeURIComponent(targetRef)) : '';
+        const data = await api('/api/messages/read' + q, { method: 'POST' });
+        if (data && typeof data.unread_messages === 'number') {
+          unreadMessages.value = data.unread_messages;
+        }
+      } catch (e) {}
+    }
+    function switchMsgTab(tab) {
+      if (msgTab.value === tab) return;
+      msgTab.value = tab;
+      if (tab === 'messages') {
+        loadReceivedMessages({ markRead: msgScope.value === 'received' });
+        if (msgScope.value === 'sent') refreshMyMessagesCount();
+      } else {
+        loadNotifications().then(() => { if (unreadCount.value > 0) markNotificationsRead(); });
+      }
+    }
+    function switchMsgScope(scope) {
+      if (msgScope.value === scope) return;
+      msgScope.value = scope;
+      if (scope === 'received') loadReceivedMessages({ markRead: true });
+      else refreshMyMessagesCount();
+    }
+    function isReceivedUnread(id) {
+      return receivedUnreadIds.value.indexOf(String(id)) >= 0;
+    }
+    function startInlineReply(m) {
+      if (!m || !m.target_openid) return;
+      inlineReplyId.value = inlineReplyId.value === m.id ? null : m.id;
+      inlineReplyText.value = '';
+      nextTick(() => {
+        if (inlineReplyId.value !== m.id) return;
+        try {
+          const el = document.querySelector('.msg-inline-input');
+          if (el) el.focus();
+        } catch (e) {}
+      });
+    }
+    async function sendInlineReply(m) {
+      if (inlineReplyBusy.value || !m) return;
+      const text = inlineReplyText.value.trim();
+      if (!text) { vant.showToast('请先输入回复内容'); return; }
+      inlineReplyBusy.value = true;
+      try {
+        const parentId = m.parent_id || m.id;
+        await api('/api/messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            target_openid: m.target_openid,
+            content: text,
+            parent_id: parentId,
+            reply_to_id: m.id,
+          }),
+        });
+        m.replied = true;
+        inlineReplyId.value = null;
+        inlineReplyText.value = '';
+        vant.showToast('回复成功');
+      } catch (e) {
+        vant.showToast(e.message || '回复失败');
+      } finally {
+        inlineReplyBusy.value = false;
+      }
+    }
+    function openMessageThread(targetRef, messageId, seed) {
+      if (!targetRef) { vant.showToast('卡片不存在'); return; }
+      const seq = ++messageThreadSeq;
+      messageThread.value = {
+        target_ref: String(targetRef),
+        target_name: (seed && seed.target_nickname) || (seed && seed.author_nickname) || '卡片留言',
+        target_avatar: (seed && seed.target_avatar) || '',
+        target_uid: (seed && seed.target_uid) || '',
+        target_is_self: false,
+        highlight_id: messageId ? String(messageId) : '',
+        messages: [],
+      };
+      messageThreadLoading.value = true;
+      threadText.value = '';
+      threadReplyTarget.value = null;
+      page.value = 'message_thread';
+      loadMessageThread(seq, true);
+    }
+    async function loadMessageThread(seq, markRead) {
+      const current = messageThread.value;
+      if (!current) return;
+      if (seq !== messageThreadSeq) return;
+      messageThreadLoading.value = true;
+      try {
+        const data = await api('/api/messages?target=' + encodeURIComponent(current.target_ref));
+        if (seq !== messageThreadSeq || page.value !== 'message_thread') return;
+        const target = data.target || {};
+        messageThread.value = {
+          ...current,
+          target_name: target.nickname || current.target_name,
+          target_avatar: target.avatar || current.target_avatar,
+          target_uid: target.uid || current.target_uid,
+          target_is_self: !!target.is_self,
+          messages: data.messages || [],
+        };
+        if (markRead) await markMessagesRead(current.target_ref);
+        nextTick(() => scrollThreadToHighlight());
+      } catch (e) {
+        if (seq === messageThreadSeq) vant.showToast(e.message || '加载失败');
+      } finally {
+        if (seq === messageThreadSeq) messageThreadLoading.value = false;
+      }
+    }
+    function isThreadHighlight(id) {
+      const t = messageThread.value;
+      return !!(t && String(t.highlight_id) === String(id));
+    }
+    function scrollThreadToHighlight() {
+      const t = messageThread.value;
+      if (!t || !t.highlight_id) {
+        const list = document.querySelector('.thread-msg-scroll');
+        if (list) list.scrollTop = list.scrollHeight;
+        return;
+      }
+      const el = document.querySelector('[data-thread-mid="' + String(t.highlight_id).replace(/"/g, '') + '"]');
+      if (el && el.scrollIntoView) {
+        try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+      }
+      const highlight = String(t.highlight_id);
+      setTimeout(() => {
+        if (messageThread.value && String(messageThread.value.highlight_id) === highlight) {
+          messageThread.value = { ...messageThread.value, highlight_id: '' };
+        }
+      }, 1800);
+    }
+    function replyThreadTo(target, threadRoot) {
+      if (!target) return;
+      const parent = threadRoot || target;
+      threadReplyTarget.value = { ...target, parentId: parent.id };
+      threadText.value = '';
+      nextTick(() => {
+        try { const el = document.querySelector('.thread-input'); if (el) el.focus(); } catch (e) {}
+      });
+    }
+    function cancelThreadReply() {
+      threadReplyTarget.value = null;
+      threadText.value = '';
+    }
+    async function sendThreadMessage() {
+      if (threadSending.value) return;
+      const t = messageThread.value;
+      const text = threadText.value.trim();
+      if (!t || !t.target_ref) return;
+      if (!text) { vant.showToast('请先输入留言内容'); return; }
+      threadSending.value = true;
+      try {
+        const parentId = threadReplyTarget.value ? (threadReplyTarget.value.parentId || threadReplyTarget.value.id) : '';
+        const replyToId = threadReplyTarget.value ? threadReplyTarget.value.id : '';
+        await api('/api/messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            target_openid: t.target_ref,
+            content: text,
+            parent_id: parentId,
+            reply_to_id: replyToId,
+          }),
+        });
+        threadText.value = '';
+        threadReplyTarget.value = null;
+        const seq = ++messageThreadSeq;
+        await loadMessageThread(seq, true);
+        vant.showToast('留言成功');
+      } catch (e) {
+        vant.showToast(e.message || '发送失败');
+      } finally {
+        threadSending.value = false;
+      }
+    }
+    async function deleteThreadMessage(m) {
+      if (!m) return;
+      try {
+        await vant.showConfirmDialog({ title: '删除留言', message: '确定删除这条留言吗？', confirmButtonColor: '#ee0a24' });
+      } catch (e) { return; }
+      try {
+        await api('/api/messages/' + m.id, { method: 'DELETE' });
+        const seq = ++messageThreadSeq;
+        await loadMessageThread(seq, false);
+        vant.showToast('已删除');
+      } catch (e) {
+        vant.showToast(e.message || '删除失败');
+      }
+    }
+    const feedIcons = {
+      message: '💬', message_reply: '💬', like: '💕', mutual: '💞',
+      wechat_exchange: '💞', admin_broadcast: '📣', activity_broadcast: '📣',
+      signup: '🎟️', points: '🌾', review: '✅', security: '🔐',
+      message_report: '🛡️', report: '🛡️', message_moderation: '🛡️',
+    };
+    function notificationIcon(n) {
+      return feedIcons[(n && n.kind) || ''] || '🔔';
+    }
+    function notificationImage(n) {
+      return (n && (n.image_url || (n.payload && n.payload.image_url))) || '';
+    }
+    function viewNotificationImage(n) {
+      const url = notificationImage(n);
+      if (url) viewerOpen([url], 0);
+    }
+    function markOneNotificationRead(n) {
+      if (!n || n.read) return;
+      n.read = true;
+      unreadCount.value = Math.max(0, unreadCount.value - 1);
+      api('/api/notifications/' + n.id + '/read', { method: 'POST' }).catch(() => {});
+    }
+    function openNotification(n) {
+      if (!n) return;
+      markOneNotificationRead(n);
+      const kind = n.kind || '';
+      const payload = n.payload || {};
+      if (kind === 'message' || kind === 'message_reply') {
+        const targetRef = payload.target_ref || payload.target_user_id;
+        openMessageThread(targetRef, payload.message_id);
+        return;
+      }
+      if (kind === 'like') { openLikedMe(); return; }
+      if (kind === 'mutual' || kind === 'wechat_exchange') { openMutual(); return; }
+      if (kind === 'signup' || kind === 'activity_broadcast') {
+        if (n.activity_id) openActivity(n.activity_id);
+        return;
+      }
+      if (kind === 'review') { openProfileDetail(); return; }
+      if (kind === 'points') { openPoints(); return; }
+      if (kind === 'security') { openPasswordPage(); return; }
+      if (kind === 'message_report') { if (user.value && user.value.can_admin) openAdminConsole(); return; }
+      if (kind === 'admin_broadcast') {
+        if (notificationImage(n)) viewNotificationImage(n);
+        return;
+      }
+    }
+    async function clearFeed() {
+      try {
+        await vant.showConfirmDialog({
+          title: '清空动态',
+          message: '清空后不再显示，重新登录也不会恢复。',
+          confirmButtonText: '清空',
+          confirmButtonColor: '#ee0a24',
+        });
+      } catch (e) { return; }
+      try {
+        const data = await api('/api/notifications/clear', { method: 'POST' });
+        notifications.value = [];
+        unreadCount.value = 0;
+        if (data && typeof data.unread_messages === 'number') unreadMessages.value = data.unread_messages;
+        vant.showToast('已清空');
+      } catch (e) {
+        vant.showToast(e.message || '清空失败');
       }
     }
     function replyTo(target, threadRoot) {
@@ -7254,7 +7532,13 @@ const yxqApp = createApp({
       showReportDialog, reportReason, reportReasonText, reportTarget, openReportDialog, onReportBeforeClose, doReport, reportSubmitting,
       reportedMessages, loadingReported, reportedCount, openReportedMessages, loadReportedMessages, handleReported,
       showSuggestionDialog, suggestionType, suggestionText, openSuggestionDialog, onSuggestionBeforeClose, suggestionSubmitting,
-      likesData, loadingLikes, loadMyLikesCount, notifications, unreadCount, unreadBadge, markNotificationsRead,
+      likesData, loadingLikes, loadMyLikesCount, notifications, unreadCount, unreadMessages, unreadBadge, markNotificationsRead,
+      msgTab, msgScope, switchMsgTab, switchMsgScope, receivedUnreadIds, isReceivedUnread,
+      inlineReplyId, inlineReplyText, inlineReplyBusy, startInlineReply, sendInlineReply,
+      messageThread, messageThreadLoading, threadText, threadSending, threadReplyTarget,
+      threadedThreadMessages, openMessageThread, loadMessageThread, replyThreadTo,
+      cancelThreadReply, sendThreadMessage, deleteThreadMessage,
+      notificationIcon, notificationImage, viewNotificationImage, openNotification, clearFeed, isThreadHighlight,
       embedOpen, embedUrl, embedTitle, embedLoading, embedReady, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
       embedFailed, retryEmbed, returnAdminHome,
       nativeAdmin, gaBack,
@@ -7279,8 +7563,8 @@ const yxqApp = createApp({
       toggleChoice, removeChoiceToast, moveChoice, submitChoices, goGroupResult, switchGroupRound,
       onPhotoError, onPhotoLoad, retryImg, photoPositions, recalcPhotoPosition,
       cardTab, messages, msgLoading, msgSending, msgText, replyTarget, threadedMessages, currentMsgCount,
-      myMessagesList, loadingMyMessages, openMyMessages, deleteMyMessage, refreshMyMessagesCount,
-      receivedMessagesList, loadingReceivedMessages, openReceivedMessages, refreshReceivedCount,
+      myMessagesList, loadingMyMessages, deleteMyMessage, refreshMyMessagesCount,
+      receivedMessagesList, loadingReceivedMessages, loadReceivedMessages, markMessagesRead,
       openMessageTab, openMessageAuthor, sendMessage, deleteMessage, replyTo, cancelReply, fmtTimeAgo,
       showPhotoViewer, viewerLoading, cancelViewerLoading, viewPoster,
       handleBack, showInviteDialog, inviteShareText, copyInviteFull, copyInviteCode,

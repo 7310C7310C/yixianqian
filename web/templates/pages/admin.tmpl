@@ -107,7 +107,7 @@
   <section class="admin-entry-group" aria-labelledby="entry-group-safety">
     <div class="admin-entry-group-head">
       <h2 id="entry-group-safety">内容与安全</h2>
-      <span class="admin-entry-group-count">{{if and .Data.CanModerate .Data.CanAudit}}4 项{{else if .Data.CanModerate}}3 项{{else}}1 项{{end}}</span>
+      <span class="admin-entry-group-count">{{if and .Data.CanModerate .Data.CanAudit}}5 项{{else if .Data.CanModerate}}4 项{{else}}1 项{{end}}</span>
     </div>
     {{if .Data.CanModerate}}
     <a class="admin-entry" href="/admin/reports">
@@ -126,6 +126,14 @@
         <span class="admin-entry-desc">查看产品建议与问题反馈</span>
       </span>
       {{if gt .Data.Stats.PendingSuggestions 0}}<span class="admin-entry-badge">{{.Data.Stats.PendingSuggestions}}</span>{{end}}
+      <span class="admin-entry-arrow" aria-hidden="true">›</span>
+    </a>
+    <a class="admin-entry" href="/admin/broadcasts">
+      <span class="admin-entry-icon" aria-hidden="true">{{template "admin_icon_feedback"}}</span>
+      <span class="admin-entry-body">
+        <span class="admin-entry-title">全员消息</span>
+        <span class="admin-entry-desc">发送图文消息到所有用户的动态</span>
+      </span>
       <span class="admin-entry-arrow" aria-hidden="true">›</span>
     </a>
     <a class="admin-entry" href="/admin/settings/angel-qr">

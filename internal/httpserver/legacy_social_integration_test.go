@@ -278,7 +278,7 @@ func TestIntegrationLegacySocialHTTP(t *testing.T) {
 		Messages []legacyThreadMessage `json:"messages"`
 	}
 	decode(resp, &received)
-	if resp.StatusCode != http.StatusOK || len(received.Messages) != 2 {
+	if resp.StatusCode != http.StatusOK || len(received.Messages) != 1 {
 		t.Fatalf("received status=%d messages=%+v", resp.StatusCode, received.Messages)
 	}
 

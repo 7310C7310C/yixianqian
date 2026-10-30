@@ -122,7 +122,7 @@ curl -sS https://next.nantou.love/healthz
 ```
 
 - migration 只增不改；**只回滚到上一版 post-0005 binary**，不要回滚 pre-0005。
-- 回滚 binary 不等于回滚 schema；不要删表/删列。
+- 回滚 binary 不等于回滚 schema；不要删表/删列。消息中心回滚后旧 binary 不认 `cleared_at`/`message_reads`：已清空动态会重现、tabbar 徽标退回动态未读。
 
 ## 4. nginx、证书与请求体上限
 
@@ -191,8 +191,8 @@ BASE_URL=https://next.nantou.love SESSION_COOKIE=<管理员> USER_SESSION_COOKIE
 - HEIC：server1 需 `libheif-examples` + `libheif-plugin-libde265`（HEVC 解码插件；`heif-convert --version`）；env `HEIC_ENABLED`/`HEIF_CONVERT_PATH`/`HEIC_TIMEOUT`；`/api/media` 上传 HEIC 应 201、表单路径 303，媒体为 JPEG。
 - 二維碼：`/angel-qr` 上传后统一 JPEG q92 ≤720px；检查 `Cache-Control: max-age=3600` 与 ETag。
 - 管理台页面清单：`/admin`、`/admin/users`、`/admin/users/{id}`、`/admin/matching`、`/admin/points`、
-  `/admin/audit`、`/admin/reports`、`/admin/suggestions`、`/admin/roles`；`/admin/activities` 的 iframe
-  请求应 303 到 `/app?native_admin=1&p=group_admin`。
+  `/admin/audit`、`/admin/reports`、`/admin/suggestions`、`/admin/roles`、`/admin/broadcasts`；`/admin/activities` 的 iframe 请求应 303 到 `/app?native_admin=1&p=group_admin`。
+- 消息中心：`/legacy/api/messages/received` 返回 `messages[].unread` 与 `unread`；`POST /legacy/api/messages/read` 清零；`/legacy/api/notifications` 同时返回 `unread` 与 `unread_messages`；`POST /legacy/api/notifications/clear` 后列表为空且重新登录仍为空；`/admin/broadcasts` 可发全员图文，收件人 `/legacy/api/notifications` 出现 `admin_broadcast`，广播图片 `/media/{id}` 对登录用户 200。
 - 管理 API 兼容层：`python3 tools/admin_legacy_api_smoke.py`（管理员 200、普通用户 403）。
 - 5xx/403/空页先看：`journalctl -u yixianqian-next-test -n 100 --no-pager`、`tail -n 100 /var/log/nginx/error.log`；不要靠重启碰运气。
 

@@ -21,6 +21,12 @@ type legacyThreadMessage struct {
 	ReplyToID       string                `json:"reply_to_id"`
 	ReplyToNickname string                `json:"reply_to_nickname"`
 	ReplyToUID      string                `json:"reply_to_uid"`
+	TargetOpenID    string                `json:"target_openid,omitempty"`
+	TargetNickname  string                `json:"target_nickname,omitempty"`
+	TargetAvatar    string                `json:"target_avatar,omitempty"`
+	OnMyCard        bool                  `json:"on_my_card,omitempty"`
+	Unread          bool                  `json:"unread,omitempty"`
+	Replied         bool                  `json:"replied,omitempty"`
 	CreatedAt       int64                 `json:"created_at"`
 	IsMine          bool                  `json:"is_mine"`
 	CanDelete       bool                  `json:"can_delete"`
@@ -62,11 +68,18 @@ type legacyReportedMessage struct {
 }
 
 type legacyNotificationJSON struct {
-	ID         int64  `json:"id"`
-	Text       string `json:"text"`
-	Time       string `json:"time"`
-	ActivityID string `json:"activity_id"`
-	Read       bool   `json:"read"`
+	ID         int64          `json:"id"`
+	Kind       string         `json:"kind"`
+	Title      string         `json:"title"`
+	Body       string         `json:"body"`
+	Text       string         `json:"text"`
+	Time       string         `json:"time"`
+	ActivityID string         `json:"activity_id"`
+	Link       string         `json:"link"`
+	ImageURL   string         `json:"image_url,omitempty"`
+	ThumbURL   string         `json:"thumb_url,omitempty"`
+	Payload    map[string]any `json:"payload,omitempty"`
+	Read       bool           `json:"read"`
 }
 
 func legacyMessageRef(openID, legacyID string, id int64) string {
@@ -197,7 +210,32 @@ func legacySentMessages(msgs []db.Message, avatars map[int64]string) []legacySen
 	return out
 }
 
-func legacyReceivedMessages(msgs []db.Message, viewerID int64, avatars map[int64]string) []legacyThreadMessage {
+func (a *App) legacyReceivedAvatars(ctx context.Context, msgs []db.ReceivedMessage) (map[int64]string, error) {
+	ids := make([]int64, 0, len(msgs)*2)
+	seen := make(map[int64]struct{}, len(msgs)*2)
+	add := func(id int64) {
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	for _, m := range msgs {
+		add(m.AuthorID)
+		add(m.TargetUserID)
+	}
+	profiles, err := a.db.GetSocialProfilesByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	avatars := make(map[int64]string, len(profiles))
+	for id, p := range profiles {
+		avatars[id] = legacyMessageAvatar(p, true)
+	}
+	return avatars, nil
+}
+
+func legacyReceivedMessages(msgs []db.ReceivedMessage, viewerID int64, avatars map[int64]string) []legacyThreadMessage {
 	out := make([]legacyThreadMessage, 0, len(msgs))
 	for _, m := range msgs {
 		out = append(out, legacyThreadMessage{
@@ -206,6 +244,12 @@ func legacyReceivedMessages(msgs []db.Message, viewerID int64, avatars map[int64
 			AuthorNickname:  m.AuthorName,
 			AuthorUID:       m.AuthorLegacyID,
 			AuthorAvatar:    avatars[m.AuthorID],
+			TargetOpenID:    legacyMessageRef(m.TargetLegacyOpenID, m.TargetLegacyID, m.TargetUserID),
+			TargetNickname:  m.TargetName,
+			TargetAvatar:    avatars[m.TargetUserID],
+			OnMyCard:        m.TargetUserID == viewerID,
+			Unread:          m.Unread,
+			Replied:         m.Replied,
 			Content:         m.Content,
 			ParentID:        legacyOptionalID(m.ParentID),
 			ReplyToID:       legacyOptionalID(m.ReplyToID),
@@ -322,13 +366,41 @@ func legacyNotifications(rows []db.Notification) []legacyNotificationJSON {
 		}
 		out = append(out, legacyNotificationJSON{
 			ID:         n.ID,
+			Kind:       n.Kind,
+			Title:      n.Title,
+			Body:       n.Body,
 			Text:       text,
 			Time:       formatSocialTime(n.CreatedAt),
 			ActivityID: legacyNotificationActivityID(n),
+			Link:       n.Link,
+			ImageURL:   legacyNotificationImageURL(n),
+			ThumbURL:   legacyNotificationThumbURL(n),
+			Payload:    n.Payload,
 			Read:       n.ReadAt != nil,
 		})
 	}
 	return out
+}
+
+func legacyNotificationImageURL(n db.Notification) string {
+	if raw, ok := n.Payload["image_url"].(string); ok && strings.TrimSpace(raw) != "" {
+		return raw
+	}
+	if raw, ok := n.Payload["media_id"].(string); ok && strings.TrimSpace(raw) != "" {
+		return "/media/" + raw
+	}
+	return ""
+}
+
+func legacyNotificationThumbURL(n db.Notification) string {
+	url := legacyNotificationImageURL(n)
+	if url == "" {
+		return ""
+	}
+	if strings.Contains(url, "?") {
+		return url
+	}
+	return url + "?size=thumb"
 }
 
 func legacyNotificationActivityID(n db.Notification) string {

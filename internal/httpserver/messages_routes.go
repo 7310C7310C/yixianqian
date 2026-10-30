@@ -489,7 +489,7 @@ func (a *App) apiReceivedMessages(w http.ResponseWriter, r *http.Request) {
 	admin := a.isModerator(r.Context(), user)
 	out := make([]messageJSON, 0, len(msgs))
 	for _, m := range msgs {
-		out = append(out, messageJSONFor(m, user, admin))
+		out = append(out, messageJSONFor(m.Message, user, admin))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"messages": out})
 }
