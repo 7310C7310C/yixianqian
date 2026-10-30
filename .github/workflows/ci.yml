@@ -125,24 +125,42 @@ jobs:
           cache-dependency-path: go.sum
       - name: 下载依赖
         run: go mod download
-      # 两个包曾在同一测试库串行跑（-p 1）。现在各用独立数据库并行：
-      # internal/db 用 service 默认库，httpserver 用同实例的第二个库，
-      # 既保留 -race 与包内串行，又把该 job 的墙钟时间减半。
-      - name: 集成测试（PostgreSQL，并行双库）
+      # httpserver 单包测试串行要 ~90s，是 CI 关键路径。三个独立测试库并行：
+      # internal/db + httpserver 按测试名奇偶分两片，各自 -race -p 1。
+      - name: 集成测试（PostgreSQL，三分片并行）
         env:
-          TEST_DATABASE_URL_HTTP: postgres://yixianqian:yixianqian@localhost:5432/yixianqian_test_http?sslmode=disable
+          DB_BASE: postgres://yixianqian:yixianqian@localhost:5432
         run: |
           set -uo pipefail
-          docker exec "${{ job.services.postgres.id }}" \
-            createdb -U yixianqian yixianqian_test_http
-          go test -race -p 1 -count=1 ./internal/db > /tmp/integration-db.log 2>&1 &
-          db_pid=$!
-          TEST_DATABASE_URL="$TEST_DATABASE_URL_HTTP" \
-            go test -race -p 1 -count=1 ./internal/httpserver > /tmp/integration-http.log 2>&1 &
-          http_pid=$!
+          for db in yixianqian_test_http_a yixianqian_test_http_b; do
+            docker exec "${{ job.services.postgres.id }}" createdb -U yixianqian "$db"
+          done
+          # 先列出测试名再奇偶分片；新测试自动纳入，不需要维护名单。
+          mapfile -t names < <(go test -race -list '^Test' ./internal/httpserver | grep '^Test')
+          if ((${#names[@]} < 50)); then
+            echo "测试名单异常：只列出 ${#names[@]} 个测试" >&2
+            exit 1
+          fi
+          shard_a=(); shard_b=()
+          for i in "${!names[@]}"; do
+            if ((i % 2 == 0)); then shard_a+=("${names[i]}"); else shard_b+=("${names[i]}"); fi
+          done
+          echo "分片：a=${#shard_a[@]} b=${#shard_b[@]}"
+          run_a=$(IFS='|'; echo "${shard_a[*]}")
+          run_b=$(IFS='|'; echo "${shard_b[*]}")
           status=0
-          wait "$db_pid" || status=1
-          wait "$http_pid" || status=1
+          go test -race -p 1 -count=1 ./internal/db > /tmp/integration-db.log 2>&1 &
+          p1=$!
+          TEST_DATABASE_URL="$DB_BASE/yixianqian_test_http_a?sslmode=disable" \
+            go test -race -p 1 -count=1 ./internal/httpserver -run "^(${run_a})$" > /tmp/integration-http-a.log 2>&1 &
+          p2=$!
+          TEST_DATABASE_URL="$DB_BASE/yixianqian_test_http_b?sslmode=disable" \
+            go test -race -p 1 -count=1 ./internal/httpserver -run "^(${run_b})$" > /tmp/integration-http-b.log 2>&1 &
+          p3=$!
+          wait "$p1" || status=1
+          wait "$p2" || status=1
+          wait "$p3" || status=1
           cat /tmp/integration-db.log
-          cat /tmp/integration-http.log
+          cat /tmp/integration-http-a.log
+          cat /tmp/integration-http-b.log
           exit "$status"
