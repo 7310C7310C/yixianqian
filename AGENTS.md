@@ -67,6 +67,7 @@ sources:
 ## 前端与性能红线
 
 - 顶层 SPA 默认虚拟历史栈：子页/浮层/应用内返回统一用 `pushHistory`、`hist.replace`、`handleBack`；不得直接调用 `window.history.pushState/replaceState/back`。`native_admin` 与 `?history=legacy` 例外。
+- 资料照片上传/删除/换封面后，必须同步更新本人卡与牌堆缩略图（`selfCard`/`cards`），不得依赖整页刷新才显示新图。
 - 门禁（身份证/地区/人脸）直接打开资料编辑时，保存成功后的 `dropCurrent` 必须保留父级 tab 作为返回落点；父级不是 `profile_detail` 时要补目标条目，不能把 tab 替换掉（否则返回键无处可回）。已进入 `profile_edit`/`profile_detail` 后，迟到的 403 不得再次弹门禁浮层；缺失地区字段要就地红字提示；注册页二维码未长按时点击选项，选项文字也要标红。
 - 热路径：`web/static/legacy/**`、`deploy/nginx/**`、`internal/httpserver/{middleware,handlers_media,media_serve,legacy_ui,readcache,app}.go`、DB home/cards/profile/notifications/照片授权查询、热索引 migration。
 - 命中热路径必须给 `make perf-bench` / `make perf-lcp` 前后数字；p95 不得比基线差 >10%，否则解释根因或回退。

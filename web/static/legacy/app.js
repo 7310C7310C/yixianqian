@@ -1656,10 +1656,23 @@ const yxqApp = createApp({
     const profilePhotosThumb = ref([]);
     const regionProvinces = ref([]);
     let regionLoadPromise = null;
-    function syncProfilePhotos() {
-      // 同步头像（第一张照片，用缩图）与全局 user，保证保存后首页/消息头像一致
-      profileData.value.photo = profilePhotosThumb.value[0] || profilePhotos.value[0] || '';
-      if (user.value) user.value.photo = profileData.value.photo;
+    function syncProfilePhotos(data) {
+      // 同步头像（第一张照片，用缩图）与全局 user，并同步首页本人卡/牌堆缓存，
+      // 避免上传/删除/换封面后必须刷新整页才看到新图。
+      const photo = (data && (data.photo_thumb || data.photo))
+        || profilePhotosThumb.value[0] || profilePhotos.value[0] || '';
+      profileData.value.photo = photo;
+      if (user.value) user.value.photo = photo;
+      if (data && Array.isArray(data.photos_meta)) profileData.value.photos_meta = data.photos_meta;
+      const patch = {
+        photo,
+        photos: [...profilePhotos.value],
+        photos_thumb: [...profilePhotosThumb.value],
+      };
+      if (data && Array.isArray(data.photos_meta)) patch.photos_meta = data.photos_meta;
+      if (selfCard.value) Object.assign(selfCard.value, patch);
+      const idx = cards.value.findIndex(c => c && c.is_self);
+      if (idx >= 0) cards.value[idx] = { ...cards.value[idx], ...patch };
     }
     async function ensureRegions(){
       if (regionProvinces.value.length) return;
@@ -1816,7 +1829,7 @@ const yxqApp = createApp({
         profileData.value.photos = profilePhotos.value;
         profileData.value.photos_thumb = profilePhotosThumb.value;
         if (typeof data.has_face === 'boolean') profileData.value.has_face = data.has_face;
-        syncProfilePhotos();
+        syncProfilePhotos(data);
         vant.showToast(data.has_face===false ? '已上传，人脸检测中…' : '照片已添加');
         uploadProgress.value = 100;
         // 若服务端仍异步，轮询 has_face 最终态，达标即隐去红字
@@ -1861,7 +1874,7 @@ const yxqApp = createApp({
         profileData.value.photos = profilePhotos.value;
         profileData.value.photos_thumb = profilePhotosThumb.value;
         if (typeof data.has_face === 'boolean') profileData.value.has_face = data.has_face;
-        syncProfilePhotos();
+        syncProfilePhotos(data);
         vant.showToast('已删除');
         if (data.has_face===false) pollFaceResult();
       } catch (err) {
@@ -1881,7 +1894,7 @@ const yxqApp = createApp({
         profilePhotosThumb.value = (data.photos_thumb && data.photos_thumb.length) ? data.photos_thumb : profilePhotos.value;
         profileData.value.photos = profilePhotos.value;
         profileData.value.photos_thumb = profilePhotosThumb.value;
-        syncProfilePhotos();
+        syncProfilePhotos(data);
         vant.showToast('已设为封面');
       } catch (err) { vant.showToast(err.message || '操作失败'); }
     }
