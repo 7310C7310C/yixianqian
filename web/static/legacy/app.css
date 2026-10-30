@@ -977,7 +977,7 @@
   .van-theme-dark .msg-scope-btn.active { color: #f5f5f5; }
   .van-theme-dark .msg-shortcuts button, .van-theme-dark .thread-profile-btn { background: #222226; border-color: #3a3a3e; color: #c8c9cc; }
   .van-theme-dark .msg-row.unread { background: linear-gradient(90deg, #2b1c20 0, #222226 50%); }
-  .van-theme-dark .msg-row-avatar, .van-theme-dark .feed-icon, .van-theme-dark .thread-avatar { background: rgba(255, 107, 129, 0.14); color: #ff8fa1; }
+  .van-theme-dark .msg-entry-icon, .van-theme-dark .msg-row-avatar, .van-theme-dark .feed-icon, .van-theme-dark .thread-avatar { background: rgba(255, 107, 129, 0.14); color: #ff8fa1; }
   .van-theme-dark .msg-row-text, .van-theme-dark .feed-body { color: #c8c9cc; }
   .van-theme-dark .msg-row-time, .van-theme-dark .feed-time, .van-theme-dark .msg-row-meta,
   .van-theme-dark .thread-sub, .van-theme-dark .msg-empty, .van-theme-dark .feed-clear { color: #a0a0a4; }
