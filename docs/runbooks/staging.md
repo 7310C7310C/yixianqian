@@ -192,7 +192,7 @@ BASE_URL=https://next.nantou.love SESSION_COOKIE=<管理员> USER_SESSION_COOKIE
 - 二維碼：`/angel-qr` 上传后统一 JPEG q92 ≤720px；检查 `Cache-Control: max-age=3600` 与 ETag。
 - 管理台页面清单：`/admin`、`/admin/users`、`/admin/users/{id}`、`/admin/matching`、`/admin/points`、
   `/admin/audit`、`/admin/reports`、`/admin/suggestions`、`/admin/roles`、`/admin/broadcasts`；`/admin/activities` 的 iframe 请求应 303 到 `/app?native_admin=1&p=group_admin`。
-- 消息中心：消息页默认动态；`/legacy/api/messages/received` 返回 `messages[].unread` 与 `unread`；`POST /legacy/api/messages/read` 清零；`/legacy/api/notifications` 返回 `unread`/`unread_messages`；`POST /legacy/api/notifications/clear` 后重登仍为空；`/admin/broadcasts` 全员图文，广播图片 `/media/{id}` 对登录用户 200。
+- 消息中心：消息页默认动态；`/legacy/api/messages/received` 返回 `messages[].unread` 与 `unread`；`POST /legacy/api/messages/read` 清零；`/legacy/api/notifications` 返回 `unread`/`unread_messages`；`POST /legacy/api/notifications/clear` 后重登仍为空；`/admin/broadcasts` 全员图文，广播图片 `/media/{id}` 对登录用户 200；发送喜欢/留言后本人动态也应有对应条目。
 - 管理 API 兼容层：`python3 tools/admin_legacy_api_smoke.py`（管理员 200、普通用户 403）。
 - 5xx/403/空页先看：`journalctl -u yixianqian-next-test -n 100 --no-pager`、`tail -n 100 /var/log/nginx/error.log`；不要靠重启碰运气。
 

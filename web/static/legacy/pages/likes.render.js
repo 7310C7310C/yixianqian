@@ -1064,7 +1064,7 @@ function render(_ctx, _cache) {
             }, "资料")
           ]),
           _createElementVNode("div", _hoisted_9, [
-            (_ctx.messageThreadLoading)
+            (_ctx.messageThread.loading)
               ? (_openBlock(), _createElementBlock("div", _hoisted_10))
               : (!_ctx.threadedThreadMessages.length)
                 ? (_openBlock(), _createElementBlock("div", _hoisted_11, "暂无留言"))

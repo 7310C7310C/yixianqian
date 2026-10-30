@@ -588,6 +588,30 @@ func (d *DB) CreateMessage(ctx context.Context, p CreateMessageParams) (Message,
 			return Message{}, err
 		}
 	}
+	// Sender-side feed entry: the item also appears under 「留言 → 我发出的」.
+	sentTitle := "你给 " + targetName + " 留言"
+	if replyToID != nil {
+		sentTitle = "你在 " + targetName + " 的卡片回复了留言"
+	}
+	sentKey := fmt.Sprintf("message-sent:%d", id)
+	sentPayload := map[string]any{
+		"message_id":     id,
+		"target_user_id": p.TargetUserID,
+		"target_ref":     targetRef,
+		"target_name":    targetName,
+		"on_my_card":     false,
+		"event_key":      sentKey,
+	}
+	if err := insertNotificationTx(ctx, tx, p.AuthorID, "message_sent", sentTitle, excerpt, "/app", sentPayload, sentKey); err != nil {
+		return Message{}, err
+	}
+	// Own action: visible in the feed but not an unread alert for the sender.
+	if _, err := tx.Exec(ctx,
+		`UPDATE notifications SET read_at = now()
+		  WHERE user_id = $1 AND payload->>'event_key' = $2 AND read_at IS NULL`,
+		p.AuthorID, sentKey); err != nil {
+		return Message{}, fmt.Errorf("db: mark sender message notification read: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Message{}, fmt.Errorf("db: commit message: %w", err)
 	}

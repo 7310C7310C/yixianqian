@@ -21,7 +21,7 @@
       </div>
 
       <div class="thread-msg-scroll">
-        <div v-if="messageThreadLoading" class="msg-tip" aria-label="正在加载"></div>
+        <div v-if="messageThread.loading" class="msg-tip" aria-label="正在加载"></div>
         <div v-else-if="!threadedThreadMessages.length" class="msg-tip">暂无留言</div>
         <div v-else>
           <div v-for="m in threadedThreadMessages" :key="m.id" class="thread-thread">

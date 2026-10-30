@@ -277,6 +277,14 @@ func TestIntegrationSocialCardsLikesMutual(t *testing.T) {
 	if notifTitle != "有人匿名喜欢了你" {
 		t.Fatalf("anonymous notification title = %q (must not identify sender)", notifTitle)
 	}
+	var sentNotif int
+	if err := d.pool.QueryRow(ctx,
+		`SELECT count(*) FROM notifications WHERE user_id = $1 AND kind = 'like_sent'`, male).Scan(&sentNotif); err != nil {
+		t.Fatal(err)
+	}
+	if sentNotif != 1 {
+		t.Fatalf("sender like_sent notifications = %d, want 1", sentNotif)
+	}
 
 	// Reciprocal like flips both rows and notifies both sides.
 	second, err := d.CreateLike(ctx, CreateLikeParams{

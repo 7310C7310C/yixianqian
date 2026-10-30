@@ -627,6 +627,7 @@ const yxqApp = createApp({
       const target = TAB_ORDER.includes(targetPage) ? (tabScroll[targetPage] || 0) : 0;
       applyPageScroll(target);
       if(target > 0 && readScrollY() < target - 2) retryPageScroll(targetPage, target);
+      if (targetPage === 'message_thread') setTimeout(scrollThreadToHighlight, 30);
     }
     // Vant 弹层（van-popup / van-dialog）锁滚动只给 body 加 van-overflow-hidden；
     // 本页 html 带 overflow-x: clip，按规范会阻止 body 的 overflow 传播到视口，
@@ -2086,7 +2087,6 @@ const yxqApp = createApp({
     const inlineReplyText = ref('');
     const inlineReplyBusy = ref(false);
     const messageThread = ref(null);      // 留言详情页：目标卡片 + 消息
-    const messageThreadLoading = ref(false);
     const threadText = ref('');
     const threadSending = ref(false);
     const threadReplyTarget = ref(null);
@@ -5169,7 +5169,7 @@ const yxqApp = createApp({
     async function onOnetooneMsgBeforeClose(action) {
       if (onetooneMsgSubmitting.value) return false;   // 发送在途：任何关闭都被拦（结果回来才允许关，P16）
       if (action === 'confirm') {
-        if (!onetooneMsgText.value.trim()) { vant.showToast('请输入内容'); return false; }
+        if (!onetooneMsgText.value.trim()) { vant.showToast('请输入'); return false; }
         return await doOnetooneMsg();
       }
       // 取消/点遮罩关闭：有未发送留言 → 先走通用离开拦截
@@ -5189,7 +5189,7 @@ const yxqApp = createApp({
           method: 'POST',
           body: JSON.stringify({ target_openid: t.openid, content: onetooneMsgText.value.trim() })
         });
-        vant.showToast('已发送');
+        vant.showToast('已发');
         showOnetooneMsg.value = false;
         const arr = onetooneResult.value.partners || [];
         const idx = arr.findIndex(x => x.openid === t.openid);
@@ -5590,7 +5590,7 @@ const yxqApp = createApp({
       if (msgSending.value) return false;
       const c = currentCard.value;
       const text = msgText.value.trim();
-      if (!text) { vant.showToast('请输入内容'); return false; }
+      if (!text) { vant.showToast('请输入'); return false; }
       if (!c || !c.openid) { vant.showToast('卡片信息异常，请左右切换到其他用户后重试'); return false; }
       const parentId = replyTarget.value ? (replyTarget.value.parentId || replyTarget.value.id) : '';
       const replyToId = replyTarget.value ? replyTarget.value.id : '';
@@ -5643,7 +5643,7 @@ const yxqApp = createApp({
         }
         // keep msg_count in sync (no reload)
         if (cards.value[cardIndex.value]) cards.value[cardIndex.value].msg_count = messages.value.length;
-        vant.showToast('已发送');
+        vant.showToast('已发');
         ok = true;
         // invalidate myMessages cache so next entry sees new message; also patch if already loaded
         if (myMessagesLoaded.value) {
@@ -5680,7 +5680,7 @@ const yxqApp = createApp({
     }
     async function deleteMessage(m) {
       try {
-        await vant.showConfirmDialog({ title: '删除留言', message: '删除留言？', confirmButtonColor: '#ee0a24' });
+        await vant.showConfirmDialog({ title: '删除留言', message: '删除？', confirmButtonColor: '#ee0a24' });
       } catch (e) { return; }
       // optimistic: remove message + its replies (cascade) immediately
       const backup = [...messages.value];
@@ -5719,7 +5719,7 @@ const yxqApp = createApp({
     }
     async function deleteMyMessage(m) {
       try {
-        await vant.showConfirmDialog({ title: '删除留言', message: '删除留言？', confirmButtonColor: '#ee0a24' });
+        await vant.showConfirmDialog({ title: '删除留言', message: '删除？', confirmButtonColor: '#ee0a24' });
       } catch (e) { return; }
       // optimistic: immediate removal
       const backup = [...myMessagesList.value];
@@ -5804,8 +5804,7 @@ const yxqApp = createApp({
     }
     function openLikeProfile(item) {
       const ref = item && (item.initiator_openid || item.openid);
-      if (!ref) { vant.showToast('匿名'); return; }
-      openUserDetailFromPage(ref, 'like_inbox');
+      if (ref) openUserDetailFromPage(ref, 'like_inbox');
     }
     function openMessageInbox(scope) {
       msgScope.value = scope || 'received';
@@ -5834,7 +5833,7 @@ const yxqApp = createApp({
     async function sendInlineReply(m) {
       if (inlineReplyBusy.value || !m) return;
       const text = inlineReplyText.value.trim();
-      if (!text) { vant.showToast('请输入内容'); return; }
+      if (!text) { vant.showToast('请输入'); return; }
       inlineReplyBusy.value = true;
       try {
         const parentId = m.parent_id || m.id;
@@ -5870,8 +5869,8 @@ const yxqApp = createApp({
         target_is_self: false,
         highlight_id: messageId ? String(messageId) : '',
         messages: [],
+        loading: true,
       };
-      messageThreadLoading.value = true;
       threadText.value = '';
       threadReplyTarget.value = null;
       page.value = 'message_thread';
@@ -5881,7 +5880,7 @@ const yxqApp = createApp({
       const current = messageThread.value;
       if (!current) return;
       if (seq !== messageThreadSeq) return;
-      messageThreadLoading.value = true;
+      messageThread.value.loading = true;
       try {
         const data = await api('/api/messages?target=' + encodeURIComponent(current.target_ref));
         if (seq !== messageThreadSeq || page.value !== 'message_thread') return;
@@ -5893,13 +5892,17 @@ const yxqApp = createApp({
           target_uid: target.uid || current.target_uid,
           target_is_self: !!target.is_self,
           messages: data.messages || [],
+          loading: false,
         };
         if (markRead) await markMessagesRead(current.target_ref);
-        nextTick(() => scrollThreadToHighlight());
+        nextTick(() => {
+          scrollThreadToHighlight();
+          setTimeout(scrollThreadToHighlight, 300);
+        });
       } catch (e) {
         if (seq === messageThreadSeq) vant.showToast(e.message || '加载失败');
       } finally {
-        if (seq === messageThreadSeq) messageThreadLoading.value = false;
+        if (seq === messageThreadSeq && messageThread.value) messageThread.value.loading = false;
       }
     }
     function isThreadHighlight(id) {
@@ -5908,19 +5911,19 @@ const yxqApp = createApp({
     }
     function scrollThreadToHighlight() {
       const t = messageThread.value;
-      if (!t || !t.highlight_id) {
-        const list = document.querySelector('.thread-msg-scroll');
-        if (list) list.scrollTop = list.scrollHeight;
-        return;
-      }
-      const el = document.querySelector('[data-thread-mid="' + String(t.highlight_id).replace(/"/g, '') + '"]');
-      if (el && el.scrollIntoView) {
-        try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
-      }
-      const highlight = String(t.highlight_id);
+      if (!t) return;
+      const list = document.querySelector('.thread-msg-scroll');
+      if (!list) return;
+      if (!t.highlight_id) { list.scrollTop = list.scrollHeight; return; }
+      const el = document.querySelector('[data-thread-mid="' + t.highlight_id + '"]');
+      if (!el) return;
+      const a = list.getBoundingClientRect(), b = el.getBoundingClientRect();
+      const d = b.top - a.top - (list.clientHeight - b.height) / 2;
+      if (Math.abs(d) > 4) list.scrollTop = Math.max(0, list.scrollTop + d);
+      const h = String(t.highlight_id);
       setTimeout(() => {
-        if (messageThread.value && String(messageThread.value.highlight_id) === highlight) {
-          messageThread.value = { ...messageThread.value, highlight_id: '' };
+        if (messageThread.value && String(messageThread.value.highlight_id) === h) {
+          messageThread.value.highlight_id = '';
         }
       }, 1800);
     }
@@ -5942,7 +5945,7 @@ const yxqApp = createApp({
       const t = messageThread.value;
       const text = threadText.value.trim();
       if (!t || !t.target_ref) return;
-      if (!text) { vant.showToast('请输入内容'); return; }
+      if (!text) { vant.showToast('请输入'); return; }
       threadSending.value = true;
       try {
         const parentId = threadReplyTarget.value ? (threadReplyTarget.value.parentId || threadReplyTarget.value.id) : '';
@@ -5960,7 +5963,7 @@ const yxqApp = createApp({
         threadReplyTarget.value = null;
         const seq = ++messageThreadSeq;
         await loadMessageThread(seq, true);
-        vant.showToast('已发送');
+        vant.showToast('已发');
       } catch (e) {
         vant.showToast(e.message || '发送失败');
       } finally {
@@ -5970,7 +5973,7 @@ const yxqApp = createApp({
     async function deleteThreadMessage(m) {
       if (!m) return;
       try {
-        await vant.showConfirmDialog({ title: '删除留言', message: '删除留言？', confirmButtonColor: '#ee0a24' });
+        await vant.showConfirmDialog({ title: '删除留言', message: '删除？', confirmButtonColor: '#ee0a24' });
       } catch (e) { return; }
       try {
         await api('/api/messages/' + m.id, { method: 'DELETE' });
@@ -5981,14 +5984,17 @@ const yxqApp = createApp({
         vant.showToast(e.message || '删除失败');
       }
     }
-    const feedIcons = {
-      message: '💬', message_reply: '💬', like: '💕', mutual: '💞',
-      wechat_exchange: '💞', admin_broadcast: '📣', activity_broadcast: '📣',
-      signup: '🎟️', points: '🌾', review: '✅', security: '🔐',
-      message_report: '🛡️', report: '🛡️', message_moderation: '🛡️',
-    };
     function notificationIcon(n) {
-      return feedIcons[(n && n.kind) || ''] || '🔔';
+      const k = (n && n.kind) || '';
+      if (k.indexOf('message') === 0) return '💬';
+      if (k === 'like' || k === 'like_sent') return '💕';
+      if (k === 'mutual' || k === 'wechat_exchange') return '💞';
+      if (k === 'admin_broadcast' || k === 'activity_broadcast') return '📣';
+      if (k === 'points') return '🌾';
+      if (k === 'review') return '✅';
+      if (k === 'security') return '🔐';
+      if (k === 'signup') return '🎟️';
+      return '🔔';
     }
     function notificationImage(n) {
       return (n && (n.image_url || (n.payload && n.payload.image_url))) || '';
@@ -6009,13 +6015,14 @@ const yxqApp = createApp({
       markOneNotificationRead(n);
       const kind = n.kind || '';
       const payload = n.payload || {};
-      if (kind === 'message' || kind === 'message_reply') {
-        if (payload.on_my_card) { vant.showToast('在卡片下'); return; }
+      if (kind === 'message' || kind === 'message_reply' || kind === 'message_sent') {
+        if (payload.on_my_card) return;
         const targetRef = payload.target_ref || payload.target_user_id;
         openMessageThread(targetRef, payload.message_id);
         return;
       }
       if (kind === 'like') { openLikedMe(); return; }
+      if (kind === 'like_sent') { openLikeInbox('mine'); return; }
       if (kind === 'mutual' || kind === 'wechat_exchange') { openMutual(); return; }
       if (kind === 'signup' || kind === 'activity_broadcast') {
         if (n.activity_id) openActivity(n.activity_id);
@@ -6034,7 +6041,7 @@ const yxqApp = createApp({
       try {
         await vant.showConfirmDialog({
           title: '清空动态',
-          message: '清空后不再显示',
+          message: '清空后隐藏',
           confirmButtonText: '清空',
           confirmButtonColor: '#ee0a24',
         });
@@ -6044,7 +6051,7 @@ const yxqApp = createApp({
         notifications.value = [];
         unreadCount.value = 0;
         if (data && typeof data.unread_messages === 'number') unreadMessages.value = data.unread_messages;
-        vant.showToast('已清空');
+
       } catch (e) {
         vant.showToast(e.message || '清空失败');
       }
@@ -7531,7 +7538,7 @@ const yxqApp = createApp({
       msgScope, switchMsgScope, likeScope, switchLikeScope, openLikeInbox, openMessageInbox, openLikeProfile,
       msgTabDot, receivedUnreadIds, isReceivedUnread,
       inlineReplyId, inlineReplyText, inlineReplyBusy, startInlineReply, sendInlineReply,
-      messageThread, messageThreadLoading, threadText, threadSending, threadReplyTarget,
+      messageThread, threadText, threadSending, threadReplyTarget,
       threadedThreadMessages, openMessageThread, loadMessageThread, replyThreadTo,
       cancelThreadReply, sendThreadMessage, deleteThreadMessage,
       notificationIcon, notificationImage, viewNotificationImage, openNotification, clearFeed, isThreadHighlight,

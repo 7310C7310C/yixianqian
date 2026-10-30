@@ -423,6 +423,26 @@ func (d *DB) CreateLike(ctx context.Context, p CreateLikeParams) (CreateLikeResu
 			"去「谁喜欢我」看看吧。", "/liked_me", payload, eventKey); err != nil {
 			return CreateLikeResult{}, err
 		}
+		// Sender-side feed entry: the item also appears under 「喜欢 → 我喜欢的」.
+		sentKey := fmt.Sprintf("like-sent:%d", liked.ID)
+		sentType := "匿名"
+		if p.LikeType == LikeTypeReal {
+			sentType = "实名"
+		}
+		if err := insertNotificationTx(ctx, tx, p.InitiatorID, "like_sent",
+			"你向"+socialDisplayName(target.Nickname)+"表达了"+sentType+"喜欢",
+			"可在「喜欢 → 我喜欢的」查看。", "/app",
+			map[string]any{"event_key": sentKey, "target_id": target.ID}, sentKey); err != nil {
+			return CreateLikeResult{}, err
+		}
+		// The sender just performed the action; the feed entry is informational,
+		// not an unread alert. Keep it visible but read.
+		if _, err := tx.Exec(ctx,
+			`UPDATE notifications SET read_at = now()
+			  WHERE user_id = $1 AND payload->>'event_key' = $2 AND read_at IS NULL`,
+			p.InitiatorID, sentKey); err != nil {
+			return CreateLikeResult{}, fmt.Errorf("db: mark sender like notification read: %w", err)
+		}
 	}
 
 	records, err = listLikesTx(ctx, tx, p.InitiatorID)

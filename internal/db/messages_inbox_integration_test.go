@@ -107,8 +107,8 @@ func TestIntegrationMessageInboxAndNotifications(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(notes) != 2 {
-		t.Fatalf("notifications len = %d, want 2 (%+v)", len(notes), notes)
+	if len(notes) != 3 {
+		t.Fatalf("notifications len = %d, want 3 (%+v)", len(notes), notes)
 	}
 	kinds := map[string]int{}
 	for _, n := range notes {
@@ -116,14 +116,17 @@ func TestIntegrationMessageInboxAndNotifications(t *testing.T) {
 		if n.Link == "" || n.Payload["message_id"] == nil {
 			t.Fatalf("message notification missing link/payload: %+v", n)
 		}
+		if n.Kind == "message_sent" && n.ReadAt == nil {
+			t.Fatalf("sender-side message notification must be read: %+v", n)
+		}
 	}
-	if kinds["message"] != 1 || kinds["message_reply"] != 1 {
-		t.Fatalf("notification kinds = %v, want one message + one message_reply", kinds)
+	if kinds["message"] != 1 || kinds["message_reply"] != 1 || kinds["message_sent"] != 1 {
+		t.Fatalf("notification kinds = %v, want message + message_reply + message_sent", kinds)
 	}
 
 	// Clearing the feed hides existing rows forever, but a later message still appears.
-	if cleared, err := database.ClearNotifications(ctx, me.ID); err != nil || cleared != 2 {
-		t.Fatalf("clear notifications = %d err=%v, want 2", cleared, err)
+	if cleared, err := database.ClearNotifications(ctx, me.ID); err != nil || cleared != 3 {
+		t.Fatalf("clear notifications = %d err=%v, want 3", cleared, err)
 	}
 	if notes, err := database.ListNotifications(ctx, me.ID, 50); err != nil || len(notes) != 0 {
 		t.Fatalf("notifications after clear = %d err=%v, want 0", len(notes), err)
