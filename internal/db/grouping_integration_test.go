@@ -306,6 +306,64 @@ func TestIntegrationGroupSigninGate(t *testing.T) {
 	}
 }
 
+func TestIntegrationOnetooneModeAllowsVolunteerSelection(t *testing.T) {
+	database, pool, ctx := setupGroupingDB(t)
+	activity := createGroupActivity(t, ctx, pool, false, 1, 1)
+	if _, err := pool.Exec(ctx,
+		`UPDATE activities SET group_enabled = false, onetoone_enabled = true WHERE id = $1`,
+		activity.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	viewer := createGroupUser(t, ctx, database, pool, "GRP-OTO-VIEW", "女性")
+	addGroupSignup(t, ctx, pool, activity.ID, viewer.ID, SignupStatusSigned, "")
+	males := make([]User, 0, 7)
+	for i := 0; i < 7; i++ {
+		male := createGroupUser(t, ctx, database, pool, fmt.Sprintf("GRP-OTO-M%d", i), "男性")
+		males = append(males, male)
+		addGroupSignup(t, ctx, pool, activity.ID, male.ID, SignupStatusSigned, "")
+	}
+	choices := make([]int64, 0, len(males))
+	for _, male := range males {
+		choices = append(choices, male.ID)
+	}
+
+	// 一对一模式只有 OnetooneEnabled；志愿选择页必须仍然可用。
+	_, candidates, err := database.GroupCandidates(ctx, viewer.ID, activity.ActivityNo)
+	if err != nil {
+		t.Fatalf("onetoone candidates: %v", err)
+	}
+	if len(candidates) != 7 {
+		t.Fatalf("onetoone candidates = %d, want 7", len(candidates))
+	}
+	selection, err := database.SelectGroupChoices(ctx, viewer.ID, activity.ActivityNo, choices)
+	if err != nil {
+		t.Fatalf("onetoone select: %v", err)
+	}
+	if len(selection.Choices) != 7 {
+		t.Fatalf("onetoone selection = %+v", selection)
+	}
+	status, err := database.GroupStatusForUser(ctx, viewer.ID, activity.ActivityNo)
+	if err != nil || !status.Selected || len(status.Choices) != 7 {
+		t.Fatalf("onetoone status = %+v err=%v", status, err)
+	}
+
+	// 分组结果仍只对分组模式开放，避免一对一活动误开分组结果。
+	if _, err := database.GroupResultForUser(ctx, viewer.ID, activity.ActivityNo, 0); !errors.Is(err, ErrActivityNotOpen) {
+		t.Fatalf("group result on onetoone activity err = %v, want ErrActivityNotOpen", err)
+	}
+
+	// 两个模式都关闭时，志愿入口关闭。
+	closed := createGroupActivity(t, ctx, pool, false, 1, 1)
+	if _, err := pool.Exec(ctx,
+		`UPDATE activities SET group_enabled = false WHERE id = $1`, closed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := database.GroupCandidates(ctx, viewer.ID, closed.ActivityNo); !errors.Is(err, ErrActivityNotOpen) {
+		t.Fatalf("closed activity candidates err = %v, want ErrActivityNotOpen", err)
+	}
+}
+
 func TestIntegrationGroupingRunAndResult(t *testing.T) {
 	database, pool, ctx := setupGroupingDB(t)
 	activity := createGroupActivity(t, ctx, pool, false, 2, 2)

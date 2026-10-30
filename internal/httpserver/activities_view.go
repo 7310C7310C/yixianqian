@@ -60,6 +60,12 @@ type ActivityView struct {
 	StartsAt *time.Time `json:"-"`
 	EndsAt   *time.Time `json:"-"`
 
+	// signinCodeSet records whether the activity has a 4-digit on-site code.
+	// An activity can carry signin_enabled with an empty code (legacy data or
+	// an admin who enabled the flag before setting the code); self sign-in can
+	// never succeed in that state, so the capability must stay false.
+	signinCodeSet bool
+
 	// observedAt freezes the request time so the derived status and the
 	// capability flags always agree with each other.
 	observedAt time.Time
@@ -139,6 +145,8 @@ func buildActivityView(a db.Activity, now time.Time) ActivityView {
 		StartsAt:   a.StartAt,
 		EndsAt:     a.EndAt,
 		observedAt: now,
+
+		signinCodeSet: db.IsFourDigitCode(a.SigninCode),
 	}
 	applyActivityTimeWindow(&view, a.EndedAt(now))
 	return view
@@ -192,7 +200,7 @@ func applySignupToView(v *ActivityView, status string, attendance db.Attendance)
 // set) and before end_at (when set). A stored 「未到」 is not self-signable
 // either, matching ErrMarkedAbsent.
 func (v ActivityView) selfSigninAllowed() bool {
-	if !v.SigninEnabled || !v.MySignup || v.CheckedIn ||
+	if !v.SigninEnabled || !v.signinCodeSet || !v.MySignup || v.CheckedIn ||
 		strings.TrimSpace(v.Attendance) != "" || v.observedAt.IsZero() {
 		return false
 	}

@@ -58,7 +58,7 @@ func TestApplySignupToViewClearsCapabilitiesAfterEnd(t *testing.T) {
 
 	ended := buildActivityView(db.Activity{
 		ID: 1, ActivityNo: "A-ENDED", Status: db.ActivityStatusOpen, MaxSignup: 10,
-		CurrentSignup: 1, SigninEnabled: true, StartAt: &past, EndAt: &past,
+		CurrentSignup: 1, SigninEnabled: true, SigninCode: "0123", StartAt: &past, EndAt: &past,
 	}, now)
 	applySignupToView(&ended, db.SignupStatusSigned, "")
 	if ended.Status != db.ActivityStatusFinished {
@@ -71,7 +71,7 @@ func TestApplySignupToViewClearsCapabilitiesAfterEnd(t *testing.T) {
 
 	live := buildActivityView(db.Activity{
 		ID: 2, ActivityNo: "A-LIVE", Status: db.ActivityStatusOpen, MaxSignup: 10,
-		CurrentSignup: 1, SigninEnabled: true, StartAt: &past, EndAt: &future,
+		CurrentSignup: 1, SigninEnabled: true, SigninCode: "0123", StartAt: &past, EndAt: &future,
 	}, now)
 	applySignupToView(&live, db.SignupStatusSigned, "")
 	if !live.CanCancel || live.CanSignup {
@@ -119,7 +119,7 @@ func TestCanSelfSigninBoundaries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			view := buildActivityView(db.Activity{
 				ID: 1, ActivityNo: "A-TEST", Status: tc.status, MaxSignup: 10,
-				SigninEnabled: tc.signin, StartAt: tc.startAt, EndAt: tc.endAt,
+				SigninEnabled: tc.signin, SigninCode: "0123", StartAt: tc.startAt, EndAt: tc.endAt,
 			}, now)
 			if tc.applySig {
 				applySignupToView(&view, tc.signup, tc.attendance)
@@ -128,6 +128,21 @@ func TestCanSelfSigninBoundaries(t *testing.T) {
 				t.Fatalf("can_self_signin = %v, want %v (status=%q)", view.CanSelfSignin, tc.want, view.Status)
 			}
 		})
+	}
+
+	// An activity can carry signin_enabled with no code (legacy data or an
+	// admin who toggled the flag before setting the code), or with a legacy
+	// non-4-digit code. Self sign-in can never succeed in those states, so the
+	// capability must stay false.
+	for _, code := range []string{"", "12", "12345", "abcd"} {
+		noCode := buildActivityView(db.Activity{
+			ID: 9, ActivityNo: "A-NO-CODE", Status: db.ActivityStatusOpen, MaxSignup: 10,
+			SigninEnabled: true, SigninCode: code, StartAt: &past, EndAt: &future,
+		}, now)
+		applySignupToView(&noCode, db.SignupStatusSigned, "")
+		if noCode.CanSelfSignin {
+			t.Fatalf("activity with sign-in code %q must not advertise self sign-in", code)
+		}
 	}
 }
 

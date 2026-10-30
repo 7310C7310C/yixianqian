@@ -266,6 +266,20 @@ func groupingGate(activity Activity, now time.Time) error {
 	return nil
 }
 
+// selectionGate gates the shared volunteer-selection entry. Grouping and
+// one-to-one both write group_selections, and the console forces the two
+// entry flags to be mutually exclusive; checking GroupEnabled alone would
+// close 志愿选择 for every one-to-one-only activity.
+func selectionGate(activity Activity, now time.Time) error {
+	if activity.EndedAt(now) {
+		return ErrActivityEnded
+	}
+	if !activity.GroupEnabled && !activity.OnetooneEnabled {
+		return ErrActivityNotOpen
+	}
+	return nil
+}
+
 // loadSignupGate verifies the user registered and, when sign-in is enabled, is
 // present. It uses the same rule as the legacy endpoints: non-cancelled signup
 // plus a checked-in attendance value.
@@ -318,7 +332,7 @@ func (d *DB) GroupCandidates(ctx context.Context, userID int64, activityRef stri
 	if err != nil {
 		return Activity{}, nil, err
 	}
-	if err := groupingGate(activity, time.Now()); err != nil {
+	if err := selectionGate(activity, time.Now()); err != nil {
 		return Activity{}, nil, err
 	}
 	if _, err := d.loadSignupGate(ctx, activity, userID); err != nil {
@@ -389,7 +403,7 @@ func (d *DB) GroupStatusForUser(ctx context.Context, userID int64, activityRef s
 	if err != nil {
 		return GroupStatus{}, err
 	}
-	if err := groupingGate(activity, time.Now()); err != nil {
+	if err := selectionGate(activity, time.Now()); err != nil {
 		return GroupStatus{}, err
 	}
 	status := GroupStatus{
@@ -418,7 +432,7 @@ func (d *DB) SelectGroupChoices(ctx context.Context, userID int64, activityRef s
 	if err != nil {
 		return GroupSelection{}, err
 	}
-	if err := groupingGate(activity, time.Now()); err != nil {
+	if err := selectionGate(activity, time.Now()); err != nil {
 		return GroupSelection{}, err
 	}
 	if _, err := d.loadSignupGate(ctx, activity, userID); err != nil {

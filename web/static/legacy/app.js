@@ -666,12 +666,13 @@ const yxqApp = createApp({
       if (!act || !act.my_signup || isActivityEnded(act)) return false;
       return canSelfSignin(act) || isAttendancePresent(act.my_attendance);
     }
-    // 签到门禁：已签到不拦；活动要求签到但当前还不能签到（未到/已结束）才拦。
+    // 签到闸门：活动要求现场签到时，未签到/未到一律不能填志愿。能否自助
+    // 签到只决定「现场签到」按钮是否可用，不降低填志愿门槛；与后端
+    // loadSignupGate 的判定一致。已结束活动仍按原防线阻断。
     function signinBeforeFillBlocked(act) {
       if (!act || !act.signin_enabled) return false;
-      if (isAttendancePresent(act.my_attendance)) return false;
-      if (isActivityEnded(act)) return true;   // 已结束：不再要求/允许现场签到后填志愿
-      return !canSelfSignin(act);
+      if (isActivityEnded(act)) return true;
+      return !isAttendancePresent(act.my_attendance);
     }
     const isDetailCheckedIn = computed(() => isAttendancePresent(currentActivity.value && currentActivity.value.my_attendance));
     const detailSigninBlocked = computed(() => signinBeforeFillBlocked(currentActivity.value));
