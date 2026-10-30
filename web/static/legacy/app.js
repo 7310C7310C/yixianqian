@@ -4758,6 +4758,7 @@ const yxqApp = createApp({
     }
     function startIdInvalidOverlay(){
       if(showIdInvalidDialog.value) return;
+      if(page.value === 'profile_edit') return;
       showIdInvalidDialog.value = true;
       idInvalidCountdown.value = 5;
       if(idInvalidTimer) clearInterval(idInvalidTimer);
@@ -4823,6 +4824,9 @@ const yxqApp = createApp({
     }
     function startRegionInvalidOverlay(){
       if(showRegionInvalidDialog.value) return;
+      // Already on the fix surface (gate click opens profile_detail → edit);
+      // late 403 responses from cards must not pop the overlay again.
+      if(page.value === 'profile_edit' || page.value === 'profile_detail') return;
       showRegionInvalidDialog.value = true;
       regionInvalidCountdown.value = 5;
       if(regionInvalidTimer) clearInterval(regionInvalidTimer);
@@ -4850,6 +4854,7 @@ const yxqApp = createApp({
     // —— 人脸照片门禁（本人照片需至少 1 张可检出人脸，否则仅可进修改资料）——
     function startFaceInvalidOverlay(){
       if(showFaceInvalidDialog.value) return;
+      if(page.value === 'profile_edit') return;
       showFaceInvalidDialog.value = true;
       faceInvalidCountdown.value = 5;
       if(faceInvalidTimer) clearInterval(faceInvalidTimer);

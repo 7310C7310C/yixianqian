@@ -988,21 +988,25 @@ const _hoisted_29 = ["value"]
 const _hoisted_30 = ["onUpdate:modelValue", "onChange", "disabled"]
 const _hoisted_31 = /*#__PURE__*/_createElementVNode("option", { value: "" }, "区/县", -1 /* HOISTED */)
 const _hoisted_32 = ["value"]
-const _hoisted_33 = ["onClick"]
+const _hoisted_33 = {
+  key: 1,
+  style: {"flex-basis":"100%","color":"#ee0a24","font-size":"12px","padding":"4px 0 0","line-height":"1.6"}
+}
 const _hoisted_34 = ["onClick"]
-const _hoisted_35 = {
+const _hoisted_35 = ["onClick"]
+const _hoisted_36 = {
   key: 6,
   style: {"flex-basis":"100%","color":"#ee0a24","font-size":"12px","padding":"0 16px 10px","line-height":"1.6"}
 }
-const _hoisted_36 = { style: {"padding":"20px 16px"} }
-const _hoisted_37 = { class: "picker-header" }
-const _hoisted_38 = { style: {"font-weight":"600"} }
-const _hoisted_39 = { class: "picker-options" }
-const _hoisted_40 = ["onClick"]
-const _hoisted_41 = { class: "picker-header" }
-const _hoisted_42 = { style: {"font-weight":"600"} }
-const _hoisted_43 = { class: "multi-options" }
-const _hoisted_44 = ["onClick"]
+const _hoisted_37 = { style: {"padding":"20px 16px"} }
+const _hoisted_38 = { class: "picker-header" }
+const _hoisted_39 = { style: {"font-weight":"600"} }
+const _hoisted_40 = { class: "picker-options" }
+const _hoisted_41 = ["onClick"]
+const _hoisted_42 = { class: "picker-header" }
+const _hoisted_43 = { style: {"font-weight":"600"} }
+const _hoisted_44 = { class: "multi-options" }
+const _hoisted_45 = ["onClick"]
 
 function render(_ctx, _cache) {
   const _component_van_icon = _resolveComponent("van-icon")
@@ -1173,6 +1177,9 @@ function render(_ctx, _cache) {
                             ], 40 /* PROPS, NEED_HYDRATION */, _hoisted_30)), [
                               [_vModelSelect, f.area_code]
                             ])
+                          : _createCommentVNode("v-if", true),
+                        (!f.value)
+                          ? (_openBlock(), _createElementBlock("div", _hoisted_33, " 请选择" + _toDisplayString(f.label), 1 /* TEXT */))
                           : _createCommentVNode("v-if", true)
                       ]))
                     : (f.type==='select')
@@ -1185,7 +1192,7 @@ function render(_ctx, _cache) {
                             class: _normalizeClass(f.value ? '' : 'placeholder')
                           }, _toDisplayString(f.value || '请选择'), 3 /* TEXT, CLASS */),
                           _createVNode(_component_van_icon, { name: "arrow" })
-                        ], 8 /* PROPS */, _hoisted_33))
+                        ], 8 /* PROPS */, _hoisted_34))
                       : (f.type==='multi')
                         ? (_openBlock(), _createElementBlock("div", {
                             key: 5,
@@ -1196,15 +1203,15 @@ function render(_ctx, _cache) {
                               class: _normalizeClass((f.value && f.value.length) ? '' : 'placeholder')
                             }, _toDisplayString((f.value && f.value.length) ? f.value.join('、') : '请选择（可多选）'), 3 /* TEXT, CLASS */),
                             _createVNode(_component_van_icon, { name: "arrow" })
-                          ], 8 /* PROPS */, _hoisted_34))
+                          ], 8 /* PROPS */, _hoisted_35))
                         : _createCommentVNode("v-if", true),
             (f.field==='身份证号' && f.hint)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_35, _toDisplayString(f.hint), 1 /* TEXT */))
+              ? (_openBlock(), _createElementBlock("div", _hoisted_36, _toDisplayString(f.hint), 1 /* TEXT */))
               : _createCommentVNode("v-if", true)
           ], 2 /* CLASS */))
         }), 128 /* KEYED_FRAGMENT */))
       ]),
-      _createElementVNode("div", _hoisted_36, [
+      _createElementVNode("div", _hoisted_37, [
         _createVNode(_component_van_button, {
           type: "primary",
           block: "",
@@ -1226,23 +1233,23 @@ function render(_ctx, _cache) {
       round: ""
     }, {
       default: _withCtx(() => [
-        _createElementVNode("div", _hoisted_37, [
+        _createElementVNode("div", _hoisted_38, [
           _createElementVNode("span", {
             onClick: _cache[3] || (_cache[3] = $event => (_ctx.showSelectPopup=false))
           }, "取消"),
-          _createElementVNode("span", _hoisted_38, _toDisplayString(_ctx.pickerField ? _ctx.pickerField.label : ''), 1 /* TEXT */),
+          _createElementVNode("span", _hoisted_39, _toDisplayString(_ctx.pickerField ? _ctx.pickerField.label : ''), 1 /* TEXT */),
           _createElementVNode("span", {
             style: {"color":"#ff6b81"},
             onClick: _cache[4] || (_cache[4] = (...args) => (_ctx.clearPickerField && _ctx.clearPickerField(...args)))
           }, "清除")
         ]),
-        _createElementVNode("div", _hoisted_39, [
+        _createElementVNode("div", _hoisted_40, [
           (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((_ctx.pickerField ? (_ctx.pickerField.options || []) : []), (opt) => {
             return (_openBlock(), _createElementBlock("div", {
               key: opt,
               class: _normalizeClass(["picker-option", {active: _ctx.pickerField && _ctx.pickerField.value===opt}]),
               onClick: $event => (_ctx.pickSelect(opt))
-            }, _toDisplayString(opt), 11 /* TEXT, CLASS, PROPS */, _hoisted_40))
+            }, _toDisplayString(opt), 11 /* TEXT, CLASS, PROPS */, _hoisted_41))
           }), 128 /* KEYED_FRAGMENT */))
         ])
       ]),
@@ -1255,23 +1262,23 @@ function render(_ctx, _cache) {
       round: ""
     }, {
       default: _withCtx(() => [
-        _createElementVNode("div", _hoisted_41, [
+        _createElementVNode("div", _hoisted_42, [
           _createElementVNode("span", {
             onClick: _cache[6] || (_cache[6] = $event => (_ctx.showMultiPopup=false))
           }, "取消"),
-          _createElementVNode("span", _hoisted_42, _toDisplayString(_ctx.pickerField ? _ctx.pickerField.label : ''), 1 /* TEXT */),
+          _createElementVNode("span", _hoisted_43, _toDisplayString(_ctx.pickerField ? _ctx.pickerField.label : ''), 1 /* TEXT */),
           _createElementVNode("span", {
             style: {"color":"#ff6b81"},
             onClick: _cache[7] || (_cache[7] = $event => (_ctx.showMultiPopup=false))
           }, "确定")
         ]),
-        _createElementVNode("div", _hoisted_43, [
+        _createElementVNode("div", _hoisted_44, [
           (_openBlock(true), _createElementBlock(_Fragment, null, _renderList((_ctx.pickerField ? (_ctx.pickerField.options || []) : []), (opt) => {
             return (_openBlock(), _createElementBlock("div", {
               key: opt,
               class: _normalizeClass(["multi-option", {active: _ctx.pickerField && _ctx.pickerField.value && _ctx.pickerField.value.includes(opt)}]),
               onClick: $event => (_ctx.toggleMulti(opt))
-            }, _toDisplayString(opt), 11 /* TEXT, CLASS, PROPS */, _hoisted_44))
+            }, _toDisplayString(opt), 11 /* TEXT, CLASS, PROPS */, _hoisted_45))
           }), 128 /* KEYED_FRAGMENT */))
         ])
       ]),

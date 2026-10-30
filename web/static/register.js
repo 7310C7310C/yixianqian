@@ -680,12 +680,18 @@
       option.addEventListener('click', function () {
         if (!ack.disabled) return;
         setStatus(COPY_ANGEL_PRESS_HINT);
+        option.classList.remove('is-warn');
+        void option.offsetWidth;
+        option.classList.add('is-warn');
         if (status) {
           status.classList.remove('is-warn');
           void status.offsetWidth;
           status.classList.add('is-warn');
-          setTimeout(function () { status.classList.remove('is-warn'); }, 1200);
         }
+        setTimeout(function () {
+          option.classList.remove('is-warn');
+          if (status) status.classList.remove('is-warn');
+        }, 1200);
       });
     }
     img.addEventListener('contextmenu', function () {

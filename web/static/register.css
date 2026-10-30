@@ -542,6 +542,10 @@ textarea::placeholder {
   margin: 0;
 }
 
+.register-angel-option.is-warn .register-check > span {
+  color: #ee0a24;
+}
+
 .register-angel-option .register-angel-qr {
   margin: 10px 0 0;
 }

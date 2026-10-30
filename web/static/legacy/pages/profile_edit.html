@@ -46,6 +46,9 @@
             <option value="">区/县</option>
             <option v-for="a in regionAreas(f)" :key="a.code" :value="a.code">{{ a.name }}</option>
           </select>
+          <div v-if="!f.value" style="flex-basis:100%; color:#ee0a24; font-size:12px; padding:4px 0 0; line-height:1.6;">
+            请选择{{ f.label }}
+          </div>
         </div>
         <div v-else-if="f.type==='select'" class="edit-picker" @click="openPicker(f)">
           <span :class="f.value ? '' : 'placeholder'">{{ f.value || '请选择' }}</span>
