@@ -124,6 +124,26 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 		legacyError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A save must not succeed while the resulting profile would still be
+	// region-gated: otherwise the user sees "保存成功" and is bounced straight
+	// back into the edit page. Merge the current values with the patch first.
+	if !profileIsObserver(profile) {
+		city, native, church := profile.City, profile.NativePlace, profile.ChurchLocation
+		if upd.City != nil {
+			city = *upd.City
+		}
+		if upd.NativePlace != nil {
+			native = *upd.NativePlace
+		}
+		if upd.ChurchLocation != nil {
+			church = *upd.ChurchLocation
+		}
+		if regionInvalid(city, native, church) {
+			legacyErrorCode(w, http.StatusBadRequest, "region_required", regionRequiredMessage)
+			return
+		}
+	}
+
 	// v1 allowed the ID card to be filled only while the record was invalid.
 	// The plaintext is validated here, encrypted immediately and never logged
 	// or returned; only the last four digits stay queryable.

@@ -62,6 +62,21 @@ func TestIntegrationRegionGateAndProfileFix(t *testing.T) {
 	}
 
 	csrf := client.pageCSRF("/register/done")
+	// A save must not succeed while the profile is still region-gated.
+	resp = profileJSONRequest(t, client, http.MethodPut, "/legacy/api/profile", csrf,
+		map[string]any{"昵称": "城市门禁"})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("partial save status=%d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	var regionErr struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&regionErr); err != nil {
+		t.Fatal(err)
+	}
+	if regionErr.Code != "region_required" {
+		t.Fatalf("partial save code=%q, want region_required", regionErr.Code)
+	}
 	// Invalid values are rejected instead of being silently stored.
 	resp = profileJSONRequest(t, client, http.MethodPut, "/legacy/api/profile", csrf,
 		map[string]any{"现居/工作城市": "不存在市"})
