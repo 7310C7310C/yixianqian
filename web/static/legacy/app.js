@@ -426,7 +426,14 @@ const yxqApp = createApp({
         }
         if(virtualHistory.stack.length > 1){
           virtualHistory.stack.pop();
-          virtualHistory.stack[virtualHistory.stack.length - 1] = state;
+          const parent = virtualHistory.stack[virtualHistory.stack.length - 1];
+          if(parent && parent.page === state.page){
+            virtualHistory.stack[virtualHistory.stack.length - 1] = state;
+          } else {
+            // Gate-opened edit pages have the tab as parent, not profile_detail.
+            // Push the target so back still has the tab/home entry beneath it.
+            virtualHistory.stack.push(state);
+          }
         } else {
           virtualHistory.stack[0] = state;
         }
@@ -5178,10 +5185,19 @@ const yxqApp = createApp({
     // 拦截 popstate：按 浮层 > 子页 优先级关闭
     function handlePopState(e){
       if(dropCurrentPending){
-        // 保存/改密成功后的 dropCurrent：back() 已落到父条目，只修正 state，不切页。
+        // 保存/改密成功后的 dropCurrent：back() 已落到父条目。若父条目不是
+        // 目标页（门禁直接打开 edit 时父级是 tab），补 push 目标页，保留父级
+        // 作为返回落点；否则只 replace state。
         const state = dropCurrentPending;
         dropCurrentPending = null;
-        try{ realHistory.replaceState(state, '', navURL()); }catch(err){}
+        const parent = e && e.state ? e.state : null;
+        try{
+          if(parent && parent.page && state.page && parent.page !== state.page){
+            realHistory.pushState(state, '', navURL());
+          } else {
+            realHistory.replaceState(state, '', navURL());
+          }
+        }catch(err){}
         isHandlingPopState = false;
         return;
       }

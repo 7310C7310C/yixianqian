@@ -43,9 +43,9 @@ import (
 // covered the SPA compression white-fill fix. 56 covers the photo preview,
 // simplified hints, church province/city and QR compression changes. 57
 // covered the CSP/preview/feedback fixes. 58 covers the region focus/church
-// revert changes. 62 covers the required city fields. Keep admin @import
+// revert changes. 63 covers the gate-edit history fix. Keep admin @import
 // values in sync.
-const assetVersion = "62"
+const assetVersion = "63"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {
