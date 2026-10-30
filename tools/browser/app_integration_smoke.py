@@ -442,10 +442,8 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
         # 3. 登录后动态通知可见（tabbar 数字只表示收到留言未读，不再由通知驱动）
         if PSQL_ENABLED:
             tap_tab(page, "消息")
-            page.locator(".msg-seg-btn").filter(has_text="动态").click()
             page.get_by_text(titles[0]).first.wait_for(state="visible", timeout=10000)
             page.screenshot(path=str(out_dir / f"feed-notice-{tag}.png"))
-            page.locator(".msg-seg-btn").filter(has_text="留言").click()
         else:
             print(f"NOTE {width}px: 无 PSQL_CMD，跳过动态通知可见用例")
 
@@ -551,8 +549,8 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
                 raise SmokeFailure(f"{width}: SSE 后 badge 不是数字")
             page.screenshot(path=str(out_dir / f"badge-sse-{tag}.png"))
             tap_tab(page, "消息")
-            page.locator(".msg-seg-btn").filter(has_text="留言").click()
-            page.locator(".msg-scope-btn").filter(has_text="收到的").click()
+            page.locator(".msg-entry").filter(has_text="留言").click()
+            page.locator(".msg-tab").filter(has_text="收到的").click()
             page.get_by_text(live_title).first.wait_for(state="visible", timeout=10000)
             badge(page).wait_for(state="hidden", timeout=10000)
         else:
@@ -586,6 +584,7 @@ def run_polling_fallback(browser, base_url: str, cookie: str, user_legacy_id: st
         dismiss_guides(page)
         # 先清零现有未读：进消息 tab 再回来
         tap_tab(page, "消息")
+        page.locator(".msg-entry").filter(has_text="留言").click()
         badge(page).wait_for(state="hidden", timeout=15000)
         tap_tab(page, "我的")
         insert_message(user_legacy_id, MESSAGE_AUTHOR_LEGACY_ID, title)
@@ -735,10 +734,12 @@ def run_mutual_wechat_prefill(browser, base_url: str, cookie: str, out_dir: Path
     try:
         page.goto(base_url.rstrip("/") + "/", wait_until="domcontentloaded")
         page.locator(".van-tabbar").wait_for(state="visible", timeout=20000)
+        dismiss_guides(page)
         tap_tab(page, "消息")
-        row = page.locator(".msg-shortcuts button").filter(has_text="相互喜欢").first
+        page.locator(".msg-entry").filter(has_text="喜欢").click()
+        page.locator(".msg-tab").filter(has_text="相互喜欢").click()
+        row = page.locator(".msg-tab").filter(has_text="相互喜欢").first
         row.wait_for(state="visible", timeout=15000)
-        row.click()
         field = page.locator("input[placeholder='请输入微信号']")
         field.wait_for(state="visible", timeout=15000)
         prefilled = field.input_value()

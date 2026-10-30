@@ -3,118 +3,44 @@
     <h1 class="msg-head-title">消息</h1>
   </header>
 
-  <div class="msg-seg" role="tablist" aria-label="消息分类">
-    <button type="button" class="msg-seg-btn" :class="{active: msgTab==='messages'}"
-      role="tab" :aria-selected="msgTab==='messages'" @click="switchMsgTab('messages')">
-      留言
-      <span v-if="unreadMessages>0" class="msg-badge">{{ unreadMessages>99 ? '99+' : unreadMessages }}</span>
+  <div class="msg-entries">
+    <button v-if="!isObserver" type="button" class="msg-entry" @click="openLikeInbox('mine')">
+      <span class="msg-entry-icon" aria-hidden="true">💕</span>
+      <span class="msg-entry-body"><span class="msg-entry-title">喜欢</span></span>
+      <span class="msg-entry-arrow" aria-hidden="true">›</span>
     </button>
-    <button type="button" class="msg-seg-btn" :class="{active: msgTab==='feed'}"
-      role="tab" :aria-selected="msgTab==='feed'" @click="switchMsgTab('feed')">
-      动态
-      <span v-if="unreadCount > 0" class="msg-dot"></span>
+    <button type="button" class="msg-entry" @click="openMessageInbox('received')">
+      <span class="msg-entry-icon" aria-hidden="true">💬</span>
+      <span class="msg-entry-body"><span class="msg-entry-title">留言</span></span>
+      <span v-if="unreadMessages>0" class="msg-badge">{{ unreadMessages>99 ? '99+' : unreadMessages }}</span>
+      <span class="msg-entry-arrow" aria-hidden="true">›</span>
     </button>
   </div>
 
-  <template v-if="msgTab==='messages'">
-    <div class="msg-scope" role="tablist" aria-label="留言方向">
-      <button type="button" class="msg-scope-btn" :class="{active: msgScope==='received'}"
-        role="tab" :aria-selected="msgScope==='received'" @click="switchMsgScope('received')">收到的</button>
-      <button type="button" class="msg-scope-btn" :class="{active: msgScope==='sent'}"
-        role="tab" :aria-selected="msgScope==='sent'" @click="switchMsgScope('sent')">我发出的</button>
+  <div class="feed-head">
+    <span class="feed-head-title">动态</span>
+    <div class="feed-head-actions">
+      <button v-if="unreadCount>0" type="button" class="feed-action" @click="markNotificationsRead">全部已读</button>
+      <button v-if="notifications.length" type="button" class="feed-action" @click="clearFeed">清空</button>
     </div>
+  </div>
 
-    <div class="msg-shortcuts" v-if="!isObserver">
-      <button type="button" @click="openMyLikes">💕 我喜欢的</button>
-      <button type="button" @click="openMutual">💞 相互喜欢</button>
-      <button type="button" @click="openLikedMe">👤 谁喜欢了我</button>
-    </div>
-
-    <div v-if="msgScope==='received'">
-      <div v-if="loadingReceivedMessages" class="msg-skeleton" aria-busy="true">
-        <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
-      </div>
-      <van-empty v-else-if="!receivedMessagesList.length" description="暂无留言"></van-empty>
-      <div v-else class="msg-inbox">
-        <article v-for="m in receivedMessagesList" :key="m.id" class="msg-row"
-          :class="{unread: isReceivedUnread(m.id)}" @click="openMessageThread(m.target_openid, m.id, m)">
-          <div class="msg-row-avatar">
-            <img v-if="m.author_avatar" :src="m.author_avatar" alt="" loading="lazy">
-            <span v-else>{{ (m.author_nickname || '?')[0] }}</span>
-          </div>
-          <div class="msg-row-main">
-            <div class="msg-row-top">
-              <span class="msg-row-name">{{ m.author_nickname }}</span>
-              <span class="msg-row-time">{{ fmtTimeAgo(m.created_at) }}</span>
-            </div>
-            <div class="msg-row-text">{{ m.content }}</div>
-            <div class="msg-row-meta">
-              <span>{{ m.on_my_card ? '在我的卡片留言' : '回复了我的留言' }}</span>
-              <span v-if="m.replied" class="msg-row-done">已回复</span>
-              <button v-else type="button" class="msg-row-reply" @click.stop="startInlineReply(m)">回复</button>
-            </div>
-            <div v-if="inlineReplyId===m.id" class="msg-inline" @click.stop>
-              <input v-model="inlineReplyText" class="msg-inline-input" maxlength="500"
-                placeholder="回复…" @keyup.enter="sendInlineReply(m)">
-              <button type="button" class="msg-inline-send" :disabled="!inlineReplyText.trim() || inlineReplyBusy"
-                @click="sendInlineReply(m)">{{ inlineReplyBusy ? '发送中' : '发送' }}</button>
-            </div>
-          </div>
-          <span v-if="isReceivedUnread(m.id)" class="msg-unread-dot"></span>
-        </article>
-      </div>
-    </div>
-
-    <div v-else>
-      <div v-if="loadingMyMessages" class="msg-skeleton" aria-busy="true">
-        <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
-      </div>
-      <van-empty v-else-if="!myMessagesList.length" description="暂无留言"></van-empty>
-      <div v-else class="msg-inbox">
-        <article v-for="m in myMessagesList" :key="m.id" class="msg-row"
-          @click="openMessageThread(m.target_openid, m.id, {target_nickname: m.target_nickname, target_avatar: m.target_avatar})">
-          <div class="msg-row-avatar">
-            <img v-if="m.target_avatar" :src="m.target_avatar" alt="" loading="lazy">
-            <span v-else>{{ (m.target_nickname || '?')[0] }}</span>
-          </div>
-          <div class="msg-row-main">
-            <div class="msg-row-top">
-              <span class="msg-row-name">{{ m.target_nickname }}</span>
-              <span class="msg-row-time">{{ fmtTimeAgo(m.created_at) }}</span>
-            </div>
-            <div class="msg-row-text">{{ m.content }}</div>
-            <div class="msg-row-meta">
-              <span>给 {{ m.target_nickname }}</span>
-              <button type="button" class="msg-row-del" @click.stop="deleteMyMessage(m)">删除</button>
-            </div>
-          </div>
-        </article>
-      </div>
-    </div>
-  </template>
-
-  <template v-else>
-    <div class="feed-head">
-      <span class="feed-head-title">动态</span>
-      <button v-if="notifications.length" type="button" class="feed-clear" @click="clearFeed">清空</button>
-    </div>
-    <div v-if="!notifications.length" class="msg-empty">暂无动态</div>
-    <div v-else class="feed-list">
-      <article v-for="n in notifications" :key="n.id" class="feed-item" :class="{unread: !n.read}"
-        @click="openNotification(n)">
-        <div class="feed-icon">{{ notificationIcon(n) }}</div>
-        <div class="feed-main">
-          <div class="feed-top">
-            <span class="feed-title">{{ n.title }}</span>
-            <span class="feed-time">{{ n.time }}</span>
-          </div>
-          <div v-if="n.body" class="feed-body">{{ n.body }}</div>
-          <div v-if="notificationImage(n)" class="feed-image" @click.stop="viewNotificationImage(n)">
-            <img :src="n.thumb_url || notificationImage(n)" alt="" loading="lazy" @error="retryImg($event, 1)">
-          </div>
+  <div v-if="!notifications.length" class="msg-empty">暂无动态</div>
+  <div v-else class="feed-list">
+    <article v-for="n in notifications" :key="n.id" class="feed-item" :class="{unread: !n.read}"
+      @click="openNotification(n)">
+      <div class="feed-icon">{{ notificationIcon(n) }}</div>
+      <div class="feed-main">
+        <div class="feed-top">
+          <span class="feed-title">{{ n.title }}</span>
+          <span class="feed-time">{{ n.time }}</span>
         </div>
-        <span v-if="!n.read" class="feed-unread-dot"></span>
-      </article>
-    </div>
-  </template>
+        <div v-if="n.body" class="feed-body">{{ n.body }}</div>
+        <div v-if="notificationImage(n)" class="feed-image" @click.stop="viewNotificationImage(n)">
+          <img :src="n.thumb_url || notificationImage(n)" alt="" loading="lazy" @error="retryImg($event, 1)">
+        </div>
+      </div>
+      <span v-if="!n.read" class="feed-unread-dot"></span>
+    </article>
+  </div>
 </div>

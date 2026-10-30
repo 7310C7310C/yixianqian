@@ -139,7 +139,7 @@ func (d *DB) GetSocialProfileByLegacyOpenID(ctx context.Context, openID string) 
 	}
 	p, err := scanSocialProfile(d.pool.QueryRow(ctx,
 		"SELECT "+socialProfileColumns+" FROM users u "+socialPhotoJoin+
-			" WHERE u.legacy_open_id = $1 ORDER BY u.id LIMIT 1", openID))
+			" WHERE u.legacy_open_id = $1 ORDER BY (COALESCE(u.account_kind, '') <> 'observer') DESC, u.id ASC LIMIT 1", openID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SocialProfile{}, ErrNotFound
 	}

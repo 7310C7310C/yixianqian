@@ -44,7 +44,7 @@ PAGES = {
 # 数据加载稳定的额外判据（避免「加载中占位 vs 数字」造成结构差异噪声）
 SETTLE = {
     "cards": "() => !!document.querySelector('.cards-page .card-counter, .cards-page .swipe-card, .cards-page .van-empty')",
-    "likes": "() => !!document.querySelector('.msg-page .msg-seg')",
+    "likes": "() => !!document.querySelector('.msg-page .msg-entries')",
     "home": "() => { const cards = document.querySelectorAll('.activity-card'); return cards.length > 0 || !!document.querySelector('.van-empty'); }",
     "profile": "() => !!document.querySelector('.profile-header')",
 }

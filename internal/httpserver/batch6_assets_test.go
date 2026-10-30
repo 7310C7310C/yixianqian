@@ -49,8 +49,8 @@ func TestPageChunksMatchTemplates(t *testing.T) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatal(err)
 	}
-	if len(m.Pages) != 25 {
-		t.Fatalf("page manifest has %d pages, want 25", len(m.Pages))
+	if len(m.Pages) != 24 {
+		t.Fatalf("page manifest has %d pages, want 24", len(m.Pages))
 	}
 	if len(m.Initial) != 1 || m.Initial[0] != "cards" {
 		t.Fatalf("initial chunk = %v, want [cards]", m.Initial)

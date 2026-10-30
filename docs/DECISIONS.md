@@ -179,10 +179,10 @@ sources: []
 - 不要做：不恢复 4s 轮询；不在无订阅者时查业务；多实例前需共享 fan-out 或 pub/sub。
 - 验证：SSE 集成用例、`TestNotificationHub*`；直插数据后需显式 `SELECT pg_notify(...)`。
 ### 4.7 消息中心、动态与全员广播
-- 决策：消息页只留「留言/动态」；收到留言 = 卡上留言 + 回复我的留言，已读存 `message_reads`；tabbar 数字只表示收到留言未读，动态只用点，不显示各入口总数。
-- 决策：动态清空写 `notifications.cleared_at` 持久隐藏（保 dedupe/审计）；全员图文广播只经 `/admin/broadcasts`（content.moderate），写 broadcasts + 批量 notifications + 审计，广播图片仅对已引用 media 放宽。
-- 不要做：不用 notifications.read_at 冒充已读；不删行清空；不整体放宽 `/media/{id}`。
-- 验证：`TestIntegrationMessageInboxAndNotifications`、`TestIntegrationLegacyMessageInboxHTTP`、`TestIntegrationAdminBroadcast`；staging Playwright 走跳转/内联回复/清空/广播。
+- 决策：消息页默认动态流 +「喜欢/留言」两个同款入口；喜欢/留言为独立子页并共用同一列表与筛选视觉；收到留言 = 卡上留言 + 回复我的留言，已读存 `message_reads`；tabbar 数字只表示收到留言未读。
+- 决策：动态未读用页面内小点 +「全部已读」；清空写 `notifications.cleared_at` 持久隐藏（保 dedupe/审计）；全员图文广播只经 `/admin/broadcasts`（content.moderate），写 broadcasts + 批量 notifications + 审计，广播图片仅对已引用 media 放宽。
+- 不要做：卡上留言不跳卡片；不用 notifications.read_at 冒充已读；不删行清空；不整体放宽 `/media/{id}`；不假设 legacy_open_id 唯一。
+- 验证：`TestIntegrationMessageInboxAndNotifications`、`TestIntegrationLegacyMessageInboxHTTP`、`TestIntegrationAdminBroadcast`、`TestIntegrationFindUserByDuplicateLegacyOpenID`；staging Playwright 走喜欢/留言/已读/清空/广播。
 ## 5. 被取代决策索引
 
 | 旧条目 | 现行为 | 说明 |

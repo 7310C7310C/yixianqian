@@ -23,7 +23,7 @@ const compilerVersion = JSON.parse(fs.readFileSync(path.join(here, 'node_modules
 
 // Page -> lazy chunk group. `cards` is in the initial app.render.js.
 const GROUPS = {
-  likes: ['likes', 'mutual', 'liked_me', 'my_likes', 'reported_messages', 'message_thread'],
+  likes: ['likes', 'like_inbox', 'message_inbox', 'reported_messages', 'message_thread'],
   home: ['home', 'my_activities', 'my_groups'],
   profile: ['profile', 'password', 'profile_detail', 'profile_edit', 'points'],
   detail: ['user_detail'],

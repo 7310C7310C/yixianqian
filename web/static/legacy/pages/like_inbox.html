@@ -1,0 +1,101 @@
+<div key="like_inbox" class="msg-page msg-subpage">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+
+  <h1 class="msg-subtitle">喜欢</h1>
+
+  <div class="msg-tabs" role="tablist" aria-label="喜欢分类">
+    <button type="button" class="msg-tab" :class="{active: likeScope==='mine'}"
+      role="tab" :aria-selected="likeScope==='mine'" @click="switchLikeScope('mine')">我喜欢的</button>
+    <button type="button" class="msg-tab" :class="{active: likeScope==='mutual'}"
+      role="tab" :aria-selected="likeScope==='mutual'" @click="switchLikeScope('mutual')">相互喜欢</button>
+    <button type="button" class="msg-tab" :class="{active: likeScope==='liked'}"
+      role="tab" :aria-selected="likeScope==='liked'" @click="switchLikeScope('liked')">谁喜欢了我</button>
+  </div>
+
+  <template v-if="likeScope==='mine'">
+    <div v-if="loadingMyLikes" class="msg-skeleton" aria-busy="true">
+      <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
+    </div>
+    <van-empty v-else-if="!myLikesList.length" description="还没有喜欢过谁"></van-empty>
+    <div v-else class="msg-inbox">
+      <article v-for="l in myLikesList" :key="l.openid" class="msg-row clickable" @click="openLikeProfile(l)">
+        <div class="msg-row-avatar">
+          <img v-if="l.photo" :src="l.photo" alt="" loading="lazy" @error="retryImg($event, 2, ()=>{l.photo=''})">
+          <span v-else>{{ (l.nickname || '?')[0] }}</span>
+        </div>
+        <div class="msg-row-main">
+          <div class="msg-row-top">
+            <span class="msg-row-name">{{ l.nickname }}</span>
+            <span v-if="l.mutual" class="msg-chip">相互喜欢</span>
+          </div>
+          <div class="msg-row-text">
+            {{ l.age ? l.age + '岁' : '' }}<span v-if="l.church"> · {{ l.church }}</span>
+          </div>
+          <div class="msg-row-meta" v-if="l.mutual && l.message">附言：{{ l.message }}</div>
+        </div>
+        <span class="msg-row-arrow" aria-hidden="true">›</span>
+      </article>
+    </div>
+  </template>
+
+  <template v-else-if="likeScope==='mutual'">
+    <div v-if="loadingLikes" class="msg-skeleton" aria-busy="true">
+      <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
+    </div>
+    <van-empty v-else-if="!likesData.mutual.length" description="还没有相互喜欢的人"></van-empty>
+    <div v-else class="msg-inbox">
+      <article v-for="m in likesData.mutual" :key="m.initiator_openid" class="msg-row clickable"
+        @click="openLikeProfile(m)">
+        <div class="msg-row-avatar">💕</div>
+        <div class="msg-row-main">
+          <div class="msg-row-top">
+            <span class="msg-row-name">{{ m.nickname }}</span>
+            <span class="msg-chip">相互喜欢</span>
+          </div>
+          <div class="msg-row-text" v-if="m.message">附言：{{ m.message }}</div>
+          <div class="mutual-form" @click.stop v-if="!m.their_wechat">
+            <template v-if="m.wechat_required && !m.waiting_other">
+              <van-field v-model="m.edit_wechat" placeholder="请输入微信号" maxlength="64" :border="false"></van-field>
+              <label class="mutual-consent">
+                <van-switch v-model="m.edit_agree" size="20px" />
+                <span>同意向对方展示微信号</span>
+              </label>
+              <van-button class="tap-44" type="primary" color="#ff6b81" size="small" block
+                :loading="m.submitting" @click="submitMutualWechat(m)">保存并同意交换</van-button>
+            </template>
+            <div v-else class="msg-row-meta">已同意交换，等待对方填写后即可看到微信号。</div>
+          </div>
+          <div v-else class="msg-row-meta">微信号：<b>{{ m.their_wechat }}</b></div>
+        </div>
+        <span class="msg-row-arrow" aria-hidden="true">›</span>
+      </article>
+    </div>
+  </template>
+
+  <template v-else>
+    <div v-if="loadingLikes" class="msg-skeleton" aria-busy="true">
+      <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
+    </div>
+    <van-empty v-else-if="!likesData.liked_me.length" description="还没有人喜欢你"></van-empty>
+    <div v-else class="msg-inbox">
+      <article v-for="(l, i) in likesData.liked_me" :key="i" class="msg-row"
+        :class="{clickable: l.real}" @click="l.real && openLikeProfile(l)">
+        <div class="msg-row-avatar">{{ l.real ? '💌' : '👤' }}</div>
+        <div class="msg-row-main">
+          <div class="msg-row-top">
+            <span class="msg-row-name">{{ l.nickname }}</span>
+            <span class="msg-chip" v-if="l.real">实名</span>
+          </div>
+          <div class="msg-row-text">{{ l.real ? '实名喜欢了你' : '匿名用户喜欢了你' }}</div>
+        </div>
+        <span v-if="l.real" class="msg-row-arrow" aria-hidden="true">›</span>
+      </article>
+      <div class="msg-foot-action">
+        <van-button class="tap-44" type="primary" color="#ff6b81" size="small" block
+          @click="gotoCards('liked_me')">去牵线看看</van-button>
+      </div>
+    </div>
+  </template>
+</div>

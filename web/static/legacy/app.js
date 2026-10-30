@@ -123,11 +123,11 @@ const GaLoading = {
 };
 
 // ===== 页面 chunk（批次6）=====
-// 26 个 tab/子页的 render function 拆成 6 个 chunk：cards 在 app.render.js 里，
+// 24 个 tab/子页的 render function 拆成 6 个 chunk：cards 在 app.render.js 里，
 // 其余按页面分组懒加载；加载失败显示可见错误页（不白屏）。
 var YXQ_PAGE_GROUPS = {
   cards: null,
-  likes: 'likes', mutual: 'likes', liked_me: 'likes', my_likes: 'likes',
+  likes: 'likes', like_inbox: 'likes', message_inbox: 'likes',
   reported_messages: 'likes', message_thread: 'likes',
   home: 'home', my_activities: 'home', my_groups: 'home',
   profile: 'profile', password: 'profile', profile_detail: 'profile',
@@ -577,7 +577,7 @@ const yxqApp = createApp({
       return '⚠️';
     });
     function retryGate() { retryBoot(); }   // 原地重试，不整页刷新
-    const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_likes','my_activities','my_groups','user_detail','mutual','liked_me','points','points_admin','group_admin','group_detail','group_roster','checkin','password','message_thread'];
+    const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_activities','my_groups','user_detail','like_inbox','message_inbox','points','points_admin','group_admin','group_detail','group_roster','checkin','password','message_thread'];
     // 修改密码：App 内子页。不在 URL/hash 留状态，返回用 history 落在 profile。
     const passwordForm = ref({ current: '', password: '', confirm: '' });
     const passwordErrors = ref({ current: '', password: '', confirm: '' });
@@ -1439,7 +1439,6 @@ const yxqApp = createApp({
     // 我的喜欢
     const myLikesList = ref([]);
     const loadingMyLikes = ref(false);
-    const myLikesCount = ref(0);
     const myLikesLoaded = ref(false);
 
     // 我的活动
@@ -2078,8 +2077,10 @@ const yxqApp = createApp({
     const unreadCount = ref(0);
     const unreadMessages = ref(0);
     const unreadBadge = computed(() => unreadMessages.value > 99 ? '99+' : (unreadMessages.value > 0 ? String(unreadMessages.value) : ''));
-    const msgTab = ref('messages');       // messages | feed
+    const msgTabDot = computed(() => unreadMessages.value <= 0 && unreadCount.value > 0);
+    const likeScope = ref('mine');        // mine | mutual | liked
     const msgScope = ref('received');     // received | sent
+    const messageThreadFrom = ref('likes');
     const receivedUnreadIds = ref([]);    // 本次加载时仍未读的留言 id（保留红点视觉）
     const inlineReplyId = ref(null);      // 收到列表内联回复的留言 id
     const inlineReplyText = ref('');
@@ -3880,9 +3881,8 @@ const yxqApp = createApp({
     function refreshNotifications() {
       const beforeMessages = unreadMessages.value;
       return loadNotifications().then(() => {
-        if (page.value !== 'likes') return;
-        if (msgTab.value === 'feed' && unreadCount.value > 0) return markNotificationsRead();
-        if (msgTab.value === 'messages' && unreadMessages.value > beforeMessages) {
+        if (page.value === 'message_inbox' && msgScope.value === 'received' &&
+            unreadMessages.value > beforeMessages) {
           return loadReceivedMessages({ markRead: false, quiet: true });
         }
       });
@@ -3921,16 +3921,9 @@ const yxqApp = createApp({
         const messagesIncreased = nextMessages > unreadMessages.value;
         unreadCount.value = next;
         unreadMessages.value = nextMessages;
-        if (page.value === 'likes') {
-          if (msgTab.value === 'feed') {
-            // 正在看动态：同步列表并置为已读（留言未读由独立游标维持）
-            loadNotifications().then(() => { if (unreadCount.value > 0) markNotificationsRead(); });
-          } else if (messagesIncreased) {
-            loadReceivedMessages({ markRead: false, quiet: true });
-          }
-          if (feedChanged && msgTab.value !== 'feed') loadNotifications();
-        } else if (feedChanged && data.latest_id) {
-          loadNotifications();
+        if (page.value === 'likes' && feedChanged) loadNotifications();
+        if (page.value === 'message_inbox' && msgScope.value === 'received' && messagesIncreased) {
+          loadReceivedMessages({ markRead: false, quiet: true });
         }
       });
       es.onopen = stopNotificationPolling;
@@ -4374,7 +4367,6 @@ const yxqApp = createApp({
           }
         }
         // 乐观更新消息页计数与列表，配合后端在途意图，避免 60s 快照滞后
-        myLikesCount.value = (myLikesCount.value || 0) + 1;
         if (myLikesLoaded.value && deckCard) {
           const exists = myLikesList.value.some(x => x.openid === target.openid);
           if (!exists) myLikesList.value.push({ ...deckCard, mutual: false, like_type: likeType.value, message: '' });
@@ -4629,7 +4621,6 @@ const yxqApp = createApp({
         likesInitialized.value = true;
       }
       catch(e) { vant.showToast(e.message); }
-      await loadMyLikesCount();
       loadingLikes.value = false;
     }
     async function submitMutualWechat(m) {
@@ -4655,22 +4646,9 @@ const yxqApp = createApp({
         m.submitting = false;
       }
     }
-    async function loadMyLikesCount() {
-      try {
-        const data = await api('/api/likes/mine');
-        const serverCount = (data.likes || []).length;
-        // 喜欢后 120s 内不回退计数，避免在途意图过期与快照间隙导致 -1
-        if (Date.now() - lastLikeAt.value < 120000 && serverCount < myLikesCount.value) {
-          // keep optimistic
-        } else {
-          myLikesCount.value = serverCount;
-        }
-      } catch(e) {}
-    }
 
     // 我的喜欢
-    async function openMyLikes() {
-      page.value = 'my_likes';
+    async function loadMyLikesList() {
       if (myLikesLoaded.value) return; // 已加载则直接展示缓存
       loadingMyLikes.value = true;
       try {
@@ -4684,23 +4662,15 @@ const yxqApp = createApp({
             if (!serverIds.has(it.openid)) merged.push(it);
           }
           myLikesList.value = merged;
-          myLikesCount.value = merged.length;
         } else {
           myLikesList.value = serverList;
-          myLikesCount.value = serverList.length;
         }
         myLikesLoaded.value = true;
       } catch(e) { vant.showToast(e.message); }
       loadingMyLikes.value = false;
     }
-    function openMutual() {
-      loadLikes();
-      page.value = 'mutual';
-    }
-    function openLikedMe() {
-      loadLikes();
-      page.value = 'liked_me';
-    }
+    function openMutual() { openLikeInbox('mutual'); }
+    function openLikedMe() { openLikeInbox('liked'); }
     // 取消喜欢已下线：喜欢的有效期是制度性的（匿名 3 个月自动失效、实名永久），
     // 不由用户手动撤销。相关入口和接口都已删除，这里不再保留空壳函数。
 
@@ -5199,7 +5169,7 @@ const yxqApp = createApp({
     async function onOnetooneMsgBeforeClose(action) {
       if (onetooneMsgSubmitting.value) return false;   // 发送在途：任何关闭都被拦（结果回来才允许关，P16）
       if (action === 'confirm') {
-        if (!onetooneMsgText.value.trim()) { vant.showToast('请先输入留言内容'); return false; }
+        if (!onetooneMsgText.value.trim()) { vant.showToast('请输入内容'); return false; }
         return await doOnetooneMsg();
       }
       // 取消/点遮罩关闭：有未发送留言 → 先走通用离开拦截
@@ -5219,7 +5189,7 @@ const yxqApp = createApp({
           method: 'POST',
           body: JSON.stringify({ target_openid: t.openid, content: onetooneMsgText.value.trim() })
         });
-        vant.showToast('留言成功');
+        vant.showToast('已发送');
         showOnetooneMsg.value = false;
         const arr = onetooneResult.value.partners || [];
         const idx = arr.findIndex(x => x.openid === t.openid);
@@ -5385,8 +5355,8 @@ const yxqApp = createApp({
         return;
       }
       const parentMap = {
-        'mutual': 'likes', 'liked_me': 'likes', 'my_likes': 'likes',
-        'message_thread': 'likes',
+        'like_inbox': 'likes', 'message_inbox': 'likes',
+        'message_thread': messageThreadFrom.value || 'likes',
         'my_activities': 'profile', 'my_groups': 'profile', 'points': 'profile', 'points_admin': 'profile',
         'group_admin': 'profile', 'group_detail': 'group_admin', 'group_roster': 'group_detail', 'checkin': 'group_admin',
         'profile_detail': 'profile', 'profile_edit': 'profile_detail', 'password': 'profile',
@@ -5417,12 +5387,14 @@ const yxqApp = createApp({
       if (p === 'checkin' && gaDetailId.value) loadSigninRoster(true);
       if (p === 'home') loadActivities();
       if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
-      if (p === 'likes') {
-        loadLikes();
-        loadNotifications();
-        refreshMyMessagesCount();
-        if (msgTab.value === 'messages') loadReceivedMessages({ markRead: msgScope.value === 'received' });
-        else loadNotifications().then(() => { if (unreadCount.value > 0) markNotificationsRead(); });
+      if (p === 'likes') loadNotifications();
+      if (p === 'like_inbox') {
+        if (likeScope.value === 'mine') loadMyLikesList();
+        else loadLikes();
+      }
+      if (p === 'message_inbox') {
+        if (msgScope.value === 'received') loadReceivedMessages({ markRead: true });
+        else refreshMyMessagesCount();
       }
       if (p === 'profile') { checkGroupEntry(); loadPraiseState(); if (user.value && user.value.is_admin) refreshReportedCount(); if (user.value && user.value.can_admin) refreshAdminBadge(); }
       // 任何页进入即验身份证/人脸照片，不达标则倒计时跳修改资料
@@ -5618,7 +5590,7 @@ const yxqApp = createApp({
       if (msgSending.value) return false;
       const c = currentCard.value;
       const text = msgText.value.trim();
-      if (!text) { vant.showToast('请先输入留言内容'); return false; }
+      if (!text) { vant.showToast('请输入内容'); return false; }
       if (!c || !c.openid) { vant.showToast('卡片信息异常，请左右切换到其他用户后重试'); return false; }
       const parentId = replyTarget.value ? (replyTarget.value.parentId || replyTarget.value.id) : '';
       const replyToId = replyTarget.value ? replyTarget.value.id : '';
@@ -5671,7 +5643,7 @@ const yxqApp = createApp({
         }
         // keep msg_count in sync (no reload)
         if (cards.value[cardIndex.value]) cards.value[cardIndex.value].msg_count = messages.value.length;
-        vant.showToast('留言成功');
+        vant.showToast('已发送');
         ok = true;
         // invalidate myMessages cache so next entry sees new message; also patch if already loaded
         if (myMessagesLoaded.value) {
@@ -5708,7 +5680,7 @@ const yxqApp = createApp({
     }
     async function deleteMessage(m) {
       try {
-        await vant.showConfirmDialog({ title: '删除留言', message: '确定删除这条留言吗？', confirmButtonColor: '#ee0a24' });
+        await vant.showConfirmDialog({ title: '删除留言', message: '删除留言？', confirmButtonColor: '#ee0a24' });
       } catch (e) { return; }
       // optimistic: remove message + its replies (cascade) immediately
       const backup = [...messages.value];
@@ -5747,7 +5719,7 @@ const yxqApp = createApp({
     }
     async function deleteMyMessage(m) {
       try {
-        await vant.showConfirmDialog({ title: '删除留言', message: '确定删除这条留言吗？', confirmButtonColor: '#ee0a24' });
+        await vant.showConfirmDialog({ title: '删除留言', message: '删除留言？', confirmButtonColor: '#ee0a24' });
       } catch (e) { return; }
       // optimistic: immediate removal
       const backup = [...myMessagesList.value];
@@ -5809,21 +5781,40 @@ const yxqApp = createApp({
         }
       } catch (e) {}
     }
-    function switchMsgTab(tab) {
-      if (msgTab.value === tab) return;
-      msgTab.value = tab;
-      if (tab === 'messages') {
-        loadReceivedMessages({ markRead: msgScope.value === 'received' });
-        if (msgScope.value === 'sent') refreshMyMessagesCount();
-      } else {
-        loadNotifications().then(() => { if (unreadCount.value > 0) markNotificationsRead(); });
-      }
-    }
     function switchMsgScope(scope) {
       if (msgScope.value === scope) return;
       msgScope.value = scope;
       if (scope === 'received') loadReceivedMessages({ markRead: true });
       else refreshMyMessagesCount();
+    }
+    function openLikeInbox(scope) {
+      likeScope.value = scope || 'mine';
+      if (page.value === 'like_inbox') {
+        if (likeScope.value === 'mine') loadMyLikesList();
+        else loadLikes();
+        return;
+      }
+      page.value = 'like_inbox';
+    }
+    function switchLikeScope(scope) {
+      if (likeScope.value === scope) return;
+      likeScope.value = scope;
+      if (scope === 'mine') loadMyLikesList();
+      else loadLikes();
+    }
+    function openLikeProfile(item) {
+      const ref = item && (item.initiator_openid || item.openid);
+      if (!ref) { vant.showToast('匿名'); return; }
+      openUserDetailFromPage(ref, 'like_inbox');
+    }
+    function openMessageInbox(scope) {
+      msgScope.value = scope || 'received';
+      if (page.value === 'message_inbox') {
+        if (msgScope.value === 'received') loadReceivedMessages({ markRead: true });
+        else refreshMyMessagesCount();
+        return;
+      }
+      page.value = 'message_inbox';
     }
     function isReceivedUnread(id) {
       return receivedUnreadIds.value.indexOf(String(id)) >= 0;
@@ -5843,7 +5834,7 @@ const yxqApp = createApp({
     async function sendInlineReply(m) {
       if (inlineReplyBusy.value || !m) return;
       const text = inlineReplyText.value.trim();
-      if (!text) { vant.showToast('请先输入回复内容'); return; }
+      if (!text) { vant.showToast('请输入内容'); return; }
       inlineReplyBusy.value = true;
       try {
         const parentId = m.parent_id || m.id;
@@ -5867,7 +5858,9 @@ const yxqApp = createApp({
       }
     }
     function openMessageThread(targetRef, messageId, seed) {
-      if (!targetRef) { vant.showToast('卡片不存在'); return; }
+      if (!targetRef) { vant.showToast('不存在'); return; }
+      if (page.value === 'message_inbox') messageThreadFrom.value = 'message_inbox';
+      else if (page.value !== 'message_thread') messageThreadFrom.value = 'likes';
       const seq = ++messageThreadSeq;
       messageThread.value = {
         target_ref: String(targetRef),
@@ -5949,7 +5942,7 @@ const yxqApp = createApp({
       const t = messageThread.value;
       const text = threadText.value.trim();
       if (!t || !t.target_ref) return;
-      if (!text) { vant.showToast('请先输入留言内容'); return; }
+      if (!text) { vant.showToast('请输入内容'); return; }
       threadSending.value = true;
       try {
         const parentId = threadReplyTarget.value ? (threadReplyTarget.value.parentId || threadReplyTarget.value.id) : '';
@@ -5967,7 +5960,7 @@ const yxqApp = createApp({
         threadReplyTarget.value = null;
         const seq = ++messageThreadSeq;
         await loadMessageThread(seq, true);
-        vant.showToast('留言成功');
+        vant.showToast('已发送');
       } catch (e) {
         vant.showToast(e.message || '发送失败');
       } finally {
@@ -5977,7 +5970,7 @@ const yxqApp = createApp({
     async function deleteThreadMessage(m) {
       if (!m) return;
       try {
-        await vant.showConfirmDialog({ title: '删除留言', message: '确定删除这条留言吗？', confirmButtonColor: '#ee0a24' });
+        await vant.showConfirmDialog({ title: '删除留言', message: '删除留言？', confirmButtonColor: '#ee0a24' });
       } catch (e) { return; }
       try {
         await api('/api/messages/' + m.id, { method: 'DELETE' });
@@ -6001,6 +5994,7 @@ const yxqApp = createApp({
       return (n && (n.image_url || (n.payload && n.payload.image_url))) || '';
     }
     function viewNotificationImage(n) {
+      markOneNotificationRead(n);
       const url = notificationImage(n);
       if (url) viewerOpen([url], 0);
     }
@@ -6016,6 +6010,7 @@ const yxqApp = createApp({
       const kind = n.kind || '';
       const payload = n.payload || {};
       if (kind === 'message' || kind === 'message_reply') {
+        if (payload.on_my_card) { vant.showToast('在卡片下'); return; }
         const targetRef = payload.target_ref || payload.target_user_id;
         openMessageThread(targetRef, payload.message_id);
         return;
@@ -6039,7 +6034,7 @@ const yxqApp = createApp({
       try {
         await vant.showConfirmDialog({
           title: '清空动态',
-          message: '清空后不再显示，重新登录也不会恢复。',
+          message: '清空后不再显示',
           confirmButtonText: '清空',
           confirmButtonColor: '#ee0a24',
         });
@@ -7532,8 +7527,9 @@ const yxqApp = createApp({
       showReportDialog, reportReason, reportReasonText, reportTarget, openReportDialog, onReportBeforeClose, doReport, reportSubmitting,
       reportedMessages, loadingReported, reportedCount, openReportedMessages, loadReportedMessages, handleReported,
       showSuggestionDialog, suggestionType, suggestionText, openSuggestionDialog, onSuggestionBeforeClose, suggestionSubmitting,
-      likesData, loadingLikes, loadMyLikesCount, notifications, unreadCount, unreadMessages, unreadBadge, markNotificationsRead,
-      msgTab, msgScope, switchMsgTab, switchMsgScope, receivedUnreadIds, isReceivedUnread,
+      likesData, loadingLikes, notifications, unreadCount, unreadMessages, unreadBadge, markNotificationsRead,
+      msgScope, switchMsgScope, likeScope, switchLikeScope, openLikeInbox, openMessageInbox, openLikeProfile,
+      msgTabDot, receivedUnreadIds, isReceivedUnread,
       inlineReplyId, inlineReplyText, inlineReplyBusy, startInlineReply, sendInlineReply,
       messageThread, messageThreadLoading, threadText, threadSending, threadReplyTarget,
       threadedThreadMessages, openMessageThread, loadMessageThread, replyThreadTo,
@@ -7542,7 +7538,7 @@ const yxqApp = createApp({
       embedOpen, embedUrl, embedTitle, embedLoading, embedReady, embedFrame, openEmbed, closeEmbed, onEmbedLoad,
       embedFailed, retryEmbed, returnAdminHome,
       nativeAdmin, gaBack,
-      myLikesList, loadingMyLikes, myLikesCount, openMyLikes, openMutual, openLikedMe, submitMutualWechat,
+      myLikesList, loadingMyLikes, openMutual, openLikedMe, submitMutualWechat,
       myActivitiesList, loadingMyActivities, openMyActivities,
       myGroupsList, loadingMyGroups, openMyGroups, hasGroupEntry,
       onetooneResult, onetooneResultLoading,

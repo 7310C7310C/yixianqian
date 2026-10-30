@@ -152,3 +152,49 @@ func TestIntegrationMessageInboxAndNotifications(t *testing.T) {
 		t.Fatalf("message unread after thread read = %d err=%v, want 0", unread, err)
 	}
 }
+
+// TestIntegrationFindUserByDuplicateLegacyOpenID protects card refs when a real
+// user and their observer shadow share a migrated legacy_open_id.
+func TestIntegrationFindUserByDuplicateLegacyOpenID(t *testing.T) {
+	database := openMessageTestDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	user, err := database.UpsertLegacyUser(ctx, "U-DUP-"+randomDigits(t, 10), "1"+randomDigits(t, 10), "重复绑定用户")
+	if err != nil {
+		t.Fatal(err)
+	}
+	observer, err := database.UpsertLegacyUser(ctx, "C-DUP-"+randomDigits(t, 10), "1"+randomDigits(t, 10), "重复绑定观察员")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dup := "ou_dup_" + randomDigits(t, 8)
+	t.Cleanup(func() {
+		cleanup := context.Background()
+		_, _ = database.pool.Exec(cleanup, `DELETE FROM users WHERE id = ANY($1)`, []int64{user.ID, observer.ID})
+	})
+	if _, err := database.pool.Exec(ctx,
+		`UPDATE users SET legacy_open_id = $2, account_kind = 'user', account_status = 'active' WHERE id = $1`,
+		user.ID, dup); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.pool.Exec(ctx,
+		`UPDATE users SET legacy_open_id = $2, account_kind = 'observer', account_status = 'observer' WHERE id = $1`,
+		observer.ID, dup); err != nil {
+		t.Fatal(err)
+	}
+	got, err := database.FindUserByRef(ctx, dup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != user.ID {
+		t.Fatalf("FindUserByRef(%q) = %d (%s), want non-observer %d", dup, got.ID, got.Name, user.ID)
+	}
+	if got, err := database.FindUserByRef(ctx, *user.LegacyUserID); err != nil || got.ID != user.ID {
+		t.Fatalf("FindUserByRef(legacy id) = %+v err=%v", got, err)
+	}
+	profile, err := database.GetSocialProfileByLegacyOpenID(ctx, dup)
+	if err != nil || profile.ID != user.ID {
+		t.Fatalf("GetSocialProfileByLegacyOpenID = %+v err=%v, want user %d", profile, err, user.ID)
+	}
+}

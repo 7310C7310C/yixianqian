@@ -183,6 +183,37 @@ func TestIntegrationLegacyHomeSelfCard(t *testing.T) {
 	if pool.Cards[0].IsSelf {
 		t.Fatal("/legacy/api/cards must not include the viewer's own card")
 	}
+
+	// A message on the viewer's card must be visible from the self card:
+	// the old hard-coded msgCount=0 made the card look empty even when the
+	// thread endpoint had rows.
+	if _, err := env.database.CreateMessage(env.ctx, db.CreateMessageParams{
+		TargetUserID: viewer.ID,
+		AuthorID:     candidate.ID,
+		Content:      "自卡留言 " + randomHTTPDigits(t, 6),
+	}); err != nil {
+		t.Fatalf("create self-card message: %v", err)
+	}
+	resp = viewerClient.get("/legacy/api/home" + query)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("legacy home after message status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	home = legacyHomePayload{}
+	legacyJSONDecode(t, resp, &home)
+	if len(home.Cards) == 0 || !home.Cards[0].IsSelf || home.Cards[0].MsgCount != 1 {
+		t.Fatalf("self card after message = %+v, want msg_count=1", home.Cards)
+	}
+	resp = viewerClient.get("/legacy/api/messages?target=" + url.QueryEscape(home.Cards[0].OpenID))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("self card messages status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	var thread struct {
+		Messages []legacyThreadMessage `json:"messages"`
+	}
+	legacyJSONDecode(t, resp, &thread)
+	if len(thread.Messages) != 1 {
+		t.Fatalf("self card thread = %+v, want 1 message", thread.Messages)
+	}
 }
 
 func TestIntegrationShellBootstrapInjection(t *testing.T) {

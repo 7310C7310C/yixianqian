@@ -139,9 +139,17 @@ func (d *DB) FindUserByRef(ctx context.Context, ref string) (User, error) {
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
 		return d.GetUserByID(ctx, id)
 	}
+	// A few migrated accounts share a legacy_open_id (e.g. a real user and
+	// their observer shadow). Prefer the exact legacy_user_id, then the
+	// non-observer account, then the oldest row so a card ref always resolves
+	// to the person the UI meant.
 	return scanUser(d.pool.QueryRow(ctx,
-		"SELECT "+userColumns+" FROM users WHERE legacy_user_id = $1 OR legacy_open_id = $1 LIMIT 1",
-		ref))
+		"SELECT "+userColumns+` FROM users
+		  WHERE legacy_user_id = $1 OR legacy_open_id = $1
+		  ORDER BY (legacy_user_id = $1) DESC,
+		           (COALESCE(account_kind, '') <> 'observer') DESC,
+		           id ASC
+		  LIMIT 1`, ref))
 }
 
 // DisplayName returns the product-facing name (nickname, then real name).
@@ -560,22 +568,23 @@ func (d *DB) CreateMessage(ctx context.Context, p CreateMessageParams) (Message,
 		"author_name":    authorName,
 		"author_ref":     authorRef,
 	}
-	notify := func(recipientID int64, kind, title string) error {
-		payload := make(map[string]any, len(basePayload)+1)
+	notify := func(recipientID int64, kind, title string, onMyCard bool) error {
+		payload := make(map[string]any, len(basePayload)+2)
 		for k, v := range basePayload {
 			payload[k] = v
 		}
 		eventKey := fmt.Sprintf("message:%d:%d", id, recipientID)
 		payload["event_key"] = eventKey
+		payload["on_my_card"] = onMyCard
 		return insertNotificationTx(ctx, tx, recipientID, kind, title, excerpt, link, payload, eventKey)
 	}
 	if p.TargetUserID != p.AuthorID {
-		if err := notify(p.TargetUserID, "message", authorName+" 在你的卡片留言"); err != nil {
+		if err := notify(p.TargetUserID, "message", authorName+" 在你的卡片留言", true); err != nil {
 			return Message{}, err
 		}
 	}
 	if replyAuthorID != 0 && replyAuthorID != p.AuthorID && replyAuthorID != p.TargetUserID {
-		if err := notify(replyAuthorID, "message_reply", authorName+" 回复了你的留言"); err != nil {
+		if err := notify(replyAuthorID, "message_reply", authorName+" 回复了你的留言", false); err != nil {
 			return Message{}, err
 		}
 	}

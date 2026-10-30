@@ -1,0 +1,79 @@
+<div key="message_inbox" class="msg-page msg-subpage">
+  <div class="back-nav" @click="handleBack">
+    <van-icon name="arrow-left"></van-icon> 返回
+  </div>
+
+  <h1 class="msg-subtitle">留言</h1>
+
+  <div class="msg-tabs" role="tablist" aria-label="留言方向">
+    <button type="button" class="msg-tab" :class="{active: msgScope==='received'}"
+      role="tab" :aria-selected="msgScope==='received'" @click="switchMsgScope('received')">收到的</button>
+    <button type="button" class="msg-tab" :class="{active: msgScope==='sent'}"
+      role="tab" :aria-selected="msgScope==='sent'" @click="switchMsgScope('sent')">我发出的</button>
+  </div>
+
+  <div v-if="msgScope==='received'">
+    <div v-if="loadingReceivedMessages" class="msg-skeleton" aria-busy="true">
+      <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
+    </div>
+    <van-empty v-else-if="!receivedMessagesList.length" description="暂无留言"></van-empty>
+    <div v-else class="msg-inbox">
+      <article v-for="m in receivedMessagesList" :key="m.id" class="msg-row"
+        :class="{unread: isReceivedUnread(m.id), clickable: !m.on_my_card}"
+        @click="!m.on_my_card && openMessageThread(m.target_openid, m.id, m)">
+        <div class="msg-row-avatar" @click.stop="m.author_openid && openUserDetailFromPage(m.author_openid, 'message_inbox')">
+          <img v-if="m.author_avatar" :src="m.author_avatar" alt="" loading="lazy">
+          <span v-else>{{ (m.author_nickname || '?')[0] }}</span>
+        </div>
+        <div class="msg-row-main">
+          <div class="msg-row-top">
+            <span class="msg-row-name">{{ m.author_nickname }}</span>
+            <span class="msg-row-time">{{ fmtTimeAgo(m.created_at) }}</span>
+          </div>
+          <div class="msg-row-text">{{ m.content }}</div>
+          <div class="msg-row-meta">
+            <span>{{ m.on_my_card ? '在我的卡片留言' : '回复了我的留言' }}</span>
+            <span v-if="m.replied" class="msg-row-done">已回复</span>
+            <button v-else type="button" class="msg-row-reply" @click.stop="startInlineReply(m)">回复</button>
+          </div>
+          <div v-if="inlineReplyId===m.id" class="msg-inline" @click.stop>
+            <input v-model="inlineReplyText" class="msg-inline-input" maxlength="500"
+              placeholder="回复…" @keyup.enter="sendInlineReply(m)">
+            <button type="button" class="msg-inline-send" :disabled="!inlineReplyText.trim() || inlineReplyBusy"
+              @click="sendInlineReply(m)">{{ inlineReplyBusy ? '发送中' : '发送' }}</button>
+          </div>
+        </div>
+        <span v-if="!m.on_my_card" class="msg-row-arrow" aria-hidden="true">›</span>
+        <span v-if="isReceivedUnread(m.id)" class="msg-unread-dot"></span>
+      </article>
+    </div>
+  </div>
+
+  <div v-else>
+    <div v-if="loadingMyMessages" class="msg-skeleton" aria-busy="true">
+      <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
+    </div>
+    <van-empty v-else-if="!myMessagesList.length" description="暂无留言"></van-empty>
+    <div v-else class="msg-inbox">
+      <article v-for="m in myMessagesList" :key="m.id" class="msg-row clickable"
+        @click="openMessageThread(m.target_openid, m.id, {target_nickname: m.target_nickname, target_avatar: m.target_avatar})">
+        <div class="msg-row-avatar" @click.stop="m.target_openid && openUserDetailFromPage(m.target_openid, 'message_inbox')">
+          <img v-if="m.target_avatar" :src="m.target_avatar" alt="" loading="lazy">
+          <span v-else>{{ (m.target_nickname || '?')[0] }}</span>
+        </div>
+        <div class="msg-row-main">
+          <div class="msg-row-top">
+            <span class="msg-row-name">{{ m.target_nickname }}</span>
+            <span class="msg-row-time">{{ fmtTimeAgo(m.created_at) }}</span>
+          </div>
+          <div class="msg-row-text">{{ m.content }}</div>
+          <div class="msg-row-meta">
+            <span>给 {{ m.target_nickname }}</span>
+            <button type="button" class="msg-row-del" @click.stop="deleteMyMessage(m)">删除</button>
+          </div>
+        </div>
+        <span class="msg-row-arrow" aria-hidden="true">›</span>
+      </article>
+    </div>
+  </div>
+</div>

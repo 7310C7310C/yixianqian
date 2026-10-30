@@ -3,10 +3,10 @@
   "vue": "3.4.27",
   "root": {
     "file": "app.render.js",
-    "templateSha256": "9fc28f9484abf4404439546704b95a93b9c4d8e45d7efc185487f1476ff000fa",
-    "templateSize": 52615,
-    "bytes": 183972,
-    "sha256": "ac60bd021b76495f8a49e1e948a5c4a205e22515599f6849be9f6e685066e7a3"
+    "templateSha256": "17f71024ba133d955e49d948c4f8f5729e01c5b026a65d6658f9d158d710f4ec",
+    "templateSize": 52632,
+    "bytes": 184028,
+    "sha256": "1266805c7b8b81b48abeb0261f9e8290ee2866b9cfca7b3180271906edf34684"
   },
   "initial": [
     "cards"
@@ -16,14 +16,13 @@
       "file": "pages/likes.render.js",
       "pages": [
         "likes",
-        "mutual",
-        "liked_me",
-        "my_likes",
+        "like_inbox",
+        "message_inbox",
         "reported_messages",
         "message_thread"
       ],
-      "bytes": 58590,
-      "sha256": "eb2dd98c92357ea3c17f50c9d28bd0ccd2a7cf55c45cb3c536251b31f77322cd"
+      "bytes": 61500,
+      "sha256": "c078e0210447c11d086de44d59588c2e9827d8cfd9bfd393851626b7ad3ac4ab"
     },
     "home": {
       "file": "pages/home.render.js",
@@ -82,26 +81,20 @@
     "likes": {
       "group": "likes",
       "file": "pages/likes.render.js",
-      "templateSha256": "249c999baaf79913a5a14f077811e3ca24321b63fe2b7d3bd359b07d4891ea2c",
-      "templateSize": 6022
+      "templateSha256": "fe15f47d08776dfaedbad54f2cb3aa9502372bc76a7e07f784697fc968cc877b",
+      "templateSize": 2150
     },
-    "mutual": {
+    "like_inbox": {
       "group": "likes",
       "file": "pages/likes.render.js",
-      "templateSha256": "04f4575d94c6612adb16bdd81d6e2ff0b9f118ea45c2e8be9ef3d5f1ef571662",
-      "templateSize": 1841
+      "templateSha256": "c3ffe8c352c374cea69a1d7f56ff0d0ade63fdd1bef8c0eec43af0e2eafb4786",
+      "templateSize": 5121
     },
-    "liked_me": {
+    "message_inbox": {
       "group": "likes",
       "file": "pages/likes.render.js",
-      "templateSha256": "98fd78ce26f4eff7a07c5663eb2d98f4b35e464743781427481b9c2399f02dce",
-      "templateSize": 1139
-    },
-    "my_likes": {
-      "group": "likes",
-      "file": "pages/likes.render.js",
-      "templateSha256": "5f50b07a4afe8b4d88473a68f4b683175f0f8ab23d00efdb3973c3164d98dc8e",
-      "templateSize": 1190
+      "templateSha256": "5ace20c67e88bbcb7b4a3abbe9ca60b51c57ac507ae8e297f244d15a06f84572",
+      "templateSize": 4231
     },
     "reported_messages": {
       "group": "likes",

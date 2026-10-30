@@ -147,7 +147,13 @@ func (a *App) buildLegacyHomePayloadLimit(ctx context.Context, r *http.Request, 
 	}
 	views := page.Cards
 	if page.Self != nil {
-		selfView := buildCardView(*page.Self, false, false, 0, now)
+		selfCount := 0
+		if n, countErr := a.db.CountMessagesReceived(ctx, user.ID); countErr != nil {
+			a.logger(r).Warn("legacy home self message count failed", "error", countErr, "user_id", user.ID)
+		} else {
+			selfCount = n
+		}
+		selfView := buildCardView(*page.Self, false, false, selfCount, now)
 		selfView.IsSelf = true
 		views = append([]CardView{selfView}, views...)
 		if page.Limit > 0 && len(views) > page.Limit {
