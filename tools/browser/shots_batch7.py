@@ -37,14 +37,14 @@ import local_assets  # noqa: E402
 LEGACY = REPO / "web" / "static" / "legacy"
 PAGES = {
     "cards": ".cards-page",
-    "likes": ".msg-card",
+    "likes": ".msg-page",
     "home": ".activity-card, .van-empty",
     "profile": ".profile-header",
 }
 # 数据加载稳定的额外判据（避免「加载中占位 vs 数字」造成结构差异噪声）
 SETTLE = {
     "cards": "() => !!document.querySelector('.cards-page .card-counter, .cards-page .swipe-card, .cards-page .van-empty')",
-    "likes": "() => { const c = document.querySelector('.msg-count'); return !c || !c.closest('.msg-count-wrap').querySelector('.van-loading'); }",
+    "likes": "() => !!document.querySelector('.msg-page .msg-seg')",
     "home": "() => { const cards = document.querySelectorAll('.activity-card'); return cards.length > 0 || !!document.querySelector('.van-empty'); }",
     "profile": "() => !!document.querySelector('.profile-header')",
 }

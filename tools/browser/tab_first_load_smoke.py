@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover
 TEXT = "加载中"
 TABS = [("消息", "likes"), ("活动", "home"), ("我的", "profile"), ("牵线", "cards")]
 SELECTORS = {
-    "likes": ".page .msg-card",
+    "likes": ".msg-page",
     "home": ".page",
     "profile": ".profile-header",
     "cards": ".swipe-card",

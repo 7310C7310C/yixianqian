@@ -111,13 +111,11 @@ def scroll_to(page, y: int) -> None:
 # 不改变原有滚动断言。
 PAGE_MARKERS = {
     "cards": ".cards-page",
-    "likes": ".msg-card",
+    "likes": ".msg-page",
     "home": ".activity-card, .van-empty",
     "profile": ".profile-header",
     "my_activities": ".back-nav",
     "my_likes": ".back-nav",
-    "my_messages": ".back-nav",
-    "received_messages": ".back-nav",
     "reported_messages": ".back-nav",
     "liked_me": ".back-nav",
     "mutual": ".back-nav",
