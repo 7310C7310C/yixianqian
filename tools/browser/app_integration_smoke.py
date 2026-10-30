@@ -544,6 +544,7 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
             tap_tab(page, "我的")
             live_title = f"{TITLE_PREFIX}-{tag}-LIVE-{int(time.time())}"
             insert_message(user_legacy_id, MESSAGE_AUTHOR_LEGACY_ID, live_title)
+            page.wait_for_function("window.yxqRootProxy && window.yxqRootProxy.unreadMessages > 0", timeout=15000)
             badge(page).wait_for(state="visible", timeout=10000)
             if not badge(page).inner_text().strip().isdigit():
                 raise SmokeFailure(f"{width}: SSE 后 badge 不是数字")
@@ -585,10 +586,13 @@ def run_polling_fallback(browser, base_url: str, cookie: str, user_legacy_id: st
         # 先清零现有未读：进消息 tab 再回来
         tap_tab(page, "消息")
         page.locator(".msg-entry").filter(has_text="留言").click()
-        badge(page).wait_for(state="hidden", timeout=15000)
+        page.wait_for_function("window.yxqRootProxy && window.yxqRootProxy.unreadMessages === 0", timeout=15000)
+        page.locator(".back-nav").click()
+        page.locator(".van-tabbar").wait_for(state="visible", timeout=10000)
         tap_tab(page, "我的")
         insert_message(user_legacy_id, MESSAGE_AUTHOR_LEGACY_ID, title)
-        badge(page).wait_for(state="visible", timeout=20000)
+        page.wait_for_function("window.yxqRootProxy && window.yxqRootProxy.unreadMessages > 0", timeout=25000)
+        badge(page).wait_for(state="visible", timeout=10000)
         page.screenshot(path=str(out_dir / "badge-poll-390.png"))
         assert_no_console_errors(errors, "poll fallback")
         return []
