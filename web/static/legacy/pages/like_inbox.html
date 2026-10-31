@@ -8,10 +8,10 @@
   <div class="msg-tabs" role="tablist" aria-label="喜欢分类">
     <button type="button" class="msg-tab" :class="{active: likeScope==='mine'}"
       role="tab" :aria-selected="likeScope==='mine'" @click="switchLikeScope('mine')">我喜欢的</button>
-    <button type="button" class="msg-tab" :class="{active: likeScope==='mutual'}"
-      role="tab" :aria-selected="likeScope==='mutual'" @click="switchLikeScope('mutual')">相互喜欢</button>
     <button type="button" class="msg-tab" :class="{active: likeScope==='liked'}"
       role="tab" :aria-selected="likeScope==='liked'" @click="switchLikeScope('liked')">谁喜欢了我</button>
+    <button type="button" class="msg-tab" :class="{active: likeScope==='mutual'}"
+      role="tab" :aria-selected="likeScope==='mutual'" @click="switchLikeScope('mutual')">相互喜欢</button>
   </div>
 
   <template v-if="likeScope==='mine'">

@@ -295,18 +295,18 @@ function render(_ctx, _cache) {
         }, "我喜欢的", 10 /* CLASS, PROPS */, _hoisted_5),
         _createElementVNode("button", {
           type: "button",
-          class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='mutual'}]),
-          role: "tab",
-          "aria-selected": _ctx.likeScope==='mutual',
-          onClick: _cache[2] || (_cache[2] = $event => (_ctx.switchLikeScope('mutual')))
-        }, "相互喜欢", 10 /* CLASS, PROPS */, _hoisted_6),
-        _createElementVNode("button", {
-          type: "button",
           class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='liked'}]),
           role: "tab",
           "aria-selected": _ctx.likeScope==='liked',
-          onClick: _cache[3] || (_cache[3] = $event => (_ctx.switchLikeScope('liked')))
-        }, "谁喜欢了我", 10 /* CLASS, PROPS */, _hoisted_7)
+          onClick: _cache[2] || (_cache[2] = $event => (_ctx.switchLikeScope('liked')))
+        }, "谁喜欢了我", 10 /* CLASS, PROPS */, _hoisted_6),
+        _createElementVNode("button", {
+          type: "button",
+          class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='mutual'}]),
+          role: "tab",
+          "aria-selected": _ctx.likeScope==='mutual',
+          onClick: _cache[3] || (_cache[3] = $event => (_ctx.switchLikeScope('mutual')))
+        }, "相互喜欢", 10 /* CLASS, PROPS */, _hoisted_7)
       ]),
       (_ctx.likeScope==='mine')
         ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [

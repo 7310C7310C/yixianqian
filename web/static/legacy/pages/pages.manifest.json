@@ -22,7 +22,7 @@
         "message_thread"
       ],
       "bytes": 62499,
-      "sha256": "67b7c61438a4964074b250ffa94b99ca95000d6c2f8155290cbb46ccffb077ff"
+      "sha256": "aeef3ef632dc4865e88c406b5713c402955766ff533d221e2a191be6fd6d1cc0"
     },
     "home": {
       "file": "pages/home.render.js",
@@ -87,7 +87,7 @@
     "like_inbox": {
       "group": "likes",
       "file": "pages/likes.render.js",
-      "templateSha256": "8b5d4151ec5c21b0b0deafdbb762478c4e44ac133e4ab837c792efb2bd6f40b5",
+      "templateSha256": "dfb2d49e8a52c52d37e03d89207d95138ddcc4f6a3fc3238f2e5b097e60bd1b9",
       "templateSize": 5241
     },
     "message_inbox": {
