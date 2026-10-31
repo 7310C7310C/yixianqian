@@ -583,6 +583,7 @@
   .thread-msg-reply { margin-left: 14px; border-left: 2px solid #ffe3e8; border-radius: 0 12px 12px 0; }
   .thread-reply-bar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 16px 0; color: #ff6b81; font-size: 12px; }
   .thread-input-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid #f2f3f5; background: #fff; }
+  .thread-input-bar .msg-send { align-self: stretch; min-height: 36px; }
   .thread-input { flex: 1; min-width: 0; border: 0; outline: 0; background: #f7f8fa; border-radius: 18px; padding: 9px 14px; color: #323233; font-size: 14px; }
   .thread-loading { padding: 64px 0; text-align: center; }
   /* 通用小类（供内联样式替换用） */
