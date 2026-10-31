@@ -168,107 +168,105 @@ window.__YXQ_PAGES__['likes'] = render;
 
 (function () {
 const { resolveComponent: _resolveComponent, createVNode: _createVNode, createTextVNode: _createTextVNode, createElementVNode: _createElementVNode, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, toDisplayString: _toDisplayString, withCtx: _withCtx, withModifiers: _withModifiers } = Vue;
-const _hoisted_1 = {
-  key: "like_inbox",
-  class: "msg-page msg-subpage"
-}
-const _hoisted_2 = /*#__PURE__*/_createElementVNode("h1", { class: "msg-subtitle" }, "喜欢", -1 /* HOISTED */)
-const _hoisted_3 = {
+const _hoisted_1 = { key: "like_inbox" }
+const _hoisted_2 = { class: "msg-page msg-subpage" }
+const _hoisted_3 = /*#__PURE__*/_createElementVNode("h1", { class: "msg-subtitle" }, "喜欢", -1 /* HOISTED */)
+const _hoisted_4 = {
   class: "msg-tabs",
   role: "tablist",
   "aria-label": "喜欢分类"
 }
-const _hoisted_4 = ["aria-selected"]
 const _hoisted_5 = ["aria-selected"]
 const _hoisted_6 = ["aria-selected"]
-const _hoisted_7 = {
+const _hoisted_7 = ["aria-selected"]
+const _hoisted_8 = {
   key: 0,
   class: "msg-skeleton",
   "aria-busy": "true"
 }
-const _hoisted_8 = {
+const _hoisted_9 = {
   key: 2,
   class: "msg-inbox"
 }
-const _hoisted_9 = ["onClick"]
-const _hoisted_10 = { class: "msg-row-avatar" }
-const _hoisted_11 = ["src", "onError"]
-const _hoisted_12 = { key: 1 }
-const _hoisted_13 = { class: "msg-row-main" }
-const _hoisted_14 = { class: "msg-row-top" }
-const _hoisted_15 = { class: "msg-row-name" }
-const _hoisted_16 = {
+const _hoisted_10 = ["onClick"]
+const _hoisted_11 = { class: "msg-row-avatar" }
+const _hoisted_12 = ["src", "onError"]
+const _hoisted_13 = { key: 1 }
+const _hoisted_14 = { class: "msg-row-main" }
+const _hoisted_15 = { class: "msg-row-top" }
+const _hoisted_16 = { class: "msg-row-name" }
+const _hoisted_17 = {
   key: 0,
   class: "msg-chip"
 }
-const _hoisted_17 = { class: "msg-row-text" }
-const _hoisted_18 = { key: 0 }
-const _hoisted_19 = {
+const _hoisted_18 = { class: "msg-row-text" }
+const _hoisted_19 = { key: 0 }
+const _hoisted_20 = {
   key: 0,
   class: "msg-row-meta"
 }
-const _hoisted_20 = /*#__PURE__*/_createElementVNode("span", {
+const _hoisted_21 = /*#__PURE__*/_createElementVNode("span", {
   class: "msg-row-arrow",
   "aria-hidden": "true"
 }, "›", -1 /* HOISTED */)
-const _hoisted_21 = {
+const _hoisted_22 = {
   key: 0,
   class: "msg-skeleton",
   "aria-busy": "true"
 }
-const _hoisted_22 = {
+const _hoisted_23 = {
   key: 2,
   class: "msg-inbox"
 }
-const _hoisted_23 = ["onClick"]
-const _hoisted_24 = /*#__PURE__*/_createElementVNode("div", { class: "msg-row-avatar" }, "💕", -1 /* HOISTED */)
-const _hoisted_25 = { class: "msg-row-main" }
-const _hoisted_26 = { class: "msg-row-top" }
-const _hoisted_27 = { class: "msg-row-name" }
-const _hoisted_28 = /*#__PURE__*/_createElementVNode("span", { class: "msg-chip" }, "相互喜欢", -1 /* HOISTED */)
-const _hoisted_29 = {
+const _hoisted_24 = ["onClick"]
+const _hoisted_25 = /*#__PURE__*/_createElementVNode("div", { class: "msg-row-avatar" }, "💕", -1 /* HOISTED */)
+const _hoisted_26 = { class: "msg-row-main" }
+const _hoisted_27 = { class: "msg-row-top" }
+const _hoisted_28 = { class: "msg-row-name" }
+const _hoisted_29 = /*#__PURE__*/_createElementVNode("span", { class: "msg-chip" }, "相互喜欢", -1 /* HOISTED */)
+const _hoisted_30 = {
   key: 0,
   class: "msg-row-text"
 }
-const _hoisted_30 = { class: "mutual-consent" }
-const _hoisted_31 = /*#__PURE__*/_createElementVNode("span", null, "同意向对方展示微信号", -1 /* HOISTED */)
-const _hoisted_32 = {
+const _hoisted_31 = { class: "mutual-consent" }
+const _hoisted_32 = /*#__PURE__*/_createElementVNode("span", null, "同意向对方展示微信号", -1 /* HOISTED */)
+const _hoisted_33 = {
   key: 1,
   class: "msg-row-meta"
 }
-const _hoisted_33 = {
+const _hoisted_34 = {
   key: 2,
   class: "msg-row-meta"
 }
-const _hoisted_34 = /*#__PURE__*/_createElementVNode("span", {
+const _hoisted_35 = /*#__PURE__*/_createElementVNode("span", {
   class: "msg-row-arrow",
   "aria-hidden": "true"
 }, "›", -1 /* HOISTED */)
-const _hoisted_35 = {
+const _hoisted_36 = {
   key: 0,
   class: "msg-skeleton",
   "aria-busy": "true"
 }
-const _hoisted_36 = {
+const _hoisted_37 = {
   key: 2,
   class: "msg-inbox"
 }
-const _hoisted_37 = ["onClick"]
-const _hoisted_38 = { class: "msg-row-avatar" }
-const _hoisted_39 = { class: "msg-row-main" }
-const _hoisted_40 = { class: "msg-row-top" }
-const _hoisted_41 = { class: "msg-row-name" }
-const _hoisted_42 = {
+const _hoisted_38 = ["onClick"]
+const _hoisted_39 = { class: "msg-row-avatar" }
+const _hoisted_40 = { class: "msg-row-main" }
+const _hoisted_41 = { class: "msg-row-top" }
+const _hoisted_42 = { class: "msg-row-name" }
+const _hoisted_43 = {
   key: 0,
   class: "msg-chip"
 }
-const _hoisted_43 = { class: "msg-row-text" }
-const _hoisted_44 = {
+const _hoisted_44 = { class: "msg-row-text" }
+const _hoisted_45 = {
   key: 0,
   class: "msg-row-arrow",
   "aria-hidden": "true"
 }
-const _hoisted_45 = { class: "msg-foot-action" }
+const _hoisted_46 = { class: "msg-foot-action" }
 
 function render(_ctx, _cache) {
   const _component_van_icon = _resolveComponent("van-icon")
@@ -285,90 +283,35 @@ function render(_ctx, _cache) {
       _createVNode(_component_van_icon, { name: "arrow-left" }),
       _createTextVNode(" 返回 ")
     ]),
-    _hoisted_2,
-    _createElementVNode("div", _hoisted_3, [
-      _createElementVNode("button", {
-        type: "button",
-        class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='mine'}]),
-        role: "tab",
-        "aria-selected": _ctx.likeScope==='mine',
-        onClick: _cache[1] || (_cache[1] = $event => (_ctx.switchLikeScope('mine')))
-      }, "我喜欢的", 10 /* CLASS, PROPS */, _hoisted_4),
-      _createElementVNode("button", {
-        type: "button",
-        class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='mutual'}]),
-        role: "tab",
-        "aria-selected": _ctx.likeScope==='mutual',
-        onClick: _cache[2] || (_cache[2] = $event => (_ctx.switchLikeScope('mutual')))
-      }, "相互喜欢", 10 /* CLASS, PROPS */, _hoisted_5),
-      _createElementVNode("button", {
-        type: "button",
-        class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='liked'}]),
-        role: "tab",
-        "aria-selected": _ctx.likeScope==='liked',
-        onClick: _cache[3] || (_cache[3] = $event => (_ctx.switchLikeScope('liked')))
-      }, "谁喜欢了我", 10 /* CLASS, PROPS */, _hoisted_6)
-    ]),
-    (_ctx.likeScope==='mine')
-      ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
-          (_ctx.loadingMyLikes)
-            ? (_openBlock(), _createElementBlock("div", _hoisted_7, [
-                (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
-                  return _createElementVNode("div", {
-                    class: "msg-skeleton-row",
-                    key: i
-                  })
-                }), 64 /* STABLE_FRAGMENT */))
-              ]))
-            : (!_ctx.myLikesList.length)
-              ? (_openBlock(), _createBlock(_component_van_empty, {
-                  key: 1,
-                  description: "还没有喜欢过谁"
-                }))
-              : (_openBlock(), _createElementBlock("div", _hoisted_8, [
-                  (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.myLikesList, (l) => {
-                    return (_openBlock(), _createElementBlock("article", {
-                      key: l.openid,
-                      class: "msg-row clickable",
-                      onClick: $event => (_ctx.openUserDetailFromPage(l.openid, 'like_inbox'))
-                    }, [
-                      _createElementVNode("div", _hoisted_10, [
-                        (l.photo)
-                          ? (_openBlock(), _createElementBlock("img", {
-                              key: 0,
-                              src: l.photo,
-                              alt: "",
-                              loading: "lazy",
-                              onError: $event => (_ctx.retryImg($event, 2, ()=>{l.photo=''}))
-                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_11))
-                          : (_openBlock(), _createElementBlock("span", _hoisted_12, _toDisplayString((l.nickname || '?')[0]), 1 /* TEXT */))
-                      ]),
-                      _createElementVNode("div", _hoisted_13, [
-                        _createElementVNode("div", _hoisted_14, [
-                          _createElementVNode("span", _hoisted_15, _toDisplayString(l.nickname), 1 /* TEXT */),
-                          (l.mutual)
-                            ? (_openBlock(), _createElementBlock("span", _hoisted_16, "相互喜欢"))
-                            : _createCommentVNode("v-if", true)
-                        ]),
-                        _createElementVNode("div", _hoisted_17, [
-                          _createTextVNode(_toDisplayString(l.age ? l.age + '岁' : ''), 1 /* TEXT */),
-                          (l.church)
-                            ? (_openBlock(), _createElementBlock("span", _hoisted_18, " · " + _toDisplayString(l.church), 1 /* TEXT */))
-                            : _createCommentVNode("v-if", true)
-                        ]),
-                        (l.mutual && l.message)
-                          ? (_openBlock(), _createElementBlock("div", _hoisted_19, "附言：" + _toDisplayString(l.message), 1 /* TEXT */))
-                          : _createCommentVNode("v-if", true)
-                      ]),
-                      _hoisted_20
-                    ], 8 /* PROPS */, _hoisted_9))
-                  }), 128 /* KEYED_FRAGMENT */))
-                ]))
-        ], 64 /* STABLE_FRAGMENT */))
-      : (_ctx.likeScope==='mutual')
-        ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
-            (_ctx.loadingLikes)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_21, [
+    _createElementVNode("div", _hoisted_2, [
+      _hoisted_3,
+      _createElementVNode("div", _hoisted_4, [
+        _createElementVNode("button", {
+          type: "button",
+          class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='mine'}]),
+          role: "tab",
+          "aria-selected": _ctx.likeScope==='mine',
+          onClick: _cache[1] || (_cache[1] = $event => (_ctx.switchLikeScope('mine')))
+        }, "我喜欢的", 10 /* CLASS, PROPS */, _hoisted_5),
+        _createElementVNode("button", {
+          type: "button",
+          class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='mutual'}]),
+          role: "tab",
+          "aria-selected": _ctx.likeScope==='mutual',
+          onClick: _cache[2] || (_cache[2] = $event => (_ctx.switchLikeScope('mutual')))
+        }, "相互喜欢", 10 /* CLASS, PROPS */, _hoisted_6),
+        _createElementVNode("button", {
+          type: "button",
+          class: _normalizeClass(["msg-tab", {active: _ctx.likeScope==='liked'}]),
+          role: "tab",
+          "aria-selected": _ctx.likeScope==='liked',
+          onClick: _cache[3] || (_cache[3] = $event => (_ctx.switchLikeScope('liked')))
+        }, "谁喜欢了我", 10 /* CLASS, PROPS */, _hoisted_7)
+      ]),
+      (_ctx.likeScope==='mine')
+        ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
+            (_ctx.loadingMyLikes)
+              ? (_openBlock(), _createElementBlock("div", _hoisted_8, [
                   (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
                     return _createElementVNode("div", {
                       class: "msg-skeleton-row",
@@ -376,131 +319,188 @@ function render(_ctx, _cache) {
                     })
                   }), 64 /* STABLE_FRAGMENT */))
                 ]))
-              : (!_ctx.likesData.mutual.length)
+              : (!_ctx.myLikesList.length)
                 ? (_openBlock(), _createBlock(_component_van_empty, {
                     key: 1,
-                    description: "还没有相互喜欢的人"
+                    description: "还没有喜欢过谁"
                   }))
-                : (_openBlock(), _createElementBlock("div", _hoisted_22, [
-                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.likesData.mutual, (m) => {
+                : (_openBlock(), _createElementBlock("div", _hoisted_9, [
+                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.myLikesList, (l) => {
                       return (_openBlock(), _createElementBlock("article", {
-                        key: m.initiator_openid,
+                        key: l.openid,
                         class: "msg-row clickable",
-                        onClick: $event => (_ctx.openUserDetailFromPage(m.initiator_openid, 'like_inbox'))
+                        onClick: $event => (_ctx.openUserDetailFromPage(l.openid, 'like_inbox'))
                       }, [
-                        _hoisted_24,
-                        _createElementVNode("div", _hoisted_25, [
-                          _createElementVNode("div", _hoisted_26, [
-                            _createElementVNode("span", _hoisted_27, _toDisplayString(m.nickname), 1 /* TEXT */),
-                            _hoisted_28
-                          ]),
-                          (m.message)
-                            ? (_openBlock(), _createElementBlock("div", _hoisted_29, "附言：" + _toDisplayString(m.message), 1 /* TEXT */))
-                            : _createCommentVNode("v-if", true),
-                          (!m.their_wechat)
-                            ? (_openBlock(), _createElementBlock("div", {
-                                key: 1,
-                                class: "mutual-form",
-                                onClick: _cache[4] || (_cache[4] = _withModifiers(() => {}, ["stop"]))
-                              }, [
-                                (m.wechat_required && !m.waiting_other)
-                                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
-                                      _createVNode(_component_van_field, {
-                                        modelValue: m.edit_wechat,
-                                        "onUpdate:modelValue": $event => ((m.edit_wechat) = $event),
-                                        placeholder: "请输入微信号",
-                                        maxlength: "64",
-                                        border: false
-                                      }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
-                                      _createElementVNode("label", _hoisted_30, [
-                                        _createVNode(_component_van_switch, {
-                                          modelValue: m.edit_agree,
-                                          "onUpdate:modelValue": $event => ((m.edit_agree) = $event),
-                                          size: "20px"
-                                        }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
-                                        _hoisted_31
-                                      ]),
-                                      _createVNode(_component_van_button, {
-                                        class: "tap-44",
-                                        type: "primary",
-                                        color: "#ff6b81",
-                                        size: "small",
-                                        block: "",
-                                        loading: m.submitting,
-                                        onClick: $event => (_ctx.submitMutualWechat(m))
-                                      }, {
-                                        default: _withCtx(() => [
-                                          _createTextVNode("保存并同意交换")
-                                        ]),
-                                        _: 2 /* DYNAMIC */
-                                      }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["loading", "onClick"])
-                                    ], 64 /* STABLE_FRAGMENT */))
-                                  : (_openBlock(), _createElementBlock("div", _hoisted_32, "已同意交换，等待对方填写后即可看到微信号。"))
-                              ]))
-                            : (_openBlock(), _createElementBlock("div", _hoisted_33, [
-                                _createTextVNode("微信号："),
-                                _createElementVNode("b", null, _toDisplayString(m.their_wechat), 1 /* TEXT */)
-                              ]))
+                        _createElementVNode("div", _hoisted_11, [
+                          (l.photo)
+                            ? (_openBlock(), _createElementBlock("img", {
+                                key: 0,
+                                src: l.photo,
+                                alt: "",
+                                loading: "lazy",
+                                onError: $event => (_ctx.retryImg($event, 2, ()=>{l.photo=''}))
+                              }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_12))
+                            : (_openBlock(), _createElementBlock("span", _hoisted_13, _toDisplayString((l.nickname || '?')[0]), 1 /* TEXT */))
                         ]),
-                        _hoisted_34
-                      ], 8 /* PROPS */, _hoisted_23))
+                        _createElementVNode("div", _hoisted_14, [
+                          _createElementVNode("div", _hoisted_15, [
+                            _createElementVNode("span", _hoisted_16, _toDisplayString(l.nickname), 1 /* TEXT */),
+                            (l.mutual)
+                              ? (_openBlock(), _createElementBlock("span", _hoisted_17, "相互喜欢"))
+                              : _createCommentVNode("v-if", true)
+                          ]),
+                          _createElementVNode("div", _hoisted_18, [
+                            _createTextVNode(_toDisplayString(l.age ? l.age + '岁' : ''), 1 /* TEXT */),
+                            (l.church)
+                              ? (_openBlock(), _createElementBlock("span", _hoisted_19, " · " + _toDisplayString(l.church), 1 /* TEXT */))
+                              : _createCommentVNode("v-if", true)
+                          ]),
+                          (l.mutual && l.message)
+                            ? (_openBlock(), _createElementBlock("div", _hoisted_20, "附言：" + _toDisplayString(l.message), 1 /* TEXT */))
+                            : _createCommentVNode("v-if", true)
+                        ]),
+                        _hoisted_21
+                      ], 8 /* PROPS */, _hoisted_10))
                     }), 128 /* KEYED_FRAGMENT */))
                   ]))
           ], 64 /* STABLE_FRAGMENT */))
-        : (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
-            (_ctx.loadingLikes)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_35, [
-                  (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
-                    return _createElementVNode("div", {
-                      class: "msg-skeleton-row",
-                      key: i
-                    })
-                  }), 64 /* STABLE_FRAGMENT */))
-                ]))
-              : (!_ctx.likesData.liked_me.length)
-                ? (_openBlock(), _createBlock(_component_van_empty, {
-                    key: 1,
-                    description: "还没有人喜欢你"
-                  }))
-                : (_openBlock(), _createElementBlock("div", _hoisted_36, [
-                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.likesData.liked_me, (l, i) => {
-                      return (_openBlock(), _createElementBlock("article", {
-                        key: i,
-                        class: _normalizeClass(["msg-row", {clickable: l.real}]),
-                        onClick: $event => (l.real && _ctx.openUserDetailFromPage(l.initiator_openid, 'like_inbox'))
-                      }, [
-                        _createElementVNode("div", _hoisted_38, _toDisplayString(l.real ? '💌' : '👤'), 1 /* TEXT */),
-                        _createElementVNode("div", _hoisted_39, [
-                          _createElementVNode("div", _hoisted_40, [
-                            _createElementVNode("span", _hoisted_41, _toDisplayString(l.nickname), 1 /* TEXT */),
-                            (l.real)
-                              ? (_openBlock(), _createElementBlock("span", _hoisted_42, "实名"))
-                              : _createCommentVNode("v-if", true)
-                          ]),
-                          _createElementVNode("div", _hoisted_43, _toDisplayString(l.real ? '实名喜欢了你' : '匿名用户喜欢了你'), 1 /* TEXT */)
-                        ]),
-                        (l.real)
-                          ? (_openBlock(), _createElementBlock("span", _hoisted_44, "›"))
-                          : _createCommentVNode("v-if", true)
-                      ], 10 /* CLASS, PROPS */, _hoisted_37))
-                    }), 128 /* KEYED_FRAGMENT */)),
-                    _createElementVNode("div", _hoisted_45, [
-                      _createVNode(_component_van_button, {
-                        class: "tap-44",
-                        type: "primary",
-                        color: "#ff6b81",
-                        size: "small",
-                        block: "",
-                        onClick: _cache[5] || (_cache[5] = $event => (_ctx.gotoCards('liked_me')))
-                      }, {
-                        default: _withCtx(() => [
-                          _createTextVNode("去牵线看看")
-                        ]),
-                        _: 1 /* STABLE */
+        : (_ctx.likeScope==='mutual')
+          ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+              (_ctx.loadingLikes)
+                ? (_openBlock(), _createElementBlock("div", _hoisted_22, [
+                    (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
+                      return _createElementVNode("div", {
+                        class: "msg-skeleton-row",
+                        key: i
                       })
-                    ])
+                    }), 64 /* STABLE_FRAGMENT */))
                   ]))
-          ], 64 /* STABLE_FRAGMENT */))
+                : (!_ctx.likesData.mutual.length)
+                  ? (_openBlock(), _createBlock(_component_van_empty, {
+                      key: 1,
+                      description: "还没有相互喜欢的人"
+                    }))
+                  : (_openBlock(), _createElementBlock("div", _hoisted_23, [
+                      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.likesData.mutual, (m) => {
+                        return (_openBlock(), _createElementBlock("article", {
+                          key: m.initiator_openid,
+                          class: "msg-row clickable",
+                          onClick: $event => (_ctx.openUserDetailFromPage(m.initiator_openid, 'like_inbox'))
+                        }, [
+                          _hoisted_25,
+                          _createElementVNode("div", _hoisted_26, [
+                            _createElementVNode("div", _hoisted_27, [
+                              _createElementVNode("span", _hoisted_28, _toDisplayString(m.nickname), 1 /* TEXT */),
+                              _hoisted_29
+                            ]),
+                            (m.message)
+                              ? (_openBlock(), _createElementBlock("div", _hoisted_30, "附言：" + _toDisplayString(m.message), 1 /* TEXT */))
+                              : _createCommentVNode("v-if", true),
+                            (!m.their_wechat)
+                              ? (_openBlock(), _createElementBlock("div", {
+                                  key: 1,
+                                  class: "mutual-form",
+                                  onClick: _cache[4] || (_cache[4] = _withModifiers(() => {}, ["stop"]))
+                                }, [
+                                  (m.wechat_required && !m.waiting_other)
+                                    ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
+                                        _createVNode(_component_van_field, {
+                                          modelValue: m.edit_wechat,
+                                          "onUpdate:modelValue": $event => ((m.edit_wechat) = $event),
+                                          placeholder: "请输入微信号",
+                                          maxlength: "64",
+                                          border: false
+                                        }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
+                                        _createElementVNode("label", _hoisted_31, [
+                                          _createVNode(_component_van_switch, {
+                                            modelValue: m.edit_agree,
+                                            "onUpdate:modelValue": $event => ((m.edit_agree) = $event),
+                                            size: "20px"
+                                          }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
+                                          _hoisted_32
+                                        ]),
+                                        _createVNode(_component_van_button, {
+                                          class: "tap-44",
+                                          type: "primary",
+                                          color: "#ff6b81",
+                                          size: "small",
+                                          block: "",
+                                          loading: m.submitting,
+                                          onClick: $event => (_ctx.submitMutualWechat(m))
+                                        }, {
+                                          default: _withCtx(() => [
+                                            _createTextVNode("保存并同意交换")
+                                          ]),
+                                          _: 2 /* DYNAMIC */
+                                        }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["loading", "onClick"])
+                                      ], 64 /* STABLE_FRAGMENT */))
+                                    : (_openBlock(), _createElementBlock("div", _hoisted_33, "已同意交换，等待对方填写后即可看到微信号。"))
+                                ]))
+                              : (_openBlock(), _createElementBlock("div", _hoisted_34, [
+                                  _createTextVNode("微信号："),
+                                  _createElementVNode("b", null, _toDisplayString(m.their_wechat), 1 /* TEXT */)
+                                ]))
+                          ]),
+                          _hoisted_35
+                        ], 8 /* PROPS */, _hoisted_24))
+                      }), 128 /* KEYED_FRAGMENT */))
+                    ]))
+            ], 64 /* STABLE_FRAGMENT */))
+          : (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+              (_ctx.loadingLikes)
+                ? (_openBlock(), _createElementBlock("div", _hoisted_36, [
+                    (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
+                      return _createElementVNode("div", {
+                        class: "msg-skeleton-row",
+                        key: i
+                      })
+                    }), 64 /* STABLE_FRAGMENT */))
+                  ]))
+                : (!_ctx.likesData.liked_me.length)
+                  ? (_openBlock(), _createBlock(_component_van_empty, {
+                      key: 1,
+                      description: "还没有人喜欢你"
+                    }))
+                  : (_openBlock(), _createElementBlock("div", _hoisted_37, [
+                      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.likesData.liked_me, (l, i) => {
+                        return (_openBlock(), _createElementBlock("article", {
+                          key: i,
+                          class: _normalizeClass(["msg-row", {clickable: l.real}]),
+                          onClick: $event => (l.real && _ctx.openUserDetailFromPage(l.initiator_openid, 'like_inbox'))
+                        }, [
+                          _createElementVNode("div", _hoisted_39, _toDisplayString(l.real ? '💌' : '👤'), 1 /* TEXT */),
+                          _createElementVNode("div", _hoisted_40, [
+                            _createElementVNode("div", _hoisted_41, [
+                              _createElementVNode("span", _hoisted_42, _toDisplayString(l.nickname), 1 /* TEXT */),
+                              (l.real)
+                                ? (_openBlock(), _createElementBlock("span", _hoisted_43, "实名"))
+                                : _createCommentVNode("v-if", true)
+                            ]),
+                            _createElementVNode("div", _hoisted_44, _toDisplayString(l.real ? '实名喜欢了你' : '匿名用户喜欢了你'), 1 /* TEXT */)
+                          ]),
+                          (l.real)
+                            ? (_openBlock(), _createElementBlock("span", _hoisted_45, "›"))
+                            : _createCommentVNode("v-if", true)
+                        ], 10 /* CLASS, PROPS */, _hoisted_38))
+                      }), 128 /* KEYED_FRAGMENT */)),
+                      _createElementVNode("div", _hoisted_46, [
+                        _createVNode(_component_van_button, {
+                          class: "tap-44",
+                          type: "primary",
+                          color: "#ff6b81",
+                          size: "small",
+                          block: "",
+                          onClick: _cache[5] || (_cache[5] = $event => (_ctx.gotoCards('liked_me')))
+                        }, {
+                          default: _withCtx(() => [
+                            _createTextVNode("去牵线看看")
+                          ]),
+                          _: 1 /* STABLE */
+                        })
+                      ])
+                    ]))
+            ], 64 /* STABLE_FRAGMENT */))
+    ])
   ]))
 }
 window.__YXQ_PAGES__ = window.__YXQ_PAGES__ || {};
@@ -509,76 +509,74 @@ window.__YXQ_PAGES__['like_inbox'] = render;
 
 (function () {
 const { resolveComponent: _resolveComponent, createVNode: _createVNode, createTextVNode: _createTextVNode, createElementVNode: _createElementVNode, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, toDisplayString: _toDisplayString, withModifiers: _withModifiers, vModelText: _vModelText, withKeys: _withKeys, withDirectives: _withDirectives } = Vue;
-const _hoisted_1 = {
-  key: "message_inbox",
-  class: "msg-page msg-subpage"
-}
-const _hoisted_2 = /*#__PURE__*/_createElementVNode("h1", { class: "msg-subtitle" }, "留言", -1 /* HOISTED */)
-const _hoisted_3 = {
+const _hoisted_1 = { key: "message_inbox" }
+const _hoisted_2 = { class: "msg-page msg-subpage" }
+const _hoisted_3 = /*#__PURE__*/_createElementVNode("h1", { class: "msg-subtitle" }, "留言", -1 /* HOISTED */)
+const _hoisted_4 = {
   class: "msg-tabs",
   role: "tablist",
   "aria-label": "留言方向"
 }
-const _hoisted_4 = ["aria-selected"]
 const _hoisted_5 = ["aria-selected"]
-const _hoisted_6 = { key: 0 }
-const _hoisted_7 = {
+const _hoisted_6 = ["aria-selected"]
+const _hoisted_7 = { key: 0 }
+const _hoisted_8 = {
   key: 0,
   class: "msg-skeleton",
   "aria-busy": "true"
 }
-const _hoisted_8 = {
+const _hoisted_9 = {
   key: 2,
   class: "msg-inbox"
 }
-const _hoisted_9 = ["onClick"]
 const _hoisted_10 = ["onClick"]
-const _hoisted_11 = ["src"]
-const _hoisted_12 = { key: 1 }
-const _hoisted_13 = { class: "msg-row-main" }
-const _hoisted_14 = { class: "msg-row-top" }
-const _hoisted_15 = { class: "msg-row-name" }
-const _hoisted_16 = { class: "msg-row-time" }
-const _hoisted_17 = { class: "msg-row-text" }
-const _hoisted_18 = { class: "msg-row-meta" }
-const _hoisted_19 = {
+const _hoisted_11 = ["onClick"]
+const _hoisted_12 = ["src"]
+const _hoisted_13 = { key: 1 }
+const _hoisted_14 = { class: "msg-row-main" }
+const _hoisted_15 = { class: "msg-row-top" }
+const _hoisted_16 = { class: "msg-row-name" }
+const _hoisted_17 = { class: "msg-row-time" }
+const _hoisted_18 = { class: "msg-row-text" }
+const _hoisted_19 = { class: "msg-row-meta" }
+const _hoisted_20 = {
   key: 0,
   class: "msg-row-done"
 }
-const _hoisted_20 = ["onClick"]
-const _hoisted_21 = ["onKeyup"]
-const _hoisted_22 = ["disabled", "onClick"]
-const _hoisted_23 = {
+const _hoisted_21 = ["onClick"]
+const _hoisted_22 = ["onKeyup"]
+const _hoisted_23 = ["disabled", "onClick"]
+const _hoisted_24 = {
   key: 0,
   class: "msg-row-arrow",
   "aria-hidden": "true"
 }
-const _hoisted_24 = {
+const _hoisted_25 = {
   key: 1,
   class: "msg-unread-dot"
 }
-const _hoisted_25 = { key: 1 }
-const _hoisted_26 = {
+const _hoisted_26 = { key: 1 }
+const _hoisted_27 = {
   key: 0,
   class: "msg-skeleton",
   "aria-busy": "true"
 }
-const _hoisted_27 = {
+const _hoisted_28 = {
   key: 2,
   class: "msg-inbox"
 }
-const _hoisted_28 = ["onClick"]
 const _hoisted_29 = ["onClick"]
-const _hoisted_30 = ["src"]
-const _hoisted_31 = { key: 1 }
-const _hoisted_32 = { class: "msg-row-main" }
-const _hoisted_33 = { class: "msg-row-top" }
-const _hoisted_34 = { class: "msg-row-name" }
-const _hoisted_35 = { class: "msg-row-time" }
-const _hoisted_36 = { class: "msg-row-text" }
-const _hoisted_37 = { class: "msg-row-meta" }
-const _hoisted_38 = ["onClick"]
-const _hoisted_39 = /*#__PURE__*/_createElementVNode("span", {
+const _hoisted_30 = ["onClick"]
+const _hoisted_31 = ["src"]
+const _hoisted_32 = { key: 1 }
+const _hoisted_33 = { class: "msg-row-main" }
+const _hoisted_34 = { class: "msg-row-top" }
+const _hoisted_35 = { class: "msg-row-name" }
+const _hoisted_36 = { class: "msg-row-time" }
+const _hoisted_37 = { class: "msg-row-text" }
+const _hoisted_38 = { class: "msg-row-meta" }
+const _hoisted_39 = ["onClick"]
+const _hoisted_40 = /*#__PURE__*/_createElementVNode("span", {
   class: "msg-row-arrow",
   "aria-hidden": "true"
 }, "›", -1 /* HOISTED */)
@@ -595,165 +593,167 @@ function render(_ctx, _cache) {
       _createVNode(_component_van_icon, { name: "arrow-left" }),
       _createTextVNode(" 返回 ")
     ]),
-    _hoisted_2,
-    _createElementVNode("div", _hoisted_3, [
-      _createElementVNode("button", {
-        type: "button",
-        class: _normalizeClass(["msg-tab", {active: _ctx.msgScope==='received'}]),
-        role: "tab",
-        "aria-selected": _ctx.msgScope==='received',
-        onClick: _cache[1] || (_cache[1] = $event => (_ctx.switchMsgScope('received')))
-      }, "收到的", 10 /* CLASS, PROPS */, _hoisted_4),
-      _createElementVNode("button", {
-        type: "button",
-        class: _normalizeClass(["msg-tab", {active: _ctx.msgScope==='sent'}]),
-        role: "tab",
-        "aria-selected": _ctx.msgScope==='sent',
-        onClick: _cache[2] || (_cache[2] = $event => (_ctx.switchMsgScope('sent')))
-      }, "我发出的", 10 /* CLASS, PROPS */, _hoisted_5)
-    ]),
-    (_ctx.msgScope==='received')
-      ? (_openBlock(), _createElementBlock("div", _hoisted_6, [
-          (_ctx.loadingReceivedMessages)
-            ? (_openBlock(), _createElementBlock("div", _hoisted_7, [
-                (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
-                  return _createElementVNode("div", {
-                    class: "msg-skeleton-row",
-                    key: i
-                  })
-                }), 64 /* STABLE_FRAGMENT */))
-              ]))
-            : (!_ctx.receivedMessagesList.length)
-              ? (_openBlock(), _createBlock(_component_van_empty, {
-                  key: 1,
-                  description: "暂无留言"
-                }))
-              : (_openBlock(), _createElementBlock("div", _hoisted_8, [
-                  (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.receivedMessagesList, (m) => {
-                    return (_openBlock(), _createElementBlock("article", {
-                      key: m.id,
-                      class: _normalizeClass(["msg-row", {unread: _ctx.isReceivedUnread(m.id), clickable: !m.on_my_card}]),
-                      onClick: $event => (!m.on_my_card && _ctx.openMessageThread(m.target_openid, m.id, m))
-                    }, [
-                      _createElementVNode("div", {
-                        class: "msg-row-avatar",
-                        onClick: _withModifiers($event => (m.author_openid && _ctx.openUserDetailFromPage(m.author_openid, 'message_inbox')), ["stop"])
+    _createElementVNode("div", _hoisted_2, [
+      _hoisted_3,
+      _createElementVNode("div", _hoisted_4, [
+        _createElementVNode("button", {
+          type: "button",
+          class: _normalizeClass(["msg-tab", {active: _ctx.msgScope==='received'}]),
+          role: "tab",
+          "aria-selected": _ctx.msgScope==='received',
+          onClick: _cache[1] || (_cache[1] = $event => (_ctx.switchMsgScope('received')))
+        }, "收到的", 10 /* CLASS, PROPS */, _hoisted_5),
+        _createElementVNode("button", {
+          type: "button",
+          class: _normalizeClass(["msg-tab", {active: _ctx.msgScope==='sent'}]),
+          role: "tab",
+          "aria-selected": _ctx.msgScope==='sent',
+          onClick: _cache[2] || (_cache[2] = $event => (_ctx.switchMsgScope('sent')))
+        }, "我发出的", 10 /* CLASS, PROPS */, _hoisted_6)
+      ]),
+      (_ctx.msgScope==='received')
+        ? (_openBlock(), _createElementBlock("div", _hoisted_7, [
+            (_ctx.loadingReceivedMessages)
+              ? (_openBlock(), _createElementBlock("div", _hoisted_8, [
+                  (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
+                    return _createElementVNode("div", {
+                      class: "msg-skeleton-row",
+                      key: i
+                    })
+                  }), 64 /* STABLE_FRAGMENT */))
+                ]))
+              : (!_ctx.receivedMessagesList.length)
+                ? (_openBlock(), _createBlock(_component_van_empty, {
+                    key: 1,
+                    description: "暂无留言"
+                  }))
+                : (_openBlock(), _createElementBlock("div", _hoisted_9, [
+                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.receivedMessagesList, (m) => {
+                      return (_openBlock(), _createElementBlock("article", {
+                        key: m.id,
+                        class: _normalizeClass(["msg-row", {unread: _ctx.isReceivedUnread(m.id), clickable: !m.on_my_card}]),
+                        onClick: $event => (!m.on_my_card && _ctx.openMessageThread(m.target_openid, m.id, m))
                       }, [
-                        (m.author_avatar)
-                          ? (_openBlock(), _createElementBlock("img", {
-                              key: 0,
-                              src: m.author_avatar,
-                              alt: "",
-                              loading: "lazy"
-                            }, null, 8 /* PROPS */, _hoisted_11))
-                          : (_openBlock(), _createElementBlock("span", _hoisted_12, _toDisplayString((m.author_nickname || '?')[0]), 1 /* TEXT */))
-                      ], 8 /* PROPS */, _hoisted_10),
-                      _createElementVNode("div", _hoisted_13, [
+                        _createElementVNode("div", {
+                          class: "msg-row-avatar",
+                          onClick: _withModifiers($event => (m.author_openid && _ctx.openUserDetailFromPage(m.author_openid, 'message_inbox')), ["stop"])
+                        }, [
+                          (m.author_avatar)
+                            ? (_openBlock(), _createElementBlock("img", {
+                                key: 0,
+                                src: m.author_avatar,
+                                alt: "",
+                                loading: "lazy"
+                              }, null, 8 /* PROPS */, _hoisted_12))
+                            : (_openBlock(), _createElementBlock("span", _hoisted_13, _toDisplayString((m.author_nickname || '?')[0]), 1 /* TEXT */))
+                        ], 8 /* PROPS */, _hoisted_11),
                         _createElementVNode("div", _hoisted_14, [
-                          _createElementVNode("span", _hoisted_15, _toDisplayString(m.author_nickname), 1 /* TEXT */),
-                          _createElementVNode("span", _hoisted_16, _toDisplayString(_ctx.fmtTimeAgo(m.created_at)), 1 /* TEXT */)
+                          _createElementVNode("div", _hoisted_15, [
+                            _createElementVNode("span", _hoisted_16, _toDisplayString(m.author_nickname), 1 /* TEXT */),
+                            _createElementVNode("span", _hoisted_17, _toDisplayString(_ctx.fmtTimeAgo(m.created_at)), 1 /* TEXT */)
+                          ]),
+                          _createElementVNode("div", _hoisted_18, _toDisplayString(m.content), 1 /* TEXT */),
+                          _createElementVNode("div", _hoisted_19, [
+                            _createElementVNode("span", null, _toDisplayString(m.on_my_card ? '在我的卡片留言' : '回复了我的留言'), 1 /* TEXT */),
+                            (m.replied)
+                              ? (_openBlock(), _createElementBlock("span", _hoisted_20, "已回复"))
+                              : (_openBlock(), _createElementBlock("button", {
+                                  key: 1,
+                                  type: "button",
+                                  class: "msg-row-reply",
+                                  onClick: _withModifiers($event => (_ctx.startInlineReply(m)), ["stop"])
+                                }, "回复", 8 /* PROPS */, _hoisted_21))
+                          ]),
+                          (_ctx.inlineReplyId===m.id)
+                            ? (_openBlock(), _createElementBlock("div", {
+                                key: 0,
+                                class: "msg-inline",
+                                onClick: _cache[4] || (_cache[4] = _withModifiers(() => {}, ["stop"]))
+                              }, [
+                                _withDirectives(_createElementVNode("input", {
+                                  "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((_ctx.inlineReplyText) = $event)),
+                                  class: "msg-inline-input",
+                                  maxlength: "500",
+                                  placeholder: "回复…",
+                                  onKeyup: _withKeys($event => (_ctx.sendInlineReply(m)), ["enter"])
+                                }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_22), [
+                                  [_vModelText, _ctx.inlineReplyText]
+                                ]),
+                                _createElementVNode("button", {
+                                  type: "button",
+                                  class: "msg-inline-send",
+                                  disabled: !_ctx.inlineReplyText.trim() || _ctx.inlineReplyBusy,
+                                  onClick: $event => (_ctx.sendInlineReply(m))
+                                }, _toDisplayString(_ctx.inlineReplyBusy ? '发送中' : '发送'), 9 /* TEXT, PROPS */, _hoisted_23)
+                              ]))
+                            : _createCommentVNode("v-if", true)
                         ]),
-                        _createElementVNode("div", _hoisted_17, _toDisplayString(m.content), 1 /* TEXT */),
-                        _createElementVNode("div", _hoisted_18, [
-                          _createElementVNode("span", null, _toDisplayString(m.on_my_card ? '在我的卡片留言' : '回复了我的留言'), 1 /* TEXT */),
-                          (m.replied)
-                            ? (_openBlock(), _createElementBlock("span", _hoisted_19, "已回复"))
-                            : (_openBlock(), _createElementBlock("button", {
-                                key: 1,
-                                type: "button",
-                                class: "msg-row-reply",
-                                onClick: _withModifiers($event => (_ctx.startInlineReply(m)), ["stop"])
-                              }, "回复", 8 /* PROPS */, _hoisted_20))
-                        ]),
-                        (_ctx.inlineReplyId===m.id)
-                          ? (_openBlock(), _createElementBlock("div", {
-                              key: 0,
-                              class: "msg-inline",
-                              onClick: _cache[4] || (_cache[4] = _withModifiers(() => {}, ["stop"]))
-                            }, [
-                              _withDirectives(_createElementVNode("input", {
-                                "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((_ctx.inlineReplyText) = $event)),
-                                class: "msg-inline-input",
-                                maxlength: "500",
-                                placeholder: "回复…",
-                                onKeyup: _withKeys($event => (_ctx.sendInlineReply(m)), ["enter"])
-                              }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_21), [
-                                [_vModelText, _ctx.inlineReplyText]
-                              ]),
-                              _createElementVNode("button", {
-                                type: "button",
-                                class: "msg-inline-send",
-                                disabled: !_ctx.inlineReplyText.trim() || _ctx.inlineReplyBusy,
-                                onClick: $event => (_ctx.sendInlineReply(m))
-                              }, _toDisplayString(_ctx.inlineReplyBusy ? '发送中' : '发送'), 9 /* TEXT, PROPS */, _hoisted_22)
-                            ]))
+                        (!m.on_my_card)
+                          ? (_openBlock(), _createElementBlock("span", _hoisted_24, "›"))
+                          : _createCommentVNode("v-if", true),
+                        (_ctx.isReceivedUnread(m.id))
+                          ? (_openBlock(), _createElementBlock("span", _hoisted_25))
                           : _createCommentVNode("v-if", true)
-                      ]),
-                      (!m.on_my_card)
-                        ? (_openBlock(), _createElementBlock("span", _hoisted_23, "›"))
-                        : _createCommentVNode("v-if", true),
-                      (_ctx.isReceivedUnread(m.id))
-                        ? (_openBlock(), _createElementBlock("span", _hoisted_24))
-                        : _createCommentVNode("v-if", true)
-                    ], 10 /* CLASS, PROPS */, _hoisted_9))
-                  }), 128 /* KEYED_FRAGMENT */))
+                      ], 10 /* CLASS, PROPS */, _hoisted_10))
+                    }), 128 /* KEYED_FRAGMENT */))
+                  ]))
+          ]))
+        : (_openBlock(), _createElementBlock("div", _hoisted_26, [
+            (_ctx.loadingMyMessages)
+              ? (_openBlock(), _createElementBlock("div", _hoisted_27, [
+                  (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
+                    return _createElementVNode("div", {
+                      class: "msg-skeleton-row",
+                      key: i
+                    })
+                  }), 64 /* STABLE_FRAGMENT */))
                 ]))
-        ]))
-      : (_openBlock(), _createElementBlock("div", _hoisted_25, [
-          (_ctx.loadingMyMessages)
-            ? (_openBlock(), _createElementBlock("div", _hoisted_26, [
-                (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i) => {
-                  return _createElementVNode("div", {
-                    class: "msg-skeleton-row",
-                    key: i
-                  })
-                }), 64 /* STABLE_FRAGMENT */))
-              ]))
-            : (!_ctx.myMessagesList.length)
-              ? (_openBlock(), _createBlock(_component_van_empty, {
-                  key: 1,
-                  description: "暂无留言"
-                }))
-              : (_openBlock(), _createElementBlock("div", _hoisted_27, [
-                  (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.myMessagesList, (m) => {
-                    return (_openBlock(), _createElementBlock("article", {
-                      key: m.id,
-                      class: "msg-row clickable",
-                      onClick: $event => (_ctx.openMessageThread(m.target_openid, m.id, {target_nickname: m.target_nickname, target_avatar: m.target_avatar}))
-                    }, [
-                      _createElementVNode("div", {
-                        class: "msg-row-avatar",
-                        onClick: _withModifiers($event => (m.target_openid && _ctx.openUserDetailFromPage(m.target_openid, 'message_inbox')), ["stop"])
+              : (!_ctx.myMessagesList.length)
+                ? (_openBlock(), _createBlock(_component_van_empty, {
+                    key: 1,
+                    description: "暂无留言"
+                  }))
+                : (_openBlock(), _createElementBlock("div", _hoisted_28, [
+                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.myMessagesList, (m) => {
+                      return (_openBlock(), _createElementBlock("article", {
+                        key: m.id,
+                        class: "msg-row clickable",
+                        onClick: $event => (_ctx.openMessageThread(m.target_openid, m.id, {target_nickname: m.target_nickname, target_avatar: m.target_avatar}))
                       }, [
-                        (m.target_avatar)
-                          ? (_openBlock(), _createElementBlock("img", {
-                              key: 0,
-                              src: m.target_avatar,
-                              alt: "",
-                              loading: "lazy"
-                            }, null, 8 /* PROPS */, _hoisted_30))
-                          : (_openBlock(), _createElementBlock("span", _hoisted_31, _toDisplayString((m.target_nickname || '?')[0]), 1 /* TEXT */))
-                      ], 8 /* PROPS */, _hoisted_29),
-                      _createElementVNode("div", _hoisted_32, [
+                        _createElementVNode("div", {
+                          class: "msg-row-avatar",
+                          onClick: _withModifiers($event => (m.target_openid && _ctx.openUserDetailFromPage(m.target_openid, 'message_inbox')), ["stop"])
+                        }, [
+                          (m.target_avatar)
+                            ? (_openBlock(), _createElementBlock("img", {
+                                key: 0,
+                                src: m.target_avatar,
+                                alt: "",
+                                loading: "lazy"
+                              }, null, 8 /* PROPS */, _hoisted_31))
+                            : (_openBlock(), _createElementBlock("span", _hoisted_32, _toDisplayString((m.target_nickname || '?')[0]), 1 /* TEXT */))
+                        ], 8 /* PROPS */, _hoisted_30),
                         _createElementVNode("div", _hoisted_33, [
-                          _createElementVNode("span", _hoisted_34, _toDisplayString(m.target_nickname), 1 /* TEXT */),
-                          _createElementVNode("span", _hoisted_35, _toDisplayString(_ctx.fmtTimeAgo(m.created_at)), 1 /* TEXT */)
+                          _createElementVNode("div", _hoisted_34, [
+                            _createElementVNode("span", _hoisted_35, _toDisplayString(m.target_nickname), 1 /* TEXT */),
+                            _createElementVNode("span", _hoisted_36, _toDisplayString(_ctx.fmtTimeAgo(m.created_at)), 1 /* TEXT */)
+                          ]),
+                          _createElementVNode("div", _hoisted_37, _toDisplayString(m.content), 1 /* TEXT */),
+                          _createElementVNode("div", _hoisted_38, [
+                            _createElementVNode("span", null, "给 " + _toDisplayString(m.target_nickname), 1 /* TEXT */),
+                            _createElementVNode("button", {
+                              type: "button",
+                              class: "msg-row-del",
+                              onClick: _withModifiers($event => (_ctx.deleteMyMessage(m)), ["stop"])
+                            }, "删除", 8 /* PROPS */, _hoisted_39)
+                          ])
                         ]),
-                        _createElementVNode("div", _hoisted_36, _toDisplayString(m.content), 1 /* TEXT */),
-                        _createElementVNode("div", _hoisted_37, [
-                          _createElementVNode("span", null, "给 " + _toDisplayString(m.target_nickname), 1 /* TEXT */),
-                          _createElementVNode("button", {
-                            type: "button",
-                            class: "msg-row-del",
-                            onClick: _withModifiers($event => (_ctx.deleteMyMessage(m)), ["stop"])
-                          }, "删除", 8 /* PROPS */, _hoisted_38)
-                        ])
-                      ]),
-                      _hoisted_39
-                    ], 8 /* PROPS */, _hoisted_28))
-                  }), 128 /* KEYED_FRAGMENT */))
-                ]))
-        ]))
+                        _hoisted_40
+                      ], 8 /* PROPS */, _hoisted_29))
+                    }), 128 /* KEYED_FRAGMENT */))
+                  ]))
+          ]))
+    ])
   ]))
 }
 window.__YXQ_PAGES__ = window.__YXQ_PAGES__ || {};
