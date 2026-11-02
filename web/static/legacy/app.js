@@ -6021,9 +6021,8 @@ const yxqApp = createApp({
       const kind = n.kind || '';
       const payload = n.payload || {};
       if (kind === 'message' || kind === 'message_reply' || kind === 'message_sent') {
-        if (payload.on_my_card) return;
-        const targetRef = payload.target_ref || payload.target_user_id;
-        openMessageThread(targetRef, payload.message_id);
+        // 卡上留言也进对应留言串：目标就是自己的卡片，详情页会显示「我的卡片」并高亮该条。
+        openMessageThread(payload.target_ref || payload.target_user_id, payload.message_id);
         return;
       }
       if (kind === 'like') { openLikeInbox('liked'); return; }
@@ -6033,7 +6032,10 @@ const yxqApp = createApp({
         if (n.activity_id) openActivity(n.activity_id);
         return;
       }
-      if (kind === 'review') { openProfileDetail(); return; }
+      if (kind === 'review') {
+        user.value && user.value.is_admin ? openAdminConsole() : openProfileDetail();
+        return;
+      }
       if (kind === 'points') { openPoints(); return; }
       if (kind === 'security') { openPasswordPage(); return; }
       if (kind === 'message_report') { if (user.value && user.value.can_admin) openAdminConsole(); return; }

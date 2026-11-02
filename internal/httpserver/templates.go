@@ -49,7 +49,8 @@ import (
 // the volunteer-selection entry until check-in and hid self sign-in when the
 // activity has no valid code; 69 keeps the ended-activity defense and requires
 // a real 4-digit code. Keep admin @import values in sync.
-const assetVersion = "82"
+// 83 makes card-owner message feed items click into the highlighted thread.
+const assetVersion = "83"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

@@ -546,13 +546,12 @@ const _hoisted_20 = {
 const _hoisted_21 = ["onClick"]
 const _hoisted_22 = ["onKeyup"]
 const _hoisted_23 = ["disabled", "onClick"]
-const _hoisted_24 = {
-  key: 0,
+const _hoisted_24 = /*#__PURE__*/_createElementVNode("span", {
   class: "msg-row-arrow",
   "aria-hidden": "true"
-}
+}, "›", -1 /* HOISTED */)
 const _hoisted_25 = {
-  key: 1,
+  key: 0,
   class: "msg-unread-dot"
 }
 const _hoisted_26 = { key: 1 }
@@ -631,8 +630,8 @@ function render(_ctx, _cache) {
                     (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.receivedMessagesList, (m) => {
                       return (_openBlock(), _createElementBlock("article", {
                         key: m.id,
-                        class: _normalizeClass(["msg-row", {unread: _ctx.isReceivedUnread(m.id), clickable: !m.on_my_card}]),
-                        onClick: $event => (!m.on_my_card && _ctx.openMessageThread(m.target_openid, m.id, m))
+                        class: _normalizeClass(["msg-row clickable", {unread: _ctx.isReceivedUnread(m.id)}]),
+                        onClick: $event => (_ctx.openMessageThread(m.target_openid, m.id, m))
                       }, [
                         _createElementVNode("div", {
                           class: "msg-row-avatar",
@@ -688,9 +687,7 @@ function render(_ctx, _cache) {
                               ]))
                             : _createCommentVNode("v-if", true)
                         ]),
-                        (!m.on_my_card)
-                          ? (_openBlock(), _createElementBlock("span", _hoisted_24, "›"))
-                          : _createCommentVNode("v-if", true),
+                        _hoisted_24,
                         (_ctx.isReceivedUnread(m.id))
                           ? (_openBlock(), _createElementBlock("span", _hoisted_25))
                           : _createCommentVNode("v-if", true)

@@ -15,7 +15,8 @@
 7. SSE 实时未读：页面不刷新，新增通知后 badge 在数秒内出现；SSE 被阻断时
    12s 轮询兜底；
 8. 无 console error / pageerror（忽略 SSE 阻断与预期 400 改密响应）；
-9. 390×844 与 1280×900 截图。
+9. 卡上留言的动态与「留言→收到的」都可点进留言串并定位高亮（需 PSQL_CMD）；
+10. 390×844 与 1280×900 截图。
 
 需要已部署的 staging、一个可登录账号的原始 session cookie，以及能写测试通知的
 psql 命令。不放进 make ci，手动运行：
@@ -145,14 +146,84 @@ def insert_message(user_legacy_id: str, author_legacy_id: str, content: str) -> 
     )
 
 
+def insert_message_with_notification(user_legacy_id: str, author_legacy_id: str,
+                                     content: str) -> None:
+    """Seed one received message plus the same feed row CreateMessage would write.
+
+    The card-owner feed clicks `message` notifications whose payload carries
+    target_ref/message_id, so testing the click path needs the real payload shape.
+    """
+    psql(
+        "WITH tm AS ("
+        "  SELECT id, COALESCE(NULLIF(nickname, ''), name) AS name,"
+        "         COALESCE(NULLIF(legacy_open_id, ''), legacy_user_id, '') AS ref"
+        "    FROM users WHERE legacy_user_id = '" + user_legacy_id + "'"
+        "), am AS ("
+        "  SELECT id, COALESCE(NULLIF(nickname, ''), name) AS name,"
+        "         COALESCE(NULLIF(legacy_open_id, ''), legacy_user_id, '') AS ref"
+        "    FROM users WHERE legacy_user_id = '" + author_legacy_id + "'"
+        "), m AS ("
+        "  INSERT INTO messages (target_user_id, author_id, author_name, content, status)"
+        "  SELECT tm.id, am.id, am.name, '" + content + "', '正常' FROM tm, am"
+        "  RETURNING id, target_user_id, author_id"
+        ")"
+        " INSERT INTO notifications (user_id, kind, title, body, link, payload)"
+        " SELECT m.target_user_id, 'message', am.name || ' 在你的卡片留言',"
+        "        '" + content + "', '/app',"
+        "        jsonb_build_object("
+        "          'message_id', m.id, 'target_user_id', m.target_user_id,"
+        "          'target_ref', tm.ref, 'target_name', tm.name,"
+        "          'author_id', m.author_id, 'author_name', am.name,"
+        "          'author_ref', am.ref, 'on_my_card', true,"
+        "          'event_key', 'message:' || m.id || ':' || m.target_user_id)"
+        "   FROM m, tm, am;"
+        "SELECT pg_notify('yxq_notify', id::text) FROM users "
+        f"WHERE legacy_user_id = '{user_legacy_id}';"
+    )
+
+
 def cleanup_notifications() -> None:
     psql(f"DELETE FROM notifications WHERE title LIKE '{TITLE_PREFIX}%';")
+    psql(f"DELETE FROM notifications WHERE body LIKE '{TITLE_PREFIX}%';")
     psql(f"DELETE FROM messages WHERE content LIKE '{TITLE_PREFIX}%';")
 
 
 def badge(page):
     item = page.locator(".van-tabbar-item").filter(has_text="消息")
     return item.locator(".van-badge")
+
+
+def verify_message_click_through(page, content: str, width: int) -> None:
+    """卡上留言：动态与「留言→收到的」都必须进「我的卡片」留言串并高亮该条。"""
+    page.locator(".back-nav").click()
+    page.wait_for_function("window.yxqRootProxy.page === 'likes'", timeout=15000)
+    feed = page.locator(".feed-item").filter(has_text=content).first
+    feed.wait_for(state="visible", timeout=20000)
+    feed.click()
+    page.wait_for_function("window.yxqRootProxy.page === 'message_thread'", timeout=15000)
+    page.wait_for_function(
+        "window.yxqRootProxy.messageThread && !window.yxqRootProxy.messageThread.loading",
+        timeout=20000,
+    )
+    if not page.evaluate("window.yxqRootProxy.messageThread.target_is_self === true"):
+        raise SmokeFailure(f"{width}: 卡上留言动态未进入「我的卡片」留言串")
+    page.locator(".thread-msg.highlight").filter(has_text=content).first.wait_for(
+        state="visible", timeout=15000)
+
+    page.locator(".back-nav").click()
+    page.wait_for_function("window.yxqRootProxy.page === 'likes'", timeout=15000)
+    page.locator(".msg-entry").filter(has_text="留言").click()
+    page.wait_for_function("window.yxqRootProxy.page === 'message_inbox'", timeout=15000)
+    row = page.locator(".msg-row").filter(has_text=content).first
+    row.wait_for(state="visible", timeout=15000)
+    row.locator(".msg-row-text").click()
+    page.wait_for_function("window.yxqRootProxy.page === 'message_thread'", timeout=15000)
+    page.wait_for_function(
+        "window.yxqRootProxy.messageThread && !window.yxqRootProxy.messageThread.loading",
+        timeout=20000,
+    )
+    page.locator(".thread-msg.highlight").filter(has_text=content).first.wait_for(
+        state="visible", timeout=15000)
 
 
 def dismiss_guides(page) -> None:
@@ -554,8 +625,15 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
             page.locator(".msg-tab").filter(has_text="收到的").click()
             page.get_by_text(live_title).first.wait_for(state="visible", timeout=10000)
             badge(page).wait_for(state="hidden", timeout=10000)
+
+            # 8b. 卡上留言可点进：动态与收件箱两条入口都进留言串并高亮。
+            click_content = f"{TITLE_PREFIX}-click-{tag}-{int(time.time())}"
+            insert_message_with_notification(user_legacy_id, MESSAGE_AUTHOR_LEGACY_ID, click_content)
+            page.get_by_text(click_content).first.wait_for(state="visible", timeout=20000)
+            verify_message_click_through(page, click_content, width)
+            page.screenshot(path=str(out_dir / f"message-click-{tag}.png"))
         else:
-            print(f"{width}px: 无 PSQL_CMD，跳过 SSE 实时留言用例")
+            print(f"{width}px: 无 PSQL_CMD，跳过 SSE 实时留言与留言点进用例")
 
         assert_no_console_errors(errors, f"{width}px")
         return failures

@@ -18,9 +18,9 @@
     </div>
     <van-empty v-else-if="!receivedMessagesList.length" description="暂无留言"></van-empty>
     <div v-else class="msg-inbox">
-      <article v-for="m in receivedMessagesList" :key="m.id" class="msg-row"
-        :class="{unread: isReceivedUnread(m.id), clickable: !m.on_my_card}"
-        @click="!m.on_my_card && openMessageThread(m.target_openid, m.id, m)">
+      <article v-for="m in receivedMessagesList" :key="m.id" class="msg-row clickable"
+        :class="{unread: isReceivedUnread(m.id)}"
+        @click="openMessageThread(m.target_openid, m.id, m)">
         <div class="msg-row-avatar" @click.stop="m.author_openid && openUserDetailFromPage(m.author_openid, 'message_inbox')">
           <img v-if="m.author_avatar" :src="m.author_avatar" alt="" loading="lazy">
           <span v-else>{{ (m.author_nickname || '?')[0] }}</span>
@@ -43,7 +43,7 @@
               @click="sendInlineReply(m)">{{ inlineReplyBusy ? '发送中' : '发送' }}</button>
           </div>
         </div>
-        <span v-if="!m.on_my_card" class="msg-row-arrow" aria-hidden="true">›</span>
+        <span class="msg-row-arrow" aria-hidden="true">›</span>
         <span v-if="isReceivedUnread(m.id)" class="msg-unread-dot"></span>
       </article>
     </div>

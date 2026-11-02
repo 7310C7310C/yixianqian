@@ -21,8 +21,8 @@
         "reported_messages",
         "message_thread"
       ],
-      "bytes": 62499,
-      "sha256": "aeef3ef632dc4865e88c406b5713c402955766ff533d221e2a191be6fd6d1cc0"
+      "bytes": 62365,
+      "sha256": "28e0b12a2b2b882973d595d36bb57092076aba91d55bd1f5eb8ca27aa754ed7d"
     },
     "home": {
       "file": "pages/home.render.js",
@@ -93,8 +93,8 @@
     "message_inbox": {
       "group": "likes",
       "file": "pages/likes.render.js",
-      "templateSha256": "58e852657253044ca3d54bff5d506d76efb9426baa553da919d17eb2676aa9c1",
-      "templateSize": 4247
+      "templateSha256": "2271d2d90c37082c4adba1bd310f806ea2e7bad04b82c6b90570f2ee31e7c830",
+      "templateSize": 4193
     },
     "reported_messages": {
       "group": "likes",
