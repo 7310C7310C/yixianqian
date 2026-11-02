@@ -153,15 +153,7 @@ func effectiveThumbWidth(original, requested int) int {
 }
 
 func thumbVariantKey(base string, width int) string {
-	if base == "" || width <= 0 {
-		return base
-	}
-	dot := strings.LastIndex(base, ".")
-	suffix := "_" + strconv.Itoa(width)
-	if dot < 0 {
-		return base + suffix
-	}
-	return base[:dot] + suffix + base[dot:]
+	return media.ThumbVariantKey(base, width)
 }
 
 // serveThumbVariant streams a pre-generated width variant. Variants live next
@@ -170,10 +162,7 @@ func thumbVariantKey(base string, width int) string {
 func (a *App) serveThumbVariant(w http.ResponseWriter, r *http.Request, m mediaObject, width int) {
 	// Try the requested width, then smaller variants. This keeps a missing
 	// 1280 variant from falling all the way back to 512 on a DPR3 phone.
-	for _, candidate := range []int{width, 1024, 768} {
-		if candidate > width {
-			continue
-		}
+	for _, candidate := range thumbVariantCandidates(width) {
 		key := thumbVariantKey(m.ThumbKey, candidate)
 		if key == "" || key == m.ThumbKey {
 			continue
@@ -210,10 +199,31 @@ func (a *App) serveThumbVariant(w http.ResponseWriter, r *http.Request, m mediaO
 		writeMediaBytes(w, r, etag, "image/jpeg", int64(len(data)), data)
 		return
 	}
-	a.serveMediaObject(w, r, m, true)
+	// No variant exists (typically a source narrower than 768). Redirect to the
+	// base 512 thumb and cache the redirect, so every card view does not probe
+	// the same missing 768/1024 keys again.
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.Redirect(w, r, r.URL.Path+"?size=thumb", http.StatusFound)
 }
 
-var thumbVariantWidths = []int{768, 1024, 1280}
+func thumbVariantCandidates(width int) []int {
+	out := make([]int, 0, 3)
+	seen := make(map[int]bool, 3)
+	for _, candidate := range []int{width, 1024, 768} {
+		if candidate > width || seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		out = append(out, candidate)
+	}
+	return out
+}
+
+// Card srcset caps at 1024; 1280 is no longer generated (wasted CPU/storage).
+var thumbVariantWidths = []int{768, 1024}
+
+// Old deployments wrote 1280; deletion still removes it.
+var thumbVariantDeleteWidths = []int{768, 1024, 1280}
 
 // putThumbVariants is best-effort: card images fall back to 512 when a
 // variant is absent, so a variant upload failure must not fail the photo save.
@@ -221,17 +231,22 @@ func (a *App) putThumbVariants(ctx context.Context, original []byte, contentType
 	if contentType != "image/jpeg" || thumbKey == "" {
 		return
 	}
+	widths := make([]int, 0, len(thumbVariantWidths))
 	for _, width := range thumbVariantWidths {
 		// Allow a small upscale (<=15%) for near-miss sources such as 736px;
 		// skip large fake upscales (480 -> 768/1024/1280).
 		if originalWidth > 0 && width*100 > originalWidth*115 {
 			continue
 		}
-		data, err := media.ResizeWidthJPEG(original, width, 82)
-		if err != nil {
-			a.log.Warn("thumb variant encode failed", "error", err, "width", width)
-			continue
-		}
+		widths = append(widths, width)
+	}
+	// 一次 decode 生成全部宽度，避免上传请求内重复解码 3 次。
+	variants, err := media.ResizeWidthsJPEG(original, widths, 82)
+	if err != nil {
+		a.log.Warn("thumb variant encode failed", "error", err)
+		return
+	}
+	for width, data := range variants {
 		if err := a.store.Put(ctx, thumbVariantKey(thumbKey, width), data, "image/jpeg"); err != nil {
 			a.log.Warn("thumb variant upload failed", "error", err, "width", width)
 		}

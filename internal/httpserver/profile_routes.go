@@ -784,6 +784,7 @@ func (a *App) handleProfilePhotoDelete(w http.ResponseWriter, r *http.Request, a
 	if objectsRemoved {
 		a.removeObject(r, media.ID, media.ObjectKey)
 		a.removeObject(r, media.ID, media.ThumbKey)
+		a.removeMediaVariants(r, media.ID, media.ThumbKey)
 	}
 	a.audit(r, &user.ID, "profile.photo_deleted", "media", mediaID, map[string]any{"media_id": mediaID})
 	photos, err := a.db.ProfilePhotos(r.Context(), user.ID)

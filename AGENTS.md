@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-02
+last_verified: 2026-11-03
 sources:
   - Makefile
   - .github/workflows/**
@@ -66,10 +66,10 @@ sources:
 
 - 顶层 SPA 默认虚拟历史栈：子页/浮层/应用内返回统一用 `pushHistory`、`hist.replace`、`handleBack`；不得直接调用 `window.history.pushState/replaceState/back`。`native_admin` 与 `?history=legacy` 例外。
 - 前端交互不变量（照片同步、门禁返回栈、签到/匹配入口）见 `docs/DECISIONS.md` §4.3；本文件只留性能与历史栈红线。局部 SPA 规则见 `web/AGENTS.md`。
-- 热路径（`web/static/legacy/**`、`deploy/nginx/**`、`internal/httpserver/{middleware,handlers_media,media_serve,legacy_ui,readcache,app}.go`、DB home/cards/profile/notifications/照片授权、热索引 migration）必须给 `make perf-bench`/`make perf-lcp` 前后数字；p95 不得比基线差 >10%。
+- 热路径（`web/static/legacy/**`、`deploy/nginx/**`、`internal/httpserver/{middleware,handlers_media,media_serve,legacy_ui,readcache,app}.go`、DB home/cards/profile/notifications/照片授权、热索引 migration）必须给 `make perf-bench`/`make perf-lcp` 前后数字；前后必须对同一基线提交（通常是本次改动前的 HEAD），不是更早的历史基线；p95 不得比基线差 >10%。
 - 不得移除：边缘 keepalive、静态 gzip/identity 分键缓存、TLS session ticket、缩略图磁盘缓存、媒体 ETag/304、10s 读缓存 + epoch、`0008`–`0010` 热索引；不得给 `/legacy/api` 加边缘 `proxy_cache`，cache key 不含 `$cookie_`。
 - 不得把 `app.css`/`app.min.js`/`app.render.js` 大段内联回壳；不得退回 `vant.full.min.*`；生成物必须走 `make spa-check`。
-- 预算只改 `tools/perf/budgets.json` 并走 Review；没有自动更新命令。操作细节看 `tools/README.md`。
+- 预算只改 `tools/perf/budgets.json` 并走 Review；commit 记录旧值→新值、实测值与理由，基线抬高不得只为凑上限；没有自动更新命令。操作细节看 `tools/README.md`。
 
 ## 文档地图
 

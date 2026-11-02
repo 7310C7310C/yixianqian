@@ -32,8 +32,9 @@ sources: []
 | `cmd/seed` | `-name` | string | `"测试用户"` | display name | `cmd/seed/main.go` |
 | `cmd/seed` | `-phone` | string | `"13800000006"` | phone number | `cmd/seed/main.go` |
 | `cmd/server` | — | — | — | — | `cmd/server/main.go` |
-| `cmd/thumbwarm` | `-dry-run` | bool | `false` | 只统计待预热数量 | `cmd/thumbwarm/main.go` |
-| `cmd/thumbwarm` | `-limit` | int | `0` | 最多预热多少张；0=全部 | `cmd/thumbwarm/main.go` |
+| `cmd/thumbwarm` | `-dry-run` | bool | `false` | 只统计待处理数量 | `cmd/thumbwarm/main.go` |
+| `cmd/thumbwarm` | `-limit` | int | `0` | 最多处理多少张；0=全部 | `cmd/thumbwarm/main.go` |
+| `cmd/thumbwarm` | `-variants` | bool | `false` | 生成 768/1024/1280 卡面变体（默认只预热 512 缩略图） | `cmd/thumbwarm/main.go` |
 | `cmd/thumbwarm` | `-workers` | int | `8` | 并发拉取数（1-8） | `cmd/thumbwarm/main.go` |
 | `cmd/token` | `-legacy-user-id` | string | `""` | existing user's legacy_user_id | `cmd/token/main.go` |
 | `cmd/token` | `-name` | string | `""` | display name (required for a new phone) | `cmd/token/main.go` |

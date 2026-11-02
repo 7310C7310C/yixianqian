@@ -103,3 +103,37 @@ func (d *DB) ListThumbs(ctx context.Context, limit int) ([]ThumbRef, error) {
 	}
 	return out, rows.Err()
 }
+
+// VariantSource is a media row that can be used to (re)generate card width
+// variants. It is read-only and only used by cmd/thumbwarm -variants.
+type VariantSource struct {
+	MediaID     string
+	ObjectKey   string
+	ThumbKey    string
+	ContentType string
+	Width       int
+}
+
+// ListVariantSources lists JPEG media with an original object and thumb.
+func (d *DB) ListVariantSources(ctx context.Context, limit int) ([]VariantSource, error) {
+	if limit <= 0 {
+		limit = 1 << 30
+	}
+	rows, err := d.pool.Query(ctx,
+		`SELECT id, object_key, thumb_key, content_type, width FROM media
+		  WHERE object_key <> '' AND thumb_key <> '' AND content_type = 'image/jpeg'
+		  ORDER BY id LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: list variant sources: %w", err)
+	}
+	defer rows.Close()
+	out := make([]VariantSource, 0, 1024)
+	for rows.Next() {
+		var src VariantSource
+		if err := rows.Scan(&src.MediaID, &src.ObjectKey, &src.ThumbKey, &src.ContentType, &src.Width); err != nil {
+			return nil, fmt.Errorf("db: scan variant source: %w", err)
+		}
+		out = append(out, src)
+	}
+	return out, rows.Err()
+}

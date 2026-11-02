@@ -535,12 +535,22 @@ func (a *App) saveStagedRegistrationPhotos(ctx context.Context, userID int64, st
 			if _, removed, rerr := a.db.RemoveMediaOwned(ctx, userID, saved.ID); rerr == nil && removed {
 				a.removeStoredObject(ctx, id, key)
 				a.removeStoredObject(ctx, id, thumbKey)
+				a.removeStoredMediaVariants(ctx, id, thumbKey)
 			}
 			return nil, err
 		}
 		mediaIDs = append(mediaIDs, photo.MediaID)
 	}
 	return mediaIDs, nil
+}
+
+func (a *App) removeStoredMediaVariants(ctx context.Context, mediaID, thumbKey string) {
+	if thumbKey == "" {
+		return
+	}
+	for _, width := range thumbVariantDeleteWidths {
+		a.removeStoredObject(ctx, mediaID, thumbVariantKey(thumbKey, width))
+	}
 }
 
 func (a *App) removeStoredObject(ctx context.Context, mediaID, key string) {

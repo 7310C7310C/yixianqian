@@ -228,3 +228,31 @@ func TestEffectiveThumbWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveMediaVariantsDeletesAllWidths(t *testing.T) {
+	store := newFakeStore()
+	app := &App{store: store}
+	thumb := "media/1/m_thumb.jpg"
+	for _, width := range thumbVariantDeleteWidths {
+		store.objects[thumbVariantKey(thumb, width)] = []byte("variant")
+	}
+	app.removeMediaVariants(httptest.NewRequest(http.MethodDelete, "/media/m1", nil), "m1", thumb)
+	for _, width := range thumbVariantDeleteWidths {
+		if _, ok := store.objects[thumbVariantKey(thumb, width)]; ok {
+			t.Fatalf("variant %d not deleted", width)
+		}
+	}
+}
+
+func TestThumbVariantCandidatesDedupe(t *testing.T) {
+	if got := thumbVariantCandidates(768); len(got) != 1 || got[0] != 768 {
+		// 1024 > 768 is skipped; the duplicate 768 probe is removed.
+		t.Fatalf("candidates(768)=%v", got)
+	}
+	if got := thumbVariantCandidates(1024); len(got) != 2 || got[0] != 1024 || got[1] != 768 {
+		t.Fatalf("candidates(1024)=%v", got)
+	}
+	if got := thumbVariantCandidates(1280); len(got) != 3 || got[0] != 1280 || got[1] != 1024 || got[2] != 768 {
+		t.Fatalf("candidates(1280)=%v", got)
+	}
+}

@@ -324,6 +324,7 @@ func (a *App) rollbackAdminActivityPoster(r *http.Request, userID int64, saved d
 	a.removeObject(r, removed.ID, removed.ObjectKey)
 	if removed.ThumbKey != "" {
 		a.removeObject(r, removed.ID, removed.ThumbKey)
+		a.removeMediaVariants(r, removed.ID, removed.ThumbKey)
 	}
 }
 

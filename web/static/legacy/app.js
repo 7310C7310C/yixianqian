@@ -923,6 +923,17 @@ const yxqApp = createApp({
 
     const photoIndex = ref(0);
     const photoSlideDir = ref('');
+    // 卡面先显示 512（已预取，切卡秒显），停留 ~600ms 后再升级到 DPR 对应变体；
+    // 快速连滑时不会触发高分辨率下载，避免每滑一张都要等新图。
+    const sharpPhoto = ref(false);
+    let sharpPhotoTimer = null;
+    function scheduleSharpPhoto(delay) {
+      sharpPhoto.value = false;
+      clearTimeout(sharpPhotoTimer);
+      sharpPhotoTimer = setTimeout(() => { sharpPhoto.value = true }, typeof delay === 'number' ? delay : 6e2);
+    }
+    // 手势开始只取消“待升级”，已升级的 768/1024 保持不变，避免触点一下先糊回 512。
+    function cancelSharpPhoto() { clearTimeout(sharpPhotoTimer); }
     const currentCard = computed(() => cards.value[cardIndex.value] || null);
     const currentMsgCount = computed(() => (currentCard.value && currentCard.value.msg_count) || 0);
     const currentPhotoUrl = computed(() => {
@@ -1048,7 +1059,7 @@ const yxqApp = createApp({
     function onViewportVisibility() {
       if (!document.hidden) onViewportCropChange();   // 回前台：工具栏/键盘状态可能已变
     }
-    function onPhotoLoad(e) {
+    function onPhotoLoad(e, i) {
       try {
         const raw = e && e.target && e.target.getAttribute ? e.target.getAttribute('src') : '';
         if (raw) loadedPhotoSet.add(raw);
@@ -1057,8 +1068,11 @@ const yxqApp = createApp({
       } catch (_) {}
       clearTimeout(photoLoadingTimer);
       photoLoading.value = false;
+      // 512 真正显示后再等 600ms 升级，慢网下不让高分辨率请求抢在首帧前。
+      if ((typeof i !== 'number' || i === photoIndex.value) && !sharpPhoto.value) scheduleSharpPhoto(6e2);
     }
     function triggerPhotoLoading() {
+      scheduleSharpPhoto();
       clearTimeout(photoLoadingTimer);
       photoLoading.value = false;
       const url = currentPhotoUrl.value;
@@ -2741,6 +2755,7 @@ const yxqApp = createApp({
     function closeSwipeGuide() {
       showSwipeGuide.value = false;
       try { localStorage.setItem(SWIPE_GUIDE_KEY, '1'); } catch(e) {}
+      preloadAround();
       maybeShowActivityPromo(); // 新手引导让位后再补弹活动引导
       maybeShowUpdateNotes();
     }
@@ -2860,11 +2875,6 @@ const yxqApp = createApp({
       if(guardOverlay('filter', () => { showFilter.value = false; })) return;
       showFilter.value = false;
     }
-    function preloadImage(url) {
-      if (!url) return;
-      const img = new Image();
-      img.src = url;
-    }
     function cardPhotosOf(c) {
       return (c && (c.photos || (c.photo ? [c.photo] : []))) || [];
     }
@@ -2874,21 +2884,23 @@ const yxqApp = createApp({
       return cardPhotosOf(c);
     }
     function schedulePreloadAround() {
-      // 首屏不抢带宽：下一张卡的首图等 load 后空闲再预取；切卡仍走 preloadAround()。
-      var run = function(){ try { preloadAround(); } catch (e) {} };
-      var start = function(){
-        if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 3000 });
-        else setTimeout(run, 1500);
-      };
-      if (document.readyState === 'complete') setTimeout(start, 1e3);
-      else window.addEventListener('load', function(){ setTimeout(start, 1e3); }, { once: true });
+      // 首屏 hero 绘制后再预取下一张卡的首图（512），不抢 LCP 带宽。
+      if (document.readyState === 'complete') setTimeout(preloadAround, 8e2);
+      else window.addEventListener('load', function(){ setTimeout(preloadAround, 8e2); }, { once: true });
     }
     function preloadAround() {
-      // 只预取下一张卡片的首图；当前卡片的相邻照片由 deck 自身按需加载。
+      // 预取后两张卡的首图（512）：连续快滑时领先两张，避免每滑一张现下载；
+      // 上限固定为两张，避免牌堆一次拉过多图。
       const next = cards.value[cardIndex.value + 1];
-      if (!next) return;
-      const p = cardDisplayPhotos(next);
-      if (p[0]) preloadImage(p[0]);
+      if (next) {
+        const p = cardDisplayPhotos(next);
+        if (p[0]) new Image().src = p[0];
+      }
+      const next2 = cards.value[cardIndex.value + 2];
+      if (next2) {
+        const p2 = cardDisplayPhotos(next2);
+        if (p2[0]) new Image().src = p2[0];
+      }
     }
     function cardsQuery() {
       const q = buildFilterQuery();
@@ -2932,7 +2944,6 @@ const yxqApp = createApp({
         cardsStart.value = 0;
         cardIndex.value = 0; photoIndex.value = 0;
         triggerPhotoLoading();
-        preloadAround();
         maybeShowSwipeGuide();
       }
       catch(e) { vant.showToast(e.message); }
@@ -3031,6 +3042,7 @@ const yxqApp = createApp({
         return;
       }
       cardTouchIgnore = false;
+      cancelSharpPhoto();
       cardTouchStartX = e.touches[0].clientX; cardTouchStartY = e.touches[0].clientY;
     }
     function onCardTouchMove(e) {}
@@ -3206,14 +3218,12 @@ const yxqApp = createApp({
       // 鼠标移出时视为结束，不触发切换，避免卡死
       cardMouseDown = false;
     }
-    // 兼容旧模板（如有残留调用）
-    const onTouchStart = onCardTouchStart;
-    const onTouchMove = onCardTouchMove;
-    const onTouchEnd = onCardTouchEnd;
     // —— 图片区：横滑切换照片，点击放大 ——
     let photoTouchStartX = 0, photoTouchStartY = 0, photoTouchStartTime = 0;
     let photoDidSwipe = false;
     function onPhotoTouchStart(e) {
+      preloadAround();
+      cancelSharpPhoto();
       photoTouchStartX = e.touches[0].clientX;
       photoTouchStartY = e.touches[0].clientY;
       photoTouchStartTime = Date.now();
@@ -6208,8 +6218,9 @@ const yxqApp = createApp({
               : '';
             if (pos && window.__YXQ_HERO__.setObjectPosition) window.__YXQ_HERO__.setObjectPosition(pos);
           } catch (_) {}
-          // 等首屏长任务结束 + 至少一帧绘制；见 dismissHeroAfterPaint 注释。
+          // 等首屏 hero 绘制/长任务结束后再预取，避免抢 LCP 带宽与解码主线程。
           dismissHeroAfterPaint();
+          setTimeout(preloadAround, 600);
           return;
         }
         if (Date.now() > deadline) { dismissBootHero('timeout'); return; }
@@ -7520,6 +7531,7 @@ const yxqApp = createApp({
       isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
       cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoSrc, photoLoading,
+      sharpPhoto,
       showSwipeGuide, closeSwipeGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
       filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,
@@ -7528,7 +7540,6 @@ const yxqApp = createApp({
       regionProvinces, regionCities, regionAreas, onRegionProvince, onRegionCity, onRegionArea,
       showFaceInvalidDialog, faceInvalidCountdown, goFaceInvalidNow,
       slideDir,
-      onTouchStart, onTouchMove, onTouchEnd,
       onCardTouchStart, onCardTouchMove, onCardTouchEnd,
       onCardMouseDown, onCardMouseMove, onCardMouseUp, onCardMouseLeave,
       onPhotoTouchStart, onPhotoTouchMove, onPhotoTouchEnd, onPhotoClick,

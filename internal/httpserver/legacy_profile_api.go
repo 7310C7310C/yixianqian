@@ -503,6 +503,7 @@ func (a *App) handleLegacyProfilePhotoDelete(w http.ResponseWriter, r *http.Requ
 	if objectsRemoved {
 		a.removeObject(r, deleted.ID, deleted.ObjectKey)
 		a.removeObject(r, deleted.ID, deleted.ThumbKey)
+		a.removeMediaVariants(r, deleted.ID, deleted.ThumbKey)
 	}
 	a.audit(r, &user.ID, "profile.photo_deleted", "media", mediaID,
 		map[string]any{"media_id": mediaID, "source": "legacy"})

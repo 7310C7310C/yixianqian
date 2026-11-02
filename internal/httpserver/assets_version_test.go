@@ -212,8 +212,13 @@ func TestDeckLoadsOnlyAdjacentPhotos(t *testing.T) {
 	if !strings.Contains(js, "function photoSrc(i)") {
 		t.Fatal("app.js is missing photoSrc")
 	}
-	if !strings.Contains(js, "cards.value[cardIndex.value + 1]") {
-		t.Fatal("preloadAround should only prefetch the next card")
+	// 连续快滑需要领先两张；但仍需固定上限，不能一次预取整个牌堆。
+	if !strings.Contains(js, "cards.value[cardIndex.value + 1]") ||
+		!strings.Contains(js, "cards.value[cardIndex.value + 2]") {
+		t.Fatal("preloadAround should prefetch the next two cards")
+	}
+	if strings.Contains(js, "cards.value[cardIndex.value + 3]") {
+		t.Fatal("preloadAround must not prefetch more than two cards")
 	}
 }
 

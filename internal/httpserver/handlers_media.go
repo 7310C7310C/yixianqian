@@ -152,6 +152,7 @@ func (a *App) discardMedia(r *http.Request, userID int64, mediaID string) {
 	}
 	a.removeObject(r, m.ID, m.ObjectKey)
 	a.removeObject(r, m.ID, m.ThumbKey)
+	a.removeMediaVariants(r, m.ID, m.ThumbKey)
 }
 
 // heicOptions is shared by the photo and QR upload paths. The request context
@@ -233,6 +234,7 @@ func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (d
 	if err != nil {
 		a.removeObject(r, id, key)
 		a.removeObject(r, id, thumbKey)
+		a.removeMediaVariants(r, id, thumbKey)
 		return db.Media{}, err
 	}
 
@@ -247,6 +249,18 @@ func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (d
 
 // removeObject deletes one stored object. The R2 object key is never logged:
 // only the media id may appear in logs and audit trails.
+// removeMediaVariants deletes the pre-generated width variants that live next
+// to the 512 thumb. Called on every media deletion path so a user delete does
+// not leave 768/1024/1280 copies behind in R2.
+func (a *App) removeMediaVariants(r *http.Request, mediaID, thumbKey string) {
+	if thumbKey == "" {
+		return
+	}
+	for _, width := range thumbVariantDeleteWidths {
+		a.removeObject(r, mediaID, thumbVariantKey(thumbKey, width))
+	}
+}
+
 func (a *App) removeObject(r *http.Request, mediaID, key string) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 	defer cancel()
