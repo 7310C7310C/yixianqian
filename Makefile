@@ -20,7 +20,7 @@ PERF_LCP_OUT ?= /tmp/yxq-perf/lcp.json
 LDFLAGS := -X github.com/7310C7310C/yixianqian/internal/platform.Version=$(VERSION)
 
 .PHONY: all tidy generate fmt fmt-check vet test test-race test-race-full test-integration test-migration \
-        test-broadcast-ui build run seed token docs-gen docs-check docs-check-stale prepush ci \
+        test-broadcast-ui build run status seed token docs-gen docs-check docs-check-stale prepush ci \
         static-gzip static-gzip-check spa-check spa-check-node \
         perf-budget perf-guard-test perf-bench perf-lcp \
         fast smoke-fast smoke-full smoke-viewer-arrows deploy-wait review-packet
@@ -60,6 +60,9 @@ test-integration:
 
 test-migration:
 	python3 -m unittest discover -s tools -p 'test_*.py' -v
+
+status:
+	@BASE_URL="$(BASE_URL)" ./tools/status.sh
 
 docs-gen:
 	python3 tools/gen_docs.py

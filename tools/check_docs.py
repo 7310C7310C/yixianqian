@@ -695,6 +695,9 @@ HISTORY_DOCS = ("docs/STATUS.md", "docs/runbooks/staging.md")
 HISTORY_HEADING = re.compile(
     r"^#{1,6}\s+(?:20\d{2}-\d{2}-\d{2}[A-Za-z]?(?![\w])|.*(?:批次|性能批次))"
 )
+HISTORY_LINE = re.compile(
+    r"^\s*(?:(?:>\s*)|(?:[-*+]\s+))?20\d{2}-\d{2}-\d{2}(?!\d)"
+)
 
 
 def check_doc_budgets(root: Path, docs: list[str]) -> list[common.Finding]:
@@ -812,21 +815,21 @@ def check_doc_budgets(root: Path, docs: list[str]) -> list[common.Finding]:
 
 
 def check_current_only_headings(root: Path) -> list[common.Finding]:
-    """STATUS/runbook must not grow dated or batch-history headings."""
+    """STATUS/runbook must not grow dated or batch-history headings/lines."""
     findings: list[common.Finding] = []
     for rel in HISTORY_DOCS:
         path = root / rel
         if not path.is_file():
             continue
         for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if HISTORY_HEADING.match(line.strip()):
+            if HISTORY_HEADING.match(line.strip()) or HISTORY_LINE.match(line):
                 findings.append(
                     common.Finding(
                         "E-DOC-HISTORY",
                         "error",
                         rel,
                         line_no,
-                        f"当前状态文档出现历史/批次标题：{line.strip()}",
+                        f"当前状态文档出现历史/批次标题或日期行：{line.strip()}",
                         "把该段移到 commit message/.team/git log；STATUS/runbook 只写当前状态与操作步骤",
                     )
                 )

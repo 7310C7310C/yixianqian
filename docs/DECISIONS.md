@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-30
+last_verified: 2026-11-02
 sources: []
 -->
 
@@ -68,7 +68,7 @@ sources: []
 
 ### 2.4 媒体私有、上传去元数据
 
-- 决策：R2 私有桶，浏览器只经 `/media/{id}`；上传接受 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC（HEIC/HEIF 由后端 ispe 元数据预检（纯 Go）后经 heif-convert 子进程转 JPEG(q95) 再统一 q92，见 2026-10-29 决策）；单张 10MiB、单边 8000px、像素上限 12.5MP、并发 1；原图与缩图入库前重编码，按 EXIF/eXIf 方向 auto-orient，去除 EXIF/GPS/XMP/文本元数据。
+- 决策：R2 私有桶，浏览器只经 `/media/{id}`；上传接受 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC（HEIC/HEIF 由后端 ispe 元数据预检（纯 Go）后经 heif-convert 子进程转 JPEG(q95) 再统一 q92，原始 HEIC 不留；透明填白、GIF 首帧）；单张 10MiB、单边 8000px、像素上限 12.5MP、并发 1；原图与缩图入库前重编码，按 EXIF/eXIf 方向 auto-orient，去除 EXIF/GPS/XMP/文本元数据。
 - 决策（删除）：资料照片删除只删调用者 attachment；仅当无其它 `profile_photos` 引用且 `media.user_id` 为调用者时，才删 media 行与 R2 对象；非属主删最后一个 attachment 时保留 media/R2（当前无 GC，记 P3）。
 - 理由：照片是私人物品；不信任 Content-Type，必须 sniff + decode；iPhone 12MP（4032×3024）必须可通过。
 - 不要做：不把 R2 URL/key 给前端或日志；不跳过重编码；不恢复 12MP 旧上限；不批量重写已入库历史原图。
@@ -125,20 +125,15 @@ sources: []
 - 不要做：不把历史报名当永久阻塞；不改变 matched 状态机其他校验。
 - 验证：`TestIntegrationEndedSignupDoesNotBlockMatched`。
 
-### 3.5 公开页扫描防护
+### 3.5 公开页、登录与注册
 
 - 决策：匿名 `/`、`/?login=1`（`/login` 303）、`/activate`、`/password`、`/register/done`、404、公开 GET 错误页、`/register` 表单页：响应体除 `<title>` 外 **0 汉字**；引用同源 CSS/JS 也 0 汉字；中文由 `home.js`/`public-copy.js`/`register.js` 注入。
 - 决策：`/register` 由服务端生成 ASCII 文案目录（`data-copy-json`，非 ASCII 全 `\uXXXX`），option 的中文 value 由 JS 写入后按原契约提交；POST 失败重渲染也 0 汉字。POST 表单错误消息、内部 500、管理台错误页是明示例外。
-- 决策：`/welcome` 已并入首页，`GET /welcome` 301 → `/`；首页只保留飞书入口链接，不展示二维码。
-- 决策：大图 viewer 用 API `photos_meta` 定框；缩图先显、原图后台升级；无 meta 时回退自然尺寸，10s timeout/cancel 保留。
-- 不要做：不把中文写回公开页源码；不恢复二维码；不恢复 `/welcome` 独立页；不给公开页引入含中文注释的 `app.css`/`shell.css`。
-- 决策（2026-10-29）：独立 `/login` 页并入匿名首页登录弹框；`GET /login` 303 `/?login=1`（保留 `next`/`logged_out`/`activated`），`POST /login` 契约不变；弹框文案仍由 `home.js` 注入，首页保持 0 汉字。
-- 决策（2026-10-29）：注册页「小天使二维码」由后台「内容与安全 → 小天使二维码」上传/更换；资产存 `site_assets`，公开只读 `/angel-qr`（1 小时缓存）；与已废弃的首页二维码无关，首页仍不展示二维码。
-- 决策（2026-10-29）：注册地区改省-市 / 市-区联动（值保持 `广东深圳`/`深圳南山`），行业与「你是怎么知道一线牵的」均为纯文本（无选项/datalist），身份证即时校验并限 18+，手机限 11 位大陆号码；地区数据 vendored（2023，WTFPL）；注册与资料页现居/家乡/教堂所在地均必填且只能从级联选择，不接受手填；空值或数据集外的旧值由 `region_required` 门禁强制修改。
-- 决策（2026-10-29）：注册校验每个字段只给一条通用错误（身份证不再提示校验位/证内生日/省份子原因；生日与身份证不一致时不报身份证错误，以证内生日静默更正后再校验 18+）；房/车补充内容为条件字段；用户照片/海报/二维码统一转 JPEG，支持 JPEG/PNG/WebP/GIF/BMP/TIFF/HEIC（HEIC 由后端 ispe 元数据预检后经 heif-convert 子进程转 JPEG(q95) 再统一 q92）。
-- 决策（2026-10-29）：注册照片说明只保留「3–9 张 / 首张封面 / 10MB」；选后本地预览可删/设封面；教堂选省-市-区，行业纯文本；二维码存 720px JPEG q92 + 1 小时浏览器缓存。
-- 决策（2026-10-29）：HEIC/HEIF 由后端 ispe 元数据预检（纯 Go）后经 `heif-convert` 子进程转 JPEG q95 再统一 q92（request ctx/timeout/prlimit 320MiB+fsize/mediaSem；原始 HEIC 不留）；二维码同样统一 JPEG q92、720px 上限。
-- 不要做：不恢复独立登录页；不把二维码放回首页；不把身份证改回选填（与门禁冲突）；不再按输入格式分叉存储图片。
+- 决策：`/welcome` 已并入首页（301 → `/`），首页只保留飞书入口链接、不展示二维码；独立 `/login` 页并入首页登录弹框，`GET /login` 303 `/?login=1`（保留 `next`/`logged_out`/`activated`），`POST /login` 契约不变。
+- 决策：注册地区为省-市/市-区级联（值保持 `广东深圳`/`深圳南山`），行业与来源纯文本；身份证即时校验并限 18+，手机限 11 位大陆号码；地区数据 vendored（2023，WTFPL）；注册/资料的现居、家乡、教堂所在地均必填且只从级联选择；空值或数据集外旧值由 `region_required` 门禁强制修改。
+- 决策：注册每字段只给一条通用错误（身份证不提示校验位/证内生日/省份子原因；生日与证内不一致时不报错，以证内生日静默更正后再校验 18+）；房/车为条件字段；照片说明只留「3–9 张 / 首张封面 / 10MB」，选后本地预览可删/设封面。
+- 决策：注册页小天使二维码由后台「内容与安全 → 小天使二维码」上传/更换；资产存 `site_assets`，公开只读 `/angel-qr`（1 小时缓存），统一 JPEG q92、最长边 720px；与已废弃的首页二维码无关。
+- 不要做：不把中文写回公开页源码；不恢复二维码到首页；不恢复 `/welcome` 或独立登录页；不给公开页引入含中文注释的 `app.css`/`shell.css`；不把身份证改回选填。
 - 验证：`TestPublicScanPagesAreHanFree`、`TestRegisterCopyCatalogIsASCII`、`TestParseRegisterRegionFields`、`TestRegisterRegionsEndpoint`、Playwright `public_scan_pages_smoke.py`。
 
 ## 4. 性能与前端构建
@@ -171,18 +166,33 @@ sources: []
 - 验证：`TestReadCache*`、`TestIntegrationLegacyHomeCardsReadCache`、`make perf-bench`。
 
 ### 4.5 顶层 SPA 虚拟历史栈
+
 - 决策：顶层 SPA 默认虚拟历史栈；子页/浮层/应用内返回统一用 `pushHistory`、`hist.replace`、`handleBack`，不直接调用 `window.history.pushState/replaceState/back`；`native_admin` iframe 与 `?history=legacy` / `localStorage.yxq_history_mode='legacy'` 保持真实历史。
 - 不要做：不在新增子页直接读写 `history.state`；不删除启动哨兵；不改 `native_admin` 内部历史语义。
 - 验证：`tools/browser/no_history_smoke.py`；Via 真机进度条需 PM 复验。
+
 ### 4.6 通知 SSE
+
 - 决策：`/legacy/api/notifications/stream` 用 PostgreSQL `LISTEN/NOTIFY`；只有应用写入通知/标记已读时在同一事务 `pg_notify`；保留 30s 兜底（未连接 15s）与 15s 心跳；绕过应用直插 DB 最坏等 25–30s。
 - 不要做：不恢复 4s 轮询；不在无订阅者时查业务；多实例前需共享 fan-out 或 pub/sub。
 - 验证：SSE 集成用例、`TestNotificationHub*`；直插数据后需显式 `SELECT pg_notify(...)`。
+
 ### 4.7 消息中心、动态与全员广播
+
 - 决策：消息页默认动态流 +「喜欢/留言」两个同款入口；喜欢/留言为独立子页并共用同一列表与筛选视觉；收到留言 = 卡上留言 + 回复我的留言，已读存 `message_reads`；tabbar 数字只表示收到留言未读；发送喜欢/留言也写一条 sender-side 动态（已读，不产生未读点）。
 - 决策：动态未读用页面内小点 +「全部已读」；清空写 `notifications.cleared_at` 持久隐藏（保 dedupe/审计）；全员图文广播只经 `/admin/broadcasts`（content.moderate），写 broadcasts + 批量 notifications + 审计，广播图片仅对已引用 media 放宽。
 - 不要做：卡上留言不跳卡片；不用 notifications.read_at 冒充已读；不删行清空；不整体放宽 `/media/{id}`；不假设 legacy_open_id 唯一。
 - 验证：`TestIntegrationMessageInboxAndNotifications`、`TestIntegrationLegacyMessageInboxHTTP`、`TestIntegrationAdminBroadcast`、`TestIntegrationFindUserByDuplicateLegacyOpenID`；staging Playwright 走喜欢/留言/已读/清空/广播。
+
+### 4.8 前端交互不变量
+
+- 决策：资料照片上传/删除/换封面后，必须同步更新本人卡与牌堆（`selfCard`/`cards` 的 `photo`/`photos`/`photos_thumb`/`photos_meta`），不得依赖整页刷新。
+- 决策：大图 viewer 用 API `photos_meta` 定框；缩图先显、原图后台升级；无 meta 回退自然尺寸，10s timeout/cancel 保留。
+- 决策：门禁（身份证/地区/人脸）直接打开资料编辑时，保存后的 `dropCurrent` 必须保留父级 tab 作为返回落点（父级不是 `profile_detail` 时补目标条目）；已进入 `profile_edit`/`profile_detail` 后，迟到的 403 不得再弹门禁浮层；缺失地区字段就地红字提示。
+- 决策：活动要求现场签到时，未签到/未到不得进入「志愿选择」；前端 `signinBeforeFillBlocked` 只看签到状态，后端 `loadSignupGate` 是权威；`can_self_signin` 还要求 4 位签到码。
+- 决策：分组与一对一共用 `group_selections`、入口互斥；志愿选择入口在任一模式开启时可用，分组结果仅对分组模式开放。
+- 验证：`TestIntegrationLegacyHomeSelfCard`、`TestIntegrationRegionGateAndProfileFix`、`TestCanSelfSigninBoundaries`、`TestSPAMatchingEntriesAreGatedByFlags`；Playwright `spa_user_fixes_smoke.py`。
+
 ## 5. 被取代决策索引
 
 | 旧条目 | 现行为 | 说明 |
@@ -192,7 +202,8 @@ sources: []
 | 18 / 19 | 20 / 22（现行 1.2） | 管理入口先并列三个 v1 SPA，后收敛为单一管理后台；活动管理走 native SPA |
 | 25 | 26 / 27（现行 3.1、3.2） | E2/D10 先暂缓，后按 v1 原版重新纳入 |
 | 28–33 | 2.1、2.5、4.1–4.4、4.6（现行） | 性能批次 4–10 的实现细节已合并为现行约束；全文见 git log |
-| 34–44 | 1.2、2.2–2.7、3.1–3.5、4.5（现行） | 历史栈、活动状态、保存返回、扫描防护、腾讯合规、照片配额等已并入现行条目 |
+| 34–44 | 1.2、2.2–2.7、3.1–3.5、4.5、4.8（现行） | 历史栈、活动状态、保存返回、扫描防护、腾讯合规、照片配额等已并入现行条目 |
+
 ## 6. 不要复活
 
 - 顶层 `/admin` SSR 或 404；第二套管理 UI。
@@ -201,9 +212,10 @@ sources: []
 - `vant.full.min.*`；未预编译的运行时模板；手改生成物。
 - Redis、消息队列、微服务/K8s；飞书 runtime；第二套用户 UI；短信 OTP/IM。
 - 未授权生产部署、批量 grandfather 身份证、静默回填腾讯合规。
+
 ## 7. 新增决策
 
 1. 先确认是否真的改变现行行为；能由 code/git 推导的事实不写进本文件。
-2. 在对应主题下追加一节：决策 / 理由 / 不要做什麼 / 验证入口，最多 5 行。
+2. 在对应主题下追加一节：决策 / 理由 / 不要做什麼 / 验证入口，最多 5 行；同一行为只留一条，同日多条合并，不写日期批次。
 3. 若取代旧决策：把旧条目压成 §5 的一行索引；全文交给 git log。
 4. 涉及产品范围、验收、安全/权限/数据的决策，先取得 PM 或 Auditor 同意。

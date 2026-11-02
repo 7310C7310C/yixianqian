@@ -340,6 +340,7 @@ sources: []
 | `spa-check-node` | — |
 | `static-gzip` | — |
 | `static-gzip-check` | — |
+| `status` | — |
 | `test` | — |
 | `test-broadcast-ui` | — |
 | `test-integration` | — |
@@ -378,7 +379,7 @@ sources: []
 
 | 文档 | sources |
 |---|---|
-| `AGENTS.md` | `Makefile`, `.github/workflows/**`, `tools/perf/**`, `deploy/nginx/**`, `web/static/legacy/app.js` |
+| `AGENTS.md` | `Makefile`, `.github/workflows/**`, `tools/perf/**`, `deploy/nginx/**` |
 | `README.md` | `go.mod` |
 | `docs/DECISIONS.md` | — |
 | `docs/PRODUCT.md` | — |

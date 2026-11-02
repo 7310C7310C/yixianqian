@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-28
+last_verified: 2026-11-02
 sources:
   - go.mod
 -->
@@ -45,7 +45,7 @@ make run
 - `.env.example` 是配置项的权威清单，不在 README 复制整张表。
 - 测试账号：`make seed`；输出一次性启用 URL。
 - 日常：每个 edit 后 `make fast`；每个 commit 前 `make ci`；push 前 `make prepush`。
-- 集成测试需要 `TEST_DATABASE_URL`，`internal/db` 与 `internal/httpserver` 共用测试库，必须串行（`-p 1`）：
+- 本地集成测试需要 `TEST_DATABASE_URL`，`internal/db` 与 `internal/httpserver` 共用测试库，必须串行（`-p 1`）；CI 用独立测试库并行分片：
 
 ```sh
 TEST_DATABASE_URL='postgres://yixianqian:yixianqian@localhost:5432/yixianqian_test?sslmode=disable' make test-integration
@@ -53,21 +53,11 @@ TEST_DATABASE_URL='postgres://yixianqian:yixianqian@localhost:5432/yixianqian_te
 
 ## 文档地图
 
-| 文件 | 用途 |
-|---|---|
-| `AGENTS.md` | 唯一规则入口：工作流、门禁、安全红线、文档规则 |
-| `README.md` | 本文件；稳定概览、架构与本地开发入口 |
-| `docs/PRODUCT.md` | PM 权威：使命、非目标、硬约束、验收清单 |
-| `docs/STATUS.md` | 唯一进度来源：阶段、已实现 vs 已验收、P0/缺口；运行版本查 `/healthz` |
-| `docs/DECISIONS.md` | 现行决策、理由与「不要做什麼」；历史在 git log |
-| `docs/runbooks/staging.md` | staging 部署、回滚、smoke、人脸/腾讯、迁移附录 |
-| `docs/reference/REFERENCE.md` | 自动生成的机械事实索引（勿手改） |
-| `tools/README.md` | 生成物重建顺序与性能护栏命令 |
-| `CLAUDE.md` | Claude Code 入口指针（生成物） |
+唯一入口是 `AGENTS.md`；文档清单、owner 与「变更 → 文档」映射只维护在那里。README 只保留稳定概览。
 
 ## 维护规则
 
-- 本文件只写半年内不常变的稳定事实；功能完成度、P0 与缺口只放 `docs/STATUS.md`；运行版本用 `/healthz` 查，不写进文档。
+- 本文件只写半年内不常变的稳定事实；功能完成度、P0 与缺口只放 `docs/STATUS.md`；运行版本用 `make status` 查，不写进文档。
 - 路由、env、migration、Makefile target、目录结构以 code/config/Makefile 为准；需要索引时看 `docs/reference/REFERENCE.md`。
 - 历史与逐批证据看 `git log` 和 commit message，不写进 README/STATUS/runbook。
 - 验收目标只放 `docs/PRODUCT.md`；不要把「已实现」写成「已验收」。

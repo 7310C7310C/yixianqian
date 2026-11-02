@@ -469,6 +469,24 @@ class DocsCheckTests(unittest.TestCase):
         findings = check_docs.check_current_only_headings(self.root)
         self.assertIn("E-DOC-HISTORY", codes(findings))
 
+    def test_current_only_reject_date_blockquote(self):
+        with (self.root / "docs/STATUS.md").open("a", encoding="utf-8") as handle:
+            handle.write("\n> 2026-10-30 消息中心改版：动态/留言/广播。\n")
+        findings = check_docs.check_current_only_headings(self.root)
+        self.assertIn("E-DOC-HISTORY", codes(findings))
+
+    def test_current_only_reject_dated_list_item(self):
+        with (self.root / "docs/STATUS.md").open("a", encoding="utf-8") as handle:
+            handle.write("\n- 2026-10-30 注册表单改版。\n")
+        findings = check_docs.check_current_only_headings(self.root)
+        self.assertIn("E-DOC-HISTORY", codes(findings))
+
+    def test_current_only_allow_inline_date(self):
+        with (self.root / "docs/STATUS.md").open("a", encoding="utf-8") as handle:
+            handle.write("\n- 人脸首次上线已于 2026-10-22 完成。\n")
+        findings = check_docs.check_current_only_headings(self.root)
+        self.assertEqual(findings, [])
+
     def test_current_only_headings_allow_snapshot(self):
         with (self.root / "docs/STATUS.md").open("a", encoding="utf-8") as handle:
             handle.write("\n## 1. 当前快照（2026-10-28 02:36 UTC）\n")

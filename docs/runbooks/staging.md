@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-10-30
+last_verified: 2026-11-02
 sources:
   - deploy/**
   - .env.example
@@ -56,8 +56,7 @@ server1 的 `yxq-autodeploy.timer` 每 60 秒检查 `origin/main`：
 - 失败退避 15 分钟（`/opt/yixianqian-next/autodeploy.failed`）；`--force` 立即重试。
 
 ```sh
-curl -sS https://next.nantou.love/healthz            # version=staging-<sha>
-systemctl is-active yxq-autodeploy.timer
+make status                                          # healthz/deployed.sha/src/autodeploy/migrations/users/photos
 tail -n 50 /var/log/yxq-autodeploy.log
 /opt/yixianqian-next/autodeploy.sh --dry-run         # 只打印计划
 systemctl stop yxq-autodeploy.timer                  # 紧急冻结；已在跑的一轮会跑完
@@ -189,10 +188,12 @@ BASE_URL=https://next.nantou.love SESSION_COOKIE=<管理员> USER_SESSION_COOKIE
 - 顶层 `/admin`（document）应 303 `/?admin=1`；iframe 请求（`Sec-Fetch-Dest: iframe`）才渲染 SSR。
 - 受权媒体（照片原图、活动海报）document 直接串流是例外，应 200 `image/*`。
 - HEIC：server1 需 `libheif-examples` + `libheif-plugin-libde265`（HEVC 解码插件；`heif-convert --version`）；env `HEIC_ENABLED`/`HEIF_CONVERT_PATH`/`HEIC_TIMEOUT`；`/api/media` 上传 HEIC 应 201、表单路径 303，媒体为 JPEG。
-- 二維碼：`/angel-qr` 上传后统一 JPEG q92 ≤720px；检查 `Cache-Control: max-age=3600` 与 ETag。
+- 二维码：`/angel-qr` 上传后统一 JPEG q92 ≤720px；检查 `Cache-Control: max-age=3600` 与 ETag。
 - 管理台页面清单：`/admin`、`/admin/users`、`/admin/users/{id}`、`/admin/matching`、`/admin/points`、
   `/admin/audit`、`/admin/reports`、`/admin/suggestions`、`/admin/roles`、`/admin/broadcasts`；`/admin/activities` 的 iframe 请求应 303 到 `/app?native_admin=1&p=group_admin`。
-- 消息中心：消息页默认动态；`/legacy/api/messages/received` 返回 `messages[].unread` 与 `unread`；`POST /legacy/api/messages/read` 清零；`/legacy/api/notifications` 返回 `unread`/`unread_messages`；`POST /legacy/api/notifications/clear` 后重登仍为空；`/admin/broadcasts` 全员图文，广播图片 `/media/{id}` 对登录用户 200；发送喜欢/留言后本人动态也应有对应条目。
+- 消息中心：消息页默认动态；`/legacy/api/messages/received` 返回 `messages[].unread` 与 `unread`；`POST /legacy/api/messages/read` 清零。
+- 动态：`/legacy/api/notifications` 返回 `unread`/`unread_messages`；`POST /legacy/api/notifications/clear` 后重登仍为空；发送喜欢/留言后本人动态有对应条目。
+- 广播：`/admin/broadcasts` 全员图文；广播图片 `/media/{id}` 对登录用户 200。
 - 管理 API 兼容层：`python3 tools/admin_legacy_api_smoke.py`（管理员 200、普通用户 403）。
 - 5xx/403/空页先看：`journalctl -u yixianqian-next-test -n 100 --no-pager`、`tail -n 100 /var/log/nginx/error.log`；不要靠重启碰运气。
 
