@@ -31,10 +31,10 @@ sources:
 
 - 不写密钥；密码、token、cookie、`.env`、R2 key 不得进入 repo、日志、报告或文档。
 - 用户端复用 v1 Vue 3 + Vant SPA；管理台只经同源 iframe，顶层 `/admin` 一律 303 到 `/?admin=1`。
-- 消息中心/动态/留言/全员广播的现行行为与不变式见 `docs/DECISIONS.md` §4.7；本文件不复制。
+- 消息中心/动态/留言/全员广播的现行行为与不变式见 `docs/DECISIONS.md` §2.5；本文件不复制。
 - 不恢复已废弃方案：`/welcome` 页面、独立 `/login` 页（并入首页弹框）、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、飞书 runtime、第二套用户 UI、首卡自我引导气泡（`self-guide-tip`；首卡已自带「这是你 · 他人视角」标签）；不恢复品牌启动页/静态岛，首屏保持旧 hero 图 + 真实卡绘制后交接。
 - PostgreSQL 是唯一权威；R2 只存私有媒体，浏览器只经 `/media/{id}`；不新增 Redis/消息队列，正确性不依赖缓存。
-- 城市字段只接受 vendored 数据集值（注册/资料均必填）；所有上传统一转 JPEG（HEIC 先 ispe 预检再 heif-convert）。细节见 `docs/DECISIONS.md` §2.4、§3.5。
+- 城市字段只接受 vendored 数据集值（注册/资料均必填）；所有上传统一转 JPEG（HEIC 先 ispe 预检再 heif-convert）。细节见 `docs/DECISIONS.md` §1.2、§2.4。
 - migration 只增不改；回滚 binary 不等于回滚 schema；生产大表索引另行走手工窗口。
 - staging 验证先于生产；生产切换、删数据、凭证/权限变更、验收勾选必须 PM 批准。
 - 不 force-push、不重写已推送历史；commit message 用简体中文，并带 `Docs:` 或 `Docs-Impact: none（理由）`。
@@ -65,7 +65,7 @@ sources:
 ## 前端与性能红线
 
 - 顶层 SPA 默认虚拟历史栈：子页/浮层/应用内返回统一用 `pushHistory`、`hist.replace`、`handleBack`；不得直接调用 `window.history.pushState/replaceState/back`。`native_admin` 与 `?history=legacy` 例外。
-- 前端交互不变量（照片同步、门禁返回栈、签到/匹配入口）见 `docs/DECISIONS.md` §4.8；本文件只留性能与历史栈红线。局部 SPA 规则见 `web/AGENTS.md`。
+- 前端交互不变量（照片同步、门禁返回栈、签到/匹配入口）见 `docs/DECISIONS.md` §4.3；本文件只留性能与历史栈红线。局部 SPA 规则见 `web/AGENTS.md`。
 - 热路径（`web/static/legacy/**`、`deploy/nginx/**`、`internal/httpserver/{middleware,handlers_media,media_serve,legacy_ui,readcache,app}.go`、DB home/cards/profile/notifications/照片授权、热索引 migration）必须给 `make perf-bench`/`make perf-lcp` 前后数字；p95 不得比基线差 >10%。
 - 不得移除：边缘 keepalive、静态 gzip/identity 分键缓存、TLS session ticket、缩略图磁盘缓存、媒体 ETag/304、10s 读缓存 + epoch、`0008`–`0010` 热索引；不得给 `/legacy/api` 加边缘 `proxy_cache`，cache key 不含 `$cookie_`。
 - 不得把 `app.css`/`app.min.js`/`app.render.js` 大段内联回壳；不得退回 `vant.full.min.*`；生成物必须走 `make spa-check`。

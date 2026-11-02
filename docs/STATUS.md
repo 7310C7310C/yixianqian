@@ -63,7 +63,7 @@ M6 进入条件：上述验收项完成，`docs/PRODUCT.md` 有证据地签核�
   现存一批迁移账号 `id_card_valid=false`，可在资料页自助补填。剩余是运营补填；
   但身份证门禁仍是 P0 验收项，需 PM 验收关闭。
 - **微信号同意合规**：注册当前硬编码 `contact_consent=true`，尚无显式同意步骤；
-  合规口径待 PM 决定（见 `docs/DECISIONS.md` §3.1）。
+  合规口径待 PM 决定（见 `docs/DECISIONS.md` §2.1）。
 - **验收签核**：`docs/PRODUCT.md` 仍 `0/86` 未勾选，未经 PM 签核；不要从 0 推断「未做」。
 - **待 PM 验收**：消息中心/动态/广播与注册表单改版（PRODUCT B7/E7/L9）。
 - **真机与性能**：iOS/Android/微信、Via/Kiwi/荣耀真机、旧设备宽度、首屏/图片性能未完成 PM 复验。
