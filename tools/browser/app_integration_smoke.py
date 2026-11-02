@@ -193,12 +193,46 @@ def badge(page):
     return item.locator(".van-badge")
 
 
+HIGHLIGHT_OBSERVER = """
+(content) => {
+  window.__yxqHighlightSeen = '';
+  if (window.__yxqHighlightObserver) window.__yxqHighlightObserver.disconnect();
+  window.__yxqHighlightObserver = new MutationObserver(() => {
+    const el = document.querySelector('.thread-msg.highlight');
+    if (el && (el.textContent || '').includes(content)) {
+      window.__yxqHighlightSeen = el.textContent || '';
+    }
+  });
+  window.__yxqHighlightObserver.observe(document.body, {
+    subtree: true, childList: true, attributes: true, attributeFilter: ['class'],
+  });
+}
+"""
+
+
+def arm_highlight_observer(page, content: str) -> None:
+    """高亮只保留约 1.8s；用 MutationObserver 记录它出现过，避免慢机误判。"""
+    page.evaluate(HIGHLIGHT_OBSERVER, content)
+
+
+def assert_highlight_seen(page, content: str, width: int, where: str) -> None:
+    try:
+        page.wait_for_function(
+            "(content) => (window.__yxqHighlightSeen || '').includes(content)",
+            arg=content,
+            timeout=15000,
+        )
+    except PlaywrightTimeoutError:
+        raise SmokeFailure(f"{width}: {where}未高亮目标留言") from None
+
+
 def verify_message_click_through(page, content: str, width: int) -> None:
     """卡上留言：动态与「留言→收到的」都必须进「我的卡片」留言串并高亮该条。"""
     page.locator(".back-nav").click()
     page.wait_for_function("window.yxqRootProxy.page === 'likes'", timeout=15000)
     feed = page.locator(".feed-item").filter(has_text=content).first
     feed.wait_for(state="visible", timeout=20000)
+    arm_highlight_observer(page, content)
     feed.click()
     page.wait_for_function("window.yxqRootProxy.page === 'message_thread'", timeout=15000)
     page.wait_for_function(
@@ -207,8 +241,7 @@ def verify_message_click_through(page, content: str, width: int) -> None:
     )
     if not page.evaluate("window.yxqRootProxy.messageThread.target_is_self === true"):
         raise SmokeFailure(f"{width}: 卡上留言动态未进入「我的卡片」留言串")
-    page.locator(".thread-msg.highlight").filter(has_text=content).first.wait_for(
-        state="visible", timeout=15000)
+    assert_highlight_seen(page, content, width, "动态入口")
 
     page.locator(".back-nav").click()
     page.wait_for_function("window.yxqRootProxy.page === 'likes'", timeout=15000)
@@ -216,14 +249,14 @@ def verify_message_click_through(page, content: str, width: int) -> None:
     page.wait_for_function("window.yxqRootProxy.page === 'message_inbox'", timeout=15000)
     row = page.locator(".msg-row").filter(has_text=content).first
     row.wait_for(state="visible", timeout=15000)
+    arm_highlight_observer(page, content)
     row.locator(".msg-row-text").click()
     page.wait_for_function("window.yxqRootProxy.page === 'message_thread'", timeout=15000)
     page.wait_for_function(
         "window.yxqRootProxy.messageThread && !window.yxqRootProxy.messageThread.loading",
         timeout=20000,
     )
-    page.locator(".thread-msg.highlight").filter(has_text=content).first.wait_for(
-        state="visible", timeout=15000)
+    assert_highlight_seen(page, content, width, "收件箱入口")
 
 
 def dismiss_guides(page) -> None:
