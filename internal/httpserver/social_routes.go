@@ -204,16 +204,18 @@ func (a *App) handleCardPhoto(w http.ResponseWriter, r *http.Request) {
 			ObjectType: m.ContentType,
 			ThumbKey:   m.ThumbKey,
 			ThumbSize:  m.ThumbSize,
+			Width:      m.Width,
 		})
 	case "thumb":
-		a.serveMediaObject(w, r, mediaObject{
+		a.serveThumbRequest(w, r, mediaObject{
 			ID:         m.ID,
 			ObjectKey:  m.ObjectKey,
 			ObjectSize: m.ByteSize,
 			ObjectType: m.ContentType,
 			ThumbKey:   m.ThumbKey,
 			ThumbSize:  m.ThumbSize,
-		}, true)
+			Width:      m.Width,
+		})
 	default:
 		a.serveMediaObject(w, r, mediaObject{
 			ID:         m.ID,
@@ -222,6 +224,7 @@ func (a *App) handleCardPhoto(w http.ResponseWriter, r *http.Request) {
 			ObjectType: m.ContentType,
 			ThumbKey:   m.ThumbKey,
 			ThumbSize:  m.ThumbSize,
+			Width:      m.Width,
 		}, false)
 	}
 }

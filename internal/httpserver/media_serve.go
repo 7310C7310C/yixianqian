@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -22,6 +23,7 @@ type mediaObject struct {
 	ObjectType string
 	ThumbKey   string
 	ThumbSize  int64
+	Width      int
 }
 
 // serveMediaObject streams original or thumbnail bytes with a long private
@@ -115,6 +117,127 @@ func (a *App) serveMediaObject(w http.ResponseWriter, r *http.Request, m mediaOb
 // serveMediaHero serves a small hero-only JPEG for the first-screen card.
 // It is derived from the already-authorized thumbnail, cached separately from
 // ?size=thumb, and keeps the same private/immutable semantics.
+// serveThumbRequest serves ?size=thumb with an optional width variant.
+// ?size=thumb (no w) keeps the legacy 512px thumbnail; w=768/1024/1280 serves
+// the pre-generated variant when present and falls back to 512 otherwise.
+func (a *App) serveThumbRequest(w http.ResponseWriter, r *http.Request, m mediaObject) {
+	width, _ := strconv.Atoi(r.URL.Query().Get("w"))
+	width = effectiveThumbWidth(m.Width, width)
+	switch width {
+	case 768, 1024, 1280:
+		a.serveThumbVariant(w, r, m, width)
+	default:
+		a.serveMediaObject(w, r, m, true)
+	}
+}
+
+// effectiveThumbWidth caps a requested variant to the source's useful width.
+// A 480px avatar asking for 1280 should serve 512 immediately instead of doing
+// three R2 404 probes; a 736px source maps to 768; a 1080px source to 1024.
+func effectiveThumbWidth(original, requested int) int {
+	if original <= 0 || requested <= 512 {
+		return requested
+	}
+	maxUseful := original * 115 / 100
+	if requested <= maxUseful {
+		return requested
+	}
+	switch {
+	case maxUseful >= 1024:
+		return 1024
+	case maxUseful >= 768:
+		return 768
+	default:
+		return 512
+	}
+}
+
+func thumbVariantKey(base string, width int) string {
+	if base == "" || width <= 0 {
+		return base
+	}
+	dot := strings.LastIndex(base, ".")
+	suffix := "_" + strconv.Itoa(width)
+	if dot < 0 {
+		return base + suffix
+	}
+	return base[:dot] + suffix + base[dot:]
+}
+
+// serveThumbVariant streams a pre-generated width variant. Variants live next
+// to the base thumb: <name>_thumb_768.jpg etc. Missing variants fall back to the
+// 512 thumb so old/incomplete backfills never break a card image.
+func (a *App) serveThumbVariant(w http.ResponseWriter, r *http.Request, m mediaObject, width int) {
+	// Try the requested width, then smaller variants. This keeps a missing
+	// 1280 variant from falling all the way back to 512 on a DPR3 phone.
+	for _, candidate := range []int{width, 1024, 768} {
+		if candidate > width {
+			continue
+		}
+		key := thumbVariantKey(m.ThumbKey, candidate)
+		if key == "" || key == m.ThumbKey {
+			continue
+		}
+		etag := `"` + m.ID + "-thumb-" + strconv.Itoa(candidate) + `"`
+		cacheKey := media.ThumbCacheKey(m.ID, key, 0)
+		if a.thumbCache != nil {
+			if data, ok := a.thumbCache.Get(cacheKey); ok {
+				a.thumbCacheHits.Add(1)
+				writeMediaBytes(w, r, etag, "image/jpeg", int64(len(data)), data)
+				return
+			}
+			a.thumbCacheMisses.Add(1)
+		}
+		obj, err := a.store.Get(r.Context(), key)
+		if errors.Is(err, media.ErrObjectNotFound) {
+			continue
+		}
+		if err != nil {
+			a.logger(r).Error("open thumb variant failed", "error", err, "media_id", m.ID, "width", candidate)
+			mediaFailure(w, r, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		data, readErr := io.ReadAll(io.LimitReader(obj, 4<<20))
+		_ = obj.Close()
+		if readErr != nil || len(data) == 0 {
+			continue
+		}
+		if a.thumbCache != nil {
+			if err := a.thumbCache.Put(cacheKey, data); err != nil {
+				a.logger(r).Warn("thumb variant cache write failed", "error", err, "media_id", m.ID, "width", candidate)
+			}
+		}
+		writeMediaBytes(w, r, etag, "image/jpeg", int64(len(data)), data)
+		return
+	}
+	a.serveMediaObject(w, r, m, true)
+}
+
+var thumbVariantWidths = []int{768, 1024, 1280}
+
+// putThumbVariants is best-effort: card images fall back to 512 when a
+// variant is absent, so a variant upload failure must not fail the photo save.
+func (a *App) putThumbVariants(ctx context.Context, original []byte, contentType, thumbKey string, originalWidth int) {
+	if contentType != "image/jpeg" || thumbKey == "" {
+		return
+	}
+	for _, width := range thumbVariantWidths {
+		// Allow a small upscale (<=15%) for near-miss sources such as 736px;
+		// skip large fake upscales (480 -> 768/1024/1280).
+		if originalWidth > 0 && width*100 > originalWidth*115 {
+			continue
+		}
+		data, err := media.ResizeWidthJPEG(original, width, 82)
+		if err != nil {
+			a.log.Warn("thumb variant encode failed", "error", err, "width", width)
+			continue
+		}
+		if err := a.store.Put(ctx, thumbVariantKey(thumbKey, width), data, "image/jpeg"); err != nil {
+			a.log.Warn("thumb variant upload failed", "error", err, "width", width)
+		}
+	}
+}
+
 func (a *App) serveMediaHero(w http.ResponseWriter, r *http.Request, m mediaObject) {
 	if m.ThumbKey == "" || m.ThumbSize <= 0 {
 		a.serveMediaObject(w, r, m, true)

@@ -16,8 +16,8 @@ func TestRewriteBootstrapHeroPhoto(t *testing.T) {
 	if card["photo"] != "/cards/photo/a?size=hero" {
 		t.Fatalf("photo=%v", card["photo"])
 	}
-	if got := card["photos_thumb"].([]string)[0]; got != "/cards/photo/a?size=hero" {
-		t.Fatalf("photos_thumb[0]=%v", got)
+	if got := card["photos_thumb"].([]string)[0]; got != "/cards/photo/a?size=thumb" {
+		t.Fatalf("photos_thumb[0]=%v want ?size=thumb", got)
 	}
 }
 

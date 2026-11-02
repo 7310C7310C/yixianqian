@@ -921,16 +921,18 @@ func (a *App) handleProfilePhotoServe(w http.ResponseWriter, r *http.Request) {
 			ObjectType: photo.ContentType,
 			ThumbKey:   photo.ThumbKey,
 			ThumbSize:  photo.ThumbSize,
+			Width:      photo.Width,
 		})
 	case "thumb":
-		a.serveMediaObject(w, r, mediaObject{
+		a.serveThumbRequest(w, r, mediaObject{
 			ID:         mediaID,
 			ObjectKey:  photo.ObjectKey,
 			ObjectSize: photo.ByteSize,
 			ObjectType: photo.ContentType,
 			ThumbKey:   photo.ThumbKey,
 			ThumbSize:  photo.ThumbSize,
-		}, true)
+			Width:      photo.Width,
+		})
 	default:
 		a.serveMediaObject(w, r, mediaObject{
 			ID:         mediaID,
@@ -939,6 +941,7 @@ func (a *App) handleProfilePhotoServe(w http.ResponseWriter, r *http.Request) {
 			ObjectType: photo.ContentType,
 			ThumbKey:   photo.ThumbKey,
 			ThumbSize:  photo.ThumbSize,
+			Width:      photo.Width,
 		}, false)
 	}
 }

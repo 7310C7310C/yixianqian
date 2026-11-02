@@ -512,6 +512,7 @@ func (a *App) saveStagedRegistrationPhotos(ctx context.Context, userID int64, st
 			a.removeStoredObject(ctx, id, key)
 			return nil, err
 		}
+		a.putThumbVariants(ctx, original, item.ContentType, thumbKey, item.Width)
 		saved, err := a.db.CreateMedia(ctx, db.Media{
 			ID:           id,
 			UserID:       userID,

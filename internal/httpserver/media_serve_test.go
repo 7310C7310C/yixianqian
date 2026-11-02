@@ -195,3 +195,36 @@ func TestActivityPosterETagTracksMediaID(t *testing.T) {
 		t.Fatalf("new poster with old ETag status = %d, want 200", rec.Code)
 	}
 }
+
+func TestThumbVariantKey(t *testing.T) {
+	cases := []struct {
+		base  string
+		width int
+		want  string
+	}{
+		{"media/1/a_thumb.jpg", 768, "media/1/a_thumb_768.jpg"},
+		{"media/1/a_thumb", 1024, "media/1/a_thumb_1024"},
+		{"", 768, ""},
+	}
+	for _, tc := range cases {
+		if got := thumbVariantKey(tc.base, tc.width); got != tc.want {
+			t.Fatalf("thumbVariantKey(%q,%d)=%q want %q", tc.base, tc.width, got, tc.want)
+		}
+	}
+}
+
+func TestEffectiveThumbWidth(t *testing.T) {
+	cases := []struct{ original, requested, want int }{
+		{480, 1280, 512},
+		{480, 768, 512},
+		{736, 1280, 768},
+		{1080, 1280, 1024},
+		{1080, 768, 768},
+		{0, 1280, 1280},
+	}
+	for _, tc := range cases {
+		if got := effectiveThumbWidth(tc.original, tc.requested); got != tc.want {
+			t.Fatalf("effectiveThumbWidth(%d,%d)=%d want %d", tc.original, tc.requested, got, tc.want)
+		}
+	}
+}

@@ -983,6 +983,14 @@
       var c = d.cards[0];
       var src = c.photo || (c.photos_thumb && c.photos_thumb[0]) || (c.photos && c.photos[0]);
       if (!src || !window.__YXQ_HERO__) return;
+      try {
+        var boot = document.querySelector('.boot-photo');
+        if (boot && src.indexOf('size=thumb') >= 0) {
+          var sep = src.indexOf('?') >= 0 ? '&' : '?';
+          boot.srcset = src + ' 512w, ' + src + sep + 'w=768 768w, ' + src + sep + 'w=1024 1024w, ' + src + sep + 'w=1280 1280w';
+          boot.sizes = '(max-width: 480px) calc(100vw - 32px), 390px';
+        }
+      } catch (e) {}
       window.__YXQ_HERO__.setPhoto(src, c.faces);
     }
     var boot = window.__YXQ_BOOTSTRAP__;

@@ -2880,8 +2880,8 @@ const yxqApp = createApp({
         if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 3000 });
         else setTimeout(run, 1500);
       };
-      if (document.readyState === 'complete') setTimeout(start, 5000);
-      else window.addEventListener('load', function(){ setTimeout(start, 5000); }, { once: true });
+      if (document.readyState === 'complete') setTimeout(start, 1e3);
+      else window.addEventListener('load', function(){ setTimeout(start, 1e3); }, { once: true });
     }
     function preloadAround() {
       // 只预取下一张卡片的首图；当前卡片的相邻照片由 deck 自身按需加载。

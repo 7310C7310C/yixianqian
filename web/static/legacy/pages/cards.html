@@ -26,8 +26,10 @@
         <div v-if="photoLoading" class="photo-loading"></div>
         <div v-if="currentPhotoList.length" class="card-photo-track" :style="{ transform: 'translateX(-' + photoIndex * 100 + '%)' }">
           <template v-for="(p,i) in currentPhotoList" :key="i">
-            <img v-if="photoSrc(i)" :src="photoSrc(i)" class="card-photo-item" alt=""
-              :loading="i === photoIndex ? 'eager' : 'lazy'" decoding="async"
+            <img v-if="photoSrc(i)" :src="photoSrc(i)"
+              :srcset="i === photoIndex && photoSrc(i) && photoSrc(i).indexOf('size=thumb') >= 0 ? (cardIndex === 0 ? photoSrc(i).replace('size=thumb', 'size=hero') + ' 420w, ' : '') + photoSrc(i) + ' 512w, ' + photoSrc(i) + (photoSrc(i).indexOf('?') >= 0 ? '&' : '?') + 'w=768 768w, ' + photoSrc(i) + (photoSrc(i).indexOf('?') >= 0 ? '&' : '?') + 'w=1024 1024w, ' + photoSrc(i) + (photoSrc(i).indexOf('?') >= 0 ? '&' : '?') + 'w=1280 1280w' : null"
+              sizes="(max-width: 480px) calc(100vw - 32px), 390px" class="card-photo-item" alt=""
+              :loading="(i === photoIndex || i === photoIndex + 1) ? 'eager' : 'lazy'" decoding="async"
               :fetchpriority="(cardIndex === 0 && i === 0) ? 'high' : 'auto'"
               :style="photoPositions[i] ? { objectPosition: photoPositions[i] } : null"
               @load="onPhotoLoad($event); recalcPhotoPosition($event, i)" @error="onPhotoError($event); retryImg($event, 2)">

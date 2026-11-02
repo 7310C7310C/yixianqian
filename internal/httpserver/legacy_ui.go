@@ -148,8 +148,9 @@ func (a *App) serveLegacyApp(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(body)
 }
 
-// rewriteBootstrapHeroPhoto points only the shell's first card at the small
-// ?size=hero variant. The regular API/home payload keeps the 512px thumbnail.
+// rewriteBootstrapHeroPhoto points only the shell's first card `photo` at the
+// small ?size=hero variant. `photos_thumb` stays at 512 so the Vue deck can use
+// its srcset variants after the shell hero hands over.
 func rewriteBootstrapHeroPhoto(payload map[string]any) {
 	cards, ok := payload["cards"].([]map[string]any)
 	if !ok || len(cards) == 0 || cards[0] == nil {
@@ -158,9 +159,6 @@ func rewriteBootstrapHeroPhoto(payload map[string]any) {
 	card := cards[0]
 	if photo, ok := card["photo"].(string); ok {
 		card["photo"] = heroPhotoURL(photo)
-	}
-	if thumbs, ok := card["photos_thumb"].([]string); ok && len(thumbs) > 0 {
-		thumbs[0] = heroPhotoURL(thumbs[0])
 	}
 }
 

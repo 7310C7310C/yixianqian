@@ -216,6 +216,7 @@ func (a *App) receiveUploadField(r *http.Request, user db.User, field string) (d
 		a.removeObject(r, id, key)
 		return db.Media{}, err
 	}
+	a.putThumbVariants(ctx, processed.Original, processed.ContentType, thumbKey, processed.Width)
 
 	saved, err := a.db.CreateMedia(ctx, db.Media{
 		ID:           id,
