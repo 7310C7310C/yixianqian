@@ -48,8 +48,8 @@
   @keyframes cardFadeIn { from { opacity: 0; } to { opacity: 1; } }
   .swipe-card.slide-in-right { animation: slideInRight 0.28s ease; }
   .swipe-card.slide-in-left { animation: slideInLeft 0.28s ease; }
-  @keyframes slideInRight { from { transform: translateX(46px); opacity: 0.4; } to { transform: translateX(0); opacity: 1; } }
-  @keyframes slideInLeft { from { transform: translateX(-46px); opacity: 0.4; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes slideInRight { from { transform: translateX(46px); } to { transform: translateX(0); } }
+  @keyframes slideInLeft { from { transform: translateX(-46px); } to { transform: translateX(0); } }
   /* 牵线左右滑动新手引导（仅首次进入显示一次） */
   .swipe-guide-mask { position: fixed; inset: 0; z-index: 4000; background: rgba(0,0,0,0.66); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; animation: cardFadeIn 0.2s ease; }
   .sg-stage { display: flex; align-items: center; gap: 18px; }
