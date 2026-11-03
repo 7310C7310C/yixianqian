@@ -89,10 +89,13 @@ def main() -> int:
         page.wait_for_timeout(120)
         card_state = page.evaluate("""() => {
           const i=document.querySelector('.swipe-card .card-photo-item');
-          return { complete: !!(i && i.complete && i.naturalWidth), loading: !!document.querySelector('.photo-loading') };
+          return { complete: !!(i && i.complete && i.naturalWidth), loading: !!document.querySelector('.photo-loading'),
+                   sharpReady: document.querySelectorAll('.card-photo-sharp.ready').length };
         }""")
         if card_state["loading"] or not card_state["complete"]:
             raise AssertionError(f"切卡出现 loading/空白：{card_state}")
+        if not card_state["sharpReady"]:
+            raise AssertionError(f"切卡未预取到 sharp 图：{card_state}")
         print("PASS card-loading", state, card_state)
         ctx.close()
         browser.close()

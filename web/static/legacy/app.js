@@ -942,6 +942,39 @@ const yxqApp = createApp({
     function onSharpLoad(ci, i) {
       sharpReady.value = { ...sharpReady.value, [sharpKey(ci, i)]: true };
     }
+    // 预取下一卡/下一张照片的 DPR 变体；切过去时直接显示最终清晰度，
+    // 不再等 600ms 才从 512 跳到 768/1024（这是换图/换卡闪的根因）。
+    const sharpPrefetch = new Set();
+    const sharpPrefetchImgs = new Map();
+    function sharpVariantURL(url) {
+      if (!url || url.indexOf('size=thumb') < 0) return '';
+      const css = Math.min(innerWidth * 0.96, 420);
+      const need = Math.ceil(css * (devicePixelRatio || 1));
+      if (need <= 512) return '';
+      return url + '&w=' + (need <= 768 ? 768 : 1024);
+    }
+    function prefetchSharp(url) {
+      const variant = sharpVariantURL(url);
+      if (!variant || sharpPrefetch.has(url)) return;
+      const im = new Image();
+      im.onload = function () {
+        sharpPrefetch.add(url);
+        sharpPrefetchImgs.set(url, im);
+        if (sharpPrefetchImgs.size > 8) {
+          const oldest = sharpPrefetchImgs.keys().next().value;
+          sharpPrefetchImgs.delete(oldest);
+        }
+      };
+      im.src = variant;
+    }
+    function usePrefetchedSharp(ci, pi) {
+      const url = photoSrc(pi);
+      const key = sharpKey(ci, pi);
+      if (!url || !sharpPrefetch.has(url)) return false;
+      sharpPhotos.value = { ...sharpPhotos.value, [key]: true };
+      sharpReady.value = { ...sharpReady.value, [key]: true };
+      return true;
+    }
     const currentCard = computed(() => cards.value[cardIndex.value] || null);
     const currentMsgCount = computed(() => (currentCard.value && currentCard.value.msg_count) || 0);
     const currentPhotoUrl = computed(() => {
@@ -2911,6 +2944,10 @@ const yxqApp = createApp({
       if (next) prefetch(cardDisplayPhotos(next)[0]);
       const next2 = cards.value[cardIndex.value + 2];
       if (next2) prefetch(cardDisplayPhotos(next2)[0]);
+      const curPhotos = currentCard.value ? cardDisplayPhotos(currentCard.value) : [];
+      const sharpURLs = [next, next2].map(function (c) { return c ? cardDisplayPhotos(c)[0] : ''; });
+      if (curPhotos[photoIndex.value + 1]) sharpURLs.push(curPhotos[photoIndex.value + 1]);
+      setTimeout(function () { sharpURLs.forEach(prefetchSharp); }, 400);
     }
     function cardsQuery() {
       const q = buildFilterQuery();
@@ -5560,8 +5597,8 @@ const yxqApp = createApp({
       if (ci !== oci) {
         sharpPhotos.value = {};
         sharpReady.value = {};
-        scheduleSharpPhoto();
-      } else if (!sharpPhotos.value[sharpKey(ci, pi)]) {
+        if (!usePrefetchedSharp(ci, pi)) scheduleSharpPhoto();
+      } else if (!sharpPhotos.value[sharpKey(ci, pi)] && !usePrefetchedSharp(ci, pi)) {
         scheduleSharpPhoto();
       }
       preloadAround();
