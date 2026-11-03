@@ -50,7 +50,7 @@ import (
 // activity has no valid code; 69 keeps the ended-activity defense and requires
 // a real 4-digit code. Keep admin @import values in sync.
 // 83 makes card-owner message feed items click into the highlighted thread.
-const assetVersion = "103"
+const assetVersion = "105"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

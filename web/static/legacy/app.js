@@ -927,6 +927,7 @@ const yxqApp = createApp({
     // 按 card:photo 记录已升级的图：滑下一张照片时上一张保持 768，避免过渡中回糊；
     // 连续快滑时新照片仍先 512，不会每张都等 768。
     const sharpPhotos = ref({});
+    const sharpReady = ref({});
     let sharpPhotoTimer = null;
     function sharpKey(ci, pi) { return ci + ':' + pi; }
     function scheduleSharpPhoto(delay) {
@@ -938,6 +939,9 @@ const yxqApp = createApp({
     }
     // 手势开始只取消“待升级”，已升级的 768/1024 保持不变，避免触点一下先糊回 512。
     function cancelSharpPhoto() { clearTimeout(sharpPhotoTimer); }
+    function onSharpLoad(ci, i) {
+      sharpReady.value = { ...sharpReady.value, [sharpKey(ci, i)]: true };
+    }
     const currentCard = computed(() => cards.value[cardIndex.value] || null);
     const currentMsgCount = computed(() => (currentCard.value && currentCard.value.msg_count) || 0);
     const currentPhotoUrl = computed(() => {
@@ -2645,6 +2649,7 @@ const yxqApp = createApp({
       };
       activities.value = data.activities || [];
       sharpPhotos.value = {};
+      sharpReady.value = {};
       triggerPhotoLoading();
       scheduleSharpPhoto();
       schedulePreloadAround();
@@ -2949,6 +2954,7 @@ const yxqApp = createApp({
         cardsStart.value = 0;
         cardIndex.value = 0; photoIndex.value = 0;
         sharpPhotos.value = {};
+        sharpReady.value = {};
         triggerPhotoLoading();
         scheduleSharpPhoto();
         maybeShowSwipeGuide();
@@ -5553,6 +5559,7 @@ const yxqApp = createApp({
       triggerPhotoLoading();
       if (ci !== oci) {
         sharpPhotos.value = {};
+        sharpReady.value = {};
         scheduleSharpPhoto();
       } else if (!sharpPhotos.value[sharpKey(ci, pi)]) {
         scheduleSharpPhoto();
@@ -7567,7 +7574,7 @@ const yxqApp = createApp({
       isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
       cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoSrc, photoLoading,
-      sharpPhotos,
+      sharpPhotos, sharpReady, onSharpLoad,
       showSwipeGuide, closeSwipeGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
       filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,

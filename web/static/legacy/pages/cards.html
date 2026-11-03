@@ -26,13 +26,18 @@
         <div v-if="photoLoading" class="photo-loading"></div>
         <div v-if="currentPhotoList.length" class="card-photo-track" :style="{ transform: 'translateX(-' + photoIndex * 100 + '%)' }">
           <template v-for="(p,i) in currentPhotoList" :key="i">
-            <img v-if="photoSrc(i)" :src="(cardIndex === 0 && i === 0) ? photoSrc(i).replace('size=thumb', 'size=hero') : photoSrc(i)"
-              :srcset="sharpPhotos[cardIndex + ':' + i] && photoSrc(i).indexOf('size=thumb') >= 0 ? (cardIndex === 0 && i === 0 ? photoSrc(i).replace('size=thumb', 'size=hero') + ' 420w, ' : '') + photoSrc(i) + ' 512w, ' + photoSrc(i) + '&w=768 768w, ' + photoSrc(i) + '&w=1024 1024w' : null"
-              sizes="min(96vw, 420px)" class="card-photo-item" alt=""
-              :loading="(i === photoIndex || i === photoIndex + 1) ? 'eager' : 'lazy'" decoding="async"
-              :fetchpriority="(cardIndex === 0 && i === 0) ? 'high' : 'auto'"
-              :style="photoPositions[i] ? { objectPosition: photoPositions[i] } : null"
-              @load="onPhotoLoad($event, i); recalcPhotoPosition($event, i)" @error="onPhotoError($event); retryImg($event, 2)">
+            <div v-if="photoSrc(i)" class="card-photo-slide">
+              <img :src="(cardIndex === 0 && i === 0) ? photoSrc(i).replace('size=thumb', 'size=hero') : photoSrc(i)"
+                class="card-photo-item card-photo-base" alt=""
+                :loading="(i === photoIndex || i === photoIndex + 1) ? 'eager' : 'lazy'" decoding="async"
+                :fetchpriority="(cardIndex === 0 && i === 0) ? 'high' : 'auto'"
+                :style="photoPositions[i] ? { objectPosition: photoPositions[i] } : null"
+                @load="onPhotoLoad($event, i); recalcPhotoPosition($event, i)" @error="onPhotoError($event); retryImg($event, 2)">
+              <img v-if="sharpPhotos[cardIndex + ':' + i]" :src="photoSrc(i)" :srcset="photoSrc(i).indexOf('size=thumb') >= 0 ? (cardIndex === 0 && i === 0 ? photoSrc(i).replace('size=thumb', 'size=hero') + ' 420w, ' : '') + photoSrc(i) + ' 512w, ' + photoSrc(i) + '&w=768 768w, ' + photoSrc(i) + '&w=1024 1024w' : null"
+                sizes="min(96vw, 420px)" class="card-photo-sharp" :class="{ready: sharpReady[cardIndex + ':' + i]}" alt="" decoding="async"
+                :style="photoPositions[i] ? { objectPosition: photoPositions[i] } : null"
+                @load="onSharpLoad(cardIndex, i)">
+            </div>
             <div v-else class="card-photo-item card-photo-ghost"></div>
           </template>
         </div>

@@ -46,8 +46,7 @@
   /* 卡片高度必须 ≤ 底栏以上可用高度：不要再写 90vh（视觉视口变小时会顶出底栏）。 */
   .swipe-card { width: 96%; max-width: 420px; height: calc(var(--yxq-vh, 100vh) - 76px - env(safe-area-inset-bottom)); max-height: 780px; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.12); position: relative; transition: opacity 0.15s ease; display: flex; flex-direction: column; }
   @keyframes cardFadeIn { from { opacity: 0; } to { opacity: 1; } }
-  .swipe-card.slide-in-right { animation: slideInRight 0.28s ease; }
-  .swipe-card.slide-in-left { animation: slideInLeft 0.28s ease; }
+  .swipe-card.slide-in-right, .swipe-card.slide-in-left { animation: none; }
   @keyframes slideInRight { from { transform: translateX(46px); } to { transform: translateX(0); } }
   @keyframes slideInLeft { from { transform: translateX(-46px); } to { transform: translateX(0); } }
   /* 牵线左右滑动新手引导（仅首次进入显示一次） */
@@ -67,8 +66,13 @@
   .sg-btn:active { transform: scale(0.97); }
   .card-photo-wrap { position: relative; width: 100%; flex: 0 0 48%; min-height: 200px; background: #f2f3f5; overflow: hidden; touch-action: pan-y; cursor: grab; }
   .card-photo-wrap:active { cursor: grabbing; }
-  .card-photo-track { display: flex; width: 100%; height: 100%; transition: transform 0.32s cubic-bezier(0.25,0.46,0.45,0.94); will-change: transform; }
+  .card-photo-track { display: flex; width: 100%; height: 100%; }
   .card-photo-item { flex: 0 0 100%; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card-photo-slide { flex: 0 0 100%; width: 100%; height: 100%; position: relative; overflow: hidden; }
+  .card-photo-base, .card-photo-sharp { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card-photo-base { z-index: 1; }
+  .card-photo-sharp { z-index: 2; opacity: 0; transition: opacity 0.18s ease; }
+  .card-photo-sharp.ready { opacity: 1; }
   .card-photo { width: 100%; height: 100%; object-fit: cover; display: block; will-change: opacity, transform; }
   .card-photo.photo-enter { animation: photoFadeIn 0.28s ease; }
   .card-photo.photo-slide-left { animation: photoSlideLeft 0.28s ease; }
