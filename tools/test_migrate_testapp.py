@@ -10,6 +10,7 @@ phone allocation and reconciliation logic is exercised here.
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -474,6 +475,20 @@ class PhotoIndexTests(unittest.TestCase):
             self.assertEqual(set(found), {"tok-a", "tok-b"})
             self.assertEqual(found["tok-a"].suffix, ".jpg")
             self.assertEqual(found["tok-b"].suffix, ".jpeg")
+
+
+class RuntimeDataTests(unittest.TestCase):
+    def test_observer_codes_dry_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "yixianqian_observer_codes.json"
+            path.write_text(json.dumps({
+                "ABCDEF12": {"used": False, "used_by": "", "used_at": ""},
+                "ZZZZZZ99": {"used": True, "used_by": "某人", "used_at": "2026-08-25 02:55:58"},
+            }), encoding="utf-8")
+            stats = m.process_observer_codes(None, tmp, apply=False)
+            self.assertEqual(stats["source"], 2)
+            self.assertEqual(stats["inserted"], 2)
+            self.assertEqual(stats["error_count"], 0)
 
 
 if __name__ == "__main__":

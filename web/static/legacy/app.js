@@ -2928,8 +2928,13 @@ const yxqApp = createApp({
     }
     function schedulePreloadAround() {
       // 首屏 hero 绘制后再预取下一张卡的首图（512），不抢 LCP 带宽。
-      if (document.readyState === 'complete') setTimeout(preloadAround, 8e2);
-      else window.addEventListener('load', function(){ setTimeout(preloadAround, 8e2); }, { once: true });
+      const run = function () {
+        try { preloadAround(); } catch (e) {}
+        // 预载查看器资源，避免第一次点大图才现下载 PhotoSwipe（秒开 >500ms）。
+        setTimeout(function () { try { loadPhotoSwipe().catch(function () {}); } catch (e) {} }, 5e2);
+      };
+      if (document.readyState === 'complete') setTimeout(run, 8e2);
+      else window.addEventListener('load', function(){ setTimeout(run, 8e2); }, { once: true });
     }
     function preloadAround() {
       // 预取后两张卡的首图（512）：连续快滑时领先两张，避免每滑一张现下载；
@@ -6296,7 +6301,7 @@ const yxqApp = createApp({
               ? computeFaceCrop(faces[0], heroWrap.clientWidth, heroWrap.clientHeight,
                                 heroImg.naturalWidth, heroImg.naturalHeight)
               : '';
-            if (pos && window.__YXQ_HERO__.setObjectPosition) window.__YXQ_HERO__.setObjectPosition(pos);
+            if (window.__YXQ_HERO__.setObjectPosition) window.__YXQ_HERO__.setObjectPosition(pos || '50% 50%');
           } catch (_) {}
           // 等首屏 hero 绘制/长任务结束后再预取，避免抢 LCP 带宽与解码主线程。
           dismissHeroAfterPaint();

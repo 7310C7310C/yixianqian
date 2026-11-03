@@ -213,7 +213,7 @@
      #boot-skeleton 只负责覆盖与淡出，Vue 首卡图绘制后才移除（index.html 的 __YXQ_HERO__）。 */
   #boot-skeleton { position: fixed; inset: 0; z-index: 2000; background: #f7f8fa; pointer-events: none; }
   #boot-skeleton .boot-hero-shimmer { position: absolute; inset: 0; border-radius: 0; z-index: 1; }
-  #boot-skeleton .boot-photo { position: absolute; inset: 0; z-index: 2; object-position: 50% 0; opacity: 1; }
+  #boot-skeleton .boot-photo { position: absolute; inset: 0; z-index: 2; object-position: 50% 50%; opacity: 1; }
   #boot-skeleton.boot-hero-ready .boot-photo { opacity: 1; }
   #boot-skeleton.boot-hero-ready .boot-hero-shimmer { opacity: 0; }
   #boot-skeleton.boot-hero-failed .boot-photo { display: none; }

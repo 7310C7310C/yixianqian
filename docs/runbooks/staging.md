@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-02
+last_verified: 2026-11-03
 sources:
   - deploy/**
   - .env.example
@@ -263,10 +263,10 @@ runuser -u yxq -- psql -d yixianqian_staging -Atc \
 
 ## 8. 数据迁移附录（testapp → v2）
 
-- 来源基线：users 1110、observers 4、likes 132、activities 6、signups 248、group_select 238、
-  group_result 324、onetoone_result 2972、messages 112、reports 3、suggestions 3、praise 19。
-- staging 当前：users 1115（active 普通用户 1111、observer 4）、activities 6、signups 245、
-  profile_photos 1028、points_ledger 131。来源 users+observers=1114，staging 多 1 个来源待核对。
+- 来源基线：users 1110、observers 4、likes 133、activities 6、signups 249、group_select 238、
+  group_result 324、onetoone_result 2972、messages 112、reports 3、suggestions 3、praise 20。
+- staging 当前：users 1111（3 个 dual-role observer 合并）、activities 6、signups 245（4 条重复 dedupe）、
+  profile_photos/media 1127 + 活动海报 1、points_ledger 129、observer_codes 24。
 - 手机号：staging 用 `1390000xxxx` 测试号；重复手机只保留一笔（优先 U-0006/较小 legacy ID），其余分配新测试号。
   生产必须用真实手机号；缺失/重复人工处理并写报告，不能自动乱配。
 - 微信：来源「微信号」写入 `users.wechat`；重复导入时已有非空值不被源值覆盖。
@@ -274,6 +274,8 @@ runuser -u yxq -- psql -d yixianqian_staging -Atc \
   保持原样，由用户在资料页补填 18 位；不 grandfather。存量 1 个有密文账号不回填哈希。
 - 照片映射：按 `<photos-dir>/<file_token>.<ext>` 递归匹配；缺失 token 报告并继续；`profile_photos`
   行数 ≠ `media` 数（多行可引用同一 media），对账按 `media_id` 去重。
+- 活动海报/观察员码：`--poster-owner-legacy-id`（默认 U-0006）指定海报属主，海报文件放
+  `--photos-dir/<file_token>.<ext>`；`--runtime-data-dir` 读取 observer_codes 并按 code upsert；apply 缺海报 fatal。
 - 历史原图：迁移工具上传前用 Pillow 重编码（JPEG q90/PNG）、按 EXIF/eXIf 方向 auto-orient、去元数据；
   已入库存量不批量重写，需清洗时另起一次性任务并先备份/清单。
 - 积分：`SUM(delta)` 对余额；`balance_after` 不作唯一依据；`redemptions`/`invites`/`historical_participants` 分开核对。
@@ -288,13 +290,14 @@ python3 tools/migrate_testapp.py \
   --database-url "$DATABASE_URL" \
   --dry-run \
   --photos-dir /tmp/yxq_photos \
+  --runtime-data-dir /tmp/yxq_v1_data \
   --report-out /tmp/migration-report.json
 # 正式导入把 --dry-run 换成 --apply；未经 PM 批准不要 --apply
 ```
 
+- 仍未自动化：身份证 ciphertext/hash、登录 auth/activation、历史 notifications、JSON invites 口径（PM 决定后另做）。
 - schema 以 `migrations/` 为准；迁移报告需遮罩手机号与身份证。
 - 生产大表索引如改 `CONCURRENTLY`，必须走手工窗口；迁移 runner 默认事务内普通 `CREATE INDEX`。
-
 ## 9. staging 运维备注
 
 - PG 参数（2026-10-25 已 apply，写在 `postgresql.auto.conf`）：`shared_buffers=512MB`、`work_mem=8MB`、

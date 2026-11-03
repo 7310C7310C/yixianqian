@@ -77,10 +77,17 @@ def check_admin_shell(base: str, cookie_name: str, admin_cookie: str) -> None:
     status, body = fetch(base, "/", cookie_name, admin_cookie)
     if status != 200:
         raise SmokeFailure(f"管理员 GET / status={status}，want 200")
-    if f'title="{CONSOLE_ENTRY}"' not in body:
+    # 页面已按 chunk 懒加载：入口在 profile chunk，不在 /app 壳里。
+    pstatus, profile = fetch(base, "/static/legacy/pages/profile.render.js", cookie_name, admin_cookie)
+    if pstatus != 200:
+        raise SmokeFailure(f"管理员 profile.render.js status={pstatus}，want 200")
+    haystack = body + profile
+    def has_title(label: str) -> bool:
+        return f'title="{label}"' in haystack or f'title: "{label}"' in haystack
+    if not has_title(CONSOLE_ENTRY):
         raise SmokeFailure(f"管理员 SPA 缺少「{CONSOLE_ENTRY}」入口")
     for entry in REMOVED_ENTRIES:
-        if f'title="{entry}"' in body:
+        if has_title(entry):
             raise SmokeFailure(f"管理员 SPA 仍有单列入口「{entry}」，应只保留「{CONSOLE_ENTRY}」")
     print("[ok] SPA 管理区只有「管理后台」，活动/麦穗/举报入口已撤")
 

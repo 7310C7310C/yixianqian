@@ -1063,6 +1063,59 @@ def user_params(record: dict[str, Any], phone: str) -> dict[str, Any]:
     }
 
 
+def process_observer_codes(
+    conn: Any, runtime_data_dir: str, apply: bool
+) -> dict[str, Any]:
+    """Import v1 observer invitation codes (safe, no PII beyond used_by text)."""
+    stats = Stats(0)
+    if not runtime_data_dir:
+        return stats.as_dict()
+    path = Path(runtime_data_dir) / "yixianqian_observer_codes.json"
+    if not path.is_file():
+        stats.note(f"observer codes file not found: {path}")
+        return stats.as_dict()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        stats.error("cannot read observer codes JSON", error=str(exc))
+        return stats.as_dict()
+    if not isinstance(payload, dict):
+        stats.error("observer codes JSON is not an object")
+        return stats.as_dict()
+    stats.source = len(payload)
+    existing: set[str] = set()
+    if apply:
+        with conn.cursor() as cur:
+            cur.execute("SELECT code FROM observer_codes")
+            existing = {row[0] for row in cur.fetchall()}
+    for code, record in payload.items():
+        code = str(code or "").strip()
+        if not code or not isinstance(record, dict):
+            stats.skipped += 1
+            continue
+        used = bool(record.get("used"))
+        used_by = str(record.get("used_by") or "").strip()
+        used_at = None
+        raw_used_at = str(record.get("used_at") or "").strip()
+        if raw_used_at:
+            try:
+                used_at = datetime.strptime(raw_used_at, "%Y-%m-%d %H:%M:%S").replace(tzinfo=SHANGHAI)
+            except ValueError:
+                stats.note(f"invalid used_at for code {code[:2]}…: {raw_used_at[:19]}")
+        if apply:
+            conn.execute(
+                "INSERT INTO observer_codes (code, used, used_by, used_at) VALUES (%s,%s,%s,%s) "
+                "ON CONFLICT (code) DO UPDATE SET used=EXCLUDED.used, "
+                "used_by=EXCLUDED.used_by, used_at=EXCLUDED.used_at",
+                (code, used, used_by, used_at),
+            )
+        if code in existing:
+            stats.updated += 1
+        else:
+            stats.inserted += 1
+    return stats.as_dict()
+
+
 def process_users(
     conn: Any,
     user_records: list[dict[str, Any]],
@@ -1163,7 +1216,11 @@ def process_users(
 
 
 def process_activities(
-    conn: Any, rows: list[dict[str, Any]], existing_ids: dict[str, int], apply: bool
+    conn: Any,
+    rows: list[dict[str, Any]],
+    existing_ids: dict[str, int],
+    apply: bool,
+    poster_media: dict[str, str] | None = None,
 ) -> tuple[Stats, dict[str, int], dict[str, int]]:
     stats = Stats(len(rows))
     key_to_id: dict[str, int] = {}
@@ -1179,10 +1236,11 @@ def process_activities(
         record = build_activity_record(row)
         legacy_id = record["legacy_record_id"]
         existing_id = existing_ids.get(legacy_id)
-        if record["poster_tokens"]:
-            stats.note(
-                f"{record['activity_no']}: poster {record['poster_tokens'][0]} not migrated "
-                "(poster upload is out of scope in this tool)"
+        poster_id = (poster_media or {}).get(record["activity_no"])
+        if record["poster_tokens"] and apply and not poster_id:
+            stats.error(
+                f"{record['activity_no']}: poster {record['poster_tokens'][0]} not uploaded",
+                activity_no=record["activity_no"],
             )
         if not apply:
             if existing_id:
@@ -1196,7 +1254,7 @@ def process_activities(
             with conn.transaction():
                 params = {
                     **record,
-                    "poster_media_id": None,
+                    "poster_media_id": poster_id,
                 }
                 activity_id = upsert_by_existing(
                     conn,
@@ -2441,6 +2499,69 @@ def sanitize_filename(name: str, fallback: str) -> str:
     return (base or fallback)[:200]
 
 
+def process_posters(
+    conn: Any,
+    activities: list[dict[str, Any]],
+    poster_files: dict[str, Path],
+    owner_id: int | None,
+    existing: dict[str, Any],
+    apply: bool,
+    store: R2Store | None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Upload activity poster files and return activity_no -> media_id."""
+    refs = [(a["activity_no"], str(a["poster_tokens"][0])) for a in activities if a.get("poster_tokens")]
+    stats: dict[str, Any] = {
+        "source": len(refs), "media_reused": 0, "uploaded": 0,
+        "missing_count": 0, "missing": [], "errors": [], "error_count": 0,
+    }
+    out: dict[str, str] = {}
+    for activity_no, token in refs:
+        media = existing["media_by_token"].get(token)
+        if media:
+            out[activity_no] = media["id"]
+            stats["media_reused"] += 1
+            continue
+        path = poster_files.get(token)
+        if path is None:
+            stats["missing_count"] += 1
+            if len(stats["missing"]) < 100:
+                stats["missing"].append({"activity_no": activity_no, "file_token": token})
+            continue
+        if not apply:
+            out[activity_no] = "dry-run"
+            continue
+        if owner_id is None:
+            stats["error_count"] += 1
+            stats["errors"].append({"activity_no": activity_no, "message": "poster owner user not imported"})
+            continue
+        try:
+            processed = process_photo_bytes(path)
+            media_id = str(uuid.uuid4())
+            ext = "jpg" if processed["content_type"] == "image/jpeg" else "png"
+            object_key = f"media/{owner_id}/{media_id}.{ext}"
+            thumb_key = f"media/{owner_id}/{media_id}_thumb.jpg"
+            assert store is not None
+            with conn.transaction():
+                store.put(object_key, processed["data"], processed["content_type"])
+                store.put(thumb_key, processed["thumb"], "image/jpeg")
+                conn.execute(
+                    "INSERT INTO media (id, user_id, original_name, object_key, thumb_key, "
+                    "content_type, byte_size, thumb_size, width, height, kind, legacy_file_token) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'poster',%s)",
+                    (media_id, owner_id, f"{activity_no}-poster.{ext}", object_key, thumb_key,
+                     processed["content_type"], len(processed["data"]), len(processed["thumb"]),
+                     processed["width"], processed["height"], token),
+                )
+            out[activity_no] = media_id
+            stats["uploaded"] += 1
+            existing["media_by_token"][token] = {"id": media_id, "user_id": owner_id}
+        except Exception as exc:  # noqa: BLE001
+            stats["error_count"] += 1
+            if len(stats["errors"]) < 100:
+                stats["errors"].append({"activity_no": activity_no, "message": safe_error(exc)})
+    return stats, out
+
+
 def process_media(
     conn: Any,
     photos_dir: Path | None,
@@ -2813,16 +2934,36 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             return report, 1
         report["tables"]["users"] = user_stats.as_dict()
         report["tables"]["observers"] = observer_stats.as_dict()
+        report["tables"]["observer_codes"] = process_observer_codes(
+            conn, args.runtime_data_dir, apply
+        )
         if apply:
             for record in user_records + observer_records:
                 record["_db_id"] = key_to_id.get(record["key"])
 
         activity_records = [build_activity_record(row) for row in tables["activities"]]
+        poster_tokens = {
+            str(a["poster_tokens"][0]) for a in activity_records if a.get("poster_tokens")
+        }
+        poster_files = index_photo_files(photos_dir, poster_tokens) if photos_dir else {}
+        poster_store = photo_store
+        if apply and poster_files and poster_store is None:
+            poster_store = R2Store()
+        poster_owner_id = key_to_id.get(args.poster_owner_legacy_id) if apply else -1
+        poster_stats, poster_media = process_posters(
+            conn, activity_records, poster_files, poster_owner_id, existing,
+            apply, poster_store,
+        )
+        report["posters"] = poster_stats
+        if apply and (poster_stats["missing_count"] or poster_stats["error_count"]):
+            report["fatal"].append("activity poster upload incomplete")
+            return report, 1
         activity_stats, activity_key_to_id, activity_record_to_id = process_activities(
             conn,
             tables["activities"],
             legacy_map(conn, "activities", "legacy_record_id"),
             apply,
+            poster_media,
         )
         report["tables"]["activities"] = activity_stats.as_dict()
         activity_no_to_key, activity_rec_to_key = activity_maps(activity_records)
@@ -2968,6 +3109,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     mode.add_argument("--apply", dest="apply", action="store_true", help="write to PostgreSQL/R2")
     parser.set_defaults(apply=False)
     parser.add_argument("--photos-dir", default="", help="directory of <file_token>.<ext> photos")
+    parser.add_argument(
+        "--runtime-data-dir",
+        default="",
+        help="v1 data directory for observer_codes/notifications/invites JSON (optional)",
+    )
+    parser.add_argument(
+        "--poster-owner-legacy-id",
+        default="U-0006",
+        help="owner user for activity posters (default: U-0006 admin)",
+    )
     parser.add_argument(
         "--report-out",
         default="",

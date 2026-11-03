@@ -118,7 +118,7 @@ func TestLegacyShellRendersStaticHero(t *testing.T) {
 		".boot-hero-ready",
 		"#boot-skeleton.boot-hero-out",
 		"#boot-skeleton .boot-tab-text",
-		"object-position: 50% 0",
+		"object-position: 50% 50%",
 		"height: calc(50px + env(safe-area-inset-bottom))",
 		"prefers-reduced-motion",
 	} {
