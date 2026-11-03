@@ -3577,8 +3577,9 @@ const yxqApp = createApp({
       viewerLightbox.on('slideInit', (e) => {
         const d = e.slide ? viewerDims.get(e.slide.index) : null;
         if (d && e.slide && e.slide.content) {
-          e.slide.width = d.w; e.slide.height = d.h;
-          e.slide.content.width = d.w; e.slide.content.height = d.h;
+          const fit = viewerFitSize(d.w, d.h);
+          e.slide.width = fit.w; e.slide.height = fit.h;
+          e.slide.content.width = fit.w; e.slide.content.height = fit.h;
         } else if (e.slide && e.slide.container) {
           // 尺寸未知：先隐藏，尺寸就绪（探针或 loadComplete）再显示，避免加载期被拉成视口比例
           e.slide.container.classList.add('yxq-dim-wait');
@@ -3612,6 +3613,16 @@ const yxqApp = createApp({
         if (nw && nh && !viewerDims.has(s.index)) applyViewerSlideSize(s, nw, nh);
         upgradeViewerSlide(s, viewerOpenSeq);
       });
+      viewerLightbox.on('resize', () => {
+        const pswp = viewerLightbox && viewerLightbox.pswp;
+        if (!pswp || pswp.isDestroying || !pswp.mainScroll) return;
+        pswp.mainScroll.itemHolders.forEach((holder) => {
+          const s = holder && holder.slide;
+          if (!s) return;
+          const d = viewerDims.get(s.index);
+          if (d) applyViewerSlideSize(s, d.w, d.h);
+        });
+      });
       viewerLightbox.on('loadError', () => {
         const pswp = viewerLightbox && viewerLightbox.pswp;
         if (pswp && pswp.__yxqOpenSeq && pswp.__yxqOpenSeq !== viewerOpenSeq) {
@@ -3643,15 +3654,26 @@ const yxqApp = createApp({
       im.onerror = () => cb(null);
       im.src = src;
     }
+    // 大屏上小图（如 480x640）不能只按自然尺寸显示：按视口等比放大到
+    // “至少占满宽/高中的一边”，同时保持完整、不裁切。小屏仍是等比缩小。
+    function viewerFitSize(w, h) {
+      const p = viewerLightbox && viewerLightbox.pswp;
+      const vw = (p && p.viewportSize.x) || innerWidth;
+      const vh = (p && p.viewportSize.y) || innerHeight;
+      if (!w || !h || !vw || !vh) return { w: w, h: h };
+      const scale = Math.min(vw / w, vh / h);
+      return { w: Math.round(w * scale), h: Math.round(h * scale) };
+    }
     function applyViewerSlideSize(s, nw, nh) {
       if (!s || !nw || !nh) return;
-      s.width = nw;
-      s.height = nh;
+      viewerDims.set(s.index, { w: nw, h: nh });
+      const fit = viewerFitSize(nw, nh);
+      s.width = fit.w;
+      s.height = fit.h;
       if (s.content) {
-        s.content.width = nw;
-        s.content.height = nh;
+        s.content.width = fit.w;
+        s.content.height = fit.h;
       }
-      if (s.data) { s.data.w = nw; s.data.h = nh; }
       try {
         s.calculateSize();
         s.currentResolution = 0;
@@ -3720,11 +3742,11 @@ const yxqApp = createApp({
       for (const h of p.mainScroll.itemHolders) {
         const s = h && h.slide;
         if (!s || s.index !== index || !s.content) continue;
-        s.content.width = d.w;
-        s.content.height = d.h;
-        s.width = d.w;
-        s.height = d.h;
-        if (s.data) { s.data.w = d.w; s.data.h = d.h; }
+        const fit = viewerFitSize(d.w, d.h);
+        s.content.width = fit.w;
+        s.content.height = fit.h;
+        s.width = fit.w;
+        s.height = fit.h;
         if (s.container) s.container.classList.remove('yxq-dim-wait');
         try {
           s.calculateSize();
