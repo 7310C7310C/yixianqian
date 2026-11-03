@@ -2,7 +2,7 @@
   "version": 1,
   "verified_at": "2026-11-03",
   "margin_percent": 10,
-  "baseline_ref": "origin/main@9f4dd1a; app_min baseline 47,960→48,150 (+190B) for 2-ahead 512 prefetch; budget 52,965",
+  "baseline_ref": "origin/main@3ae0664; app_min baseline 48,600; budget 53,460; 变更历史见 notes",
   "notes": [
     "所有值都是 gzip 字节；shell = 静态壳（index.html + 内联 critical CSS，gzip level 6）+ bootstrap_allowance_bytes。",
     "bootstrap_allowance_bytes=3,309 由 2026-10-26 batch10 staging-0f14252 的 /app 实测 27,978B 校准（静态壳 24,669B）；覆盖 3 张卡的 per-user bootstrap，不含 API 与图片。",
@@ -10,7 +10,7 @@
     "预算只能手工修改并走 Review；budget 不得超过 baseline×1.10；没有 --update 命令。",
     "2026-11-03：app_min 基线 47,960→48,150，因卡面改为 512 秒显 + 后两张预取；实测 52,7xxB，budget 52,965（Review 记录）。",
     "2026-11-03：查看器大屏 fit + 卡面/多图过渡修复后 app.min 实测 53,056B；基线 48,150→48,300，budget 53,130。",
-    "2026-11-04：卡面 sharp 预取后 app.min 实测 53,416B；基线 48,300→48,600，budget 53,460。"
+    "2026-11-03：卡面 sharp 预取后 app.min 实测 53,416B；基线 48,300→48,600，budget 53,460。"
   ],
   "limits": {
     "shell_gzip": {
