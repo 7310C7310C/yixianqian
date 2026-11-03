@@ -170,6 +170,14 @@ def wait_index(page, want: int, timeout_ms: int = 6000) -> None:
                            arg=want, timeout=timeout_ms)
 
 
+def card_identity(page) -> dict[str, str]:
+    """当前牌堆卡片的稳定标识；方向键误切卡时 name/counter 会变。"""
+    return {
+        "name": page.locator(".swipe-card .card-name").first.inner_text().strip(),
+        "counter": page.locator(".card-counter").first.inner_text().strip(),
+    }
+
+
 def press_arrow(page, side: str, touch: bool) -> None:
     loc = page.locator(f".yxq-viewer-arrow--{side}")
     if touch:
@@ -207,6 +215,7 @@ def check_viewport(p, viewport: str, target_offset: int, single_offset: int | No
         drag_card_next(page)
         guide_guard.dismiss_guides(page, timeout_ms=2000)
 
+    before_keys = card_identity(page)
     open_viewer(page)
     state = page.evaluate(ARROW_STATE_JS)
     n = int(state["n"])
@@ -248,6 +257,16 @@ def check_viewport(p, viewport: str, target_offset: int, single_offset: int | No
     if not page.evaluate("() => !!(window.pswp && window.pswp.opener && window.pswp.opener.isOpen)"):
         raise SystemExit(f"[{viewport}] viewer closed during next cycle")
 
+    # 方向键：大图打开时只翻图，不能切卡；退出后牌堆必须还是原来那张。
+    # 回归：曾经 window keydown 与 PhotoSwipe 同时收到 ArrowRight，大图翻页的同时
+    # 卡片也切到下一张，退出后才暴露。
+    page.keyboard.press("ArrowRight")
+    wait_index(page, 1)
+    during_keys = card_identity(page)
+    if during_keys != before_keys:
+        raise SystemExit(f"[{viewport}] arrow key switched card while viewer open: "
+                         f"{before_keys['counter']} -> {during_keys['counter']}")
+
     # 点/悬停后 photoswipe.css 的 .pswp__button:hover/:focus 会把背景重置为 none；
     # 这里锁住按钮底色与描边，防止 CSS 级联回归（浅色照片上白箭头不可见）。
     after = page.evaluate(ARROW_STATE_JS)
@@ -265,6 +284,34 @@ def check_viewport(p, viewport: str, target_offset: int, single_offset: int | No
           f"prev={prev_btn['w']:.0f}x{prev_btn['h']:.0f} next={next_btn['w']:.0f}x{next_btn['h']:.0f}")
     page.keyboard.press("Escape")
     page.wait_for_selector(".pswp", state="detached", timeout=4000)
+    after_keys = card_identity(page)
+    if after_keys != before_keys:
+        raise SystemExit(f"[{viewport}] card changed after closing viewer: "
+                         f"{before_keys['counter']} -> {after_keys['counter']}")
+    print(f"PASS keyboard arrows [{viewport}]: photo 0->1 inside viewer, "
+          f"card unchanged ({after_keys['counter']})")
+
+    # 关闭后方向键必须恢复切卡，防止 guard 状态泄漏成永久禁用。
+    page.keyboard.press("ArrowRight")
+    page.wait_for_function(
+        "(prev) => { const el = document.querySelector('.card-counter');"
+        " return el && el.textContent.trim() !== prev; }",
+        arg=before_keys["counter"], timeout=5000)
+    switched = card_identity(page)
+    if switched == before_keys:
+        raise SystemExit(f"[{viewport}] arrow key did not switch card after viewer closed")
+    page.wait_for_timeout(120)  # 按键节流 60ms
+    page.keyboard.press("ArrowLeft")
+    page.wait_for_function(
+        "(prev) => { const el = document.querySelector('.card-counter');"
+        " return el && el.textContent.trim() === prev; }",
+        arg=before_keys["counter"], timeout=5000)
+    restored = card_identity(page)
+    if restored != before_keys:
+        raise SystemExit(f"[{viewport}] card did not restore after arrow key: "
+                         f"{before_keys['counter']} -> {restored['counter']}")
+    print(f"PASS keyboard arrows [{viewport}]: after close ArrowRight switches card, "
+          f"ArrowLeft restores ({restored['counter']})")
 
     if single_offset is not None:
         # 单张照片：按钮仍注入但必须隐藏（.pswp--one-slide）。

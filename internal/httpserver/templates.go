@@ -50,7 +50,9 @@ import (
 // activity has no valid code; 69 keeps the ended-activity defense and requires
 // a real 4-digit code. Keep admin @import values in sync.
 // 83 makes card-owner message feed items click into the highlighted thread.
-const assetVersion = "107"
+// 2026-11-03 (viewer keyboard arrows): 108 invalidated app.min.js; arrow keys in
+// the fullscreen viewer now only change photos, never the underlying card.
+const assetVersion = "108"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

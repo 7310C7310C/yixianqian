@@ -1,13 +1,13 @@
 {
   "source": {
     "path": "app.js",
-    "bytes": 396062,
-    "sha256": "9f099137f0377543808aa9f88bd4a1ae503d5eb161f27a9f9b0da2a581afab22"
+    "bytes": 396295,
+    "sha256": "bdea1effb04319a45cb46adc5210042b22d9d8c3a790f1bf15da5153f2bb4b2e"
   },
   "min": {
     "path": "app.min.js",
-    "bytes": 166869,
-    "sha256": "897e5d6d3647e3454cbd69e8a63d0a54de115c6cc662107b502e14aa8c67a920"
+    "bytes": 166889,
+    "sha256": "690c128e51eee0accba6b4afe4fd2cf6ac6850fb419bf60100c2652670533f26"
   },
   "tool": {
     "name": "esbuild",

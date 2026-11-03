@@ -6515,6 +6515,9 @@ const yxqApp = createApp({
     let lastKeyNavTs = 0;
     function onKeydown(e){
       if(page.value !== 'cards' || !cards.value.length) return;
+      // 大图查看器（含打开中的遮罩）打开时，方向键只归 PhotoSwipe 翻图，
+      // 不能再切卡；否则退出大图后牌堆已经换人。
+      if(showPhotoViewer.value || viewerLoading.value) return;
       const ae = document.activeElement;
       if(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
       if(e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
