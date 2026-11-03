@@ -124,7 +124,22 @@ def main() -> int:
         page.wait_for_timeout(900)
         back = measure(page)
         assert_fit("fold-390", back)
-        print("PASS viewer-fit", {"390": small["rect"], "768": big["rect"], "back": back["rect"]})
+
+        # 双击应放大到 2x，再双击回 1x（不依赖捏合）
+        page.touchscreen.tap(195, 420)
+        page.wait_for_timeout(80)
+        page.touchscreen.tap(195, 420)
+        page.wait_for_timeout(500)
+        z1 = page.evaluate("() => window.pswp.currSlide.currZoomLevel")
+        page.touchscreen.tap(195, 420)
+        page.wait_for_timeout(80)
+        page.touchscreen.tap(195, 420)
+        page.wait_for_timeout(500)
+        z2 = page.evaluate("() => window.pswp.currSlide.currZoomLevel")
+        if abs(z1 - 2) > 0.1 or abs(z2 - 1) > 0.1:
+            raise AssertionError(f"double tap zoom failed: {z1} -> {z2}")
+
+        print("PASS viewer-fit", {"390": small["rect"], "768": big["rect"], "back": back["rect"], "doubleTap": [z1, z2]})
         ctx.close()
         browser.close()
     return 0

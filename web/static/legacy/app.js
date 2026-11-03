@@ -923,14 +923,18 @@ const yxqApp = createApp({
 
     const photoIndex = ref(0);
     const photoSlideDir = ref('');
-    // 卡面先显示 512（已预取，切卡秒显），停留 ~600ms 后再升级到 DPR 对应变体；
-    // 快速连滑时不会触发高分辨率下载，避免每滑一张都要等新图。
-    const sharpPhoto = ref(false);
+    // 卡面先显示 512（已预取，切卡秒显），停 600ms 后再升级 DPR 变体。
+    // 按 card:photo 记录已升级的图：滑下一张照片时上一张保持 768，避免过渡中回糊；
+    // 连续快滑时新照片仍先 512，不会每张都等 768。
+    const sharpPhotos = ref({});
     let sharpPhotoTimer = null;
+    function sharpKey(ci, pi) { return ci + ':' + pi; }
     function scheduleSharpPhoto(delay) {
-      sharpPhoto.value = false;
+      const key = sharpKey(cardIndex.value, photoIndex.value);
       clearTimeout(sharpPhotoTimer);
-      sharpPhotoTimer = setTimeout(() => { sharpPhoto.value = true }, typeof delay === 'number' ? delay : 6e2);
+      sharpPhotoTimer = setTimeout(() => {
+        sharpPhotos.value = { ...sharpPhotos.value, [key]: true };
+      }, typeof delay === 'number' ? delay : 6e2);
     }
     // 手势开始只取消“待升级”，已升级的 768/1024 保持不变，避免触点一下先糊回 512。
     function cancelSharpPhoto() { clearTimeout(sharpPhotoTimer); }
@@ -947,7 +951,7 @@ const yxqApp = createApp({
     });
     // 牌堆只解码当前与下一张；其余用同尺寸占位，避免首屏一次拉 9 张。
     function photoSrc(i) {
-      if (i === photoIndex.value || i === photoIndex.value + 1) return currentPhotoList.value[i] || '';
+      if (i === photoIndex.value || i === photoIndex.value + 1 || i === photoIndex.value - 1) return currentPhotoList.value[i] || '';
       return '';
     }
     const photoLoading = ref(false);
@@ -1069,10 +1073,9 @@ const yxqApp = createApp({
       clearTimeout(photoLoadingTimer);
       photoLoading.value = false;
       // 512 真正显示后再等 600ms 升级，慢网下不让高分辨率请求抢在首帧前。
-      if ((typeof i !== 'number' || i === photoIndex.value) && !sharpPhoto.value) scheduleSharpPhoto(6e2);
+      if ((typeof i !== 'number' || i === photoIndex.value) && !sharpPhotos.value[sharpKey(cardIndex.value, i)]) scheduleSharpPhoto(6e2);
     }
     function triggerPhotoLoading() {
-      scheduleSharpPhoto();
       clearTimeout(photoLoadingTimer);
       photoLoading.value = false;
       const url = currentPhotoUrl.value;
@@ -2641,7 +2644,9 @@ const yxqApp = createApp({
         mutual: normalizeMutualItems(homeLikes.mutual),
       };
       activities.value = data.activities || [];
+      sharpPhotos.value = {};
       triggerPhotoLoading();
+      scheduleSharpPhoto();
       schedulePreloadAround();
       maybeShowSwipeGuide();
       maybeShowActivityPromo();
@@ -2891,16 +2896,16 @@ const yxqApp = createApp({
     function preloadAround() {
       // 预取后两张卡的首图（512）：连续快滑时领先两张，避免每滑一张现下载；
       // 上限固定为两张，避免牌堆一次拉过多图。
+      const prefetch = function (url) {
+        if (!url) return;
+        const im = new Image();
+        im.onload = function () { loadedPhotoSet.add(url); };
+        im.src = url;
+      };
       const next = cards.value[cardIndex.value + 1];
-      if (next) {
-        const p = cardDisplayPhotos(next);
-        if (p[0]) new Image().src = p[0];
-      }
+      if (next) prefetch(cardDisplayPhotos(next)[0]);
       const next2 = cards.value[cardIndex.value + 2];
-      if (next2) {
-        const p2 = cardDisplayPhotos(next2);
-        if (p2[0]) new Image().src = p2[0];
-      }
+      if (next2) prefetch(cardDisplayPhotos(next2)[0]);
     }
     function cardsQuery() {
       const q = buildFilterQuery();
@@ -2943,7 +2948,9 @@ const yxqApp = createApp({
         cardsVersion.value = (page.version != null ? page.version : null);
         cardsStart.value = 0;
         cardIndex.value = 0; photoIndex.value = 0;
+        sharpPhotos.value = {};
         triggerPhotoLoading();
+        scheduleSharpPhoto();
         maybeShowSwipeGuide();
       }
       catch(e) { vant.showToast(e.message); }
@@ -3556,6 +3563,7 @@ const yxqApp = createApp({
         closeOnVerticalDrag: true,
         tapAction: null,
         doubleTapAction: null,
+        secondaryZoomLevel: 2,
         bgClickAction: 'close',
         imageClickAction: 'close',
         hideAnimationDuration: 160,
@@ -5541,8 +5549,14 @@ const yxqApp = createApp({
     watch(cardIndex, () => { if (showSwipeGuide.value) closeSwipeGuide(); });
 
     // 切换卡片/照片时显示图片加载占位
-    watch([cardIndex, photoIndex], () => {
+    watch([cardIndex, photoIndex], ([ci, pi], [oci]) => {
       triggerPhotoLoading();
+      if (ci !== oci) {
+        sharpPhotos.value = {};
+        scheduleSharpPhoto();
+      } else if (!sharpPhotos.value[sharpKey(ci, pi)]) {
+        scheduleSharpPhoto();
+      }
       preloadAround();
     });
 
@@ -7553,7 +7567,7 @@ const yxqApp = createApp({
       isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
       cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoSrc, photoLoading,
-      sharpPhoto,
+      sharpPhotos,
       showSwipeGuide, closeSwipeGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
       filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,
