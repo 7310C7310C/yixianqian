@@ -52,7 +52,8 @@ import (
 // 83 makes card-owner message feed items click into the highlighted thread.
 // 2026-11-03 (viewer keyboard arrows): 108 invalidated app.min.js; arrow keys in
 // the fullscreen viewer now only change photos, never the underlying card.
-const assetVersion = "108"
+// 109 removed the hearts badge (anonymous/real-name quota) from the cards page top.
+const assetVersion = "109"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

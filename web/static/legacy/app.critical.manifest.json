@@ -1,15 +1,15 @@
 {
   "source": {
     "path": "app.css",
-    "bytes": 106128,
-    "sha256": "b745bec0781b28584adc1f706873ec2c124edcc9f44148fd243b0f7fdc9077df"
+    "bytes": 106008,
+    "sha256": "1a26f2494f5e73d906214e5626696c8e7dbe3a66501be2d9e196c1c7bfd35e37"
   },
   "critical": {
     "path": "app.critical.css",
-    "bytes": 32989,
-    "gzip_bytes": 8230,
-    "sha256": "454fbf971945ea27fc4a702b2855c32930efa9c005c6b7397b16963987ad02f9",
-    "blocks": 295
+    "bytes": 32871,
+    "gzip_bytes": 8218,
+    "sha256": "c2cee6e8029368474dbe2d98154853e71d73f4e2e132b9b66e7bbb44837bddfb",
+    "blocks": 294
   },
   "keep_prefixes": [
     ":root",

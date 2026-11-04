@@ -132,7 +132,6 @@
   .back-btn:active { transform: scale(0.88); }
   .back-btn:disabled { opacity: 0.3; }
   .card-top-left { position: absolute; top: 12px; left: 16px; display: flex; align-items: center; gap: 8px; z-index: 5; }
-  .hearts-badge { background: rgba(0,0,0,0.55); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 13px; }
   .card-counter { background: rgba(0,0,0,0.55); color: #fff; padding: 4px 10px; border-radius: 20px; font-size: 12px; }
   /* 消息 */
   .msg-card { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: flex-start; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }

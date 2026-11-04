@@ -15,7 +15,6 @@
   <template v-else>
     <div class="card-top-left">
       <div class="card-counter">{{ cards.length ? (cardsStart + cardIndex + 1) + ' / ' + (cardsTotal || cards.length) : '0 / 0' }}</div>
-      <div class="hearts-badge" v-if="!isObserver">💕 匿名 {{ user.anon_left }} · 实名 {{ user.real_left }}</div>
     </div>
     <div class="filter-btn" :class="{active: hasActiveFilter}" @click="showFilter=true">⚙ 筛选</div>
     <van-empty v-if="!cards.length" :description="hasActiveFilter ? '没有符合筛选条件的人，试试调整筛选' : '暂时没有可推荐的人了～'"></van-empty>
