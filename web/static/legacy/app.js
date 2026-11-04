@@ -328,18 +328,19 @@ const yxqApp = createApp({
       if(isSub(nv) && isSub(ov)) return 'page-slide';
       return 'tab-transition';
     }
-    // 夜间模式（默认日间）
+    // 夜间模式（默认日间）；切换时短暂挂 .tf 触发颜色过渡（320ms 后移除，避免常驻 transition）
     const isDark = ref(false);
     try { isDark.value = localStorage.getItem('yxq_dark') === '1'; } catch(e) {}
     function toggleTheme(){
+      const de=document.documentElement;
+      de.classList.add('tf');
       isDark.value = !isDark.value;
-      document.documentElement.classList.toggle('van-theme-dark', isDark.value);
+      de.classList.toggle('van-theme-dark', isDark.value);
       try { localStorage.setItem('yxq_dark', isDark.value ? '1' : '0'); } catch(e) {}
       if (embedOpen.value) {
-        let doc = null;
-        try { doc = embedFrame.value && embedFrame.value.contentDocument; } catch(e) {}
-        if (doc) applyEmbedTheme(doc);   // class 操作不受 CSP 限制；深色由外部样式表接管
+        try { applyEmbedTheme(embedFrame.value && embedFrame.value.contentDocument); } catch(e) {}
       }
+      setTimeout(()=>{de.classList.remove('tf')},320);
     }
     document.documentElement.classList.toggle('van-theme-dark', isDark.value);
     // —— 返回拦截（飞书手势/物理返回）——

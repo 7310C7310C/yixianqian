@@ -2,8 +2,9 @@
   "version": 1,
   "verified_at": "2026-11-03",
   "margin_percent": 10,
-  "baseline_ref": "origin/main@3ae0664; app_min baseline 48,610; budget 53,471; 变更历史见 notes",
+  "baseline_ref": "origin/main@748c712; app_min baseline 48,622; budget 53,485; 变更历史见 notes",
   "notes": [
+    "2026-11-04：日/夜模式切换过渡动画，app.min 基线 48610→48622、budget 53471→53485（实测 53484B）。",
     "所有值都是 gzip 字节；shell = 静态壳（index.html + 内联 critical CSS，gzip level 6）+ bootstrap_allowance_bytes。",
     "bootstrap_allowance_bytes=3,309 由 2026-10-26 batch10 staging-0f14252 的 /app 实测 27,978B 校准（静态壳 24,669B）；覆盖 3 张卡的 per-user bootstrap，不含 API 与图片。",
     "first_load_static_gzip 不含 API 与用户照片；critical CSS 已在 shell 内，只计一次。",
@@ -21,8 +22,8 @@
     },
     "app_min_gzip": {
       "label": "app.min.js",
-      "baseline_bytes": 48610,
-      "budget_bytes": 53471
+      "baseline_bytes": 48622,
+      "budget_bytes": 53485
     },
     "initial_render_gzip": {
       "label": "app.render.js（根 + cards）",

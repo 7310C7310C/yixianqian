@@ -1157,3 +1157,14 @@
 .boot-fail-detail{font-size:13px;line-height:1.6;color:#969799;word-break:break-all;max-width:32em;}
 .boot-fail-retry{min-height:44px;padding:0 26px;border:0;border-radius:22px;background:#ee5a6f;color:#fff;font-size:15px;}
 .van-theme-dark .boot-fail{color:#f5f6f8;}
+
+/* 日/夜模式切换过渡：.tf 仅切换期间挂在 <html>，320ms 后移除，避免常驻 transition 影响性能与滚动 */
+.tf,
+.tf * {
+  transition: background-color 0.28s ease, color 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease !important;
+}
+.tf img,
+.tf video,
+.tf canvas {
+  transition: none !important;
+}
