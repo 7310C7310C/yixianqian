@@ -68,36 +68,40 @@ const _hoisted_33 = {
 }
 const _hoisted_34 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "喜欢", -1 /* HOISTED */)
 const _hoisted_35 = { class: "profile-card" }
-const _hoisted_36 = { class: "profile-card-row" }
-const _hoisted_37 = /*#__PURE__*/_createElementVNode("span", { class: "row-label" }, "💕 匿名喜欢", -1 /* HOISTED */)
-const _hoisted_38 = { class: "hearts-total" }
-const _hoisted_39 = { class: "hearts-left" }
-const _hoisted_40 = /*#__PURE__*/_createElementVNode("div", { class: "profile-card-divider" }, null, -1 /* HOISTED */)
-const _hoisted_41 = { class: "profile-card-row" }
-const _hoisted_42 = /*#__PURE__*/_createElementVNode("span", { class: "row-label" }, "💌 实名喜欢", -1 /* HOISTED */)
-const _hoisted_43 = { class: "hearts-total" }
-const _hoisted_44 = { class: "hearts-left" }
-const _hoisted_45 = /*#__PURE__*/_createElementVNode("div", { class: "profile-card-divider" }, null, -1 /* HOISTED */)
-const _hoisted_46 = { class: "profile-card-row" }
-const _hoisted_47 = /*#__PURE__*/_createElementVNode("span", { class: "row-label" }, "👍 收到的赞", -1 /* HOISTED */)
-const _hoisted_48 = { class: "hearts-total" }
-const _hoisted_49 = {
+const _hoisted_36 = { class: "like-stat" }
+const _hoisted_37 = /*#__PURE__*/_createElementVNode("span", { class: "like-stat-label" }, "💕 匿名喜欢", -1 /* HOISTED */)
+const _hoisted_38 = { class: "like-stat-line" }
+const _hoisted_39 = { class: "like-stat-pair" }
+const _hoisted_40 = { class: "like-stat-pair like-stat-total" }
+const _hoisted_41 = { class: "like-stat" }
+const _hoisted_42 = /*#__PURE__*/_createElementVNode("span", { class: "like-stat-label" }, "💌 实名喜欢", -1 /* HOISTED */)
+const _hoisted_43 = { class: "like-stat-line" }
+const _hoisted_44 = { class: "like-stat-pair" }
+const _hoisted_45 = { class: "like-stat-pair like-stat-total" }
+const _hoisted_46 = {
+  key: 0,
+  class: "like-stat"
+}
+const _hoisted_47 = /*#__PURE__*/_createElementVNode("span", { class: "like-stat-label" }, "👍 收到的赞", -1 /* HOISTED */)
+const _hoisted_48 = { class: "like-stat-line" }
+const _hoisted_49 = { class: "like-stat-pair like-stat-praise" }
+const _hoisted_50 = {
   key: 2,
   style: {"padding":"0 12px"}
 }
-const _hoisted_50 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "活动", -1 /* HOISTED */)
-const _hoisted_51 = {
+const _hoisted_51 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "活动", -1 /* HOISTED */)
+const _hoisted_52 = {
   key: 3,
   style: {"padding":"0 12px"}
 }
-const _hoisted_52 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "账号", -1 /* HOISTED */)
-const _hoisted_53 = {
+const _hoisted_53 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "账号", -1 /* HOISTED */)
+const _hoisted_54 = {
   key: 4,
   style: {"padding":"0 12px"}
 }
-const _hoisted_54 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "管理", -1 /* HOISTED */)
-const _hoisted_55 = { style: {"padding":"0 12px 24px"} }
-const _hoisted_56 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "帮助", -1 /* HOISTED */)
+const _hoisted_55 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "管理", -1 /* HOISTED */)
+const _hoisted_56 = { style: {"padding":"0 12px 24px"} }
+const _hoisted_57 = /*#__PURE__*/_createElementVNode("div", { class: "section-title" }, "帮助", -1 /* HOISTED */)
 
 function render(_ctx, _cache) {
   const _component_van_icon = _resolveComponent("van-icon")
@@ -191,32 +195,42 @@ function render(_ctx, _cache) {
       ? (_openBlock(), _createElementBlock("div", _hoisted_33, [
           _hoisted_34,
           _createElementVNode("div", _hoisted_35, [
-            _createElementVNode("div", _hoisted_36, [
-              _hoisted_37,
-              _createElementVNode("span", _hoisted_38, "共 " + _toDisplayString(_ctx.user.anon_total || 10) + " 颗", 1 /* TEXT */),
-              _createElementVNode("span", _hoisted_39, "剩 " + _toDisplayString(_ctx.user.anon_left) + " 颗", 1 /* TEXT */)
-            ]),
-            _hoisted_40,
-            _createElementVNode("div", _hoisted_41, [
-              _hoisted_42,
-              _createElementVNode("span", _hoisted_43, "共 " + _toDisplayString(_ctx.user.real_total || 1) + " 次", 1 /* TEXT */),
-              _createElementVNode("span", _hoisted_44, "剩 " + _toDisplayString(_ctx.user.real_left) + " 次", 1 /* TEXT */)
-            ]),
-            (_ctx.praiseReady)
-              ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
-                  _hoisted_45,
-                  _createElementVNode("div", _hoisted_46, [
+            _createElementVNode("div", {
+              class: _normalizeClass(["like-stats", { 'like-stats--two': !_ctx.praiseReady }])
+            }, [
+              _createElementVNode("div", _hoisted_36, [
+                _hoisted_37,
+                _createElementVNode("span", _hoisted_38, [
+                  _createElementVNode("span", _hoisted_39, [
+                    _createElementVNode("b", null, "剩 " + _toDisplayString(_ctx.user.anon_left) + " 颗", 1 /* TEXT */)
+                  ]),
+                  _createElementVNode("span", _hoisted_40, "共 " + _toDisplayString(_ctx.user.anon_total || 10) + " 颗", 1 /* TEXT */)
+                ])
+              ]),
+              _createElementVNode("div", _hoisted_41, [
+                _hoisted_42,
+                _createElementVNode("span", _hoisted_43, [
+                  _createElementVNode("span", _hoisted_44, [
+                    _createElementVNode("b", null, "剩 " + _toDisplayString(_ctx.user.real_left) + " 次", 1 /* TEXT */)
+                  ]),
+                  _createElementVNode("span", _hoisted_45, "共 " + _toDisplayString(_ctx.user.real_total || 1) + " 次", 1 /* TEXT */)
+                ])
+              ]),
+              (_ctx.praiseReady)
+                ? (_openBlock(), _createElementBlock("div", _hoisted_46, [
                     _hoisted_47,
-                    _createElementVNode("span", _hoisted_48, "本周 " + _toDisplayString(_ctx.praiseReceivedWeek) + " 个", 1 /* TEXT */)
-                  ])
-                ], 64 /* STABLE_FRAGMENT */))
-              : _createCommentVNode("v-if", true)
+                    _createElementVNode("span", _hoisted_48, [
+                      _createElementVNode("span", _hoisted_49, "本周 " + _toDisplayString(_ctx.praiseReceivedWeek) + " 个", 1 /* TEXT */)
+                    ])
+                  ]))
+                : _createCommentVNode("v-if", true)
+            ], 2 /* CLASS */)
           ])
         ]))
       : _createCommentVNode("v-if", true),
     (!_ctx.isObserver)
-      ? (_openBlock(), _createElementBlock("div", _hoisted_49, [
-          _hoisted_50,
+      ? (_openBlock(), _createElementBlock("div", _hoisted_50, [
+          _hoisted_51,
           _createVNode(_component_van_cell_group, {
             class: "profile-cells",
             style: {"border-radius":"12px","overflow":"hidden"}
@@ -233,8 +247,8 @@ function render(_ctx, _cache) {
         ]))
       : _createCommentVNode("v-if", true),
     (!_ctx.isObserver || _ctx.availableRoles.length > 1)
-      ? (_openBlock(), _createElementBlock("div", _hoisted_51, [
-          _hoisted_52,
+      ? (_openBlock(), _createElementBlock("div", _hoisted_52, [
+          _hoisted_53,
           _createVNode(_component_van_cell_group, {
             class: "profile-cells",
             style: {"border-radius":"12px","overflow":"hidden"}
@@ -272,8 +286,8 @@ function render(_ctx, _cache) {
         ]))
       : _createCommentVNode("v-if", true),
     (_ctx.user.can_admin)
-      ? (_openBlock(), _createElementBlock("div", _hoisted_53, [
-          _hoisted_54,
+      ? (_openBlock(), _createElementBlock("div", _hoisted_54, [
+          _hoisted_55,
           _createVNode(_component_van_cell_group, {
             class: "profile-cells",
             style: {"border-radius":"12px","overflow":"hidden"}
@@ -289,8 +303,8 @@ function render(_ctx, _cache) {
           })
         ]))
       : _createCommentVNode("v-if", true),
-    _createElementVNode("div", _hoisted_55, [
-      _hoisted_56,
+    _createElementVNode("div", _hoisted_56, [
+      _hoisted_57,
       _createVNode(_component_van_cell_group, {
         class: "profile-cells",
         style: {"border-radius":"12px","overflow":"hidden"}

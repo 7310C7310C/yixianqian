@@ -53,7 +53,7 @@ import (
 // 2026-11-03 (viewer keyboard arrows): 108 invalidated app.min.js; arrow keys in
 // the fullscreen viewer now only change photos, never the underlying card.
 // 109 removed the hearts badge (anonymous/real-name quota) from the cards page top.
-const assetVersion = "110"
+const assetVersion = "111"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

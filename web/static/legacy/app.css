@@ -164,6 +164,17 @@
   .row-label { flex: 1; min-width: 0; }
   .hearts-total { color: #969799; font-size: 13px; }
   .hearts-left { color: #ff6b81; font-weight: 700; font-size: 15px; }
+  /* 我的-喜欢额度：三列一行，共/剩都保留；窄屏时每列内部自动折行 */
+  .like-stats { display: grid; grid-template-columns: repeat(3, 1fr); padding: 10px 0; }
+  .like-stats--two { grid-template-columns: repeat(2, 1fr); }
+  .like-stat { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; padding: 0 4px; text-align: center; }
+  .like-stat + .like-stat { border-left: 1px solid #f2f3f5; }
+  .like-stat-label { font-size: 12px; line-height: 1.45; color: #969799; white-space: nowrap; }
+  .like-stat-line { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 4px; margin-top: 3px; font-size: 14px; line-height: 1.35; }
+  .like-stat-pair { white-space: nowrap; }
+  .like-stat-line b { color: #ff6b81; font-weight: 700; }
+  .like-stat-total { color: #969799; font-size: 12px; }
+  .like-stat-praise { color: #323233; font-size: 15px; }
   .invite-code-inline { flex: 1; text-align: right; font-weight: 600; font-size: 15px; letter-spacing: 1px; color: #323233; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 我的资料 */
   .profile-detail { padding: 12px; }
@@ -918,6 +929,9 @@
   .van-theme-dark .selected-item, .van-theme-dark .choice-item,
   .van-theme-dark .multi-option.active { background: rgba(255,107,129,0.14); }
   .van-theme-dark .profile-card-divider { background: #3a3a3e; }
+  .van-theme-dark .like-stat + .like-stat { border-left-color: #3a3a3e; }
+  .van-theme-dark .like-stat-label, .van-theme-dark .like-stat-total { color: #c8c9cc; }
+  .van-theme-dark .like-stat-praise { color: #f5f5f5; }
   .van-theme-dark .edit-row, .van-theme-dark .signup-bar,
   .van-theme-dark .card-tabs, .van-theme-dark .picker-header, .van-theme-dark .msg-input-bar,
   .van-theme-dark .back-nav, .van-theme-dark .msg-thread, .van-theme-dark .modal-divider { border-color: #3a3a3e; }

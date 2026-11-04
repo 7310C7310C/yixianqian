@@ -48,30 +48,34 @@
       </div>
     </div>
   </div>
-  <!-- 喜欢 -->
+  <!-- 喜欢：额度是状态，不是入口，压成三列；共/剩都保留。
+       收到的赞**只有本人看得到**（需求第 4 条）：这是「我的」页，不是任何
+       公开资料页。别人点进来看你，一个数字都拿不到。 -->
   <div style="padding:0 12px;" v-if="!isObserver">
     <div class="section-title">喜欢</div>
     <div class="profile-card">
-      <div class="profile-card-row">
-        <span class="row-label">💕 匿名喜欢</span>
-        <span class="hearts-total">共 {{ user.anon_total || 10 }} 颗</span>
-        <span class="hearts-left">剩 {{ user.anon_left }} 颗</span>
-      </div>
-      <div class="profile-card-divider"></div>
-      <div class="profile-card-row">
-        <span class="row-label">💌 实名喜欢</span>
-        <span class="hearts-total">共 {{ user.real_total || 1 }} 次</span>
-        <span class="hearts-left">剩 {{ user.real_left }} 次</span>
-      </div>
-      <!-- 收到的赞**只有本人看得到**（需求第 4 条）：这是「我的」页，不是任何
-           公开资料页。别人点进来看你，一个数字都拿不到。 -->
-      <template v-if="praiseReady">
-        <div class="profile-card-divider"></div>
-        <div class="profile-card-row">
-          <span class="row-label">👍 收到的赞</span>
-          <span class="hearts-total">本周 {{ praiseReceivedWeek }} 个</span>
+      <div class="like-stats" :class="{ 'like-stats--two': !praiseReady }">
+        <div class="like-stat">
+          <span class="like-stat-label">💕 匿名喜欢</span>
+          <span class="like-stat-line">
+            <span class="like-stat-pair"><b>剩 {{ user.anon_left }} 颗</b></span>
+            <span class="like-stat-pair like-stat-total">共 {{ user.anon_total || 10 }} 颗</span>
+          </span>
         </div>
-      </template>
+        <div class="like-stat">
+          <span class="like-stat-label">💌 实名喜欢</span>
+          <span class="like-stat-line">
+            <span class="like-stat-pair"><b>剩 {{ user.real_left }} 次</b></span>
+            <span class="like-stat-pair like-stat-total">共 {{ user.real_total || 1 }} 次</span>
+          </span>
+        </div>
+        <div class="like-stat" v-if="praiseReady">
+          <span class="like-stat-label">👍 收到的赞</span>
+          <span class="like-stat-line">
+            <span class="like-stat-pair like-stat-praise">本周 {{ praiseReceivedWeek }} 个</span>
+          </span>
+        </div>
+      </div>
     </div>
   </div>
   <!-- 活动 -->
