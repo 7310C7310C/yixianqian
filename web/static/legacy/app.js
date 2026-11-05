@@ -3334,9 +3334,15 @@ const yxqApp = createApp({
     // —— 图片区：横滑切换照片，点击放大 ——
     let photoTouchStartX = 0, photoTouchStartY = 0, photoTouchStartTime = 0;
     let photoDidSwipe = false;
+    let photoTouchOpenedAt = 0;
     function onPhotoTouchStart(e) {
       preloadAround();
       cancelSharpPhoto();
+      if (e.touches.length > 1) {
+        photoDidSwipe = true;
+        photoTouchStartTime = 0;
+        return;
+      }
       photoTouchStartX = e.touches[0].clientX;
       photoTouchStartY = e.touches[0].clientY;
       photoTouchStartTime = Date.now();
@@ -3351,6 +3357,7 @@ const yxqApp = createApp({
     function onPhotoTouchEnd(e) {
       const dx = e.changedTouches[0].clientX - photoTouchStartX;
       const dy = e.changedTouches[0].clientY - photoTouchStartY;
+      const dt = Date.now() - photoTouchStartTime;
       photoTouchStartTime = 0;
       const photos = currentCard.value ? (currentCard.value.photos || (currentCard.value.photo ? [currentCard.value.photo] : [])) : [];
       if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
@@ -3364,6 +3371,13 @@ const yxqApp = createApp({
         }
         return;
       }
+      // 手机在滑动结束后短时间内不会给下一次轻点补发 click（被当成手势的一部分），
+      // 所以短按直接在 touchend 打开大图；把 photoDidSwipe 置 true 用来吞掉可能补发的 click。
+      if (!photoDidSwipe && dt < 500 && photos.length) {
+        photoDidSwipe = true;
+        photoTouchOpenedAt = Date.now();
+        openPhotoViewerForCurrent();
+      }
     }
     function onPhotoClick(e) {
       if (photoDidSwipe) { photoDidSwipe = false; return; }
@@ -3375,6 +3389,8 @@ const yxqApp = createApp({
     let photoMouseStartX = 0, photoMouseStartY = 0, photoMouseStartTime = 0;
     function onPhotoMouseDown(e) {
       if (e.button !== 0) return;
+      // 触摸轻点后浏览器会补发兼容 mouse 事件；700ms 内不让它清掉照片滑动标记。
+      if (Date.now() - photoTouchOpenedAt < 700) return;
       photoMouseDown = true;
       photoMouseStartX = e.clientX;
       photoMouseStartY = e.clientY;
