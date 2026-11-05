@@ -13,7 +13,7 @@
         <div class="activity-body" @click="openActivity(act.record_id)" style="cursor:pointer;">
           <h3>{{ act.name }}</h3>
           <div class="activity-meta">
-            <van-tag type="primary" :color="isActivityEnded(act) ? '#d9b3ba' : 'var(--yxq-brand-ink)'" :text-color="isActivityEnded(act) ? '#5f3a42' : '#fff'">{{ act.status }}</van-tag>
+            <van-tag type="primary" :color="isActivityEnded(act) ? '#a94f5c' : 'var(--yxq-brand-ink)'">{{ act.status }}</van-tag>
           </div>
           <div style="font-size:13px; color:#48484a;">{{ activityListTime(act) }}</div>
           <div style="font-size:13px; color:#969799;">📍 {{ act.location || '待定' }}</div>

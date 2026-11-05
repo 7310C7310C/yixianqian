@@ -56,8 +56,8 @@ import (
 // 2026-11-05 (ended activity cards): 112 greyed ended/cancelled activity cards;
 // 113 switched them from grayscale to muted color after PM feedback.
 // 114 gave the 「已结束」 tag a neutral dark background; 115 softened it to a muted rose
-// chip with dark text after PM feedback that the neutral grey looked odd.
-const assetVersion = "115"
+// chip; 116 uses a red-family chip with white text after PM feedback on the light theme.
+const assetVersion = "116"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

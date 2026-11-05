@@ -31,8 +31,8 @@
         "my_activities",
         "my_groups"
       ],
-      "bytes": 27736,
-      "sha256": "bde74139bb5138f4447964dab84839333d2e3b8afe2ba53a1a798f4cb51160a1"
+      "bytes": 27538,
+      "sha256": "4d86d37e2735af50fcc32e8bfaa5deb65e9835756b331de94cbd50a8fac9dbb1"
     },
     "profile": {
       "file": "pages/profile.render.js",
@@ -67,8 +67,8 @@
         "activity_detail",
         "points_admin"
       ],
-      "bytes": 213895,
-      "sha256": "d110701f5badaeb54c7ba10433463e493ce6b6b08850a5eec4ad5abb64089a30"
+      "bytes": 213778,
+      "sha256": "bf1da1adc52682a1cbb472c53bef76008c66cc1788aded37f5f353ecd08476cb"
     }
   },
   "pages": {
@@ -111,14 +111,14 @@
     "home": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "4d01aac031312311f338d449ff9399605a7374dcc330a12a4fec9ef799a2a447",
-      "templateSize": 3438
+      "templateSha256": "88d389ad6c37baa915c3e606a0eb95802be4b94f6dcd155c1f4d6c59bc93b410",
+      "templateSize": 3382
     },
     "my_activities": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "9107d87b4600cda67e22788bfd92684f2798cfd5a6a0c6482433e2ead72e9a07",
-      "templateSize": 3208
+      "templateSha256": "0d81c383e431dc4983130e96635e64a1a82369ccf9013016946604884ffa0cc0",
+      "templateSize": 3152
     },
     "my_groups": {
       "group": "home",
@@ -207,8 +207,8 @@
     "activity_detail": {
       "group": "group",
       "file": "pages/group.render.js",
-      "templateSha256": "09ff3eb40ce5e4443b7de95bc3d869533ba4f8bcbce30fdd6e951b41fdd6ae59",
-      "templateSize": 5661
+      "templateSha256": "bf3a4244cc76b27ed1468b3bbd5f4ecc0e6696a4b6512b93771b7c1c6726eba3",
+      "templateSize": 5593
     },
     "points_admin": {
       "group": "group",
