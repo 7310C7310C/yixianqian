@@ -909,12 +909,8 @@
       </div>
       <div class="filter-row">
         <div class="filter-label">现居省份（可多选）</div>
-        <div class="filter-tags">
-          <span v-for="code in filter.city_provinces" :key="'city-'+code" class="filter-tag active" @click="toggleMultiTag('city_provinces', code)">{{ (regionProvinces.find(p => p.code === code) || {}).name || code }} ×</span>
-          <span v-if="!regionProvinces.length" class="filter-tag">加载中…</span>
-        </div>
-        <details class="filter-province-details" style="margin-top:8px;">
-          <summary class="filter-tag">选择省份</summary>
+        <details class="filter-province-details">
+          <summary class="filter-tag" :class="{active: filter.city_provinces.length}">{{ regionProvinces.length ? '选择省份' : '加载中…' }}</summary>
           <div class="filter-province-scroll" style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 2px;" @touchstart="onProvinceTouchStart" @touchmove="onProvinceTouchMove" @touchend="onProvinceTouchEnd" @touchcancel="onProvinceTouchEnd">
             <span v-for="p in filterProvinces" :key="p.code" class="filter-tag" :class="{active: filter.city_provinces.includes(p.code)}" @click="toggleMultiTag('city_provinces', p.code)">{{ p.name }}</span>
           </div>
@@ -922,12 +918,8 @@
       </div>
       <div class="filter-row">
         <div class="filter-label">家乡省份（可多选）</div>
-        <div class="filter-tags">
-          <span v-for="code in filter.native_provinces" :key="'native-'+code" class="filter-tag active" @click="toggleMultiTag('native_provinces', code)">{{ (regionProvinces.find(p => p.code === code) || {}).name || code }} ×</span>
-          <span v-if="!regionProvinces.length" class="filter-tag">加载中…</span>
-        </div>
-        <details class="filter-province-details" style="margin-top:8px;">
-          <summary class="filter-tag">选择省份</summary>
+        <details class="filter-province-details">
+          <summary class="filter-tag" :class="{active: filter.native_provinces.length}">{{ regionProvinces.length ? '选择省份' : '加载中…' }}</summary>
           <div class="filter-province-scroll" style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 2px;" @touchstart="onProvinceTouchStart" @touchmove="onProvinceTouchMove" @touchend="onProvinceTouchEnd" @touchcancel="onProvinceTouchEnd">
             <span v-for="p in filterProvinces" :key="p.code" class="filter-tag" :class="{active: filter.native_provinces.includes(p.code)}" @click="toggleMultiTag('native_provinces', p.code)">{{ p.name }}</span>
           </div>
