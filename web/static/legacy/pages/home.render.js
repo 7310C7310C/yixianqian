@@ -7,7 +7,7 @@ if (typeof Vue === 'undefined') {
 }
 
 (function () {
-const { resolveComponent: _resolveComponent, createVNode: _createVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, renderList: _renderList, Fragment: _Fragment, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, withCtx: _withCtx, withModifiers: _withModifiers } = Vue;
+const { resolveComponent: _resolveComponent, createVNode: _createVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, renderList: _renderList, Fragment: _Fragment, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, createTextVNode: _createTextVNode, withCtx: _withCtx, withModifiers: _withModifiers, normalizeClass: _normalizeClass } = Vue;
 const _hoisted_1 = {
   key: "home",
   class: "page"
@@ -66,7 +66,7 @@ function render(_ctx, _cache) {
             (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.activities, (act) => {
               return (_openBlock(), _createElementBlock("div", {
                 key: act.record_id,
-                class: "activity-card",
+                class: _normalizeClass(["activity-card", { 'activity-card--ended': _ctx.isActivityEnded(act) }]),
                 onClick: $event => (_ctx.openActivity(act.record_id))
               }, [
                 (act.poster)
@@ -199,7 +199,7 @@ function render(_ctx, _cache) {
                       ]))
                     : _createCommentVNode("v-if", true)
                 ])
-              ], 8 /* PROPS */, _hoisted_4))
+              ], 10 /* CLASS, PROPS */, _hoisted_4))
             }), 128 /* KEYED_FRAGMENT */))
           ]))
   ]))
@@ -209,7 +209,7 @@ window.__YXQ_PAGES__['home'] = render;
 })();
 
 (function () {
-const { resolveComponent: _resolveComponent, createVNode: _createVNode, createTextVNode: _createTextVNode, createElementVNode: _createElementVNode, withCtx: _withCtx, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, renderList: _renderList, Fragment: _Fragment, toDisplayString: _toDisplayString, withModifiers: _withModifiers } = Vue;
+const { resolveComponent: _resolveComponent, createVNode: _createVNode, createTextVNode: _createTextVNode, createElementVNode: _createElementVNode, withCtx: _withCtx, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, renderList: _renderList, Fragment: _Fragment, toDisplayString: _toDisplayString, withModifiers: _withModifiers, normalizeClass: _normalizeClass } = Vue;
 const _hoisted_1 = { key: "my_activities" }
 const _hoisted_2 = { class: "page" }
 const _hoisted_3 = {
@@ -272,7 +272,7 @@ function render(_ctx, _cache) {
               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.myActivitiesList, (act) => {
                 return (_openBlock(), _createElementBlock("div", {
                   key: act.record_id,
-                  class: "activity-card"
+                  class: _normalizeClass(["activity-card", { 'activity-card--ended': _ctx.isActivityEnded(act) }])
                 }, [
                   _createElementVNode("div", {
                     class: "activity-body",
@@ -383,7 +383,7 @@ function render(_ctx, _cache) {
                         ]))
                       : _createCommentVNode("v-if", true)
                   ])
-                ]))
+                ], 2 /* CLASS */))
               }), 128 /* KEYED_FRAGMENT */))
             ]))
     ])
@@ -394,7 +394,7 @@ window.__YXQ_PAGES__['my_activities'] = render;
 })();
 
 (function () {
-const { resolveComponent: _resolveComponent, createVNode: _createVNode, createTextVNode: _createTextVNode, createElementVNode: _createElementVNode, withCtx: _withCtx, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, renderList: _renderList, Fragment: _Fragment, toDisplayString: _toDisplayString } = Vue;
+const { resolveComponent: _resolveComponent, createVNode: _createVNode, createTextVNode: _createTextVNode, createElementVNode: _createElementVNode, withCtx: _withCtx, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createBlock: _createBlock, renderList: _renderList, Fragment: _Fragment, toDisplayString: _toDisplayString, normalizeClass: _normalizeClass } = Vue;
 const _hoisted_1 = { key: "my_groups" }
 const _hoisted_2 = { class: "page" }
 const _hoisted_3 = {
@@ -454,7 +454,7 @@ function render(_ctx, _cache) {
               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.myGroupsList, (act) => {
                 return (_openBlock(), _createElementBlock("div", {
                   key: act.record_id,
-                  class: "activity-card"
+                  class: _normalizeClass(["activity-card", { 'activity-card--ended': _ctx.isActivityEnded(act) }])
                 }, [
                   _createElementVNode("div", _hoisted_5, [
                     _createElementVNode("h3", null, _toDisplayString(act.name), 1 /* TEXT */),
@@ -526,7 +526,7 @@ function render(_ctx, _cache) {
                         }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["onClick"]))
                       : _createCommentVNode("v-if", true)
                   ])
-                ]))
+                ], 2 /* CLASS */))
               }), 128 /* KEYED_FRAGMENT */))
             ]))
     ])

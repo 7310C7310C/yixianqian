@@ -8,7 +8,8 @@
     </div>
     <van-empty v-else-if="!myGroupsList.length" description="你报名的活动还没有开启分组"></van-empty>
     <div v-else>
-      <div v-for="act in myGroupsList" :key="act.record_id" class="activity-card">
+      <div v-for="act in myGroupsList" :key="act.record_id" class="activity-card"
+        :class="{ 'activity-card--ended': isActivityEnded(act) }">
         <div class="activity-body">
           <h3>{{ act.name }}</h3>
           <div class="activity-meta" v-if="act.male_per_group || (act.signin_enabled && !isActivityEnded(act))">

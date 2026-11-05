@@ -31,8 +31,8 @@
         "my_activities",
         "my_groups"
       ],
-      "bytes": 27063,
-      "sha256": "d29600e5435bc5b02de433bac24dd961483728ad0ed7cafb66200a0dfacffe5b"
+      "bytes": 27422,
+      "sha256": "6764fc43040f81e0d075f9448f9507b72e43a5d423b8e2f1c084dee565f70632"
     },
     "profile": {
       "file": "pages/profile.render.js",
@@ -111,20 +111,20 @@
     "home": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "5e4075165771759467e2d5c82f1b279d9500683b7766e37d48266b434070f9cd",
-      "templateSize": 3280
+      "templateSha256": "9e66404ed7239ee621a6bdf1e9d7bc35ac83922d7f39eb719b01334df759d421",
+      "templateSize": 3344
     },
     "my_activities": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "268f3ab44a274184097dbbf9979bebc003dce91bd1fb0362d9a7f38e2ff66519",
-      "templateSize": 3048
+      "templateSha256": "35b565d957be6d7c69408ab8e45f36c446323465bfbaa3d703f371557c8d5251",
+      "templateSize": 3114
     },
     "my_groups": {
       "group": "home",
       "file": "pages/home.render.js",
-      "templateSha256": "eb353645d42f8a3a055cdaace918b1db13f5eeb1202e7e2ec4d3b4c04d56568d",
-      "templateSize": 2132
+      "templateSha256": "b857f875cd3145af0f081c465eaeaa2b3b1923d7cb57092920569b6cd58d0c2a",
+      "templateSize": 2198
     },
     "profile": {
       "group": "profile",

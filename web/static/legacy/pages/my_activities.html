@@ -8,7 +8,8 @@
     </div>
     <van-empty v-else-if="!myActivitiesList.length" description="你还没有报名任何活动"></van-empty>
     <div v-else>
-      <div v-for="act in myActivitiesList" :key="act.record_id" class="activity-card">
+      <div v-for="act in myActivitiesList" :key="act.record_id" class="activity-card"
+        :class="{ 'activity-card--ended': isActivityEnded(act) }">
         <div class="activity-body" @click="openActivity(act.record_id)" style="cursor:pointer;">
           <h3>{{ act.name }}</h3>
           <div class="activity-meta">

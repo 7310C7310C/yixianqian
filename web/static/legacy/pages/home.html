@@ -4,7 +4,8 @@
   </div>
   <van-empty v-else-if="!activities.length" description="暂无进行中的活动"></van-empty>
   <div v-else>
-    <div v-for="act in activities" :key="act.record_id" class="activity-card" @click="openActivity(act.record_id)">
+    <div v-for="act in activities" :key="act.record_id" class="activity-card"
+      :class="{ 'activity-card--ended': isActivityEnded(act) }" @click="openActivity(act.record_id)">
       <img v-if="act.poster" :src="act.poster" class="activity-poster" alt="" loading="lazy" decoding="async" @error="retryImg($event, 2, ()=>{act.poster=''})">
       <div class="activity-body">
         <h3>{{ act.name }}</h3>
