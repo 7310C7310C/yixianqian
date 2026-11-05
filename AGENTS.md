@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-04
+last_verified: 2026-11-05
 sources:
   - Makefile
   - .github/workflows/**
@@ -32,7 +32,7 @@ sources:
 - 不写密钥；密码、token、cookie、`.env`、R2 key 不得进入 repo、日志、报告或文档。
 - 用户端复用 v1 Vue 3 + Vant SPA；管理台只经同源 iframe，顶层 `/admin` 一律 303 到 `/?admin=1`。
 - 消息中心/动态/留言/全员广播的现行行为与不变式见 `docs/DECISIONS.md` §2.5；本文件不复制。
-- 不恢复已废弃方案：`/welcome` 页面、独立 `/login` 页（并入首页弹框）、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、飞书 runtime、第二套用户 UI、首卡自我引导气泡（`self-guide-tip`；首卡已自带「这是你 · 他人视角」标签）；不恢复品牌启动页/静态岛，首屏保持旧 hero 图 + 真实卡绘制后交接。
+- 不恢复已废弃方案：`/welcome` 页面、独立 `/login` 页（并入首页弹框）、首页二维码、顶层 `/admin` SSR/404、`/legacy/api` 边缘缓存、`vant.full.min.*`、飞书 runtime、第二套用户 UI、首卡自我引导气泡（`self-guide-tip`；首卡已自带「这是你 · 他人视角」标签）；不恢复品牌启动页/静态岛，首屏保持旧 hero 图；hero 在 App 骨架挂载后交接（不再等数据/首卡绘制），首卡随后渲染。
 - PostgreSQL 是唯一权威；R2 只存私有媒体，浏览器只经 `/media/{id}`；不新增 Redis/消息队列，正确性不依赖缓存。
 - 城市字段只接受 vendored 数据集值（注册/资料均必填）；所有上传统一转 JPEG（HEIC 先 ispe 预检再 heif-convert）。细节见 `docs/DECISIONS.md` §1.2、§2.4。
 - migration 只增不改；回滚 binary 不等于回滚 schema；生产大表索引另行走手工窗口。

@@ -3,7 +3,7 @@
 
 覆盖：
 1. 390/1280：`#boot-skeleton` 的首卡 hero 与 Vue 真实 `.swipe-card`/`.card-photo-wrap`
-   几何一致（±1px），首图 URL 使用 `?size=hero`（或 thumb 回退）；Vue 首卡图绘制后 hero 移除；
+   几何一致（±1px），首图 URL 使用 `?size=hero`（或 thumb 回退）；App 骨架挂载后 hero 移除；
 2. hero 期间/交接无 layout-shift（CLS < 0.01），LCP 元素是首卡缩图；
 3. 滑动、切 tab、浏览器回退、`#/likes` 深链、restore 后 hero 不残留、不重现；
 4. 牌堆只挂载当前 1 张卡（DOM 节点数受控），0/1/2/末张/回退/restore 用例；
@@ -519,7 +519,7 @@ def run_load_home_hang(browser, base_url: str, cookie: str, out_dir: Path) -> li
         removed = page.evaluate("window.__YXQ_HERO__ ? {at: window.__YXQ_HERO__.removedAt(), reason: window.__YXQ_HERO__.reason()} : null")
         if not removed or removed["at"] is None or removed["at"] > 4300:
             raise SmokeFailure(f"loadHome 挂起时 hero 移除过晚：{removed}")
-        if removed["reason"] not in ("load-timeout", "hard-timeout"):
+        if removed["reason"] not in ("load-timeout", "hard-timeout", "mounted"):
             raise SmokeFailure(f"loadHome 挂起时 hero 移除原因异常：{removed}")
         page.locator(".app-boot-skeleton").wait_for(state="visible", timeout=5000)
         page.screenshot(path=str(out_dir / "hero-load-home-hang-390.png"))

@@ -2573,8 +2573,14 @@ const yxqApp = createApp({
 
     // 启动成功后的公共收尾：入口深链、点赞状态、SSE 红点与证件/人脸检查。
     // 已登录启动与 doLogin 成功两条路径都走这里，避免行为分叉。
+    // 启动骨架期间点的 tab：数据就绪后补切过去，点击不丢失。
+    function useBootTab() {
+      const t = window.__YXQ_BOOT_TAB__;
+      if (t) page.value = t;
+    }
     function afterHomeReady(entryHash) {
       if (!user.value) return;
+      window.__YXQ_APP_READY__ = true;
       if (nativeAdminRequested) {
         nativeAdminRequested = false;
         if (!user.value.can_admin) { location.replace('/'); return; }   // 普通用户退回首页（管理台 iframe 内）
@@ -2586,6 +2592,8 @@ const yxqApp = createApp({
       }
       if (entryHash === '#/likes') { page.value = 'likes'; }
       else if (entryHash === '#/activities') { page.value = 'home'; }
+      useBootTab();
+      window.__YXQ_BOOT_TAB__ = null;
       loadPraiseState();   // 点赞的今日剩余 / 我点过谁，和切到卡片页时同一份
       startNotificationSync();   // SSE 实时红点；不可用时 12s 轮询兜底
       setTimeout(()=>{ checkIdValidForPage(page.value); }, 1000);
@@ -2600,6 +2608,7 @@ const yxqApp = createApp({
     }
     // 首屏首个长任务收尾标记：mount 开始 → 卡片页 DOM 已 patch。
     function markBootRendered(){
+      window.__YXQ_APP_READY__ = true;
       try{
         if(!performance.mark) return;
         performance.mark('yxq-boot-end');
@@ -2621,6 +2630,8 @@ const yxqApp = createApp({
           bootError.value = '无法加载账号资料，请重试';
           return;
         }
+        // 启动骨架期间已点了别的 tab：首帧直接渲染目标页，不再先渲染牵线页。
+        useBootTab();
         bootLoading.value = false;
         nextTick(markBootRendered);
         restoreDeck();   // 刷新后回到原卡片（与 doLogin 成功路径一致）
@@ -6222,54 +6233,40 @@ const yxqApp = createApp({
 
     // ===== 壳内首卡 hero：等 Vue 首卡图真正绘制后再移除 =====
     // hero 的 DOM/几何由 index.html 静态渲染（与 .swipe-card 同一套 CSS），
-    // 这里只决定何时淡出：首卡图 decode+paint 后；无卡/无图/切页/换卡/门禁/失败立即移除。
+    // 这里只决定何时淡出：App 骨架挂载后立即交接；无卡/无图/切页/换卡/门禁/失败也立即移除。
     let bootHeroAnchor = null;
     let bootHeroSettled = false;
     let bootHeroHardTimer = null;
-    let bootHeroLastLongTaskEnd = 0;
-    try {
-      new PerformanceObserver((list) => {
-        for (const e of list.getEntries()) {
-          bootHeroLastLongTaskEnd = Math.max(bootHeroLastLongTaskEnd, e.startTime + e.duration);
-        }
-      }).observe({type: 'longtask', buffered: true});
-    } catch (_) {}
+    let postBootPrefetchStarted = false;
+    function startPostBootPrefetch() {
+      if (postBootPrefetchStarted) return;
+      postBootPrefetchStarted = true;
+      if (nativeAdmin.value) return;
+      // 让出一帧给 hero 淡出，再开始下载/解析页面 chunk。
+      setTimeout(() => {
+        try { yxqPrefetchPageChunks(); prefetchPhotoSwipe(); } catch (_) {}
+      }, 0);
+    }
     function dismissBootHero(reason) {
       try { if (window.__YXQ_HERO__) window.__YXQ_HERO__.dismiss(reason); } catch (_) {}
     }
-    // 硬上限从 navigationStart 起算 4s：loadHome 卡住时 settleBootHero 不会启动，
-    // 这里确保 hero 不会无限覆盖；移除后露出 Vue 启动骨架（bootLoading 仍为 true）。
+    // 硬上限：挂载后 1.5s。loadHome 卡住时也尽快露出 Vue 骨架，不再让 hero 遮挡 4s。
     function armBootHeroHardLimit() {
       if (bootHeroHardTimer) return;
-      const remain = Math.max(0, 4000 - performance.now());
       bootHeroHardTimer = setTimeout(() => {
         bootHeroHardTimer = null;
-        // 只在 loadHome 仍挂起时强制移除；正常慢图由 settleBootHero 的绘制/超时路径处理，
-        // 避免把已经下载中的 hero 首图在 4s 时误删、反而推后 LCP。
         if (bootLoading.value && window.__YXQ_LOAD_HOME_STARTED__) dismissBootHero('load-timeout');
-      }, remain);
+      }, 1500);
     }
-    // 等首屏长任务（Vant 执行/mount/数据渲染）结束并完成一帧绘制后再移除 hero。
-    // 只等 complete 会让 hero 在长任务开始前被移除，真实卡成为新的 LCP 候选（实测 6.5s）。
+    // 真实首卡图已 complete：立即撤 hero。此前用双 rAF 等绘制，慢机上会被首屏
+    // 渲染长任务卡住 1–2s；hero 与真实卡是同一 URL/裁切，直接交接不会白屏。
     function dismissHeroAfterPaint() {
-      // 2s 窗口覆盖首屏 mount/Vant/数据渲染长任务的启动；之后要求长任务静默 200ms。
-      const notBefore = performance.now() + 2000;
-      const started = Date.now();
-      const step = () => {
-        if (window.__YXQ_HERO__.dismissed()) return;
-        const now = performance.now();
-        if (now < notBefore || now - bootHeroLastLongTaskEnd < 200) {
-          if (Date.now() - started > 10000) { dismissBootHero('paint-timeout'); return; }
-          setTimeout(step, 100);
-          return;
-        }
-        requestAnimationFrame(() => requestAnimationFrame(() => dismissBootHero('painted')));
-      };
-      step();
+      dismissBootHero('painted');
     }
     function settleBootHero() {
       if (bootHeroSettled) return;
       bootHeroSettled = true;
+      startPostBootPrefetch();
       if (!window.__YXQ_HERO__ || window.__YXQ_HERO__.dismissed()) return;
       if (page.value !== 'cards' || !currentCard.value) { dismissBootHero('not-deck'); return; }
       bootHeroAnchor = {
@@ -6344,9 +6341,12 @@ const yxqApp = createApp({
       window.__YXQ_LOAD_HOME_STARTED__ = false;
       window.__YXQ_LOAD_HOME_DONE__ = false;
       armBootHeroHardLimit();
-      // 首屏 hero 绘制 + 应用挂载后，likes 立即预取，其余 chunk LCP 后 idle；
-      // 管理台 iframe 不预取，避免占用原生管理页带宽。
-      if (!nativeAdmin.value) { yxqPrefetchPageChunks(); prefetchPhotoSwipe(); }
+      // 首帧骨架已挂载并绘制后立即撤 hero，露出 App 启动骨架（同版轮廓 + 可点 tabbar）。
+      // 数据卡随后渲染；不再等数据/首卡绘制，慢机上 hero 不再多遮挡 1–2s。
+      requestAnimationFrame(() => { try { dismissBootHero('mounted'); } catch (_) {} });
+      setTimeout(() => { try { startPostBootPrefetch(); } catch (_) {} }, 1800);
+      // 首屏 hero 交接完成后再启动 chunk/照片查看器预取（见 settleBootHero）：
+      // 预取解析是长任务，若紧跟 mount 会把撤 hero 的 rAF 推迟数百毫秒。
       // 可视区域变化：更新 --yxq-vh（壳内已尽早设过）并重算人脸裁切。
       try {
         if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportCropChange);
@@ -6403,6 +6403,9 @@ const yxqApp = createApp({
       if(deckRestored) return;
       deckRestored = true;
       if (nativeAdminRequested || nativeAdmin.value) return;   // 管理页不恢复牵线牌堆
+      // 启动期已点别的 tab：不要被 restore 拉回牵线页；flag 留给 afterHomeReady 消费。
+      const bootTab = window.__YXQ_BOOT_TAB__;
+      if (bootTab && bootTab !== 'cards') return;
       let savedPos = null;
       let restoredPos = null;
       const finish = (ok, reason) => {
@@ -6422,7 +6425,7 @@ const yxqApp = createApp({
         if(st && typeof st.pos === 'number') savedPos = st.pos;
         if(!st || Date.now() - (st.ts || 0) > 10 * 60 * 1000){ finish(false, 'stale'); return; }
         if(savedPos === null || savedPos < 0){ finish(false, 'invalid'); return; }
-        if(st.filters) filter.value = st.filters;
+        if(st.filters) Object.assign(filter.value, st.filters);
         page.value = 'cards';
         await loadCards(true);
         const pos = savedPos;

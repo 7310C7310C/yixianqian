@@ -23,7 +23,7 @@
 
 - 任何 `web/static/**` 变更必须 bump `internal/httpserver/templates.go` 的 `assetVersion`，并同步 admin CSS `@import`。
 - 生成物必须走 `make spa-check`；不得手改 `app.min.js`/`app.render.js`，不得把大段 CSS/JS 内联回壳，不得退回 `vant.full.min.*`。
-- 不恢复品牌启动页/静态岛，首屏保持旧 hero 图 + 真实卡绘制后交接；不恢复首卡自我引导气泡。
+- 不恢复品牌启动页/静态岛，首屏保持旧 hero 图；hero 在 App 骨架挂载后立即交接（不再等数据/首卡绘制），首卡随后渲染；不恢复首卡自我引导气泡。
 
 ## 验证
 

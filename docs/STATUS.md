@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-02
+last_verified: 2026-11-05
 sources: []
 -->
 
@@ -66,7 +66,7 @@ M6 进入条件：上述验收项完成，`docs/PRODUCT.md` 有证据地签核�
   合规口径待 PM 决定（见 `docs/DECISIONS.md` §2.1）。
 - **验收签核**：`docs/PRODUCT.md` 仍 `0/86` 未勾选，未经 PM 签核；不要从 0 推断「未做」。
 - **待 PM 验收**：消息中心/动态/广播与注册表单改版（PRODUCT B7/E7/L9）。
-- **真机与性能**：iOS/Android/微信、Via/Kiwi/荣耀真机、旧设备宽度、首屏/图片性能未完成 PM 复验。
+- **真机与性能**：首屏遮挡已改为 hero 在 App 骨架挂载后立即交接（不再等 5–6s）；iOS/Android/微信、Via/Kiwi/荣耀真机、旧设备宽度、首屏/图片性能仍未完成 PM 复验。
 - **运维演练**：备份还原、回滚演练、安全最终审查未完成。
 - **E2E**：全流程 E2E（登录→卡片→喜欢→留言→活动→分组→结果→麦穗）未建。
 - **人脸照片缺口**：部分 active 普通用户没有 `has_face=true` 照片；可通过资料页上传修复，不是死锁。

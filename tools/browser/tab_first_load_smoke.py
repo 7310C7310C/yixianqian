@@ -51,6 +51,26 @@ try {
 """
 
 
+BOOT_TAP_INIT = """
+(function () {
+  if (location.search.indexOf('boottap=1') < 0) return;
+  var tries = 0;
+  var timer = setInterval(function () {
+    tries++;
+    var el = document.querySelector('#boot-tabbar .boot-tab[data-boot-tab="likes"]');
+    // __YXQ_HERO__ 定义在壳内 tab 事件委托之后；等它就绪再派发，避免事件被丢弃。
+    if (!el || !window.__YXQ_HERO__) {
+      if (tries > 200) clearInterval(timer);
+      return;
+    }
+    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
+    if (window.__YXQ_BOOT_TAB__ === 'likes') clearInterval(timer);
+    else if (tries > 200) clearInterval(timer);
+  }, 10);
+})();
+"""
+
+
 def require(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -103,7 +123,9 @@ def assert_no_text(page, label: str) -> None:
 def active_tab(page) -> str:
     return page.evaluate("""() => {
       const el = document.querySelector('.van-tabbar-item--active');
-      return (el && el.innerText || '').trim();
+      const txt = (el && el.innerText || '').trim();
+      const lines = txt.split('\\n').map(s => s.trim()).filter(Boolean);
+      return lines.length ? lines[lines.length - 1] : '';
     }""")
 
 
@@ -219,7 +241,20 @@ def main() -> int:
             if cls["noInput"] > 0.02:
                 failures.append(f"CLS noInput={cls['noInput']} 超过 0.02")
 
-            # 5) 管理台 iframe：入口仍可用（顶层 tabbar 隐藏，iframe 管理台出现）。
+            # 5) 启动期点 tab 必须压过 deck restore（update 前后最容易点到的路径）。
+            # init script 在壳 HTML 解析到 tabbar 时立刻派发 pointerdown，避免 Playwright
+            # 与 mount 抢时序；?boottap=1 限定只在这一步生效。
+            page.add_init_script(BOOT_TAP_INIT)
+            page.evaluate("""() => sessionStorage.setItem('yxq_deck_restore', JSON.stringify({pos: 0, filters: {}, ts: Date.now()}))""")
+            page.goto(base_url + "/app?boottap=1", wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_selector(".van-tabbar", timeout=30000)
+            page.wait_for_selector(SELECTORS["likes"], timeout=30000)
+            if active_tab(page) != "消息":
+                failures.append(f"deck restore 覆盖启动期 tab: active={active_tab(page)!r}")
+            page.evaluate("() => sessionStorage.removeItem('yxq_deck_restore')")
+            print("PASS 启动期 tab 压过 deck restore")
+
+            # 6) 管理台 iframe：入口仍可用（顶层 tabbar 隐藏，iframe 管理台出现）。
             page.goto(base_url + "/app?admin=1", wait_until="domcontentloaded", timeout=60000)
             page.wait_for_selector(".embed-frame--ready", timeout=30000)
             page.wait_for_timeout(800)

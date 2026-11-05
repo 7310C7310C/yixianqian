@@ -97,6 +97,9 @@
 
   function openLogin(focus) {
     if (!loginModal) return;
+    // User intent is clear: warm the SPA assets while the dialog is open, so the
+    // post-login navigation can render from cache instead of downloading ~200KB.
+    prefetchSpa();
     loginModal.hidden = false;
     if (loginBody) loginBody.classList.add('login-modal-open');
     if (!focus) return;
@@ -113,6 +116,46 @@
     if (!loginModal) return;
     loginModal.hidden = true;
     if (loginBody) loginBody.classList.remove('login-modal-open');
+  }
+
+  var spaPrefetchStarted = false;
+  function prefetchSpa() {
+    if (spaPrefetchStarted) return;
+    spaPrefetchStarted = true;
+    var body = document.body;
+    var version = body && body.getAttribute('data-asset-version');
+    if (!version) return;
+    var conn = navigator.connection;
+    if (conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || ''))) return;
+    var base = '/static/legacy/';
+    var assets = [
+      'lib/vue.global.prod.js',
+      'app.render.js',
+      'app.min.js',
+      'app.css',
+      'lib/vant.min.css',
+      'lib/vant.min.js',
+      'pages/likes.render.js'
+    ];
+    for (var i = 0; i < assets.length; i++) {
+      try {
+        // fetch is more reliable than <link rel=prefetch> in iOS/WeChat WebView;
+        // assets are 1y immutable, so the SPA script/link tags hit the cache.
+        fetch(base + assets[i] + '?v=' + encodeURIComponent(version), {
+          credentials: 'same-origin',
+          cache: 'force-cache',
+          priority: 'low'
+        }).catch(function () {});
+      } catch (e) {}
+    }
+  }
+
+  function scheduleSpaPrefetch() {
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(prefetchSpa, {timeout: 2000});
+    } else {
+      setTimeout(prefetchSpa, 1500);
+    }
   }
 
   function initLogin() {
@@ -145,6 +188,7 @@
   function start() {
     fill(document);
     initLogin();
+    scheduleSpaPrefetch();
   }
 
   if (document.readyState === 'loading') {

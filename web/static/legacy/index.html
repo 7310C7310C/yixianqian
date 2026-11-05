@@ -50,6 +50,11 @@
 <link rel="stylesheet" href="app.css?v=__ASSET_URL_VERSION__" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="app.css?v=__ASSET_URL_VERSION__"></noscript>
 <!--YXQ_BOOTSTRAP_PRELOAD-->
+<!-- 主脚本低优先级预下载：与首图并行，但不抢首图的 high 优先级带宽。
+     真正执行仍由壳脚本在首帧后按顺序注入；命中缓存时只是零成本占位。 -->
+<link rel="preload" as="script" href="lib/vue.global.prod.js?v=__ASSET_URL_VERSION__" fetchpriority="low">
+<link rel="preload" as="script" href="app.render.js?v=__ASSET_URL_VERSION__" fetchpriority="low">
+<link rel="preload" as="script" href="app.min.js?v=__ASSET_URL_VERSION__" fetchpriority="low">
 
 </head>
 <body>
@@ -66,18 +71,17 @@
       </div>
     </div>
   </div>
-  <div class="boot-tabbar" aria-hidden="true">
-    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">牵线</span></div>
-    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">消息</span></div>
-    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">活动</span></div>
-    <div class="boot-tab"><span class="boot-tab-icon"></span><span class="boot-tab-text">我的</span></div>
+  <div class="boot-tabbar" id="boot-tabbar">
+    <div class="boot-tab" data-boot-tab="cards"><span class="boot-tab-icon"></span><span class="boot-tab-text">牵线</span></div>
+    <div class="boot-tab" data-boot-tab="likes"><span class="boot-tab-icon"></span><span class="boot-tab-text">消息</span></div>
+    <div class="boot-tab" data-boot-tab="home"><span class="boot-tab-icon"></span><span class="boot-tab-text">活动</span></div>
+    <div class="boot-tab" data-boot-tab="profile"><span class="boot-tab-icon"></span><span class="boot-tab-text">我的</span></div>
   </div>
 </div>
-<style>#boot-skeleton{position:fixed;inset:0;z-index:2000;background:#f7f8fa;pointer-events:none}.van-theme-dark #boot-skeleton{background:#111}</style>
+<style>#boot-skeleton{position:fixed;inset:0;z-index:2000;background:#f7f8fa;pointer-events:none}.van-theme-dark #boot-skeleton{background:#111}#boot-tabbar{pointer-events:auto}.boot-tab--pressed{opacity:.55}</style>
 <script>
 // 壳内首卡 hero：沿用牵线页 .cards-page/.swipe-card/.card-photo-wrap 的同一套几何，
-// Vue 的首卡图真正绘制后再淡出，避免新 LCP 候选被挂载长任务重置。
-// 挂载前不响应交互，避免用户点一下就把唯一的首屏内容移除成 v-cloak 空白。
+// App 骨架挂载后立即交接；启动期 tabbar 可点并排队，避免用户点了没反应。
 (function(){
   var root = document.getElementById('boot-skeleton');
   if (!root) return;
@@ -133,6 +137,10 @@
     img.onload = function(){
       state.loaded = true;
       root.classList.add('boot-hero-ready');
+      try {
+        window.__YXQ_HERO_READY_AT__ = Math.round(performance.now());
+        if (window.performance && performance.mark) performance.mark('yxq-hero-ready');
+      } catch (e) {}
       applyCrop(faces);
     };
     img.onerror = function(){ root.classList.add('boot-hero-failed'); try{ img.removeAttribute('src'); }catch(e){} };
@@ -158,6 +166,20 @@
   document.addEventListener('touchstart', onInteract, true);
   document.addEventListener('keydown', onInteract, true);
   document.addEventListener('wheel', onInteract, true);
+  // 启动骨架/壳内 hero 的假 tabbar：点按立刻给按压反馈并记下目标 tab，Vue 挂载/数据就绪后
+  // 由 afterHomeReady 消费，避免「点了没反应、还得再点一次」。事件委托同时覆盖壳内静态
+  // tabbar 与 Vue 挂载后的 .app-boot-skeleton tabbar（后者在 hero 撤除后才露出来）。
+  document.addEventListener('pointerdown', function(e){
+    var el = e.target && e.target.closest ? e.target.closest('.boot-tab[data-boot-tab]') : null;
+    if (!el) return;
+    if (window.__YXQ_APP_READY__) return;
+    var tab = el.getAttribute('data-boot-tab');
+    if (!tab) return;
+    window.__YXQ_BOOT_TAB__ = tab;
+    window.__YXQ_BOOT_PENDING_INTERACT__ = true;
+    el.classList.add('boot-tab--pressed');
+    setTimeout(function(){ el.classList.remove('boot-tab--pressed'); }, 160);
+  }, true);
   window.__YXQ_HERO__ = {
     setPhoto: setPhoto,
     setObjectPosition: setObjectPosition,
@@ -167,9 +189,6 @@
     reason: function(){ return state.reason || ''; },
     removedAt: function(){ return state.removedAt || null; }
   };
-  // 冷启硬上限：从壳脚本执行起算 4s；app 已挂载时即使 loadHome 卡住也移除，
-  // 露出 Vue 启动骨架（未挂载则保留 hero，避免白屏，app.js 挂载后会再兜底）。
-  setTimeout(function(){ if (!state.dismissed && window.__YXQ_APP_MOUNTED__ && window.__YXQ_LOAD_HOME_STARTED__ === true && window.__YXQ_LOAD_HOME_DONE__ !== true) dismiss('load-timeout'); }, 4000);
 })();
 </script>
 <div id="app" v-cloak>
@@ -214,10 +233,10 @@
     </div>
   </div>
   <div class="boot-tabbar" aria-hidden="true">
-    <div class="boot-tab" v-for="n in 4" :key="n">
-      <span class="boot-tab-icon"></span>
-      <span class="boot-shimmer boot-tab-label"></span>
-    </div>
+    <div class="boot-tab" data-boot-tab="cards"><span class="boot-tab-icon"></span><span class="boot-tab-text">牵线</span></div>
+    <div class="boot-tab" data-boot-tab="likes"><span class="boot-tab-icon"></span><span class="boot-tab-text">消息</span></div>
+    <div class="boot-tab" data-boot-tab="home"><span class="boot-tab-icon"></span><span class="boot-tab-text">活动</span></div>
+    <div class="boot-tab" data-boot-tab="profile"><span class="boot-tab-icon"></span><span class="boot-tab-text">我的</span></div>
   </div>
   </template>
 </div>
@@ -1028,18 +1047,15 @@ window.__YXQ_BOOT_FAIL__ = function(detail){
 };
 </script>
 <script>
-// 批次10（1B）渐进启动：三个主脚本只预下载，等壳内首卡 hero 真正绘制后再按序执行。
-// 根因：慢机 CPU×4 时 app.min.js 解析/执行 + Vue 挂载是 1.6–2.1s 长任务；若它在 hero
-// 绘制前跑，LCP 会被推到任务结束（批次9 基线冷 3.74s / 热 1.91s）。这里先让 hero 提交
-// 一帧，再启动 Vue。启动前的点击/返回不绑定业务逻辑、不重放事件，只记录 pending 标记。
+// 秒开：三个主脚本并行下载，壳内 hero/shimmer 提交首帧后立即执行；不再等首图 decode。
+// 旧实现串行 onload→inject 且 HERO_MAX_WAIT_MS=2500 才启动，首图慢时整个 App 被拖到 2.5s+。
+// 现在只让出一帧（保住 FCP），随后 Vue 挂载；hero 的交接由 app.js 在真实首卡图绘制后完成。
 (function(){
   var ASSETS = [
     'lib/vue.global.prod.js?v=__ASSET_URL_VERSION__',
     'app.render.js?v=__ASSET_URL_VERSION__',
     'app.min.js?v=__ASSET_URL_VERSION__'
   ];
-  var HERO_MAX_WAIT_MS = 2500;
-  var HERO_SRC_POLL_MS = 600;
   var started = false;
 
   function now(){ try { return Math.round(performance.now()); } catch (e) { return 0; } }
@@ -1057,79 +1073,33 @@ window.__YXQ_BOOT_FAIL__ = function(detail){
       setTimeout(fn, 0);
     }
   }
-  function injectAt(i){
-    if (i >= ASSETS.length) return;
+  function injectScript(src, isLast){
     var s = document.createElement('script');
-    s.src = ASSETS[i];
+    s.src = src;
+    // async=false：下载并行，执行仍按插入顺序（vue → render → app）。
     s.async = false;
-    s.onload = function(){ injectAt(i + 1); };
     s.onerror = function(){
-      if (i === ASSETS.length - 1) {
-        if (window.__YXQ_BOOT_FAIL__) window.__YXQ_BOOT_FAIL__('主程序加载失败（app.min.js）');
-        return;
+      if (isLast && window.__YXQ_BOOT_FAIL__) {
+        window.__YXQ_BOOT_FAIL__('主程序加载失败（app.min.js）');
       }
-      // Vue/渲染器失败也要继续注入后续脚本：app.min.js 会渲染可诊断错误页。
-      injectAt(i + 1);
     };
     document.head.appendChild(s);
   }
   function start(reason){
     if (started) return;
     markStart(reason);
-    injectAt(0);
+    for (var i = 0; i < ASSETS.length; i++) {
+      injectScript(ASSETS[i], i === ASSETS.length - 1);
+    }
   }
   window.__YXQ_START_APP__ = function(){ start('manual'); };
 
-  function waitForHeroPhoto(img, done){
-    var finished = false;
-    function finish(reason){
-      if (finished) return;
-      finished = true;
-      window.__YXQ_HERO_READY_AT__ = now();
-      try { if (window.performance && performance.mark) performance.mark('yxq-hero-ready'); } catch (e) {}
-      done(reason);
-    }
-    var cap = setTimeout(function(){ finish('hero-timeout'); }, HERO_MAX_WAIT_MS);
-    function decoded(){
-      clearTimeout(cap);
-      if (img.decode) {
-        img.decode().then(function(){ finish('hero-painted'); }, function(){ finish('hero-decode-failed'); });
-      } else {
-        finish('hero-loaded');
-      }
-    }
-    if (img.complete && img.naturalWidth) { decoded(); return; }
-    img.addEventListener('load', decoded, { once: true });
-    img.addEventListener('error', function(){ clearTimeout(cap); finish('hero-error'); }, { once: true });
-  }
-  function begin(){
-    var root = document.getElementById('boot-skeleton');
-    var img = root && root.querySelector('.boot-photo');
-    var waited = 0;
-    function poll(){
-      if (img && img.getAttribute('src')) {
-        waitForHeroPhoto(img, function(reason){ afterPaint(function(){ start(reason); }); });
-        return;
-      }
-      waited += 50;
-      if (waited >= HERO_SRC_POLL_MS) {
-        afterPaint(function(){ start('no-hero-photo'); });
-        return;
-      }
-      setTimeout(poll, 50);
-    }
-    poll();
-  }
   function recordPendingInteract(){
     if (!window.__YXQ_APP_MOUNTED__) window.__YXQ_BOOT_PENDING_INTERACT__ = true;
   }
   document.addEventListener('pointerdown', recordPendingInteract, true);
   document.addEventListener('keydown', recordPendingInteract, true);
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', begin, { once: true });
-  } else {
-    begin();
-  }
+  afterPaint(function(){ start('first-paint'); });
 })();
 </script>
 </body>

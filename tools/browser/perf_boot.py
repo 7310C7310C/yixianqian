@@ -109,6 +109,8 @@ def collect(page) -> dict:
             app_start_ms: window.__YXQ_APP_START_AT__ || (appStart ? Math.round(appStart.startTime) : null),
             app_start_reason: window.__YXQ_APP_START_REASON__ || '',
             hero_ready_ms: window.__YXQ_HERO_READY_AT__ || (heroReady ? Math.round(heroReady.startTime) : null),
+            hero_removed_ms: (window.__YXQ_HERO__ && window.__YXQ_HERO__.removedAt && window.__YXQ_HERO__.removedAt()) || null,
+            hero_reason: (window.__YXQ_HERO__ && window.__YXQ_HERO__.reason && window.__YXQ_HERO__.reason()) || '',
             dom: document.querySelectorAll('*').length,
             cards: document.querySelectorAll('.swipe-card').length,
             hero_present: !!document.getElementById('boot-skeleton'),
@@ -187,7 +189,7 @@ def main() -> int:
                     runs.append(run_once(context, page, base_url, suffix, reload=(mode == "warm")))
                 context.close()
                 keys = ("fcp", "lcp", "longest_task", "longtask_total", "bytes", "requests",
-                        "mount_ms", "boot_ms", "app_start_ms", "hero_ready_ms")
+                        "mount_ms", "boot_ms", "app_start_ms", "hero_ready_ms", "hero_removed_ms")
                 med = {}
                 for key in keys:
                     vals = [r[key] for r in runs if r.get(key) is not None]
@@ -211,7 +213,7 @@ def main() -> int:
             print(
                 f"  {mode}: FCP {m['fcp']}ms LCP {m['lcp']}ms longest {m['longest_task']}ms "
                 f"mount {m['mount_ms']}ms boot {m['boot_ms']}ms "
-                f"app_start {m['app_start_ms']}ms hero_ready {m['hero_ready_ms']}ms ({m.get('app_start_reason', '')}) "
+                f"app_start {m['app_start_ms']}ms hero_ready {m['hero_ready_ms']}ms hero_gone {m['hero_removed_ms']}ms ({m.get('hero_reason', '')}) "
                 f"bytes {m['bytes']} req {m['requests']} "
                 f"CLS {m['cls']} DOM {m['dom']} cards {m['cards']} | {m['lcp_el']}"
             )

@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-04
+last_verified: 2026-11-05
 sources:
   - tools/spa_minify/**
   - tools/spa_precompile/**
@@ -13,6 +13,7 @@ sources:
 -->
 
 > 这些工具只在开发期运行；生成物已提交，部署/CI 不需要 Node。
+> 壳内主脚本用 `fetchpriority=low` 预下载，执行仍由壳内脚本在首帧后按序注入；spa_minify 门禁只校验生成物与 ASSETS 顺序。
 > 规则入口是 `AGENTS.md`；性能判定口径见本文件 §3 与 `tools/perf/budgets.json`。
 
 ## 1. 生成物与重建顺序

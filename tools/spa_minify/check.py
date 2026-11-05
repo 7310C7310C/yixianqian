@@ -9,8 +9,8 @@
    防止手改生成物；
 3. 壳 web/static/legacy/index.html 必须在按序注入的 ASSETS 数组里包含 app.min.js，
    且不得再把 app.js 当脚本加载；同时 app.js 源文件必须仍在（回退与调试用）。
-   批次10 起主脚本不再 preload（预下载会与首屏 hero 图抢带宽，实测 LCP 更差），
-   因此 preload 不是门禁项。
+   壳体用 fetchpriority=low 预下载三个主脚本；执行仍由壳内 first-paint 后按序注入。
+   门禁只校验 ASSETS 顺序与不得加载 app.js，preload 不是门禁项。
 
 精确的「重新 minify 后逐字节一致」由 Node 侧 `npm run check`（make spa-check-node，
 开发机）保证；CI 只校验已提交产物与源的一致性。

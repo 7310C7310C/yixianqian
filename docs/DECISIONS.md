@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-03
+last_verified: 2026-11-05
 sources: []
 -->
 
@@ -89,6 +89,9 @@ sources: []
 ### 4.3 SPA 历史栈与前端不变量
 - 决策：顶层 SPA 默认虚拟历史栈（`pushHistory`/`hist.replace`/`handleBack`），`native_admin` 与 `?history=legacy` 例外；照片变更同步本人卡/牌堆；门禁返回栈保留父级 tab；大图 viewer 用 `photos_meta` 定框、缩图先显原图后升；**大图打开（含打开中遮罩）时方向键只翻图，不切底层卡片**；签到/匹配入口见 §2.3；详细规则在 `web/AGENTS.md`。
 - 不要做：不直接调用 `window.history.*`；不删启动哨兵；不改 `native_admin` 历史语义。验证：`no_history_smoke.py`、`spa_user_fixes_smoke.py`、`TestIntegrationLegacyHomeSelfCard`。
+
+### 4.4 首屏交接与启动预取
+- 决策：三个主脚本并行下载、首帧后启动；hero 在 App 骨架挂载后立即交接（不等数据/首卡绘制，不再用 2s + 长任务静默）；启动骨架的 tabbar 可点并按目标 tab 排队，数据就绪后自动切过去；公开首页在 idle/打开登录弹框时预取 SPA 资源（Save-Data/2g 跳过）。不要做：不把 hero 当加载闸门；不恢复 2s notBefore/长任务静默；不恢复静态岛/品牌启动页。验证：`tools/browser/perf_boot.py`、`tools/browser/app_hero_deck_smoke.py`、`tools/browser/tab_first_load_smoke.py`。
 
 ## 5. 不要复活
 
