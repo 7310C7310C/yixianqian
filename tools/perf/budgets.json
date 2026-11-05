@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "verified_at": "2026-11-03",
+  "verified_at": "2026-11-05",
   "margin_percent": 10,
-  "baseline_ref": "origin/main@748c712; app_min baseline 48,622; budget 53,485; 变更历史见 notes",
+  "baseline_ref": "origin/main@748c712; app_min baseline 48,680; budget 53,548; 变更历史见 notes",
   "notes": [
     "2026-11-04：日/夜模式切换过渡动画，app.min 基线 48610→48622、budget 53471→53485（实测 53484B）。",
     "所有值都是 gzip 字节；shell = 静态壳（index.html + 内联 critical CSS，gzip level 6）+ bootstrap_allowance_bytes。",
@@ -12,7 +12,8 @@
     "2026-11-03：app_min 基线 47,960→48,150，因卡面改为 512 秒显 + 后两张预取；实测 52,7xxB，budget 52,965（Review 记录）。",
     "2026-11-03：查看器大屏 fit + 卡面/多图过渡修复后 app.min 实测 53,056B；基线 48,150→48,300，budget 53,130。",
     "2026-11-03：卡面 sharp 预取后 app.min 实测 53,416B；基线 48,300→48,600，budget 53,460。",
-    "2026-11-03：大图方向键只翻图不切卡后 app.min 实测 53,466B；基线 48,600→48,610，budget 53,471（Review 记录）。"
+    "2026-11-03：大图方向键只翻图不切卡后 app.min 实测 53,466B；基线 48,600→48,610，budget 53,471（Review 记录）。",
+    "2026-11-05：牵线筛选新增现居/家乡省份多选，app.min 实测 53,522B；基线 48,622→48,680、budget 53,485→53,548（保留 26B 余量）。"
   ],
   "limits": {
     "shell_gzip": {
@@ -22,8 +23,8 @@
     },
     "app_min_gzip": {
       "label": "app.min.js",
-      "baseline_bytes": 48622,
-      "budget_bytes": 53485
+      "baseline_bytes": 48680,
+      "budget_bytes": 53548
     },
     "initial_render_gzip": {
       "label": "app.render.js（根 + cards）",

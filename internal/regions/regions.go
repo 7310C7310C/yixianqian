@@ -78,6 +78,7 @@ var (
 	cityAlias       = map[string]string{}
 	areaAlias       = map[string]string{}
 	noAreaAlias     = map[string]string{}
+	provinceByCode  = map[string]*Province{}
 	jsonETag        string
 )
 
@@ -101,6 +102,9 @@ func init() {
 		data = append(data, buildProvince(p))
 	}
 	data = append(data, supplementalProvinces()...)
+	for i := range data {
+		provinceByCode[data[i].Code] = &data[i]
+	}
 	for _, p := range data {
 		for _, c := range p.Cities {
 			cityValue[c.Code] = c.Value
@@ -130,18 +134,28 @@ func init() {
 			}
 		}
 	}
-	ambiguousAlias := map[string]bool{}
-	addAlias := func(dst map[string]string, alias, value string) {
-		if alias == "" || alias == value || ambiguousAlias[alias] {
+	ambiguousAlias := map[string]map[string]bool{
+		"city":   {},
+		"noarea": {},
+		"area":   {},
+	}
+	addAlias := func(namespace string, dst map[string]string, alias, value string) {
+		if alias == "" || alias == value || ambiguousAlias[namespace][alias] {
 			return
 		}
 		if previous, ok := dst[alias]; ok && previous != value {
-			// The same short name may already exist in another namespace
-			// (district vs no-area city); remove it everywhere.
-			delete(cityAlias, alias)
-			delete(noAreaAlias, alias)
-			delete(areaAlias, alias)
-			ambiguousAlias[alias] = true
+			delete(dst, alias)
+			ambiguousAlias[namespace][alias] = true
+			if namespace == "city" || namespace == "noarea" {
+				// A name shared by two city-level divisions is ambiguous for
+				// both city and no-area lookups. District aliases are a
+				// separate namespace: a district named 西安区 must not poison
+				// the city alias 西安 (陕西西安).
+				delete(cityAlias, alias)
+				delete(noAreaAlias, alias)
+				ambiguousAlias["city"][alias] = true
+				ambiguousAlias["noarea"][alias] = true
+			}
 			return
 		}
 		dst[alias] = value
@@ -150,24 +164,24 @@ func init() {
 		for _, c := range p.Cities {
 			if !cityAmbiguous[c.Value] {
 				if short := shortCity(c.Name); short != "" {
-					addAlias(cityAlias, short, c.Value)
+					addAlias("city", cityAlias, short, c.Value)
 				}
-				addAlias(cityAlias, cityStem(c.Name), c.Value)
-				addAlias(cityAlias, c.Name, c.Value)
+				addAlias("city", cityAlias, cityStem(c.Name), c.Value)
+				addAlias("city", cityAlias, c.Name, c.Value)
 			}
 			if len(c.Areas) == 0 && !cityAmbiguous[c.Value] {
 				if short := shortCity(c.Name); short != "" {
-					addAlias(noAreaAlias, short, c.Value)
+					addAlias("noarea", noAreaAlias, short, c.Value)
 				}
-				addAlias(noAreaAlias, cityStem(c.Name), c.Value)
-				addAlias(noAreaAlias, c.Name, c.Value)
+				addAlias("noarea", noAreaAlias, cityStem(c.Name), c.Value)
+				addAlias("noarea", noAreaAlias, c.Name, c.Value)
 			}
 			for _, a := range c.Areas {
 				for _, suffix := range []string{"区", "县", "市", "旗"} {
-					addAlias(areaAlias, a.Value+suffix, a.Value)
+					addAlias("area", areaAlias, a.Value+suffix, a.Value)
 				}
-				addAlias(areaAlias, a.Name, a.Value)
-				addAlias(areaAlias, shortArea(a.Name), a.Value)
+				addAlias("area", areaAlias, a.Name, a.Value)
+				addAlias("area", areaAlias, shortArea(a.Name), a.Value)
 			}
 		}
 	}
@@ -444,6 +458,66 @@ func LookupCityValue(value string) (provinceCode, cityCode string, ok bool) {
 	}
 	ref := cityByValue[canonical]
 	return ref.Province, ref.City, true
+}
+
+// ProvinceCityValues returns every stored city spelling that belongs to the
+// province: canonical ("广东深圳"), full ("深圳市"), and legacy short ("深圳").
+// The card filter expands a province selection into these values so rows
+// written by the new cascade and rows migrated from v1 free text both match.
+func ProvinceCityValues(provinceCode string) []string {
+	p := provinceByCode[provinceCode]
+	if p == nil {
+		return nil
+	}
+	seen := make(map[string]bool, len(p.Cities)*3)
+	out := make([]string, 0, len(p.Cities)*3)
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	for _, c := range p.Cities {
+		add(c.Value)
+		// Only add aliases that unambiguously resolve to this city. The alias
+		// tables already drop names shared by two datasets (e.g. 新北).
+		for _, alias := range []string{c.Name, shortCity(c.Name), cityStem(c.Name)} {
+			if canonical, ok := cityAlias[alias]; ok && canonical == c.Value {
+				add(alias)
+			}
+		}
+	}
+	return out
+}
+
+// DefaultAreaForCity returns a valid church-location value for a city: its
+// first county-level division, or the city value itself when the dataset has
+// no county-level children (济源, 台湾 cities without districts, ...).
+func DefaultAreaForCity(cityValue string) (string, bool) {
+	canonical, ok := NormalizeCityValue(cityValue)
+	if !ok || cityAmbiguous[canonical] {
+		return "", false
+	}
+	ref, ok := cityByValue[canonical]
+	if !ok {
+		return "", false
+	}
+	p := provinceByCode[ref.Province]
+	if p == nil {
+		return "", false
+	}
+	for _, c := range p.Cities {
+		if c.Code != ref.City {
+			continue
+		}
+		if len(c.Areas) > 0 {
+			return c.Areas[0].Value, true
+		}
+		return c.Value, true
+	}
+	return "", false
 }
 
 // NormalizeAreaValue maps a city-area value (canonical "深圳南山" or the legacy

@@ -908,6 +908,26 @@
         </div>
       </div>
       <div class="filter-row">
+        <div class="filter-label">现居省份（可多选）</div>
+        <div class="filter-tags">
+          <span v-for="code in filter.city_provinces" :key="'city-'+code" class="filter-tag active" @click="toggleMultiTag('city_provinces', code)">{{ (regionProvinces.find(p => p.code === code) || {}).name || code }} ×</span>
+          <span v-if="!regionProvinces.length" class="filter-tag">加载中…</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:120px; overflow-y:auto; margin-top:8px; padding:2px;">
+          <span v-for="p in regionProvinces" :key="p.code" class="filter-tag" :class="{active: filter.city_provinces.includes(p.code)}" @click="toggleMultiTag('city_provinces', p.code)">{{ p.name }}</span>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-label">家乡省份（可多选）</div>
+        <div class="filter-tags">
+          <span v-for="code in filter.native_provinces" :key="'native-'+code" class="filter-tag active" @click="toggleMultiTag('native_provinces', code)">{{ (regionProvinces.find(p => p.code === code) || {}).name || code }} ×</span>
+          <span v-if="!regionProvinces.length" class="filter-tag">加载中…</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:120px; overflow-y:auto; margin-top:8px; padding:2px;">
+          <span v-for="p in regionProvinces" :key="p.code" class="filter-tag" :class="{active: filter.native_provinces.includes(p.code)}" @click="toggleMultiTag('native_provinces', p.code)">{{ p.name }}</span>
+        </div>
+      </div>
+      <div class="filter-row">
         <div class="filter-label">学历（可多选）</div>
         <div class="filter-tags">
           <span v-for="e in educationOptions" :key="e" class="filter-tag" :class="{active: filter.education.includes(e)}" @click="toggleMultiTag('education', e)">{{ e }}</span>

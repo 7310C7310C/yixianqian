@@ -107,6 +107,7 @@ build:
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/token ./cmd/token
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/facebackfill ./cmd/facebackfill
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/thumbwarm ./cmd/thumbwarm
+	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/regionfix ./cmd/regionfix
 
 run:
 	$(GO) run ./cmd/server

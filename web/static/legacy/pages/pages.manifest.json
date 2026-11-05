@@ -3,10 +3,10 @@
   "vue": "3.4.27",
   "root": {
     "file": "app.render.js",
-    "templateSha256": "746e554bd3ff25bb9c6fe110934c9502e8ef0511594d3f50e0c0634b18a8d916",
-    "templateSize": 52980,
-    "bytes": 185194,
-    "sha256": "774b8e08c5b0247debeb02e85cc2e8804f6c90bcb3e11f893e5b94aa080113a7"
+    "templateSha256": "4945d73fa2d748623fdef7fc0f3a670cc05d656dbc977f55fd72a7f3a4ba642d",
+    "templateSize": 54632,
+    "bytes": 190030,
+    "sha256": "c0b9a0c4f9ba527371b3af08bc51089a0677633ba288ed3e8bbed1ac495c42c8"
   },
   "initial": [
     "cards"

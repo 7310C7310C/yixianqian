@@ -58,6 +58,11 @@ sources: []
 - 决策：消息页默认动态流 + 喜欢/留言子页；收到留言 = 卡上留言 + 回复我的留言，已读存 `message_reads`；tabbar 只显示收到留言未读；单条/全部已读/清空持久，清空写 `notifications.cleared_at` 不删行；发送喜欢/留言也写 sender-side 已读动态；卡上留言和回复可点进留言串高亮，纯结果类通知不跳转。全员图文广播只经 `/admin/broadcasts`（`content.moderate`），写 broadcasts + 批量 notifications + 审计。
 - 不要做：不用 `notifications.read_at` 冒充已读；不删行清空；清空不得清除收到留言未读；不整体放宽 `/media/{id}`；不假设 `legacy_open_id` 唯一。验证：`TestIntegrationMessageInboxAndNotifications`、`TestIntegrationLegacyMessageInboxHTTP`、`TestIntegrationAdminBroadcast`、`TestIntegrationFindUserByDuplicateLegacyOpenID`。
 
+### 2.6 牵线筛选：现居/家乡省份多选
+- 决策：牵线筛选只加「现居省份」「家乡省份」两个**省份多选**（不选=不限），不做城市多选/省内城市细化；后端把省份 code 展开成该省城市的 canonical/全名/短名集合，用 `u.city = ANY(...)` / `u.native_place = ANY(...)` 匹配，兼容 v1 遗留短名（如「深圳」）与新注册 canonical（「广东深圳」）；两条件 AND，未知 code 忽略。
+- 数据前置：staging 已用 `cmd/regionfix` 把 `city`/`native_place`/`church_location` 全部规范化为数据集合法值；生产迁移时先跑同一工具再开放硬筛。
+- 不要做：不按 `LIKE '广东%'` 直接匹配（会漏 v1 短名）；不做城市多选；不把省份筛选做成排序权重。验证：`TestIntegrationCardsProvinceFilter`、`TestIntegrationCardFiltersByProvinceValues`、`TestCardFilterProvinceExpansion`。
+
 ## 3. 架构与交付
 
 ### 3.1 模块化单体 + PostgreSQL + R2

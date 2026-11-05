@@ -28,6 +28,11 @@ sources: []
 | `cmd/facebackfill` | `-limit` | int | `0` | 最多处理多少张照片（按 media_id 去重）；0=全部 | `cmd/facebackfill/main.go` |
 | `cmd/facebackfill` | `-user` | string | `""` | 只处理指定 legacy user id，例如 U-0006 | `cmd/facebackfill/main.go` |
 | `cmd/facebackfill` | `-workers` | int | `2` | 并发检测数（1-8） | `cmd/facebackfill/main.go` |
+| `cmd/regionfix` | `-apply` | bool | `false` | write repairs (default: dry-run) | `cmd/regionfix/main.go` |
+| `cmd/regionfix` | `-backup-table` | string | `""` | create this users region backup table before -apply (required with -apply) | `cmd/regionfix/main.go` |
+| `cmd/regionfix` | `-limit` | int | `0` | inspect at most N users (0 = all) | `cmd/regionfix/main.go` |
+| `cmd/regionfix` | `-sample` | int | `15` | print at most N changed rows | `cmd/regionfix/main.go` |
+| `cmd/regionfix` | `-verify` | bool | `false` | only verify that every region value is valid | `cmd/regionfix/main.go` |
 | `cmd/seed` | `-legacy-id` | string | `"U-0006"` | legacy user id | `cmd/seed/main.go` |
 | `cmd/seed` | `-name` | string | `"测试用户"` | display name | `cmd/seed/main.go` |
 | `cmd/seed` | `-phone` | string | `"13800000006"` | phone number | `cmd/seed/main.go` |
@@ -357,6 +362,7 @@ sources: []
 | 路径 | Go package | 源码说明 |
 |---|---|---|
 | `cmd/facebackfill` | main | Command facebackfill 批量补齐迁移照片的本地人脸检测结果。 |
+| `cmd/regionfix` | main | Command regionfix normalizes users.city / native_place / church_location to |
 | `cmd/seed` | main | Command seed creates the P0 test account and prints a one-time activation URL. |
 | `cmd/server` | main | — |
 | `cmd/thumbwarm` | main | Command thumbwarm 预热缩略图磁盘缓存：把 media 表里所有 thumb 从 R2 拉到 |

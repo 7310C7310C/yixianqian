@@ -24,6 +24,8 @@ type socialFixtureOpts struct {
 	WithPhoto      bool
 	ContactConsent bool
 	Wechat         string
+	City           string
+	NativePlace    string
 }
 
 func openSocialTestDB(t *testing.T) (*DB, context.Context) {
@@ -79,11 +81,12 @@ func createSocialFixtureUser(t *testing.T, d *DB, ctx context.Context, opts soci
 	err := d.pool.QueryRow(ctx,
 		`INSERT INTO users (legacy_user_id, legacy_open_id, phone, name, nickname, gender,
 		                    birthday, height_cm, account_kind, account_status, status,
-		                    contact_consent, wechat)
-		 VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9, 'active', $10, $11)
+		                    contact_consent, wechat, city, native_place)
+		 VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9, 'active', $10, $11, $12, $13)
 		 RETURNING id`,
 		legacy, openID, phone, opts.Nickname, opts.Gender, birthday, height,
-		opts.AccountKind, opts.AccountStatus, opts.ContactConsent, opts.Wechat).Scan(&id)
+		opts.AccountKind, opts.AccountStatus, opts.ContactConsent, opts.Wechat,
+		opts.City, opts.NativePlace).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert fixture user: %v", err)
 	}
@@ -586,6 +589,70 @@ func TestIntegrationCardCandidateIDsMatchProfiles(t *testing.T) {
 	if len(ids) != 1 || ids[0] != female {
 		t.Fatalf("ids = %v, want exactly female %d (pending=%d nophoto=%d)", ids, female, pending, noPhoto)
 	}
+}
+
+func TestIntegrationCardFiltersByProvinceValues(t *testing.T) {
+	d, ctx := openSocialTestDB(t)
+	now := SocialNow()
+	prefix := "itprov-" + randomDigits(t, 8)
+
+	male := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderMale, Nickname: prefix + "-male", WithPhoto: true,
+	})
+	guangdong := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderFemale, Nickname: prefix + "-gd", WithPhoto: true,
+		City: "广东深圳", NativePlace: "广东汕头",
+	})
+	legacyShort := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderFemale, Nickname: prefix + "-legacy", WithPhoto: true,
+		City: "深圳", NativePlace: "汕头",
+	})
+	zhejiang := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderFemale, Nickname: prefix + "-zj", WithPhoto: true,
+		City: "浙江杭州", NativePlace: "广东广州",
+	})
+	beijing := createSocialFixtureUser(t, d, ctx, socialFixtureOpts{
+		Gender: GenderFemale, Nickname: prefix + "-bj", WithPhoto: true,
+		City: "北京", NativePlace: "北京",
+	})
+
+	// 省份展开同时覆盖 canonical 与 v1 短名。
+	cityFiltered, err := d.ListCardCandidates(ctx, male, GenderFemale, CardFilter{
+		Nickname:   prefix,
+		CityValues: []string{"广东深圳", "深圳", "深圳市"},
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	socialMustContain(t, cityFiltered, guangdong)
+	socialMustContain(t, cityFiltered, legacyShort)
+	socialMustNotContain(t, cityFiltered, zhejiang)
+	socialMustNotContain(t, cityFiltered, beijing)
+
+	nativeFiltered, err := d.ListCardCandidates(ctx, male, GenderFemale, CardFilter{
+		Nickname:          prefix,
+		NativePlaceValues: []string{"广东汕头", "汕头"},
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	socialMustContain(t, nativeFiltered, guangdong)
+	socialMustContain(t, nativeFiltered, legacyShort)
+	socialMustNotContain(t, nativeFiltered, zhejiang)
+	socialMustNotContain(t, nativeFiltered, beijing)
+
+	both, err := d.ListCardCandidates(ctx, male, GenderFemale, CardFilter{
+		Nickname:          prefix,
+		CityValues:        []string{"广东深圳", "深圳"},
+		NativePlaceValues: []string{"广东汕头", "汕头"},
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	socialMustContain(t, both, guangdong)
+	socialMustContain(t, both, legacyShort)
+	socialMustNotContain(t, both, zhejiang)
+	socialMustNotContain(t, both, beijing)
 }
 
 func TestIntegrationBackfillMutualWechatNotifications(t *testing.T) {

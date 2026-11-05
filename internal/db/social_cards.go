@@ -10,24 +10,26 @@ import (
 // CardFilter is the parsed card filter set. Zero values mean "not set"; text
 // filters are literal case-insensitive substring matches (v1 parity).
 type CardFilter struct {
-	Nickname    string
-	UserID      string
-	City        string
-	Church      string
-	NativePlace string
-	Industry    string
-	Education   []string
-	Income      []string
-	House       []string
-	Driving     []string
-	AgeMin      int
-	AgeMax      int
-	HeightMin   int
-	HeightMax   int
+	Nickname          string
+	UserID            string
+	City              string
+	Church            string
+	NativePlace       string
+	Industry          string
+	CityValues        []string
+	NativePlaceValues []string
+	Education         []string
+	Income            []string
+	House             []string
+	Driving           []string
+	AgeMin            int
+	AgeMax            int
+	HeightMin         int
+	HeightMax         int
 }
 
 // cardCandidateFilter is the shared eligibility predicate for the card deck.
-// It takes $1..$16 in the same order as the callers below. The photo condition
+// It takes $1..$18 in the same order as the callers below. The photo condition
 // is an EXISTS so the id-only query never materialises the photo array.
 const cardCandidateFilter = `u.status = 'active'
 		   AND u.account_kind = 'user'
@@ -48,7 +50,9 @@ const cardCandidateFilter = `u.status = 'active'
 		   AND ($13::date IS NULL OR (u.birthday IS NOT NULL AND u.birthday <= $13::date))
 		   AND ($14::date IS NULL OR (u.birthday IS NOT NULL AND u.birthday > $14::date))
 		   AND ($15::int IS NULL OR COALESCE(u.height_cm, 0) >= $15)
-		   AND ($16::int IS NULL OR (u.height_cm IS NOT NULL AND u.height_cm <= $16))`
+		   AND ($16::int IS NULL OR (u.height_cm IS NOT NULL AND u.height_cm <= $16))
+		   AND (cardinality($17::text[]) = 0 OR u.city = ANY($17::text[]))
+		   AND (cardinality($18::text[]) = 0 OR u.native_place = ANY($18::text[]))`
 
 // ListCardCandidates returns the eligible card pool ordered by user id (a
 // stable input order for OrderCards). targetGender "" means both genders
@@ -73,7 +77,8 @@ func (d *DB) ListCardCandidates(ctx context.Context, viewerID int64, targetGende
 		viewerID, targetGender, f.Nickname, f.UserID, f.City, f.Church,
 		f.NativePlace, f.Industry, socialNonNilStrings(f.Education), socialNonNilStrings(f.Income),
 		socialNonNilStrings(f.House), socialNonNilStrings(f.Driving),
-		ageMinAt, ageMaxAt, heightMin, heightMax)
+		ageMinAt, ageMaxAt, heightMin, heightMax,
+		socialNonNilStrings(f.CityValues), socialNonNilStrings(f.NativePlaceValues))
 	if err != nil {
 		return nil, fmt.Errorf("db: list card candidates: %w", err)
 	}
@@ -114,7 +119,8 @@ func (d *DB) ListCardCandidateIDs(ctx context.Context, viewerID int64, targetGen
 		viewerID, targetGender, f.Nickname, f.UserID, f.City, f.Church,
 		f.NativePlace, f.Industry, socialNonNilStrings(f.Education), socialNonNilStrings(f.Income),
 		socialNonNilStrings(f.House), socialNonNilStrings(f.Driving),
-		ageMinAt, ageMaxAt, heightMin, heightMax)
+		ageMinAt, ageMaxAt, heightMin, heightMax,
+		socialNonNilStrings(f.CityValues), socialNonNilStrings(f.NativePlaceValues))
 	if err != nil {
 		return nil, fmt.Errorf("db: list card candidate ids: %w", err)
 	}

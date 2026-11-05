@@ -2864,22 +2864,17 @@ const yxqApp = createApp({
     }
 
     // 牵线卡片
-    const filter = ref({
-      gender: '',
-      nickname: '',
-      user_id: '',
-      height_min: '', height_max: '',
-      age_min: '', age_max: '',
-      education: [], income: [],
-      house: [], driving: []
-    });
+    function emptyFilter() {
+      return { gender: '', nickname: '', user_id: '', height_min: '', height_max: '', age_min: '', age_max: '', city_provinces: [], native_provinces: [], education: [], income: [], house: [], driving: [] };
+    }
+    const filter = ref(emptyFilter());
     const educationOptions = ['大专以下', '大专', '本科', '硕士', '博士'];
     const incomeOptions = ['10W以下', '10W - 20W', '20W - 30W', '30W - 50W', '50W以上', '未填'];
     const showFilter = ref(false);
     const slideDir = ref('');
     const hasActiveFilter = computed(() => {
       const f = filter.value;
-      return !!(f.gender || f.nickname || f.user_id || f.height_min || f.height_max || f.age_min || f.age_max || f.education.length || f.income.length || f.house.length || f.driving.length);
+      return !!(f.gender || f.nickname || f.user_id || f.height_min || f.height_max || f.age_min || f.age_max || f.city_provinces.length || f.native_provinces.length || f.education.length || f.income.length || f.house.length || f.driving.length);
     });
     function buildFilterQuery() {
       const f = filter.value;
@@ -2889,6 +2884,8 @@ const yxqApp = createApp({
       if (nick) parts.push('nickname=' + encodeURIComponent(nick));
       ['height_min','height_max'].forEach(k => { if (f[k] !== '') parts.push(k + '=' + encodeURIComponent(f[k])); });
       ['age_min','age_max'].forEach(k => { if (f[k] !== '') parts.push(k + '=' + encodeURIComponent(f[k])); });
+      f.city_provinces.forEach(code => parts.push('city_province=' + encodeURIComponent(code)));
+      f.native_provinces.forEach(code => parts.push('native_province=' + encodeURIComponent(code)));
       f.education.forEach(e => parts.push('education=' + encodeURIComponent(e)));
       f.income.forEach(i => parts.push('income=' + encodeURIComponent(i)));
       f.house.forEach(h => parts.push('house=' + encodeURIComponent(h)));
@@ -2906,7 +2903,7 @@ const yxqApp = createApp({
     async function resetFilter() {
       // 卡片留言草稿会被随后的切卡/重载清掉：提交筛选动作前先拦截
       if(guardOverlay('cardsMsg', () => resetFilter())) return;
-      filter.value = { gender: '', nickname: '', user_id: '', height_min: '', height_max: '', age_min: '', age_max: '', education: [], income: [], house: [], driving: [] };
+      filter.value = emptyFilter();
       filterBaselineKey = JSON.stringify(filter.value);
       showFilter.value = false;
       cards.value = [];
@@ -2924,7 +2921,7 @@ const yxqApp = createApp({
       await loadCards(true);
     }
     // 筛选面板打开时对齐基线：面板里改的算「未应用」，关闭/返回时拦截
-    watch(showFilter, (v) => { if(v) filterBaselineKey = JSON.stringify(filter.value); });
+    watch(showFilter, (v) => { if(v) { filterBaselineKey = JSON.stringify(filter.value); ensureRegions(); } });
     // 筛选面板「取消」/返回：changed 未应用 → 先走通用离开拦截（两钮）
     function requestCloseFilter(){
       if(guardOverlay('filter', () => { showFilter.value = false; })) return;

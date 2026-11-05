@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +146,40 @@ func TestCardFilterParsingAndSeed(t *testing.T) {
 	}
 	if v1 == cardVersion("xyz", f, db.GenderFemale) {
 		t.Fatal("card version should change with seed")
+	}
+}
+
+func TestCardFilterProvinceExpansion(t *testing.T) {
+	f := parseCardFilter(url.Values{
+		"city_province":   {"44", "33"},
+		"native_province": {"11"},
+	})
+	for _, want := range []string{"广东深圳", "深圳", "深圳市", "浙江杭州", "杭州"} {
+		if !slices.Contains(f.CityValues, want) {
+			t.Errorf("city values missing %q: %v", want, f.CityValues)
+		}
+	}
+	for _, want := range []string{"北京"} {
+		if !slices.Contains(f.NativePlaceValues, want) {
+			t.Errorf("native values missing %q: %v", want, f.NativePlaceValues)
+		}
+	}
+	if slices.Contains(f.NativePlaceValues, "广东深圳") {
+		t.Errorf("native values leaked another province: %v", f.NativePlaceValues)
+	}
+	if !cardFilterActive(f) {
+		t.Fatal("province filter should be active")
+	}
+
+	unknown := parseCardFilter(url.Values{"city_province": {"99"}})
+	if len(unknown.CityValues) != 0 || cardFilterActive(unknown) {
+		t.Fatalf("unknown province should be ignored: %+v", unknown)
+	}
+}
+
+func TestCardFilterEmpty(t *testing.T) {
+	if cardFilterActive(parseCardFilter(url.Values{})) {
+		t.Fatal("empty query must not be active")
 	}
 }
 

@@ -130,3 +130,79 @@ func TestNormalizeLegacyValues(t *testing.T) {
 		t.Errorf("LookupAreaValue = %q,%q,%q,%v", province, city, area, ok)
 	}
 }
+
+func TestProvinceCityValuesCoverCanonicalAndLegacy(t *testing.T) {
+	guangdong := ProvinceCityValues("44")
+	want := []string{"广东深圳", "深圳", "深圳市"}
+	for _, w := range want {
+		found := false
+		for _, got := range guangdong {
+			if got == w {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("ProvinceCityValues(44) missing %q", w)
+		}
+	}
+	for _, got := range guangdong {
+		if got == "北京" {
+			t.Fatal("ProvinceCityValues(44) must not contain 北京")
+		}
+	}
+	if got := ProvinceCityValues("99"); len(got) != 0 {
+		t.Fatalf("unknown province returned %v", got)
+	}
+}
+
+// TestCityAliasesSurviveDistrictNameCollisions pins the reviewer blocker: a
+// district named 西安区/朝阳区/兴安区 must not delete the city aliases 西安/
+// 朝阳/兴安 from the city namespace.
+func TestCityAliasesSurviveDistrictNameCollisions(t *testing.T) {
+	cases := map[string]string{
+		"西安": "陕西西安",
+		"朝阳": "辽宁朝阳",
+		"兴安": "内蒙古兴安",
+	}
+	for input, want := range cases {
+		if got, ok := NormalizeCityValue(input); !ok || got != want {
+			t.Errorf("NormalizeCityValue(%q) = %q,%v want %q", input, got, ok, want)
+		}
+	}
+	for province, want := range map[string]string{"61": "西安", "21": "朝阳", "15": "兴安"} {
+		if !containsString(ProvinceCityValues(province), want) {
+			t.Errorf("ProvinceCityValues(%s) missing %q", province, want)
+		}
+	}
+	// District aliases remain ambiguous for church locations.
+	for _, input := range []string{"新北", "昌江", "新竹", "嘉义"} {
+		if _, ok := NormalizeAreaValue(input); ok {
+			t.Errorf("NormalizeAreaValue(%q) must be ambiguous", input)
+		}
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDefaultAreaForCityIsValid(t *testing.T) {
+	for _, city := range []string{"广东深圳", "北京", "河南济源"} {
+		area, ok := DefaultAreaForCity(city)
+		if !ok || area == "" {
+			t.Fatalf("DefaultAreaForCity(%q) = %q,%v", city, area, ok)
+		}
+		if _, valid := NormalizeAreaValue(area); !valid {
+			t.Fatalf("DefaultAreaForCity(%q) = %q, not a valid church location", city, area)
+		}
+	}
+	if _, ok := DefaultAreaForCity("不存在"); ok {
+		t.Fatal("DefaultAreaForCity accepted an unknown city")
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/7310C7310C/yixianqian/internal/db"
+	"github.com/7310C7310C/yixianqian/internal/regions"
 )
 
 var errGenderMissing = errors.New("httpserver: viewer gender is missing")
@@ -315,22 +316,44 @@ func socialTargetGender(u db.SocialViewer, requested string) (string, error) {
 }
 
 func parseCardFilter(q url.Values) db.CardFilter {
+	cityProvinces := socialClipList(q["city_province"], 10, 40)
+	nativeProvinces := socialClipList(q["native_province"], 10, 40)
 	return db.CardFilter{
-		Nickname:    socialClipText(q.Get("nickname"), 50),
-		UserID:      socialFilterUserID(q.Get("user_id")),
-		City:        socialClipText(q.Get("city"), 50),
-		Church:      socialClipText(q.Get("church"), 50),
-		NativePlace: socialClipText(q.Get("native_place"), 50),
-		Industry:    socialClipText(q.Get("industry"), 50),
-		Education:   socialClipList(q["education"], 30, 20),
-		Income:      socialClipList(q["income"], 30, 20),
-		House:       socialClipList(q["house"], 30, 20),
-		Driving:     socialClipList(q["driving"], 30, 20),
-		AgeMin:      socialBoundedInt(q.Get("age_min"), 0, 120),
-		AgeMax:      socialBoundedInt(q.Get("age_max"), 0, 120),
-		HeightMin:   socialBoundedInt(q.Get("height_min"), 0, 300),
-		HeightMax:   socialBoundedInt(q.Get("height_max"), 0, 300),
+		Nickname:          socialClipText(q.Get("nickname"), 50),
+		UserID:            socialFilterUserID(q.Get("user_id")),
+		City:              socialClipText(q.Get("city"), 50),
+		Church:            socialClipText(q.Get("church"), 50),
+		NativePlace:       socialClipText(q.Get("native_place"), 50),
+		Industry:          socialClipText(q.Get("industry"), 50),
+		CityValues:        provinceCityValues(cityProvinces),
+		NativePlaceValues: provinceCityValues(nativeProvinces),
+		Education:         socialClipList(q["education"], 30, 20),
+		Income:            socialClipList(q["income"], 30, 20),
+		House:             socialClipList(q["house"], 30, 20),
+		Driving:           socialClipList(q["driving"], 30, 20),
+		AgeMin:            socialBoundedInt(q.Get("age_min"), 0, 120),
+		AgeMax:            socialBoundedInt(q.Get("age_max"), 0, 120),
+		HeightMin:         socialBoundedInt(q.Get("height_min"), 0, 300),
+		HeightMax:         socialBoundedInt(q.Get("height_max"), 0, 300),
 	}
+}
+
+// provinceCityValues expands province codes into every stored city spelling
+// used by the dataset (canonical, full and legacy short forms). Unknown codes
+// are ignored so a stale client cannot make the deck silently empty.
+func provinceCityValues(codes []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, code := range codes {
+		for _, value := range regions.ProvinceCityValues(code) {
+			if value == "" || seen[value] {
+				continue
+			}
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func cardFilterView(f db.CardFilter) CardFilterView {
@@ -398,7 +421,8 @@ func cardIndexInPage(q url.Values, count int) int {
 
 func cardFilterActive(f db.CardFilter) bool {
 	return f.Nickname != "" || f.UserID != "" || f.City != "" || f.Church != "" ||
-		f.NativePlace != "" || f.Industry != "" || len(f.Education) > 0 ||
+		f.NativePlace != "" || f.Industry != "" || len(f.CityValues) > 0 ||
+		len(f.NativePlaceValues) > 0 || len(f.Education) > 0 ||
 		len(f.Income) > 0 || len(f.House) > 0 || len(f.Driving) > 0 ||
 		f.AgeMin > 0 || f.AgeMax > 0 || f.HeightMin > 0 || f.HeightMax > 0
 }
