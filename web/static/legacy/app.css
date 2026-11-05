@@ -396,7 +396,6 @@
   }
   .pswp .yxq-viewer-arrow:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   .pswp .yxq-viewer-arrow:active { background: rgba(0, 0, 0, 0.65); }
-  .pswp .yxq-viewer-arrow:disabled { opacity: 0.3; pointer-events: none; }
   .pswp--one-slide .yxq-viewer-arrow { display: none; }
   /* 全屏图片保持 pointer-events:none：拦截长按保存菜单；单击关闭由 .pswp__zoom-wrap/.pswp__item 承接（见 bg/tap 配置） */
   .pswp img, .pswp__img { pointer-events: none !important; -webkit-touch-callout: none !important; }
@@ -1080,10 +1079,12 @@
   .card-info, .msg-list, .gs-tray-list, .redeem-list, .redeem-form,
   .picker-options, .multi-options, .wish-target-list, .pa-detail,
   .admin-help-list, .embed-loading { overscroll-behavior: contain; }
-  .card-tab-transition-enter-active { transition: opacity 0.16s ease, transform 0.16s ease; will-change: opacity, transform; }
-  .card-tab-transition-leave-active { transition: opacity 0.12s ease, transform 0.12s ease; will-change: opacity, transform; }
-  .card-tab-transition-enter-from { opacity: 0; transform: translateY(6px); }
-  .card-tab-transition-leave-to { opacity: 0; transform: translateY(-4px); }
+  .card-tab-left-enter-active, .card-tab-left-leave-active,
+  .card-tab-right-enter-active, .card-tab-right-leave-active { transition: opacity 0.16s ease, transform 0.16s ease; will-change: opacity, transform; }
+  .card-tab-left-enter-from { opacity: 0; transform: translateX(18px); }
+  .card-tab-left-leave-to { opacity: 0; transform: translateX(-18px); }
+  .card-tab-right-enter-from { opacity: 0; transform: translateX(-18px); }
+  .card-tab-right-leave-to { opacity: 0; transform: translateX(18px); }
   .tab-transition-enter-active { transition: opacity 0.10s ease, transform 0.10s cubic-bezier(0.32,0.72,0,1); will-change: opacity, transform; }
   .tab-transition-leave-active { transition: opacity 0.08s ease, transform 0.08s ease; will-change: opacity, transform; }
   .tab-transition-enter-from { opacity: 0; transform: translateY(6px); }

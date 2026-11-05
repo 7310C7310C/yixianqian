@@ -60,11 +60,11 @@
       </div>
       <div class="card-main" @touchstart="onCardTouchStart" @touchmove="onCardTouchMove" @touchend="onCardTouchEnd" @mousedown="onCardMouseDown" @mousemove="onCardMouseMove" @mouseup="onCardMouseUp" @mouseleave="onCardMouseLeave">
       <div class="card-tabs">
-        <div class="card-tab" :class="{active: cardTab==='profile'}" @click="cardTab='profile'">资料</div>
+        <div class="card-tab" :class="{active: cardTab==='profile'}" @click="switchCardTab('profile')">资料</div>
         <div class="card-tab" :class="{active: cardTab==='messages'}" @click="openMessageTab">留言<span v-if="currentMsgCount > 0" class="msg-count-badge">{{ currentMsgCount }}</span></div>
       </div>
       <div class="card-info">
-        <Transition name="card-tab-transition" mode="out-in">
+        <Transition :name="cardTabDir === 'left' ? 'card-tab-left' : 'card-tab-right'" mode="out-in">
         <div v-if="cardTab==='profile'" key="profile">
           <template v-if="currentCard.display_fields && currentCard.display_fields.sections">
             <div class="card-section" v-for="(sec, si) in currentCard.display_fields.sections" :key="si">
@@ -80,9 +80,7 @@
           </template>
         </div>
         <div v-else key="messages" class="message-panel">
-          <div v-if="msgLoading" class="msg-skeleton" aria-busy="true">
-            <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
-          </div>
+          <div v-if="msgLoading" class="msg-tip" aria-label="正在加载"></div>
           <div v-else-if="!threadedMessages.length" class="msg-tip">还没有留言，快来抢沙发～</div>
           <div v-else class="msg-list">
             <div v-for="m in threadedMessages" :key="m.id" class="msg-thread">
