@@ -55,7 +55,8 @@ import (
 // 109 removed the hearts badge (anonymous/real-name quota) from the cards page top.
 // 2026-11-05 (ended activity cards): 112 greyed ended/cancelled activity cards;
 // 113 switched them from grayscale to muted color after PM feedback.
-const assetVersion = "113"
+// 114 renders the 「已结束」 tag with a neutral dark background on ended cards.
+const assetVersion = "114"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

@@ -14,7 +14,7 @@
       <div class="activity-body">
         <h3>{{ currentActivity.name }}</h3>
         <div class="activity-meta">
-          <van-tag type="primary" color="var(--yxq-brand-ink)">{{ currentActivity.status }}</van-tag>
+          <van-tag type="primary" :color="isActivityEnded(currentActivity) ? '#48484a' : 'var(--yxq-brand-ink)'">{{ currentActivity.status }}</van-tag>
         </div>
         <div class="activity-desc">{{ currentActivity.description || '暂无描述' }}</div>
         <div class="detail-meta">

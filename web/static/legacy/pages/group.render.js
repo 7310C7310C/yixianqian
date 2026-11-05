@@ -3083,13 +3083,13 @@ function render(_ctx, _cache) {
                     _createElementVNode("div", _hoisted_7, [
                       _createVNode(_component_van_tag, {
                         type: "primary",
-                        color: "var(--yxq-brand-ink)"
+                        color: _ctx.isActivityEnded(_ctx.currentActivity) ? '#48484a' : 'var(--yxq-brand-ink)'
                       }, {
                         default: _withCtx(() => [
                           _createTextVNode(_toDisplayString(_ctx.currentActivity.status), 1 /* TEXT */)
                         ]),
                         _: 1 /* STABLE */
-                      })
+                      }, 8 /* PROPS */, ["color"])
                     ]),
                     _createElementVNode("div", _hoisted_8, _toDisplayString(_ctx.currentActivity.description || '暂无描述'), 1 /* TEXT */),
                     _createElementVNode("div", _hoisted_9, [
