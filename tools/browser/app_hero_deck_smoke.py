@@ -222,6 +222,20 @@ def restore_pos(page, pos: int) -> None:
     )
     page.reload(wait_until="domcontentloaded")
     page.locator(".van-tabbar").wait_for(state="visible", timeout=30000)
+    # restoreDeck 是异步的（可能还要 loadPageAt 翻页）；hero 现在 mount 即交接，
+    # wait_cards_ready 会在 restore 完成前就通过。等计数器到达目标位，避免慢网假失败。
+    try:
+        page.wait_for_function(
+            """(want) => {
+              const el = document.querySelector('.card-counter');
+              if (!el) return false;
+              const m = (el.textContent || '').match(/^(\\d+)\\s*\\/\\s*(\\d+)$/);
+              return !!m && Number(m[1]) === want;
+            }""",
+            arg=pos + 1, timeout=20000,
+        )
+    except PlaywrightTimeoutError:
+        pass
 
 
 def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
