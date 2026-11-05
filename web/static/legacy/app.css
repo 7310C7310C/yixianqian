@@ -32,9 +32,10 @@
   .card-shadow { box-shadow: 0 2px 12px rgba(0,0,0,0.08); border-radius: 12px; }
   /* 活动卡片 */
   .activity-card { background: #fff; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); overflow: hidden; }
-  /* 已结束/已取消的活动卡片：整卡去饱和 + 灰底，和进行中的活动明显区分；保留文字对比度，仍可点进详情 */
-  .activity-card--ended { filter: grayscale(1); background: #f2f3f5; box-shadow: none; }
-  .activity-card--ended .activity-poster { opacity: 0.85; }
+  /* 已结束/已取消的活动卡片：降饱和 + 暖灰粉底，保留颜色但和进行中的活动明显区分；文字对比度不变，仍可点进详情 */
+  .activity-card--ended { filter: saturate(0.55); background: #f8f3f4; box-shadow: none; }
+  .activity-card--ended .activity-poster { opacity: 0.9; }
+  .van-theme-dark .activity-card.activity-card--ended { background: #2a2427; }
   .activity-poster { width: 100%; display: block; object-fit: cover; max-height: 220px; background: #f2f3f5; }
   .activity-poster-wrap { position: relative; overflow: hidden; cursor: zoom-in; }
   .activity-body { padding: 14px 16px; }
