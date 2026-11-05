@@ -85,13 +85,14 @@ function render(_ctx, _cache) {
                   _createElementVNode("div", _hoisted_7, [
                     _createVNode(_component_van_tag, {
                       type: "primary",
-                      color: _ctx.isActivityEnded(act) ? '#48484a' : 'var(--yxq-brand-ink)'
+                      color: _ctx.isActivityEnded(act) ? '#d9b3ba' : 'var(--yxq-brand-ink)',
+                      "text-color": _ctx.isActivityEnded(act) ? '#5f3a42' : '#fff'
                     }, {
                       default: _withCtx(() => [
                         _createTextVNode(_toDisplayString(act.status), 1 /* TEXT */)
                       ]),
                       _: 2 /* DYNAMIC */
-                    }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["color"])
+                    }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["color", "text-color"])
                   ]),
                   _createElementVNode("div", _hoisted_8, _toDisplayString(act.description || '暂无描述'), 1 /* TEXT */),
                   _createElementVNode("div", _hoisted_9, _toDisplayString(_ctx.activityListTime(act)), 1 /* TEXT */),
@@ -283,13 +284,14 @@ function render(_ctx, _cache) {
                     _createElementVNode("div", _hoisted_6, [
                       _createVNode(_component_van_tag, {
                         type: "primary",
-                        color: _ctx.isActivityEnded(act) ? '#48484a' : 'var(--yxq-brand-ink)'
+                        color: _ctx.isActivityEnded(act) ? '#d9b3ba' : 'var(--yxq-brand-ink)',
+                        "text-color": _ctx.isActivityEnded(act) ? '#5f3a42' : '#fff'
                       }, {
                         default: _withCtx(() => [
                           _createTextVNode(_toDisplayString(act.status), 1 /* TEXT */)
                         ]),
                         _: 2 /* DYNAMIC */
-                      }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["color"])
+                      }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["color", "text-color"])
                     ]),
                     _createElementVNode("div", _hoisted_7, _toDisplayString(_ctx.activityListTime(act)), 1 /* TEXT */),
                     _createElementVNode("div", _hoisted_8, "📍 " + _toDisplayString(act.location || '待定'), 1 /* TEXT */)
