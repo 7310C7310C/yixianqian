@@ -28,7 +28,11 @@
       <div class="edit-photo-tip">第一张是头像，也是牵线首页的封面；点击「设为封面」可换第一张</div>
     </div>
     <div class="edit-card">
-      <div v-for="f in editableFields" :key="f.field" :class="['edit-row', {'edit-long-row': f.long}]" style="flex-wrap:wrap;">
+      <!-- 房产/汽车补充栏按当前选项二选一（字段名形如「房产状况-有-补充内容」），未选则都不显示。 -->
+      <div v-for="f in editableFields.filter(x => {
+        const p = x.field.split('-');
+        return p.length !== 3 || p[2] !== '补充内容' || (editableFields.find(y => y.field === p[0]) || {}).value === p[1];
+      })" :key="f.field" :class="['edit-row', {'edit-long-row': f.long}]" style="flex-wrap:wrap;">
         <div class="edit-label">{{ f.label }}</div>
         <van-field v-if="f.type==='text' && f.long" v-model="f.value" type="textarea" rows="1" autosize :placeholder="'请输入' + f.label" :border="false" style="flex:1; padding:10px 0;"></van-field>
         <van-field v-else-if="f.type==='text' || f.type==='phone'" v-model="f.value" :placeholder="'请输入' + f.label" :border="false" style="flex:1;"></van-field>

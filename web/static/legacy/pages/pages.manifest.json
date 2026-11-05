@@ -43,8 +43,8 @@
         "profile_edit",
         "points"
       ],
-      "bytes": 70174,
-      "sha256": "e922168934be34ba34b1e6bed8f0ee975539a5c31836aa0710ab0f89592f6bc2"
+      "bytes": 70367,
+      "sha256": "e1ca46908c82df3a80d4ca0e696ae39e0940b1895e5bc81d88867b32be53f8bc"
     },
     "detail": {
       "file": "pages/detail.render.js",
@@ -147,8 +147,8 @@
     "profile_edit": {
       "group": "profile",
       "file": "pages/profile.render.js",
-      "templateSha256": "63e0e774ba622ed2f2209ff3fa430b095e9e344cdbca492a13000a5b1872025f",
-      "templateSize": 6611
+      "templateSha256": "cccc9ebe145b488eddec17c65a2f0deae47a4f73eb75a11646e706ec26460daf",
+      "templateSize": 6944
     },
     "points": {
       "group": "profile",

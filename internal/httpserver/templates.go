@@ -57,7 +57,8 @@ import (
 // 113 switched them from grayscale to muted color after PM feedback.
 // 114 gave the 「已结束」 tag a neutral dark background; 115 softened it to a muted rose
 // chip; 116 uses a red-family chip with white text after PM feedback on the light theme.
-const assetVersion = "118"
+// 119 shows only the house/car note that matches the selected yes/no option.
+const assetVersion = "119"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

@@ -1102,7 +1102,10 @@ function render(_ctx, _cache) {
           ]))
         : _createCommentVNode("v-if", true),
       _createElementVNode("div", _hoisted_21, [
-        (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.editableFields, (f) => {
+        (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.editableFields.filter(x => {
+        const p = x.field.split('-');
+        return p.length !== 3 || p[2] !== '补充内容' || (_ctx.editableFields.find(y => y.field === p[0]) || {}).value === p[1];
+      }), (f) => {
           return (_openBlock(), _createElementBlock("div", {
             key: f.field,
             class: _normalizeClass(['edit-row', {'edit-long-row': f.long}]),
