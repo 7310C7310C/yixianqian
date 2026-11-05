@@ -915,7 +915,7 @@
         </div>
         <details class="filter-province-details" style="margin-top:8px;">
           <summary class="filter-tag">选择省份</summary>
-          <div class="filter-province-scroll" style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 2px;">
+          <div class="filter-province-scroll" style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 2px;" @touchstart="onProvinceTouchStart" @touchmove="onProvinceTouchMove" @touchend="onProvinceTouchEnd" @touchcancel="onProvinceTouchEnd">
             <span v-for="p in filterProvinces" :key="p.code" class="filter-tag" :class="{active: filter.city_provinces.includes(p.code)}" @click="toggleMultiTag('city_provinces', p.code)">{{ p.name }}</span>
           </div>
         </details>
@@ -928,7 +928,7 @@
         </div>
         <details class="filter-province-details" style="margin-top:8px;">
           <summary class="filter-tag">选择省份</summary>
-          <div class="filter-province-scroll" style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 2px;">
+          <div class="filter-province-scroll" style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 2px;" @touchstart="onProvinceTouchStart" @touchmove="onProvinceTouchMove" @touchend="onProvinceTouchEnd" @touchcancel="onProvinceTouchEnd">
             <span v-for="p in filterProvinces" :key="p.code" class="filter-tag" :class="{active: filter.native_provinces.includes(p.code)}" @click="toggleMultiTag('native_provinces', p.code)">{{ p.name }}</span>
           </div>
         </details>

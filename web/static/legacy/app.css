@@ -465,6 +465,12 @@
   .filter-tag.active { background: var(--yxq-brand-ink); color: #fff; }
   .filter-province-details > summary { list-style: none; cursor: pointer; }
   .filter-province-details > summary::-webkit-details-marker { display: none; }
+  .filter-province-details > summary::after {
+    content: ''; width: 6px; height: 6px; margin-left: 7px; flex: none;
+    border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg); transition: transform .18s ease;
+  }
+  .filter-province-details[open] > summary::after { transform: rotate(45deg); }
   .filter-province-scroll { max-height: 150px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: auto; }
   .filter-input { padding: 6px 10px; background: #f7f8fa; border-radius: 8px; }
   /* 卡片留言 */

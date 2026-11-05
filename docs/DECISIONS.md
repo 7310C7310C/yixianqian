@@ -59,7 +59,7 @@ sources: []
 - 不要做：不用 `notifications.read_at` 冒充已读；不删行清空；清空不得清除收到留言未读；不整体放宽 `/media/{id}`；不假设 `legacy_open_id` 唯一。验证：`TestIntegrationMessageInboxAndNotifications`、`TestIntegrationLegacyMessageInboxHTTP`、`TestIntegrationAdminBroadcast`、`TestIntegrationFindUserByDuplicateLegacyOpenID`。
 
 ### 2.6 牵线筛选：现居/家乡省份多选
-- 决策：牵线筛选只加「现居省份」「家乡省份」两个**省份多选**（不选=不限），不做城市多选/省内城市细化；省份选择器默认折叠，选项按公开资料估算的天主教徒规模排序（广东置顶，港澳台因统计口径与用户来源排在末尾）；后端把省份 code 展开成该省城市的 canonical/全名/短名集合，用 `u.city = ANY(...)` / `u.native_place = ANY(...)` 匹配，兼容 v1 遗留短名（如「深圳」）与新注册 canonical（「广东深圳」）；两条件 AND，未知 code 忽略。
+- 决策：牵线筛选只加「现居省份」「家乡省份」两个**省份多选**（不选=不限），不做城市多选/省内城市细化；省份选择器默认折叠且展开/收起箭头随状态切换，触摸滚动到列表边界后继续拖动会接力滚动筛选面板；选项按公开资料估算的天主教徒规模排序（广东置顶，港澳台因统计口径与用户来源排在末尾）；后端把省份 code 展开成该省城市的 canonical/全名/短名集合，用 `u.city = ANY(...)` / `u.native_place = ANY(...)` 匹配，兼容 v1 遗留短名（如「深圳」）与新注册 canonical（「广东深圳」）；两条件 AND，未知 code 忽略。
 - 数据前置：staging 已用 `cmd/regionfix` 把 `city`/`native_place`/`church_location` 全部规范化为数据集合法值；生产迁移时先跑同一工具再开放硬筛。
 - 不要做：不按 `LIKE '广东%'` 直接匹配（会漏 v1 短名）；不做城市多选；不把省份筛选做成排序权重。验证：`TestIntegrationCardsProvinceFilter`、`TestIntegrationCardFiltersByProvinceValues`、`TestCardFilterProvinceExpansion`。
 

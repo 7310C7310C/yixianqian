@@ -2914,6 +2914,41 @@ const yxqApp = createApp({
       if (idx >= 0) arr.splice(idx, 1);
       else arr.push(val);
     }
+    let provinceTouch = null;
+    function scrollableParent(el) {
+      let p = el.parentElement;
+      while (p) {
+        const style = getComputedStyle(p);
+        if (/(auto|scroll)/.test(style.overflowY) && p.scrollHeight > p.clientHeight) return p;
+        p = p.parentElement;
+      }
+      return null;
+    }
+    function onProvinceTouchStart(e) {
+      const t = e.touches && e.touches[0];
+      provinceTouch = t ? { y: t.clientY, x: t.clientX, el: e.currentTarget } : null;
+    }
+    function onProvinceTouchMove(e) {
+      if (!provinceTouch) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      const el = provinceTouch.el;
+      const dy = t.clientY - provinceTouch.y;
+      const dx = t.clientX - provinceTouch.x;
+      provinceTouch.y = t.clientY;
+      provinceTouch.x = t.clientX;
+      if (Math.abs(dx) > Math.abs(dy)) return;
+      const atTop = el.scrollTop <= 0;
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+      if ((dy < 0 && atBottom) || (dy > 0 && atTop)) {
+        const parent = scrollableParent(el);
+        if (parent) {
+          parent.scrollTop -= dy;
+          if (e.cancelable) e.preventDefault();
+        }
+      }
+    }
+    function onProvinceTouchEnd() { provinceTouch = null; }
     async function resetFilter() {
       // 卡片留言草稿会被随后的切卡/重载清掉：提交筛选动作前先拦截
       if(guardOverlay('cardsMsg', () => resetFilter())) return;
@@ -7638,7 +7673,7 @@ const yxqApp = createApp({
       showSwipeGuide, closeSwipeGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
       filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,
-      filterProvinces,
+      filterProvinces, onProvinceTouchStart, onProvinceTouchMove, onProvinceTouchEnd,
       showIdInvalidDialog, idInvalidCountdown, goIdInvalidNow, guardTabChange,
       showRegionInvalidDialog, regionInvalidCountdown, goRegionInvalidNow,
       regionProvinces, regionCities, regionAreas, onRegionProvince, onRegionCity, onRegionArea,
