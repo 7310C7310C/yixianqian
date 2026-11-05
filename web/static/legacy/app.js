@@ -2871,6 +2871,20 @@ const yxqApp = createApp({
     const educationOptions = ['大专以下', '大专', '本科', '硕士', '博士'];
     const incomeOptions = ['10W以下', '10W - 20W', '20W - 30W', '30W - 50W', '50W以上', '未填'];
     const showFilter = ref(false);
+    // 省份展示顺序：按公开资料估算的天主教徒规模排序；广东按 PM 要求置顶。
+    // 河北约 100 万（河北省民族宗教事务厅/维基），福建、浙江为沿海传统重点，
+    // 山西、陕西、内蒙古、四川、上海为历史上天主教较集中的地区；港澳台统计
+    // 口径与大陆不同且不是主要用户来源，排在末尾。
+    const FILTER_PROVINCE_ORDER = [
+      '44', '13', '35', '33', '14', '61', '31', '15', '51', '32',
+      '37', '41', '42', '43', '11', '12', '21', '22', '23', '53',
+      '52', '45', '50', '34', '36', '62', '64', '46', '65', '63',
+      '54', '81', '82', '71'
+    ];
+    const filterProvinces = computed(() => {
+      const order = new Map(FILTER_PROVINCE_ORDER.map((code, i) => [code, i]));
+      return [...regionProvinces.value].sort((a, b) => (order.get(a.code) ?? 999) - (order.get(b.code) ?? 999));
+    });
     const slideDir = ref('');
     const hasActiveFilter = computed(() => {
       const f = filter.value;
@@ -7624,6 +7638,7 @@ const yxqApp = createApp({
       showSwipeGuide, closeSwipeGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
       filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,
+      filterProvinces,
       showIdInvalidDialog, idInvalidCountdown, goIdInvalidNow, guardTabChange,
       showRegionInvalidDialog, regionInvalidCountdown, goRegionInvalidNow,
       regionProvinces, regionCities, regionAreas, onRegionProvince, onRegionCity, onRegionArea,
