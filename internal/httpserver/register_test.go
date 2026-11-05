@@ -428,7 +428,7 @@ func TestRegisterCopyCatalogIsASCII(t *testing.T) {
 		t.Fatalf("suspiciously small catalog: text=%d options=%d values=%d",
 			len(catalog.Text), len(catalog.Options), len(catalog.Values))
 	}
-	if got := catalog.Text["field.house_note_have.label"]; got != "房产补充（有房）" {
+	if got := catalog.Text["field.house_note_have.label"]; got != "房产补充说明" {
 		t.Fatalf("house note label = %q", got)
 	}
 	if got := catalog.Text["field.id_card.label"]; got != "身份证号码" {

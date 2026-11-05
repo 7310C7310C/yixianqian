@@ -469,11 +469,11 @@ func buildProfileEditView(p db.Profile) profileEditView {
 		text("position", "职位", p.Position),
 		{Name: "income", Label: "年收入", Type: "select", Value: p.Income, Options: profileSelectOptions(p.Income, db.ProfileIncomeOptions)},
 		{Name: "house", Label: "房产状况", Type: "select", Value: p.House, Options: profileSelectOptions(p.House, db.ProfileYesNoOptions)},
-		text("house_note_have", "房产补充（有房，公开）", p.HouseNoteHave),
-		text("house_note_none", "房产补充（无房，公开）", p.HouseNoteNone),
+		text("house_note_have", "房产补充说明", p.HouseNoteHave),
+		text("house_note_none", "房产补充说明", p.HouseNoteNone),
 		{Name: "driving", Label: "汽车", Type: "select", Value: p.Driving, Options: profileSelectOptions(p.Driving, db.ProfileYesNoOptions)},
-		text("driving_note_have", "车辆补充（有车，公开）", p.DrivingNoteHave),
-		text("driving_note_none", "车辆补充（无车，公开）", p.DrivingNoteNone),
+		text("driving_note_have", "车辆补充说明", p.DrivingNoteHave),
+		text("driving_note_none", "车辆补充说明", p.DrivingNoteNone),
 	}
 	about := []profileEditField{
 		{Name: "personality", Label: "我是怎样的人", Type: "textarea", Value: p.Personality, Rows: 4, Placeholder: "介绍一下自己"},
