@@ -57,8 +57,8 @@ import (
 // 113 switched them from grayscale to muted color after PM feedback.
 // 114 gave the 「已结束」 tag a neutral dark background; 115 softened it to a muted rose
 // chip; 116 uses a red-family chip with white text after PM feedback on the light theme.
-// 125 guards the touch-opened photo viewer against compatibility mouse events.
-const assetVersion = "125"
+// 127 disables two-photo viewer arrows at boundaries so no step is instant.
+const assetVersion = "127"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

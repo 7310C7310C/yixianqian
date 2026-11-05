@@ -3633,8 +3633,11 @@ const yxqApp = createApp({
       if (!viewerLightbox || viewerLightbox.pswp !== pswp) return;
       if (pswp.opener && !pswp.opener.isOpen) return;
       const n = pswp.getNumItems();
-      if (n < 2) return;
-      pswp.goTo((pswp.currIndex + dir + n) % n);
+      if (n < 2 || pswp.mainScroll.isShifted()) return;
+      // 两张图时 PhotoSwipe 不启用循环；首尾直接停住（与触摸滑动一致），避免瞬切。
+      if (n === 2 && (pswp.currIndex + dir < 0 || pswp.currIndex + dir >= n)) return;
+      // 和触摸滑动共用 PhotoSwipe 的 mainScroll 弹簧动画；goTo 是瞬切，不能用。
+      pswp.mainScroll.moveIndexBy(dir, true);
     }
     function viewerInjectArrows(pswp) {
       if (!pswp || !pswp.scrollWrap) return;
@@ -3658,6 +3661,15 @@ const yxqApp = createApp({
         });
         pswp.scrollWrap.appendChild(btn);
       });
+      const prevBtn = pswp.scrollWrap.querySelector('.yxq-viewer-arrow--prev');
+      const nextBtn = pswp.scrollWrap.querySelector('.yxq-viewer-arrow--next');
+      const syncArrows = function () {
+        const n = pswp.getNumItems();
+        if (prevBtn) prevBtn.disabled = n === 2 && pswp.currIndex <= 0;
+        if (nextBtn) nextBtn.disabled = n === 2 && pswp.currIndex >= n - 1;
+      };
+      pswp.on('change', syncArrows);
+      syncArrows();
     }
     // 卡片页空闲时预加载 PhotoSwipe 资源：首次点大图不再等 JS/CSS 下载。
     function prefetchPhotoSwipe() {

@@ -92,7 +92,7 @@ sources: []
 - 不要做：不绕过 epoch；不把错误写进缓存；不恢复 SSE 轮询；多实例前先做 epoch pub/sub 与共享 fan-out。验证：`TestReadCache*`、`TestIntegrationLegacyHomeCardsReadCache`、`make perf-bench`、`tools/perf/check_nginx_guard.py`。
 
 ### 4.3 SPA 历史栈与前端不变量
-- 决策：顶层 SPA 默认虚拟历史栈（`pushHistory`/`hist.replace`/`handleBack`），`native_admin` 与 `?history=legacy` 例外；照片变更同步本人卡/牌堆；门禁返回栈保留父级 tab；大图 viewer 用 `photos_meta` 定框、缩图先显原图后升；**大图打开（含打开中遮罩）时方向键只翻图，不切底层卡片**；卡面照片滑动后快速轻点也必须立即打开大图（触摸 touchend 直接打开，兼容 mouse click 只吞一次）；签到/匹配入口见 §2.3；详细规则在 `web/AGENTS.md`。
+- 决策：顶层 SPA 默认虚拟历史栈（`pushHistory`/`hist.replace`/`handleBack`），`native_admin` 与 `?history=legacy` 例外；照片变更同步本人卡/牌堆；门禁返回栈保留父级 tab；大图 viewer 用 `photos_meta` 定框、缩图先显原图后升；**大图打开（含打开中遮罩）时方向键只翻图，不切底层卡片**；卡面照片滑动后快速轻点也必须立即打开大图（触摸 touchend 直接打开，兼容 mouse click 只吞一次）；卡面资料/留言切换有过渡、留言加载显示骨架、大图虚拟箭头与触摸滑动同动画（两张图时首尾箭头禁用，与触摸滑动一致，避免瞬切），我的页匿名/实名额度文案同换行；签到/匹配入口见 §2.3；详细规则在 `web/AGENTS.md`。
 - 不要做：不直接调用 `window.history.*`；不删启动哨兵；不改 `native_admin` 历史语义。验证：`no_history_smoke.py`、`spa_user_fixes_smoke.py`、`TestIntegrationLegacyHomeSelfCard`。
 
 ### 4.4 首屏交接与启动预取

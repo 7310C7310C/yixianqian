@@ -174,7 +174,8 @@
   .like-stat { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; padding: 0 4px; text-align: center; }
   .like-stat + .like-stat { border-left: 1px solid #f2f3f5; }
   .like-stat-label { font-size: 12px; line-height: 1.45; color: #969799; white-space: nowrap; }
-  .like-stat-line { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 4px; margin-top: 3px; font-size: 14px; line-height: 1.35; }
+  .like-stat-line { display: flex; flex-wrap: nowrap; justify-content: center; align-items: baseline; gap: 0 3px; margin-top: 3px; font-size: 13px; line-height: 1.35; }
+  @media (max-width: 340px) { .like-stat-line { flex-direction: column; gap: 1px 0; } }
   .like-stat-pair { white-space: nowrap; }
   .like-stat-line b { color: #ff6b81; font-weight: 700; }
   .like-stat-total { color: #969799; font-size: 12px; }
@@ -395,6 +396,7 @@
   }
   .pswp .yxq-viewer-arrow:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   .pswp .yxq-viewer-arrow:active { background: rgba(0, 0, 0, 0.65); }
+  .pswp .yxq-viewer-arrow:disabled { opacity: 0.3; pointer-events: none; }
   .pswp--one-slide .yxq-viewer-arrow { display: none; }
   /* 全屏图片保持 pointer-events:none：拦截长按保存菜单；单击关闭由 .pswp__zoom-wrap/.pswp__item 承接（见 bg/tap 配置） */
   .pswp img, .pswp__img { pointer-events: none !important; -webkit-touch-callout: none !important; }
@@ -1078,6 +1080,10 @@
   .card-info, .msg-list, .gs-tray-list, .redeem-list, .redeem-form,
   .picker-options, .multi-options, .wish-target-list, .pa-detail,
   .admin-help-list, .embed-loading { overscroll-behavior: contain; }
+  .card-tab-transition-enter-active { transition: opacity 0.16s ease, transform 0.16s ease; will-change: opacity, transform; }
+  .card-tab-transition-leave-active { transition: opacity 0.12s ease, transform 0.12s ease; will-change: opacity, transform; }
+  .card-tab-transition-enter-from { opacity: 0; transform: translateY(6px); }
+  .card-tab-transition-leave-to { opacity: 0; transform: translateY(-4px); }
   .tab-transition-enter-active { transition: opacity 0.10s ease, transform 0.10s cubic-bezier(0.32,0.72,0,1); will-change: opacity, transform; }
   .tab-transition-leave-active { transition: opacity 0.08s ease, transform 0.08s ease; will-change: opacity, transform; }
   .tab-transition-enter-from { opacity: 0; transform: translateY(6px); }

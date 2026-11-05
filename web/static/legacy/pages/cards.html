@@ -64,7 +64,8 @@
         <div class="card-tab" :class="{active: cardTab==='messages'}" @click="openMessageTab">留言<span v-if="currentMsgCount > 0" class="msg-count-badge">{{ currentMsgCount }}</span></div>
       </div>
       <div class="card-info">
-        <template v-if="cardTab==='profile'">
+        <Transition name="card-tab-transition" mode="out-in">
+        <div v-if="cardTab==='profile'" key="profile">
           <template v-if="currentCard.display_fields && currentCard.display_fields.sections">
             <div class="card-section" v-for="(sec, si) in currentCard.display_fields.sections" :key="si">
               <div class="profile-section-title"><span class="ps-icon">{{ sec.icon }}</span>{{ sec.title }}</div>
@@ -77,9 +78,11 @@
               </div>
             </div>
           </template>
-        </template>
-        <div v-else class="message-panel">
-          <div v-if="msgLoading" class="msg-tip" aria-label="正在加载"></div>
+        </div>
+        <div v-else key="messages" class="message-panel">
+          <div v-if="msgLoading" class="msg-skeleton" aria-busy="true">
+            <div class="msg-skeleton-row" v-for="i in 3" :key="i"></div>
+          </div>
           <div v-else-if="!threadedMessages.length" class="msg-tip">还没有留言，快来抢沙发～</div>
           <div v-else class="msg-list">
             <div v-for="m in threadedMessages" :key="m.id" class="msg-thread">
@@ -128,6 +131,7 @@
             <button class="msg-send" :disabled="!msgText.trim() || msgSending" @click="sendMessage">{{ msgSending ? '发送中…' : '发送' }}</button>
           </div>
         </div>
+        </Transition>
       </div>
     </div>
       </div>
