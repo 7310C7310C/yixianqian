@@ -262,7 +262,10 @@ def run_viewport(browser, base_url: str, cookie: str, width: int, height: int,
             tabbarHeight: tab ? tab.getBoundingClientRect().height : null,
           };
         }""")
-        if hero.get("objectPosition") and detail["objectPosition"]:
+        # hero 在 mount 即交接后，慢网下首图可能还没 load/decode（ready=false）；
+        # 此时 hero 从未显示过带裁切的图，不存在「hero 裁切 → 真实卡」跳变，
+        # 只对真正显示过首图的 hero 断言裁切一致。
+        if hero.get("ready") and hero.get("objectPosition") and detail["objectPosition"]:
             # 真实卡可能按人脸写 object-position；hero 默认/复制值必须一致。
             if hero["objectPosition"] != detail["objectPosition"]:
                 raise SmokeFailure(
