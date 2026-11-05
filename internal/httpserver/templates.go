@@ -57,8 +57,8 @@ import (
 // 113 switched them from grayscale to muted color after PM feedback.
 // 114 gave the 「已结束」 tag a neutral dark background; 115 softened it to a muted rose
 // chip; 116 uses a red-family chip with white text after PM feedback on the light theme.
-// 129 fixes the card-switch reset to use the rightward tab transition.
-const assetVersion = "129"
+// 131 gives message report notifications their own icon.
+const assetVersion = "131"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

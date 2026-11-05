@@ -874,10 +874,14 @@ func (a *App) handleLegacySuggestion(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(author) == "" {
 		author = user.Name
 	}
-	if err := a.db.CreateSuggestion(r.Context(), user.ID, author, req.Type, req.Content); err != nil {
+	suggestionID, err := a.db.CreateSuggestion(r.Context(), user.ID, author, req.Type, req.Content)
+	if err != nil {
 		legacyServerError(a, w, r, err, "legacy suggestion create failed")
 		return
 	}
+	a.notifyAdmins(r, "content.moderate", "suggestion", "收到新的"+req.Type,
+		fmt.Sprintf("%s：%s", author, truncateRunes(req.Content, 200)),
+		"/admin/suggestions?status=pending", fmt.Sprintf("suggestion:%d", suggestionID))
 	a.audit(r, &user.ID, "suggestion.created", "suggestion", "", map[string]any{
 		"type": req.Type, "source": "legacy",
 	})
@@ -929,10 +933,14 @@ func (a *App) handleLegacyFeedback(w http.ResponseWriter, r *http.Request) {
 		label = label + "（" + id + "）"
 	}
 	content := "目标 " + label + "；" + legacyClipText(req.Reason, 500)
-	if err := a.db.CreateSuggestion(r.Context(), user.ID, user.Name, "卡片反馈", content); err != nil {
+	suggestionID, err := a.db.CreateSuggestion(r.Context(), user.ID, user.Name, "卡片反馈", content)
+	if err != nil {
 		legacyServerError(a, w, r, err, "legacy feedback create failed")
 		return
 	}
+	a.notifyAdmins(r, "content.moderate", "suggestion", "收到新的卡片反馈",
+		fmt.Sprintf("%s：%s", user.Name, truncateRunes(content, 200)),
+		"/admin/suggestions?status=pending", fmt.Sprintf("suggestion:%d", suggestionID))
 	a.audit(r, &user.ID, "feedback.created", "suggestion", "", map[string]any{
 		"target_open_id": req.TargetOpenID, "source": "legacy",
 	})

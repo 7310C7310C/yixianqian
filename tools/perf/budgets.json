@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "verified_at": "2026-11-05",
+  "verified_at": "2026-11-06",
   "margin_percent": 10,
-  "baseline_ref": "origin/main@748c712; app_min baseline 49,170; budget 54,087; 变更历史见 notes",
+  "baseline_ref": "origin/main@748c712; app_min baseline 49,260; budget 54,186; 变更历史见 notes",
   "notes": [
     "2026-11-04：日/夜模式切换过渡动画，app.min 基线 48610→48622、budget 53471→53485（实测 53484B）。",
     "所有值都是 gzip 字节；shell = 静态壳（index.html + 内联 critical CSS，gzip level 6）+ bootstrap_allowance_bytes。",
@@ -19,7 +19,8 @@
     "2026-11-05：照片滑动后快速轻点打开大图 + 兼容 mouse 事件守卫，app.min 实测 53,965B；基线 49,060→49,080、budget 53,966→53,988。",
     "2026-11-06：卡片资料/留言过渡、留言骨架、额度对齐、查看器箭头动画；app.min 实测 54,005B，baseline 49,080→49,110、budget 53,988→54,021；critical CSS 实测 8,415B，baseline 7,641→7,655、budget 8,406→8,421。",
     "2026-11-06：两张图查看器首尾禁用左右箭头（避免瞬切），app.min 实测 54,071B；基线 49,110→49,170、budget 54,021→54,087。",
-    "2026-11-06：卡面资料/留言改左右滑动过渡，critical CSS 实测 8,424B；baseline 7,655→7,660、budget 8,421→8,426。"
+    "2026-11-06：卡面资料/留言改左右滑动过渡，critical CSS 实测 8,424B；baseline 7,655→7,660、budget 8,421→8,426。",
+    "2026-11-06：管理员待办通知与点击跳转队列，app.min 实测 54,170B；基线 49,170→49,260、budget 54,087→54,186。"
   ],
   "limits": {
     "shell_gzip": {
@@ -29,8 +30,8 @@
     },
     "app_min_gzip": {
       "label": "app.min.js",
-      "baseline_bytes": 49170,
-      "budget_bytes": 54087
+      "baseline_bytes": 49260,
+      "budget_bytes": 54186
     },
     "initial_render_gzip": {
       "label": "app.render.js（根 + cards）",

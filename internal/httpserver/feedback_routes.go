@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -42,10 +43,14 @@ func (a *App) handleFeedbackSubmit(w http.ResponseWriter, r *http.Request) {
 	} else {
 		content = reason + "：" + content
 	}
-	if err := a.db.CreateSuggestion(r.Context(), user.ID, user.Name, kind, content); err != nil {
+	if suggestionID, err := a.db.CreateSuggestion(r.Context(), user.ID, user.Name, kind, content); err != nil {
 		a.logger(r).Error("create suggestion failed", "error", err, "user_id", user.ID)
 		a.renderError(w, r, http.StatusInternalServerError, "暂时无法提交", "请稍后再试。")
 		return
+	} else {
+		a.notifyAdmins(r, "content.moderate", "suggestion", "收到新的"+kind,
+			fmt.Sprintf("%s：%s", user.Name, truncateRunes(content, 200)),
+			"/admin/suggestions?status=pending", fmt.Sprintf("suggestion:%d", suggestionID))
 	}
 	back := "/?feedback=1"
 	if r.PostFormValue("from") == "cards" {

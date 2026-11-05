@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -271,6 +272,11 @@ func (a *App) handleAPIPointsRedeem(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writePointsAPIError(w, err)
 		return
+	}
+	if order.Item != db.RedeemItemRealLike {
+		a.notifyAdmins(r, "points.adjust", "redemption", "收到新的兑换申请",
+			fmt.Sprintf("%s 兑换了「%s」", viewer.Name, order.ItemLabel),
+			"/admin/points?tab=redemptions", fmt.Sprintf("redemption:%d", order.ID))
 	}
 	balance, err := a.db.PointsBalance(r.Context(), viewer.ID)
 	if err != nil {

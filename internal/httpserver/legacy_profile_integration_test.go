@@ -543,3 +543,46 @@ func TestIntegrationSharedMediaDeleteKeepsObjects(t *testing.T) {
 		t.Fatalf("media rows = %d, want 1", mediaRows)
 	}
 }
+
+// TestIntegrationSuggestionNotifiesModerators verifies that member feedback
+// and card feedback (both stored in suggestions) also land in the moderator's
+// activity feed, not only in the admin queue.
+func TestIntegrationSuggestionNotifiesModerators(t *testing.T) {
+	env := setupProfileHTTPEnv(t)
+	owner, ownerClient := env.createUser(t, "U-NOTIFYSUG", "反馈用户", "active", "user")
+	moderator, _ := env.createUser(t, "U-NOTIFYMOD", "内容管理员", "active", "user")
+	cleanupHTTPUsers(t, env, owner.ID, moderator.ID)
+	if _, err := env.database.AssignAdminRole(env.ctx, moderator.ID, "content_moderator", true); err != nil {
+		t.Fatalf("assign content moderator: %v", err)
+	}
+	csrf := ownerClient.csrfCookie()
+	resp := profileJSONRequest(t, ownerClient, http.MethodPost, "/legacy/api/suggestions", csrf,
+		map[string]any{"type": "功能建议", "content": "希望管理员动态里能收到反馈"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("suggestion status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	resp = profileJSONRequest(t, ownerClient, http.MethodPost, "/legacy/api/feedback", csrf,
+		map[string]any{"target_openid": *moderator.LegacyUserID, "reason": "资料有误"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("feedback status = %d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	var count int
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT count(*) FROM notifications WHERE user_id = $1 AND kind = 'suggestion'`,
+		moderator.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("moderator suggestion notifications = %d, want 2", count)
+	}
+	var badLink int
+	if err := env.pool.QueryRow(env.ctx,
+		`SELECT count(*) FROM notifications
+		  WHERE user_id = $1 AND kind = 'suggestion' AND link <> '/admin/suggestions?status=pending'`,
+		moderator.ID).Scan(&badLink); err != nil {
+		t.Fatal(err)
+	}
+	if badLink != 0 {
+		t.Fatalf("suggestion notifications with wrong link = %d", badLink)
+	}
+}

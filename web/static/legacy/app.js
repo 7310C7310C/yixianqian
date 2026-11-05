@@ -6163,9 +6163,13 @@ const yxqApp = createApp({
     function notificationIcon(n) {
       const k = (n && n.kind) || '';
       if (k.indexOf('broadcast') >= 0) return '📣';
+      if (k === 'message_report') return '🚩';
       if (k.indexOf('message') === 0) return '💬';
       if (k.indexOf('like') === 0 || k === 'mutual' || k === 'wechat_exchange') return '💕';
       if (k === 'points') return '🌾';
+      if (k === 'review') return '🛡️';
+      if (k === 'suggestion' || k === 'feedback') return '📝';
+      if (k === 'redemption') return '🎁';
       return '🔔';
     }
     function notificationImage(n) {
@@ -6207,13 +6211,31 @@ const yxqApp = createApp({
         if (n.activity_id) openActivity(n.activity_id);
         return;
       }
+      function openAdminQueue(path, title) {
+        openEmbed(path + (path.indexOf('?') >= 0 ? '&' : '?') + 'embed=1', title);
+      }
       if (kind === 'review') {
-        user.value && user.value.is_admin ? openAdminConsole() : openProfileDetail();
+        if (user.value && user.value.can_admin && (n.link || '').indexOf('/admin/') === 0) {
+          openAdminQueue(n.link, '用户审核');
+        } else {
+          user.value && user.value.is_admin ? openAdminConsole() : openProfileDetail();
+        }
         return;
       }
       if (kind === 'points') { openPoints(); return; }
       if (kind === 'security') { openPasswordPage(); return; }
-      if (kind === 'message_report') { if (user.value && user.value.can_admin) openAdminConsole(); return; }
+      if (kind === 'message_report') {
+        if (user.value && user.value.can_admin) openAdminQueue('/admin/reports?status=pending', '举报处理');
+        return;
+      }
+      if (kind === 'suggestion' || kind === 'feedback') {
+        if (user.value && user.value.can_admin) openAdminQueue('/admin/suggestions?status=pending', '意见反馈');
+        return;
+      }
+      if (kind === 'redemption') {
+        if (user.value && user.value.can_admin) openAdminQueue('/admin/points?tab=redemptions', '兑换处理');
+        return;
+      }
       if (kind === 'admin_broadcast') {
         if (notificationImage(n)) viewNotificationImage(n);
         return;
