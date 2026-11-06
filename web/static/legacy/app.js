@@ -795,16 +795,18 @@ const yxqApp = createApp({
     let overviewSeq = 0;         // 全览请求序号：reset 打断在途加载更多
     let ovGesture = null;        // 网格 tile 手势
     let ovSwallowClick = false;  // 只吞掉滑动本身产生的 click（下一次手势开始即清）
-    let ovClickGuardUntil = 0;   // touchend 直接开卡后，吃掉浏览器补发的 click（避免误关新浮层）
+    let ovClickGuardPending = false;   // touchend 直接开卡后的一次性 click 保护（只吞补发的第一下）
+    let ovClickGuardTimer = 0;
     const ovPullHint = ref('');  // 全览顶部/底部继续滑动的提示
     let ovPull = null;
     // touchend 直接开卡后浏览器可能补发 click（落到新浮层上会误关）：短暂吃掉。
     try {
       document.addEventListener('click', function(e){
-        if (Date.now() < ovClickGuardUntil) {
-          e.stopPropagation();
-          if (e.cancelable) e.preventDefault();
-        }
+        if (!ovClickGuardPending) return;
+        ovClickGuardPending = false;
+        if (ovClickGuardTimer) { clearTimeout(ovClickGuardTimer); ovClickGuardTimer = 0; }
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
       }, true);
     } catch (e) {}
     let ovPhotoGesture = null;   // 浮层卡面手势
@@ -3225,10 +3227,15 @@ const yxqApp = createApp({
       }
       // 轻点：直接在 touchend/mouseup 开卡，不依赖浏览器是否补发 click（滑完立刻点也能开）。
       if (isTouch && Date.now() - g.t > 700) return;   // 长按不当作点击
-      ovClickGuardUntil = Date.now() + 350;
+      armOvClickGuard();
       openOverviewCard(item);
     }
     function ovGestureCancel() { ovGesture = null; }
+    function armOvClickGuard() {
+      ovClickGuardPending = true;
+      if (ovClickGuardTimer) clearTimeout(ovClickGuardTimer);
+      ovClickGuardTimer = setTimeout(() => { ovClickGuardPending = false; ovClickGuardTimer = 0; }, 350);
+    }
     function onOverviewTileClick(item) {
       // 只吞滑动本身的那次 click；用户滑完立刻再点（新手势已清标记）必须马上打开。
       if (ovSwallowClick) { ovSwallowClick = false; return; }
