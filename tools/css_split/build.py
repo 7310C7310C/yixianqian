@@ -98,8 +98,15 @@ def selector_of(block: str) -> str:
     return " ".join(head.split())
 
 
+# 明确不属于首屏的整块样式：即使选择器以 `.van-theme-dark` 这类宽前缀开头也不进
+# critical。全览子页只在进入后需要，完整 app.css 会异步到达。
+SKIP_MARKERS = (".cards-overview-page", ".ov-")
+
+
 def is_critical(selector: str) -> bool:
     if not selector:
+        return False
+    if any(marker in selector for marker in SKIP_MARKERS):
         return False
     for part in selector.split(","):
         part = part.strip()

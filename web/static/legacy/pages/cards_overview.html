@@ -1,0 +1,57 @@
+<div key="cards_overview" class="cards-overview-page">
+  <div class="ov-head">
+    <button type="button" class="ov-back" aria-label="返回牵线" @click="handleBack">
+      <van-icon name="arrow-left"></van-icon>
+    </button>
+    <div class="ov-head-main">
+      <div class="ov-title">全览</div>
+      <div class="ov-sub">最新加入在前<span v-if="overviewTotal"> · 共 {{ overviewTotal }} 位</span></div>
+    </div>
+    <button type="button" class="ov-refresh" aria-label="刷新全览" @click="reloadCardsOverview">
+      <van-icon name="replay" :class="{ 'ov-spin': overviewLoading }"></van-icon>
+    </button>
+  </div>
+  <div v-if="hasActiveFilter" class="ov-filter-note">全览展示全部会员，不受牵线筛选影响</div>
+  <div class="cards-overview-scroll" @scroll.passive="onOverviewScroll">
+    <div v-if="overviewError && !overviewItems.length" class="ov-state">
+      <div class="ov-state-icon">😕</div>
+      <div class="ov-state-text">{{ overviewError }}</div>
+      <button type="button" class="ov-retry" @click="reloadCardsOverview">重新加载</button>
+    </div>
+    <template v-else>
+      <div v-if="overviewLoading && !overviewItems.length" class="ov-grid" aria-hidden="true">
+        <div v-for="n in 6" :key="'ov-sk-' + n" class="ov-tile ov-skel">
+          <div class="ov-skel-photo"></div>
+          <div class="ov-skel-line"></div>
+        </div>
+      </div>
+      <div v-else-if="!overviewItems.length" class="ov-state">
+        <div class="ov-state-icon">🌱</div>
+        <div class="ov-state-text">还没有可展示的会员</div>
+      </div>
+      <template v-else>
+        <div class="ov-grid">
+          <button type="button" v-for="(it, i) in overviewItems" :key="it.openid" class="ov-tile"
+            :data-uid="it.user_id" :aria-label="'查看' + it.nickname + '的资料'" @click="openOverviewUser(it)">
+            <img class="ov-photo" :src="it.photo" alt="" :loading="i < 6 ? 'eager' : 'lazy'" decoding="async"
+              :fetchpriority="i < 2 ? 'high' : 'auto'">
+            <span v-if="it.is_new" class="ov-badge ov-badge-new">新</span>
+            <span v-if="it.recommended" class="ov-badge ov-badge-rec">推荐</span>
+            <span v-if="it.liked" class="ov-liked" aria-label="已喜欢">♥</span>
+            <span class="ov-shade"></span>
+            <span class="ov-info">
+              <span class="ov-name">{{ it.nickname }}<span class="ov-gender">{{ it.gender === '男性' ? '♂' : '♀' }}</span></span>
+              <span class="ov-meta">{{ overviewMeta(it) }}</span>
+            </span>
+          </button>
+        </div>
+        <div class="ov-foot">
+          <span v-if="overviewLoading">加载中…</span>
+          <span v-else-if="overviewError">加载失败，<button type="button" class="ov-foot-retry" @click="retryOverviewMore">重试</button></span>
+          <span v-else-if="overviewHasMore">上滑加载更多</span>
+          <span v-else>已经到底啦 · 共 {{ overviewTotal }} 位</span>
+        </div>
+      </template>
+    </template>
+  </div>
+</div>

@@ -178,5 +178,14 @@ func (a *App) grantCardOwners(viewerID int64, cards []CardView) {
 			owners = append(owners, card.ID)
 		}
 	}
+	a.grantPhotoOwners(viewerID, owners)
+}
+
+// grantPhotoOwners registers a short-lived photo grant for the owners of the
+// returned cards. Anything that hands out /cards/photo/{id} URLs must call it.
+func (a *App) grantPhotoOwners(viewerID int64, owners []int64) {
+	if a.photoGrants == nil || viewerID <= 0 || len(owners) == 0 {
+		return
+	}
 	a.photoGrants.Grant(viewerID, owners)
 }

@@ -22,6 +22,7 @@ func init() { registerModule(registerLegacyAPI) }
 func registerLegacyAPI(a *App, mux *http.ServeMux) {
 	mux.HandleFunc("GET /legacy/api/home", a.handleLegacyHome)
 	mux.HandleFunc("GET /legacy/api/cards", a.handleLegacyCards)
+	mux.HandleFunc("GET /legacy/api/cards/overview", a.handleLegacyCardsOverview)
 	mux.HandleFunc("GET /legacy/api/profile", a.handleLegacyProfile)
 	mux.HandleFunc("GET /legacy/api/user/me", a.handleLegacyUserMe)
 	mux.HandleFunc("GET /legacy/api/likes/me", a.handleLegacyLikesMe)

@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-05
+last_verified: 2026-11-06
 sources:
   - Makefile
   - .github/workflows/**

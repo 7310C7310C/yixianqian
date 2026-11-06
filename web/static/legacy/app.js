@@ -123,7 +123,7 @@ const GaLoading = {
 };
 
 // ===== 页面 chunk（批次6）=====
-// 24 个 tab/子页的 render function 拆成 6 个 chunk：cards 在 app.render.js 里，
+// 25 个 tab/子页的 render function 拆成 6 个 chunk：cards 在 app.render.js 里，
 // 其余按页面分组懒加载；加载失败显示可见错误页（不白屏）。
 var YXQ_PAGE_GROUPS = {
   cards: null,
@@ -133,6 +133,7 @@ var YXQ_PAGE_GROUPS = {
   profile: 'profile', password: 'profile', profile_detail: 'profile',
   profile_edit: 'profile', points: 'profile',
   user_detail: 'detail',
+  cards_overview: 'detail',
   group_admin: 'group', group_detail: 'group', group_roster: 'group',
   checkin: 'group', group_select: 'group', group_result: 'group',
   onetoone_result: 'group', activity_detail: 'group', points_admin: 'group'
@@ -578,7 +579,7 @@ const yxqApp = createApp({
       return '⚠️';
     });
     function retryGate() { retryBoot(); }   // 原地重试，不整页刷新
-    const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_activities','my_groups','user_detail','like_inbox','message_inbox','points','points_admin','group_admin','group_detail','group_roster','checkin','password','message_thread'];
+    const subPages = ['activity_detail','group_select','group_result','onetoone_result','profile_detail','my_activities','my_groups','user_detail','like_inbox','message_inbox','points','points_admin','group_admin','group_detail','group_roster','checkin','password','message_thread','cards_overview'];
     // 修改密码：App 内子页。不在 URL/hash 留状态，返回用 history 落在 profile。
     const passwordForm = ref({ current: '', password: '', confirm: '' });
     const passwordErrors = ref({ current: '', password: '', confirm: '' });
@@ -752,6 +753,19 @@ const yxqApp = createApp({
     // /legacy/api/home 会在无筛选时把本人卡置顶，而 /legacy/api/cards 不返回本人卡。
     // 清除筛选后重载走 cards，必须把 home 缓存下来的本人卡放回首位，并保持分页全序一致。
     const selfCard = ref(null);
+
+    // ===== 全览模式（牵线 tab 再点一次进入）=====
+    // 独立子页：按注册时间倒序（后端 u.id DESC），滚动分页；点卡片走 user_detail，
+    // 返回时保留列表与滚动位置（overviewReturnPending）。
+    const overviewItems = ref([]);
+    const overviewTotal = ref(0);
+    const overviewLoading = ref(false);
+    const overviewHasMore = ref(true);
+    const overviewError = ref('');
+    const OVERVIEW_PAGE_SIZE = 30;
+    let overviewReturnPending = false;   // 从他人资料返回：保留列表，只恢复滚动
+    let overviewScrollTop = 0;           // 离开全览（进他人资料）时的滚动位置
+    let cardsTabWasActive = false;       // 手势按下时牵线 tab 是否已激活
 
     // ===== 客户端重载/恢复痕迹（只观测，不改变业务行为）=====
     // boot 必须在页面初始化时先快照：随后 loadHome 会把 cardIndex 归零，再读 localStorage
@@ -3066,6 +3080,104 @@ const yxqApp = createApp({
       }
       catch(e) { vant.showToast(e.message); }
       loadingCards.value = false;
+    }
+    // ===== 全览模式 =====
+    function overviewMeta(item) {
+      if (!item) return '';
+      const parts = [];
+      if (item.age) parts.push(item.age + '岁');
+      if (item.height) parts.push(item.height + 'cm');
+      if (item.city) parts.push(item.city);
+      return parts.join(' · ');
+    }
+    async function loadCardsOverview(reset) {
+      if (overviewLoading.value) return;
+      overviewLoading.value = true;
+      if (reset) {
+        overviewItems.value = [];
+        overviewTotal.value = 0;
+        overviewHasMore.value = true;
+        overviewError.value = '';
+      }
+      const offset = reset ? 0 : overviewItems.value.length;
+      try {
+        const data = await api('/api/cards/overview?offset=' + offset + '&limit=' + OVERVIEW_PAGE_SIZE);
+        const incoming = (data && data.items) || [];
+        if (reset) {
+          overviewItems.value = incoming;
+        } else {
+          const seen = new Set(overviewItems.value.map((x) => x.openid));
+          overviewItems.value = overviewItems.value.concat(incoming.filter((x) => !seen.has(x.openid)));
+        }
+        // 空页时后端拿不到 count；保留上一次总数，避免底部文案闪成 0。
+        if (data && typeof data.total === 'number' && (reset || incoming.length > 0)) {
+          overviewTotal.value = data.total;
+        }
+        overviewHasMore.value = !!(data && data.has_more) && overviewItems.value.length < overviewTotal.value;
+      } catch(e) {
+        overviewError.value = (e && e.message) || '加载失败，请稍后重试';
+        if (!reset) overviewHasMore.value = false;
+      }
+      overviewLoading.value = false;
+    }
+    function loadMoreOverview() {
+      if (overviewLoading.value || !overviewHasMore.value) return;
+      loadCardsOverview(false);
+    }
+    function retryOverviewMore() {
+      if (overviewLoading.value) return;
+      overviewError.value = '';
+      loadCardsOverview(false);
+    }
+    function reloadCardsOverview() {
+      if (overviewLoading.value) return;
+      overviewScrollTop = 0;
+      loadCardsOverview(true);
+    }
+    function onOverviewScroll(e) {
+      const el = e && e.target;
+      if (!el) return;
+      overviewScrollTop = el.scrollTop || 0;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 360) loadMoreOverview();
+    }
+    function readOverviewScrollTop() {
+      const el = document.querySelector('.cards-overview-scroll');
+      return (el && el.scrollTop) || 0;
+    }
+    function restoreOverviewScroll(y) {
+      if (!y || y <= 0) return;
+      const started = Date.now();
+      const tick = () => {
+        if (page.value !== 'cards_overview') return;
+        const el = document.querySelector('.cards-overview-scroll');
+        // 卡片是固定宽高比，列表高度不依赖图片解码；但仍等元素挂载后再还原。
+        if (el && el.scrollHeight - el.clientHeight >= y - 4) { el.scrollTop = y; return; }
+        if (Date.now() - started < 1200) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+    function openCardsOverview() {
+      if (page.value !== 'cards') return;
+      overviewReturnPending = false;
+      overviewScrollTop = 0;
+      page.value = 'cards_overview';
+    }
+    function markCardsTabPress() {
+      cardsTabWasActive = page.value === 'cards';
+    }
+    function onCardsTabTap() {
+      // Vant 的 tabbar-item 对已激活项不再 setActive，但 click 照常抛出：
+      // 只有「按下时就在牵线」才算再点一次，切 tab 的首次点击只切 tab。
+      const wasActive = cardsTabWasActive;
+      cardsTabWasActive = false;
+      if (!wasActive || page.value !== 'cards') return;
+      openCardsOverview();
+    }
+    function openOverviewUser(item) {
+      if (!item || !item.openid) return;
+      overviewReturnPending = true;
+      overviewScrollTop = readOverviewScrollTop();
+      openUserDetailFromPage(item.openid, 'cards_overview');
     }
     function trimCardsWindow() {
       // 内存上限：窗口最多 150 张；只在本窗口内截头/截尾，绝不引用窗口外页
@@ -5563,6 +5675,7 @@ const yxqApp = createApp({
         'group_result': groupResultFrom.value || 'my_groups',
         'onetoone_result': onetooneResultFrom.value || 'my_activities',
         'user_detail': userDetailFrom.value || 'home',
+        'cards_overview': 'cards',
         'likes': 'cards', 'home': 'cards', 'profile': 'cards'
       };
       if (nativeAdmin.value && TAB_ORDER.includes(parentMap[page.value])) { location.href = '/admin?embed=1'; return; }
@@ -5585,6 +5698,14 @@ const yxqApp = createApp({
       if (p === 'checkin' && gaDetailId.value) loadSigninRoster(true);
       if (p === 'home') loadActivities();
       if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
+      if (p === 'cards_overview') {
+        if (overviewReturnPending) {
+          overviewReturnPending = false;
+          restoreOverviewScroll(overviewScrollTop);
+        } else {
+          loadCardsOverview(true);
+        }
+      }
       if (p === 'likes') loadNotifications();
       if (p === 'like_inbox') {
         if (likeScope.value === 'mine') loadMyLikesList();
@@ -7755,6 +7876,9 @@ const yxqApp = createApp({
       isDetailCheckedIn, detailSigninBlocked, activityDetailLoading,
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
       cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoSrc, photoLoading,
+      overviewItems, overviewTotal, overviewLoading, overviewHasMore, overviewError,
+      overviewMeta, onOverviewScroll, loadMoreOverview, retryOverviewMore, reloadCardsOverview, openOverviewUser, openCardsOverview,
+      markCardsTabPress, onCardsTabTap,
       sharpPhotos, sharpReady, onSharpLoad,
       showSwipeGuide, closeSwipeGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,

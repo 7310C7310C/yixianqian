@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-05
+last_verified: 2026-11-06
 sources: []
 -->
 
@@ -62,6 +62,11 @@ sources: []
 - 决策：牵线筛选只加「现居省份」「家乡省份」两个**省份多选**（不选=不限），不做城市多选/省内城市细化；省份选择器默认折叠且展开/收起箭头随状态切换，触摸滚动到列表边界后继续拖动会接力滚动筛选面板；选项按公开资料估算的天主教徒规模排序（广东置顶，港澳台因统计口径与用户来源排在末尾）；后端把省份 code 展开成该省城市的 canonical/全名/短名集合，用 `u.city = ANY(...)` / `u.native_place = ANY(...)` 匹配，兼容 v1 遗留短名（如「深圳」）与新注册 canonical（「广东深圳」）；两条件 AND，未知 code 忽略。
 - 数据前置：staging 已用 `cmd/regionfix` 把 `city`/`native_place`/`church_location` 全部规范化为数据集合法值；生产迁移时先跑同一工具再开放硬筛。
 - 不要做：不按 `LIKE '广东%'` 直接匹配（会漏 v1 短名）；不做城市多选；不把省份筛选做成排序权重。验证：`TestIntegrationCardsProvinceFilter`、`TestIntegrationCardFiltersByProvinceValues`、`TestCardFilterProvinceExpansion`。
+
+### 2.7 牵线爱心光晕与全览模式
+- 决策：停在「牵线」tab 时底栏爱心持续光晕（CSS 心跳：图标 `yxqHeartBeat` 2.4s + 径向 halo `yxqHeartHalo`，仅 `page==='cards'` 挂 `.tab-heart-live`；`prefers-reduced-motion` 只留静态光晕）。已在牵线时**再点一次** tab 进入全览：独立子页 `cards_overview`（隐藏底栏、页头返回），按注册时间倒序（`u.id DESC`，最新在前），滚动分页 30 条/页；点卡片进既有 `user_detail`，返回保留列表与滚动位置。
+- 全览边界：资格与牌堆完全一致（异性、`account_status=active` 即未脱单、有照片；observer 可看全性别），但**不受牵线筛选影响**（筛选只属于牌堆，页头有提示）；瓦片只给头像/昵称/年龄/身高/城市 + `新`（注册 ≤14 天）/`推荐`（本周推荐集合）/已喜欢 ♥，不展示完整资料与联系方式；接口 `GET /legacy/api/cards/overview` 分页返回并按 viewer 发 15 分钟照片 grant，不接 10s 读缓存。
+- 不要做：不把全览做成第五个 tab 或浮层；不按推荐/随机/在线排序；不在全览里放开筛选；不返回微信号/身份证等敏感字段。验证：`TestBuildCardOverviewItem`、`TestIntegrationCardsOverviewNewestFirst`、`tools/browser/cards_overview_smoke.py`。
 
 ## 3. 架构与交付
 

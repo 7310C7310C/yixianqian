@@ -176,6 +176,7 @@ sources: []
 | GET | `/legacy/api/admin/points/user` | `internal/httpserver/legacy_points_admin_routes.go` |
 | POST | `/legacy/api/auth/claim` | `internal/httpserver/legacy_profile_api.go` |
 | GET | `/legacy/api/cards` | `internal/httpserver/legacy_api.go` |
+| GET | `/legacy/api/cards/overview` | `internal/httpserver/legacy_api.go` |
 | POST | `/legacy/api/client-events` | `internal/httpserver/legacy_api.go` |
 | POST | `/legacy/api/feedback` | `internal/httpserver/legacy_profile_api.go` |
 | GET | `/legacy/api/home` | `internal/httpserver/legacy_api.go` |
@@ -239,9 +240,9 @@ sources: []
 |---|---:|
 | `/admin` | 40 |
 | `/api` | 28 |
-| `/legacy` | 89 |
+| `/legacy` | 90 |
 | 其他 | 25 |
-| **合计** | **182** |
+| **合计** | **183** |
 
 ## 4. 环境变量（key 集合对比）
 

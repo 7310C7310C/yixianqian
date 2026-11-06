@@ -1170,6 +1170,86 @@
     .embed-sk-shimmer { animation: none; }
     .embed-slide-enter-active, .embed-slide-leave-active { transition: none !important; }
   }
+  /* 全览模式：牵线 tab 再点一次进入；按注册时间从新到旧的照片网格 */
+  .cards-overview-page { height: calc(var(--yxq-vh, 100vh) - 60px - env(safe-area-inset-bottom)); display: flex; flex-direction: column; background: #f7f8fa; position: relative; z-index: 1; }
+  .ov-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 6px; padding-top: calc(10px + constant(safe-area-inset-top)); padding-top: calc(10px + env(safe-area-inset-top)); background: #fff; border-bottom: 1px solid #f2f3f5; }
+  .ov-back, .ov-refresh { flex-shrink: 0; width: 42px; height: 42px; border: 0; padding: 0; border-radius: 50%; background: transparent; color: #323233; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .ov-back:active, .ov-refresh:active { background: #f2f3f5; }
+  .ov-refresh { color: #969799; font-size: 18px; }
+  .ov-head-main { flex: 1; min-width: 0; }
+  .ov-title { font-size: 18px; font-weight: 600; color: #323233; line-height: 1.25; }
+  .ov-sub { font-size: 12px; color: #969799; margin-top: 2px; }
+  .ov-filter-note { flex-shrink: 0; padding: 7px 14px; background: #fff7e8; color: #a4620a; font-size: 12px; line-height: 1.4; border-bottom: 1px solid #fdeccd; }
+  .cards-overview-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding: 12px 12px calc(18px + env(safe-area-inset-bottom)); }
+  .ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  @media (min-width: 600px) { .ov-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+  @media (min-width: 960px) { .ov-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .cards-overview-page { max-width: 1180px; margin: 0 auto; } }
+  /* aspect-ratio 在 Safari 14.1（项目最低版本）不支持，先用 padding 撑高，
+     支持后再用 aspect-ratio（子元素全是 absolute，padding 方案不会影响布局）。 */
+  .ov-tile { position: relative; display: block; width: 100%; height: 0; padding: 0 0 133.333%; border: 0; border-radius: 14px; overflow: hidden; background: #eceff3; color: #fff; cursor: pointer; text-align: left; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  @supports (aspect-ratio: 3 / 4) { .ov-tile { height: auto; padding-bottom: 0; aspect-ratio: 3 / 4; } }
+  .ov-tile:active { transform: scale(0.985); }
+  .ov-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ov-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 46%, rgba(0,0,0,0.32) 68%, rgba(0,0,0,0.72) 100%); pointer-events: none; }
+  .ov-info { position: absolute; left: 10px; right: 10px; bottom: 9px; display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
+  .ov-name { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0,0,0,0.45); }
+  .ov-gender { margin-left: 3px; font-size: 12px; opacity: 0.9; }
+  .ov-meta { font-size: 11.5px; color: rgba(255,255,255,0.88); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ov-badge { position: absolute; top: 8px; left: 8px; padding: 2px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; line-height: 1.5; letter-spacing: 0.3px; }
+  .ov-badge-new { background: #ff6b81; color: #fff; box-shadow: 0 2px 8px rgba(255,107,129,0.45); }
+  .ov-badge-rec { left: auto; right: 8px; background: rgba(255,176,32,0.95); color: #fff; }
+  .ov-liked { position: absolute; right: 8px; bottom: 8px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.42); color: #ff8fa0; font-size: 12px; line-height: 22px; text-align: center; }
+  .ov-state { padding: 56px 20px; text-align: center; color: #969799; }
+  .ov-state-icon { font-size: 40px; margin-bottom: 10px; }
+  .ov-state-text { font-size: 14px; line-height: 1.6; }
+  .ov-retry { margin-top: 16px; min-height: 44px; padding: 0 24px; border: 0; border-radius: 22px; background: #ff6b81; color: #fff; font-size: 14px; }
+  .ov-foot { padding: 16px 0 6px; text-align: center; font-size: 12px; color: #969799; }
+  .ov-foot-retry { border: 0; background: transparent; color: #ff6b81; font-size: 12px; padding: 0 4px; }
+  .ov-spin { animation: ov-spin 0.9s linear infinite; }
+  @keyframes ov-spin { to { transform: rotate(360deg); } }
+  .ov-skel { box-shadow: none; }
+  .ov-skel-photo { position: absolute; inset: 0; background: linear-gradient(90deg, #eef0f3 25%, #e3e6ea 37%, #eef0f3 63%); background-size: 400% 100%; animation: ov-shimmer 1.3s ease infinite; }
+  .ov-skel-line { position: absolute; left: 10px; right: 34%; bottom: 12px; height: 12px; border-radius: 6px; background: rgba(255,255,255,0.55); }
+  @keyframes ov-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+  .van-theme-dark .cards-overview-page { background: #111; }
+  .van-theme-dark .ov-head { background: #1c1c1e; border-bottom-color: #2c2c2e; }
+  .van-theme-dark .ov-title, .van-theme-dark .ov-back { color: #f5f5f5; }
+  .van-theme-dark .ov-refresh { color: #a0a0a4; }
+  .van-theme-dark .ov-back:active, .van-theme-dark .ov-refresh:active { background: #2c2c2e; }
+  .van-theme-dark .ov-filter-note { background: #2a2417; color: #e0b060; border-bottom-color: #3a3220; }
+  .van-theme-dark .ov-tile { background: #1f1f22; box-shadow: none; }
+  .van-theme-dark .ov-skel-photo { background-image: linear-gradient(90deg, #2a2a2e 25%, #3a3a3e 37%, #2a2a2e 63%); }
+  .van-theme-dark .ov-skel-line { background: rgba(255,255,255,0.16); }
+  @media (prefers-reduced-motion: reduce) {
+    .ov-skel-photo { animation: none; }
+    .ov-spin { animation: none; }
+  }
+  /* 牵线 tab 爱心光晕：只在该 tab 激活时呼吸，提示「再点一次看全览」 */
+  /* 光晕的包含块必须是图标 wrapper：Vant 的 .van-tabbar-item__icon 是 static，
+     不补 relative 会以整条 fixed 底栏为包含块（光晕跑到中间 tab）。 */
+  .van-tabbar-item.tab-heart-live .van-tabbar-item__icon { position: relative; }
+  .van-tabbar-item.tab-heart-live .van-tabbar-item__icon::before {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,107,129,0.34) 0%, rgba(255,107,129,0.16) 48%, rgba(255,107,129,0) 72%);
+    pointer-events: none; will-change: transform, opacity; animation: yxqHeartHalo 2.4s ease-in-out infinite;
+  }
+  .van-tabbar-item.tab-heart-live .van-tabbar-item__icon .van-icon { position: relative; animation: yxqHeartBeat 2.4s ease-in-out infinite; }
+  @keyframes yxqHeartBeat {
+    0%, 30%, 62%, 100% { transform: scale(1); text-shadow: 0 0 0 rgba(255,107,129,0); }
+    12% { transform: scale(1.10); text-shadow: 0 0 6px rgba(255,107,129,0.55), 0 0 14px rgba(255,107,129,0.28); }
+    22% { transform: scale(1.03); text-shadow: 0 0 3px rgba(255,107,129,0.25); }
+    42% { transform: scale(1.07); text-shadow: 0 0 7px rgba(255,107,129,0.45), 0 0 16px rgba(255,107,129,0.22); }
+  }
+  @keyframes yxqHeartHalo {
+    0%, 30%, 62%, 100% { opacity: 0.45; transform: scale(0.82); }
+    12% { opacity: 1; transform: scale(1.08); }
+    22% { opacity: 0.6; transform: scale(0.94); }
+    42% { opacity: 0.9; transform: scale(1.02); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .van-tabbar-item.tab-heart-live .van-tabbar-item__icon::before { animation: none; opacity: 0.7; transform: none; }
+    .van-tabbar-item.tab-heart-live .van-tabbar-item__icon .van-icon { animation: none; text-shadow: 0 0 6px rgba(255,107,129,0.5); }
+  }
   /* 消息 tab 未读数：贴在图标右上，限制尺寸，不挤压 tab 文案 */
   .van-tabbar-item__icon .van-badge { min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; line-height: 17px; font-weight: 600; border: 1px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
   .van-theme-dark .van-tabbar-item__icon .van-badge { border-color: #1c1c1e; }

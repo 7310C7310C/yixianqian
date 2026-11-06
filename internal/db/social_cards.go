@@ -139,6 +139,72 @@ func (d *DB) ListCardCandidateIDs(ctx context.Context, viewerID int64, targetGen
 	return out, nil
 }
 
+// CardOverviewEntry is one row of the newest-first card overview: the id plus
+// the registration time used for the "NEW" badge. The caller resolves the light
+// profile view for the page ids in one batch.
+type CardOverviewEntry struct {
+	ID        int64
+	CreatedAt time.Time
+}
+
+// ListCardOverviewPage returns the eligible card pool ordered by newest
+// registration first (identity id DESC) together with the total pool size.
+// Eligibility is cardCandidateFilter, i.e. exactly the deck's predicate, so the
+// overview can never expose an account the cards endpoint hides.
+func (d *DB) ListCardOverviewPage(ctx context.Context, viewerID int64, targetGender string,
+	limit, offset int) ([]CardOverviewEntry, int, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	// Same predicate as the deck; empty text/array/date args mean "not set".
+	args := []any{
+		viewerID, targetGender, "", "", "", "", "", "",
+		[]string{}, []string{}, []string{}, []string{},
+		nil, nil, nil, nil, []string{}, []string{},
+	}
+	rows, err := d.pool.Query(ctx,
+		`SELECT u.id, u.created_at, count(*) OVER () FROM users u
+		 WHERE `+cardCandidateFilter+`
+		 ORDER BY u.id DESC
+		 LIMIT $19 OFFSET $20`,
+		append(append([]any{}, args...), limit, offset)...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("db: list card overview: %w", err)
+	}
+	defer rows.Close()
+	entries := make([]CardOverviewEntry, 0, limit)
+	total := 0
+	for rows.Next() {
+		var (
+			entry CardOverviewEntry
+			count int64
+		)
+		if err := rows.Scan(&entry.ID, &entry.CreatedAt, &count); err != nil {
+			return nil, 0, fmt.Errorf("db: scan card overview: %w", err)
+		}
+		entries = append(entries, entry)
+		total = int(count)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("db: iterate card overview: %w", err)
+	}
+	// The window count disappears with an empty page (offset past the end).
+	// Callers still need the real total, so pay one cheap count only then.
+	if len(entries) == 0 {
+		if err := d.pool.QueryRow(ctx,
+			`SELECT count(*) FROM users u WHERE `+cardCandidateFilter, args...).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("db: count card overview: %w", err)
+		}
+	}
+	return entries, total, nil
+}
+
 func socialNonNilStrings(in []string) []string {
 	if in == nil {
 		return []string{}

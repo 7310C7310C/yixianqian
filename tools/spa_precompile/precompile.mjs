@@ -26,7 +26,7 @@ const GROUPS = {
   likes: ['likes', 'like_inbox', 'message_inbox', 'reported_messages', 'message_thread'],
   home: ['home', 'my_activities', 'my_groups'],
   profile: ['profile', 'password', 'profile_detail', 'profile_edit', 'points'],
-  detail: ['user_detail'],
+  detail: ['user_detail', 'cards_overview'],
   group: ['group_admin', 'group_detail', 'group_roster', 'checkin', 'group_select',
     'group_result', 'onetoone_result', 'activity_detail', 'points_admin'],
 }
