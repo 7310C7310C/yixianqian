@@ -64,9 +64,10 @@ sources: []
 - 不要做：不按 `LIKE '广东%'` 直接匹配（会漏 v1 短名）；不做城市多选；不把省份筛选做成排序权重。验证：`TestIntegrationCardsProvinceFilter`、`TestIntegrationCardFiltersByProvinceValues`、`TestCardFilterProvinceExpansion`。
 
 ### 2.7 牵线爱心光晕与全览模式
-- 决策：停在「牵线」tab 时底栏爱心持续光晕（CSS 心跳：图标 `yxqHeartBeat` 2.4s + 径向 halo `yxqHeartHalo`，仅 `page==='cards'` 挂 `.tab-heart-live`；`prefers-reduced-motion` 只留静态光晕）。已在牵线时**再点一次** tab 进入全览：独立子页 `cards_overview`（隐藏底栏、页头返回），按注册时间倒序（`u.id DESC`，最新在前），滚动分页 30 条/页；点卡片进既有 `user_detail`，返回保留列表与滚动位置。
-- 全览边界：资格与牌堆完全一致（异性、`account_status=active` 即未脱单、有照片；observer 可看全性别），但**不受牵线筛选影响**（筛选只属于牌堆，页头有提示）；瓦片只给头像/昵称/年龄/身高/城市 + `新`（注册 ≤14 天）/`推荐`（本周推荐集合）/已喜欢 ♥，不展示完整资料与联系方式；接口 `GET /legacy/api/cards/overview` 分页返回并按 viewer 发 15 分钟照片 grant，不接 10s 读缓存。
-- 不要做：不把全览做成第五个 tab 或浮层；不按推荐/随机/在线排序；不在全览里放开筛选；不返回微信号/身份证等敏感字段。验证：`TestBuildCardOverviewItem`、`TestIntegrationCardsOverviewNewestFirst`、`tools/browser/cards_overview_smoke.py`。
+- 决策：停在「牵线」tab 时底栏爱心持续光晕（CSS 心跳：图标 `yxqHeartBeat` 2.4s + 径向 halo `yxqHeartHalo`，仅 `page==='cards'` 挂 `.tab-heart-live`；光晕包含块固定在图标 wrapper；`prefers-reduced-motion` 只留静态光晕）。已在牵线时**再点一次** tab 进入全览：独立子页 `cards_overview`（隐藏底栏、页头返回），按注册时间倒序（`u.id DESC`，最新在前），滚动分页 30 条/页；子页铺满视口（负 margin 收回 `#app` 的底栏预留，不留底部空白带）。
+- 全览交互：网格 tile 支持多图左右滑动（滑动切换、滑动后抑制误点）；点 tile 打开卡片浮层（`van-popup`，88% 高）：大图多图滑动 + 点开大图查看器、完整资料分区、留言列表与发送框、反馈、点赞、爱心（后两者复用 deck 的额度/隐私规则）；浮层关闭后列表与滚动位置不变。筛选复用牵线筛选面板与同一套参数（`parseCardFilter` + `gender`），应用/清除后全览按筛选重载；筛选只看牌堆/全览，互不影响各自结果集。
+- 全览边界：资格与牌堆完全一致（异性、`account_status=active` 即未脱单、有照片；observer 可看全性别）；接口 `GET /legacy/api/cards/overview` 返回浅字段 + 全部缩略图（`photos`）+ `liked/praised`，分页并按 viewer 发 15 分钟照片 grant，不接 10s 读缓存；完整资料只从既有 `/legacy/api/users/{id}/public` 取。
+- 不要做：不把全览做成第五个 tab 或浮层；不按推荐/随机/在线排序；不在瓦片里塞操作按钮（操作放在卡片浮层）；不返回微信号/身份证等敏感字段；不在全览里绕过 deck 的喜欢/点赞额度与 observer 限制。验证：`TestBuildCardOverviewItem`、`TestIntegrationCardsOverviewNewestFirst`、`tools/browser/cards_overview_smoke.py`。
 
 ## 3. 架构与交付
 

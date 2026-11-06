@@ -31,6 +31,9 @@ func TestBuildCardOverviewItem(t *testing.T) {
 	if want := "/cards/photo/media-1?size=thumb"; item.Photo != want {
 		t.Fatalf("photo = %q, want %q (cover is first)", item.Photo, want)
 	}
+	if len(item.Photos) != 2 || item.Photos[0] != item.Photo || item.Photos[1] != "/cards/photo/media-2?size=thumb" {
+		t.Fatalf("photos = %v, want both thumbs with cover first", item.Photos)
+	}
 	if !item.IsNew {
 		t.Fatal("3 天前注册应标新")
 	}

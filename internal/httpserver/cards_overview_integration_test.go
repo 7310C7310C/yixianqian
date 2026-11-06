@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,17 +13,19 @@ import (
 )
 
 type cardOverviewItemPayload struct {
-	OpenID      string `json:"openid"`
-	UserID      string `json:"user_id"`
-	Nickname    string `json:"nickname"`
-	Gender      string `json:"gender"`
-	Age         int    `json:"age"`
-	Height      int    `json:"height"`
-	City        string `json:"city"`
-	Photo       string `json:"photo"`
-	IsNew       bool   `json:"is_new"`
-	Recommended bool   `json:"recommended"`
-	Liked       bool   `json:"liked"`
+	OpenID      string   `json:"openid"`
+	UserID      string   `json:"user_id"`
+	Nickname    string   `json:"nickname"`
+	Gender      string   `json:"gender"`
+	Age         int      `json:"age"`
+	Height      int      `json:"height"`
+	City        string   `json:"city"`
+	Photo       string   `json:"photo"`
+	Photos      []string `json:"photos"`
+	IsNew       bool     `json:"is_new"`
+	Recommended bool     `json:"recommended"`
+	Liked       bool     `json:"liked"`
+	Praised     bool     `json:"praised"`
 }
 
 type cardOverviewPayload struct {
@@ -89,8 +92,8 @@ func TestIntegrationCardsOverviewNewestFirst(t *testing.T) {
 		if item.UserID == legacyOf(viewer) {
 			t.Fatalf("overview leaked self: %+v", item)
 		}
-		if item.Photo == "" {
-			t.Fatalf("overview item without photo: %+v", item)
+		if item.Photo == "" || len(item.Photos) == 0 || item.Photos[0] != item.Photo {
+			t.Fatalf("overview item without photo(s): %+v", item)
 		}
 	}
 	oldestAt, okOldest := index[legacyOf(oldest)]
@@ -151,6 +154,15 @@ func TestIntegrationCardsOverviewNewestFirst(t *testing.T) {
 	}
 	if clamped := readCardOverview(t, viewerClient, "?limit=999"); clamped.Limit != cardOverviewMaxPageSize {
 		t.Fatalf("limit clamp = %d, want %d", clamped.Limit, cardOverviewMaxPageSize)
+	}
+
+	// 筛选与牌堆同语义：nickname 只命中匹配项，且仍按注册时间倒序。
+	filtered := readCardOverview(t, viewerClient, "?nickname="+url.QueryEscape("全览最新")+"&limit=60")
+	if filtered.Total != 1 || len(filtered.Items) != 1 || filtered.Items[0].Nickname != "全览最新" {
+		t.Fatalf("nickname filter = %+v, want only 全览最新", filtered)
+	}
+	if filtered.Items[0].UserID != legacyOf(newest) {
+		t.Fatalf("filtered item = %+v, want newest user", filtered.Items[0])
 	}
 
 	// 身份证未补填的账号必须被服务端门禁挡住（与 /cards 一致）。

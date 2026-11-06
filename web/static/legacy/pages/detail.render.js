@@ -158,7 +158,7 @@ window.__YXQ_PAGES__['user_detail'] = render;
 })();
 
 (function () {
-const { resolveComponent: _resolveComponent, createVNode: _createVNode, createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment } = Vue;
+const { resolveComponent: _resolveComponent, createVNode: _createVNode, createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode, normalizeClass: _normalizeClass, renderList: _renderList, Fragment: _Fragment, normalizeStyle: _normalizeStyle, withModifiers: _withModifiers, withKeys: _withKeys, vModelText: _vModelText, withDirectives: _withDirectives, withCtx: _withCtx } = Vue;
 const _hoisted_1 = {
   key: "cards_overview",
   class: "cards-overview-page"
@@ -194,14 +194,11 @@ const _hoisted_15 = {
   class: "ov-state"
 }
 const _hoisted_16 = /*#__PURE__*/_createElementVNode("div", { class: "ov-state-icon" }, "🌱", -1 /* HOISTED */)
-const _hoisted_17 = /*#__PURE__*/_createElementVNode("div", { class: "ov-state-text" }, "还没有可展示的会员", -1 /* HOISTED */)
-const _hoisted_18 = [
-  _hoisted_16,
-  _hoisted_17
-]
-const _hoisted_19 = { class: "ov-grid" }
-const _hoisted_20 = ["data-uid", "aria-label", "onClick"]
-const _hoisted_21 = ["src", "loading", "fetchpriority"]
+const _hoisted_17 = { class: "ov-state-text" }
+const _hoisted_18 = { class: "ov-grid" }
+const _hoisted_19 = ["data-uid", "aria-label", "onClick", "onKeydown", "onTouchend", "onMouseup"]
+const _hoisted_20 = ["src", "loading", "fetchpriority"]
+const _hoisted_21 = { class: "ov-badges" }
 const _hoisted_22 = {
   key: 0,
   class: "ov-badge ov-badge-new"
@@ -211,23 +208,91 @@ const _hoisted_23 = {
   class: "ov-badge ov-badge-rec"
 }
 const _hoisted_24 = {
-  key: 2,
+  key: 0,
+  class: "ov-photo-count"
+}
+const _hoisted_25 = {
+  key: 1,
   class: "ov-liked",
   "aria-label": "已喜欢"
 }
-const _hoisted_25 = /*#__PURE__*/_createElementVNode("span", { class: "ov-shade" }, null, -1 /* HOISTED */)
-const _hoisted_26 = { class: "ov-info" }
-const _hoisted_27 = { class: "ov-name" }
-const _hoisted_28 = { class: "ov-gender" }
-const _hoisted_29 = { class: "ov-meta" }
-const _hoisted_30 = { class: "ov-foot" }
-const _hoisted_31 = { key: 0 }
-const _hoisted_32 = { key: 1 }
-const _hoisted_33 = { key: 2 }
-const _hoisted_34 = { key: 3 }
+const _hoisted_26 = /*#__PURE__*/_createElementVNode("span", { class: "ov-shade" }, null, -1 /* HOISTED */)
+const _hoisted_27 = {
+  key: 2,
+  class: "ov-dots"
+}
+const _hoisted_28 = { class: "ov-info" }
+const _hoisted_29 = { class: "ov-name" }
+const _hoisted_30 = { class: "ov-gender" }
+const _hoisted_31 = { class: "ov-meta" }
+const _hoisted_32 = { class: "ov-foot" }
+const _hoisted_33 = { key: 0 }
+const _hoisted_34 = { key: 1 }
+const _hoisted_35 = { key: 2 }
+const _hoisted_36 = { key: 3 }
+const _hoisted_37 = {
+  key: 0,
+  class: "ov-sheet-body"
+}
+const _hoisted_38 = { class: "ov-sheet-head" }
+const _hoisted_39 = { class: "ov-sheet-head-main" }
+const _hoisted_40 = { class: "ov-sheet-name" }
+const _hoisted_41 = { class: "ov-gender" }
+const _hoisted_42 = {
+  key: 0,
+  class: "ov-sheet-sub"
+}
+const _hoisted_43 = {
+  key: 1,
+  class: "ov-sheet-sub"
+}
+const _hoisted_44 = { class: "ov-sheet-scroll" }
+const _hoisted_45 = ["src", "loading"]
+const _hoisted_46 = {
+  key: 0,
+  class: "ov-sheet-photo-loading"
+}
+const _hoisted_47 = {
+  key: 1,
+  class: "photo-dots"
+}
+const _hoisted_48 = {
+  key: 2,
+  class: "ov-photo-count ov-photo-count--sheet"
+}
+const _hoisted_49 = { class: "ov-sheet-sections" }
+const _hoisted_50 = { class: "profile-section-title" }
+const _hoisted_51 = { class: "ps-icon" }
+const _hoisted_52 = { class: "info-grid" }
+const _hoisted_53 = { class: "df-label" }
+const _hoisted_54 = { class: "df-value" }
+const _hoisted_55 = { class: "ov-sheet-msg" }
+const _hoisted_56 = { class: "ov-sheet-msg-title" }
+const _hoisted_57 = { key: 0 }
+const _hoisted_58 = {
+  key: 0,
+  class: "ov-sheet-msg-empty"
+}
+const _hoisted_59 = {
+  key: 1,
+  class: "ov-sheet-msg-list"
+}
+const _hoisted_60 = { class: "ov-sheet-msg-author" }
+const _hoisted_61 = {
+  key: 0,
+  class: "ov-sheet-compose"
+}
+const _hoisted_62 = ["disabled"]
+const _hoisted_63 = { class: "ov-sheet-actions" }
+const _hoisted_64 = {
+  key: 1,
+  class: "ov-sheet-loading"
+}
 
 function render(_ctx, _cache) {
   const _component_van_icon = _resolveComponent("van-icon")
+  const _component_van_loading = _resolveComponent("van-loading")
+  const _component_van_popup = _resolveComponent("van-popup")
 
   return (_openBlock(), _createElementBlock("div", _hoisted_1, [
     _createElementVNode("div", _hoisted_2, [
@@ -250,9 +315,18 @@ function render(_ctx, _cache) {
       ]),
       _createElementVNode("button", {
         type: "button",
+        class: _normalizeClass(["ov-filter", { active: _ctx.hasActiveFilter }]),
+        "aria-label": "筛选",
+        onClick: _cache[1] || (_cache[1] = $event => (_ctx.showFilter = true))
+      }, [
+        _createVNode(_component_van_icon, { name: "filter-o" }),
+        _createTextVNode("筛选 ")
+      ], 2 /* CLASS */),
+      _createElementVNode("button", {
+        type: "button",
         class: "ov-refresh",
         "aria-label": "刷新全览",
-        onClick: _cache[1] || (_cache[1] = (...args) => (_ctx.reloadCardsOverview && _ctx.reloadCardsOverview(...args)))
+        onClick: _cache[2] || (_cache[2] = (...args) => (_ctx.reloadCardsOverview && _ctx.reloadCardsOverview(...args)))
       }, [
         _createVNode(_component_van_icon, {
           name: "replay",
@@ -261,11 +335,16 @@ function render(_ctx, _cache) {
       ])
     ]),
     (_ctx.hasActiveFilter)
-      ? (_openBlock(), _createElementBlock("div", _hoisted_7, "全览展示全部会员，不受牵线筛选影响"))
+      ? (_openBlock(), _createElementBlock("div", _hoisted_7, [
+          _createTextVNode("已按牵线筛选展示"),
+          _createElementVNode("span", {
+            onClick: _cache[3] || (_cache[3] = (...args) => (_ctx.resetFilter && _ctx.resetFilter(...args)))
+          }, "清除筛选")
+        ]))
       : _createCommentVNode("v-if", true),
     _createElementVNode("div", {
       class: "cards-overview-scroll",
-      onScrollPassive: _cache[4] || (_cache[4] = (...args) => (_ctx.onOverviewScroll && _ctx.onOverviewScroll(...args)))
+      onScrollPassive: _cache[13] || (_cache[13] = (...args) => (_ctx.onOverviewScroll && _ctx.onOverviewScroll(...args)))
     }, [
       (_ctx.overviewError && !_ctx.overviewItems.length)
         ? (_openBlock(), _createElementBlock("div", _hoisted_8, [
@@ -274,7 +353,7 @@ function render(_ctx, _cache) {
             _createElementVNode("button", {
               type: "button",
               class: "ov-retry",
-              onClick: _cache[2] || (_cache[2] = (...args) => (_ctx.reloadCardsOverview && _ctx.reloadCardsOverview(...args)))
+              onClick: _cache[4] || (_cache[4] = (...args) => (_ctx.reloadCardsOverview && _ctx.reloadCardsOverview(...args)))
             }, "重新加载")
           ]))
         : (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
@@ -288,65 +367,312 @@ function render(_ctx, _cache) {
                   }), 64 /* STABLE_FRAGMENT */))
                 ]))
               : (!_ctx.overviewItems.length)
-                ? (_openBlock(), _createElementBlock("div", _hoisted_15, _hoisted_18))
-                : (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
-                    _createElementVNode("div", _hoisted_19, [
-                      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.overviewItems, (it, i) => {
-                        return (_openBlock(), _createElementBlock("button", {
+                ? (_openBlock(), _createElementBlock("div", _hoisted_15, [
+                    _hoisted_16,
+                    _createElementVNode("div", _hoisted_17, _toDisplayString(_ctx.hasActiveFilter ? '没有符合筛选条件的人' : '还没有可展示的会员'), 1 /* TEXT */),
+                    (_ctx.hasActiveFilter)
+                      ? (_openBlock(), _createElementBlock("button", {
+                          key: 0,
                           type: "button",
+                          class: "ov-retry",
+                          onClick: _cache[5] || (_cache[5] = (...args) => (_ctx.resetFilter && _ctx.resetFilter(...args)))
+                        }, "清除筛选"))
+                      : _createCommentVNode("v-if", true)
+                  ]))
+                : (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+                    _createElementVNode("div", _hoisted_18, [
+                      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.overviewItems, (it, i) => {
+                        return (_openBlock(), _createElementBlock("div", {
                           key: it.openid,
                           class: "ov-tile",
                           "data-uid": it.user_id,
+                          role: "button",
+                          tabindex: "0",
                           "aria-label": '查看' + it.nickname + '的资料',
-                          onClick: $event => (_ctx.openOverviewUser(it))
+                          onClick: $event => (_ctx.onOverviewTileClick(it)),
+                          onKeydown: _withKeys(_withModifiers($event => (_ctx.onOverviewTileClick(it)), ["prevent"]), ["enter"]),
+                          onTouchstart: _cache[6] || (_cache[6] = (...args) => (_ctx.ovGestureStart && _ctx.ovGestureStart(...args))),
+                          onTouchmove: _cache[7] || (_cache[7] = (...args) => (_ctx.ovGestureMove && _ctx.ovGestureMove(...args))),
+                          onTouchend: $event => (_ctx.ovGestureEnd($event, it)),
+                          onTouchcancel: _cache[8] || (_cache[8] = (...args) => (_ctx.ovGestureCancel && _ctx.ovGestureCancel(...args))),
+                          onMousedown: _cache[9] || (_cache[9] = (...args) => (_ctx.ovGestureStart && _ctx.ovGestureStart(...args))),
+                          onMousemove: _cache[10] || (_cache[10] = (...args) => (_ctx.ovGestureMove && _ctx.ovGestureMove(...args))),
+                          onMouseup: $event => (_ctx.ovGestureEnd($event, it)),
+                          onMouseleave: _cache[11] || (_cache[11] = (...args) => (_ctx.ovGestureCancel && _ctx.ovGestureCancel(...args)))
                         }, [
-                          _createElementVNode("img", {
-                            class: "ov-photo",
-                            src: it.photo,
-                            alt: "",
-                            loading: i < 6 ? 'eager' : 'lazy',
-                            decoding: "async",
-                            fetchpriority: i < 2 ? 'high' : 'auto'
-                          }, null, 8 /* PROPS */, _hoisted_21),
-                          (it.is_new)
-                            ? (_openBlock(), _createElementBlock("span", _hoisted_22, "新"))
-                            : _createCommentVNode("v-if", true),
-                          (it.recommended)
-                            ? (_openBlock(), _createElementBlock("span", _hoisted_23, "推荐"))
+                          _createElementVNode("div", {
+                            class: "ov-photo-track",
+                            style: _normalizeStyle({ transform: 'translateX(-' + _ctx.overviewPhotoOf(it) * 100 + '%)' })
+                          }, [
+                            (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.overviewPhotosOf(it), (p, pi) => {
+                              return (_openBlock(), _createElementBlock("div", {
+                                key: pi,
+                                class: "ov-photo-slide"
+                              }, [
+                                (Math.abs(pi - _ctx.overviewPhotoOf(it)) <= 1)
+                                  ? (_openBlock(), _createElementBlock("img", {
+                                      key: 0,
+                                      class: "ov-photo",
+                                      src: p,
+                                      alt: "",
+                                      loading: (i < 4 && pi === 0) ? 'eager' : 'lazy',
+                                      decoding: "async",
+                                      fetchpriority: (i < 2 && pi === 0) ? 'high' : 'auto'
+                                    }, null, 8 /* PROPS */, _hoisted_20))
+                                  : _createCommentVNode("v-if", true)
+                              ]))
+                            }), 128 /* KEYED_FRAGMENT */))
+                          ], 4 /* STYLE */),
+                          _createElementVNode("span", _hoisted_21, [
+                            (it.is_new)
+                              ? (_openBlock(), _createElementBlock("span", _hoisted_22, "新"))
+                              : _createCommentVNode("v-if", true),
+                            (it.recommended)
+                              ? (_openBlock(), _createElementBlock("span", _hoisted_23, "推荐"))
+                              : _createCommentVNode("v-if", true)
+                          ]),
+                          (_ctx.overviewPhotosOf(it).length > 1)
+                            ? (_openBlock(), _createElementBlock("span", _hoisted_24, _toDisplayString(_ctx.overviewPhotoOf(it) + 1) + "/" + _toDisplayString(_ctx.overviewPhotosOf(it).length), 1 /* TEXT */))
                             : _createCommentVNode("v-if", true),
                           (it.liked)
-                            ? (_openBlock(), _createElementBlock("span", _hoisted_24, "♥"))
+                            ? (_openBlock(), _createElementBlock("span", _hoisted_25, "♥"))
                             : _createCommentVNode("v-if", true),
-                          _hoisted_25,
-                          _createElementVNode("span", _hoisted_26, [
-                            _createElementVNode("span", _hoisted_27, [
+                          _hoisted_26,
+                          (_ctx.overviewPhotosOf(it).length > 1)
+                            ? (_openBlock(), _createElementBlock("span", _hoisted_27, [
+                                (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.overviewPhotosOf(it), (p, pi) => {
+                                  return (_openBlock(), _createElementBlock("span", {
+                                    key: pi,
+                                    class: _normalizeClass(["ov-dot", { active: pi === _ctx.overviewPhotoOf(it) }])
+                                  }, null, 2 /* CLASS */))
+                                }), 128 /* KEYED_FRAGMENT */))
+                              ]))
+                            : _createCommentVNode("v-if", true),
+                          _createElementVNode("span", _hoisted_28, [
+                            _createElementVNode("span", _hoisted_29, [
                               _createTextVNode(_toDisplayString(it.nickname), 1 /* TEXT */),
-                              _createElementVNode("span", _hoisted_28, _toDisplayString(it.gender === '男性' ? '♂' : '♀'), 1 /* TEXT */)
+                              _createElementVNode("span", _hoisted_30, _toDisplayString(it.gender === '男性' ? '♂' : '♀'), 1 /* TEXT */)
                             ]),
-                            _createElementVNode("span", _hoisted_29, _toDisplayString(_ctx.overviewMeta(it)), 1 /* TEXT */)
+                            _createElementVNode("span", _hoisted_31, _toDisplayString(_ctx.overviewMeta(it)), 1 /* TEXT */)
                           ])
-                        ], 8 /* PROPS */, _hoisted_20))
+                        ], 40 /* PROPS, NEED_HYDRATION */, _hoisted_19))
                       }), 128 /* KEYED_FRAGMENT */))
                     ]),
-                    _createElementVNode("div", _hoisted_30, [
+                    _createElementVNode("div", _hoisted_32, [
                       (_ctx.overviewLoading)
-                        ? (_openBlock(), _createElementBlock("span", _hoisted_31, "加载中…"))
+                        ? (_openBlock(), _createElementBlock("span", _hoisted_33, "加载中…"))
                         : (_ctx.overviewError)
-                          ? (_openBlock(), _createElementBlock("span", _hoisted_32, [
+                          ? (_openBlock(), _createElementBlock("span", _hoisted_34, [
                               _createTextVNode("加载失败，"),
                               _createElementVNode("button", {
                                 type: "button",
                                 class: "ov-foot-retry",
-                                onClick: _cache[3] || (_cache[3] = (...args) => (_ctx.retryOverviewMore && _ctx.retryOverviewMore(...args)))
+                                onClick: _cache[12] || (_cache[12] = (...args) => (_ctx.retryOverviewMore && _ctx.retryOverviewMore(...args)))
                               }, "重试")
                             ]))
                           : (_ctx.overviewHasMore)
-                            ? (_openBlock(), _createElementBlock("span", _hoisted_33, "上滑加载更多"))
-                            : (_openBlock(), _createElementBlock("span", _hoisted_34, "已经到底啦 · 共 " + _toDisplayString(_ctx.overviewTotal) + " 位", 1 /* TEXT */))
+                            ? (_openBlock(), _createElementBlock("span", _hoisted_35, "上滑加载更多"))
+                            : (_openBlock(), _createElementBlock("span", _hoisted_36, "已经到底啦 · 共 " + _toDisplayString(_ctx.overviewTotal) + " 位", 1 /* TEXT */))
                     ])
                   ], 64 /* STABLE_FRAGMENT */))
           ], 64 /* STABLE_FRAGMENT */))
-    ], 32 /* NEED_HYDRATION */)
+    ], 32 /* NEED_HYDRATION */),
+    _createVNode(_component_van_popup, {
+      show: _ctx.showOverviewCard,
+      "onUpdate:show": _cache[31] || (_cache[31] = $event => ((_ctx.showOverviewCard) = $event)),
+      position: "bottom",
+      round: "",
+      class: "ov-sheet",
+      style: { height: '88%' }
+    }, {
+      default: _withCtx(() => [
+        (_ctx.overviewSheet)
+          ? (_openBlock(), _createElementBlock("div", _hoisted_37, [
+              _createElementVNode("div", _hoisted_38, [
+                _createElementVNode("div", _hoisted_39, [
+                  _createElementVNode("div", _hoisted_40, [
+                    _createTextVNode(_toDisplayString(_ctx.overviewSheet.nickname), 1 /* TEXT */),
+                    _createElementVNode("span", _hoisted_41, _toDisplayString(_ctx.overviewSheet.gender === '男性' ? '♂' : '♀'), 1 /* TEXT */)
+                  ]),
+                  (_ctx.overviewSheet.display_fields && _ctx.overviewSheet.display_fields.simple)
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_42, _toDisplayString(_ctx.overviewSheet.display_fields.simple), 1 /* TEXT */))
+                    : (_ctx.overviewSheet.user_id)
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_43, _toDisplayString(_ctx.overviewSheet.user_id), 1 /* TEXT */))
+                      : _createCommentVNode("v-if", true)
+                ]),
+                _createElementVNode("button", {
+                  type: "button",
+                  class: "ov-sheet-close",
+                  "aria-label": "关闭",
+                  onClick: _cache[14] || (_cache[14] = $event => (_ctx.showOverviewCard = false))
+                }, [
+                  _createVNode(_component_van_icon, { name: "cross" })
+                ])
+              ]),
+              _createElementVNode("div", _hoisted_44, [
+                _createElementVNode("div", {
+                  class: "ov-sheet-photo",
+                  onTouchstart: _cache[15] || (_cache[15] = (...args) => (_ctx.onOvSheetTouchStart && _ctx.onOvSheetTouchStart(...args))),
+                  onTouchmove: _cache[16] || (_cache[16] = (...args) => (_ctx.onOvSheetTouchMove && _ctx.onOvSheetTouchMove(...args))),
+                  onTouchend: _cache[17] || (_cache[17] = (...args) => (_ctx.onOvSheetTouchEnd && _ctx.onOvSheetTouchEnd(...args))),
+                  onTouchcancel: _cache[18] || (_cache[18] = (...args) => (_ctx.ovSheetGestureCancel && _ctx.ovSheetGestureCancel(...args))),
+                  onMousedown: _cache[19] || (_cache[19] = (...args) => (_ctx.onOvSheetMouseDown && _ctx.onOvSheetMouseDown(...args))),
+                  onMousemove: _cache[20] || (_cache[20] = (...args) => (_ctx.onOvSheetMouseMove && _ctx.onOvSheetMouseMove(...args))),
+                  onMouseup: _cache[21] || (_cache[21] = (...args) => (_ctx.onOvSheetMouseUp && _ctx.onOvSheetMouseUp(...args))),
+                  onMouseleave: _cache[22] || (_cache[22] = (...args) => (_ctx.onOvSheetMouseLeave && _ctx.onOvSheetMouseLeave(...args))),
+                  onClick: _cache[23] || (_cache[23] = (...args) => (_ctx.openOverviewSheetPhoto && _ctx.openOverviewSheetPhoto(...args)))
+                }, [
+                  _createElementVNode("div", {
+                    class: "ov-sheet-track",
+                    style: _normalizeStyle({ transform: 'translateX(-' + _ctx.overviewSheetPhotoIndex * 100 + '%)' })
+                  }, [
+                    (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.overviewSheetPhotos, (p, i) => {
+                      return (_openBlock(), _createElementBlock("img", {
+                        key: i,
+                        class: "ov-sheet-img",
+                        src: p,
+                        alt: "",
+                        loading: i <= 1 ? 'eager' : 'lazy',
+                        decoding: "async"
+                      }, null, 8 /* PROPS */, _hoisted_45))
+                    }), 128 /* KEYED_FRAGMENT */))
+                  ], 4 /* STYLE */),
+                  (_ctx.overviewSheetLoading)
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_46, [
+                        _createVNode(_component_van_loading, {
+                          size: "20px",
+                          color: "#fff"
+                        })
+                      ]))
+                    : _createCommentVNode("v-if", true),
+                  (_ctx.overviewSheetCount() > 1)
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_47, [
+                        (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.overviewSheetPhotos, (p, i) => {
+                          return (_openBlock(), _createElementBlock("div", {
+                            key: i,
+                            class: _normalizeClass(["photo-dot", { active: i === _ctx.overviewSheetPhotoIndex }])
+                          }, null, 2 /* CLASS */))
+                        }), 128 /* KEYED_FRAGMENT */))
+                      ]))
+                    : _createCommentVNode("v-if", true),
+                  (_ctx.overviewSheetCount() > 1)
+                    ? (_openBlock(), _createElementBlock("span", _hoisted_48, _toDisplayString(_ctx.overviewSheetPhotoIndex + 1) + " / " + _toDisplayString(_ctx.overviewSheetCount()), 1 /* TEXT */))
+                    : _createCommentVNode("v-if", true)
+                ], 32 /* NEED_HYDRATION */),
+                _createElementVNode("div", _hoisted_49, [
+                  (_ctx.overviewSheet.display_fields && _ctx.overviewSheet.display_fields.sections)
+                    ? (_openBlock(true), _createElementBlock(_Fragment, { key: 0 }, _renderList(_ctx.overviewSheet.display_fields.sections, (sec, si) => {
+                        return (_openBlock(), _createElementBlock("div", {
+                          class: "card-section",
+                          key: si
+                        }, [
+                          _createElementVNode("div", _hoisted_50, [
+                            _createElementVNode("span", _hoisted_51, _toDisplayString(sec.icon), 1 /* TEXT */),
+                            _createTextVNode(_toDisplayString(sec.title), 1 /* TEXT */)
+                          ]),
+                          _createElementVNode("div", _hoisted_52, [
+                            (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(sec.fields, (f) => {
+                              return (_openBlock(), _createElementBlock("div", {
+                                class: _normalizeClass(["info-grid-item", { full: f.label === '我是怎样的人' || f.label === '理想中的TA' }]),
+                                key: f.label
+                              }, [
+                                _createElementVNode("span", _hoisted_53, _toDisplayString(f.label) + "：", 1 /* TEXT */),
+                                _createElementVNode("span", _hoisted_54, _toDisplayString(f.value), 1 /* TEXT */)
+                              ], 2 /* CLASS */))
+                            }), 128 /* KEYED_FRAGMENT */))
+                          ])
+                        ]))
+                      }), 128 /* KEYED_FRAGMENT */))
+                    : _createCommentVNode("v-if", true),
+                  _createElementVNode("div", _hoisted_55, [
+                    _createElementVNode("div", _hoisted_56, [
+                      _createTextVNode("留言"),
+                      (_ctx.overviewSheetMessages.length)
+                        ? (_openBlock(), _createElementBlock("span", _hoisted_57, "（" + _toDisplayString(_ctx.overviewSheetMessages.length) + "）", 1 /* TEXT */))
+                        : _createCommentVNode("v-if", true)
+                    ]),
+                    (!_ctx.overviewSheetMessages.length)
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_58, "还没有留言，快来抢沙发～"))
+                      : (_openBlock(), _createElementBlock("div", _hoisted_59, [
+                          (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.overviewSheetMessages, (m) => {
+                            return (_openBlock(), _createElementBlock("div", {
+                              key: m.id,
+                              class: "ov-sheet-msg-item"
+                            }, [
+                              _createElementVNode("span", _hoisted_60, _toDisplayString(m.author_nickname) + "：", 1 /* TEXT */),
+                              _createTextVNode(_toDisplayString(m.content), 1 /* TEXT */)
+                            ]))
+                          }), 128 /* KEYED_FRAGMENT */))
+                        ]))
+                  ])
+                ])
+              ]),
+              (_ctx.overviewMsgOpen)
+                ? (_openBlock(), _createElementBlock("div", _hoisted_61, [
+                    _withDirectives(_createElementVNode("input", {
+                      "onUpdate:modelValue": _cache[24] || (_cache[24] = $event => ((_ctx.overviewMsgText) = $event)),
+                      maxlength: "200",
+                      placeholder: "写下你的留言…",
+                      onKeyup: _cache[25] || (_cache[25] = _withKeys((...args) => (_ctx.sendOverviewMessage && _ctx.sendOverviewMessage(...args)), ["enter"]))
+                    }, null, 544 /* NEED_HYDRATION, NEED_PATCH */), [
+                      [_vModelText, _ctx.overviewMsgText]
+                    ]),
+                    _createElementVNode("button", {
+                      type: "button",
+                      disabled: !_ctx.overviewMsgText.trim() || _ctx.overviewMsgSending,
+                      onClick: _cache[26] || (_cache[26] = (...args) => (_ctx.sendOverviewMessage && _ctx.sendOverviewMessage(...args)))
+                    }, _toDisplayString(_ctx.overviewMsgSending ? '发送中…' : '发送'), 9 /* TEXT, PROPS */, _hoisted_62)
+                  ]))
+                : _createCommentVNode("v-if", true),
+              _createElementVNode("div", _hoisted_63, [
+                _createElementVNode("button", {
+                  type: "button",
+                  class: _normalizeClass(["ov-act", { active: _ctx.overviewMsgOpen }]),
+                  onClick: _cache[27] || (_cache[27] = (...args) => (_ctx.toggleOverviewMsg && _ctx.toggleOverviewMsg(...args)))
+                }, [
+                  _createVNode(_component_van_icon, { name: "chat-o" }),
+                  _createTextVNode("留言 ")
+                ], 2 /* CLASS */),
+                _createElementVNode("button", {
+                  type: "button",
+                  class: "ov-act",
+                  onClick: _cache[28] || (_cache[28] = (...args) => (_ctx.openOverviewFeedback && _ctx.openOverviewFeedback(...args)))
+                }, [
+                  _createVNode(_component_van_icon, { name: "warning-o" }),
+                  _createTextVNode("反馈 ")
+                ]),
+                (_ctx.canPraiseOverviewSheet)
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 0,
+                      type: "button",
+                      class: _normalizeClass(["ov-act", { active: _ctx.overviewSheetPraised }]),
+                      onClick: _cache[29] || (_cache[29] = $event => (_ctx.togglePraise(_ctx.overviewSheet)))
+                    }, [
+                      _createVNode(_component_van_icon, {
+                        name: _ctx.overviewSheetPraised ? 'good-job' : 'good-job-o'
+                      }, null, 8 /* PROPS */, ["name"]),
+                      _createTextVNode(_toDisplayString(_ctx.overviewSheetPraised ? '已赞' : '点赞'), 1 /* TEXT */)
+                    ], 2 /* CLASS */))
+                  : _createCommentVNode("v-if", true),
+                (_ctx.canLikeOverviewSheet)
+                  ? (_openBlock(), _createElementBlock("button", {
+                      key: 1,
+                      type: "button",
+                      class: "ov-act ov-act-like",
+                      onClick: _cache[30] || (_cache[30] = $event => (_ctx.openLikeDialogForUser(_ctx.overviewSheet)))
+                    }, [
+                      _createVNode(_component_van_icon, { name: "like" }),
+                      _createTextVNode("爱心 ")
+                    ]))
+                  : _createCommentVNode("v-if", true)
+              ])
+            ]))
+          : (_openBlock(), _createElementBlock("div", _hoisted_64, [
+              _createVNode(_component_van_loading, { size: "24px" })
+            ]))
+      ]),
+      _: 1 /* STABLE */
+    }, 8 /* PROPS */, ["show"])
   ]))
 }
 window.__YXQ_PAGES__ = window.__YXQ_PAGES__ || {};

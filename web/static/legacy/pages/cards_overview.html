@@ -7,11 +7,14 @@
       <div class="ov-title">全览</div>
       <div class="ov-sub">最新加入在前<span v-if="overviewTotal"> · 共 {{ overviewTotal }} 位</span></div>
     </div>
+    <button type="button" class="ov-filter" :class="{ active: hasActiveFilter }" aria-label="筛选" @click="showFilter = true">
+      <van-icon name="filter-o"></van-icon>筛选
+    </button>
     <button type="button" class="ov-refresh" aria-label="刷新全览" @click="reloadCardsOverview">
       <van-icon name="replay" :class="{ 'ov-spin': overviewLoading }"></van-icon>
     </button>
   </div>
-  <div v-if="hasActiveFilter" class="ov-filter-note">全览展示全部会员，不受牵线筛选影响</div>
+  <div v-if="hasActiveFilter" class="ov-filter-note">已按牵线筛选展示<span @click="resetFilter">清除筛选</span></div>
   <div class="cards-overview-scroll" @scroll.passive="onOverviewScroll">
     <div v-if="overviewError && !overviewItems.length" class="ov-state">
       <div class="ov-state-icon">😕</div>
@@ -27,23 +30,38 @@
       </div>
       <div v-else-if="!overviewItems.length" class="ov-state">
         <div class="ov-state-icon">🌱</div>
-        <div class="ov-state-text">还没有可展示的会员</div>
+        <div class="ov-state-text">{{ hasActiveFilter ? '没有符合筛选条件的人' : '还没有可展示的会员' }}</div>
+        <button v-if="hasActiveFilter" type="button" class="ov-retry" @click="resetFilter">清除筛选</button>
       </div>
       <template v-else>
         <div class="ov-grid">
-          <button type="button" v-for="(it, i) in overviewItems" :key="it.openid" class="ov-tile"
-            :data-uid="it.user_id" :aria-label="'查看' + it.nickname + '的资料'" @click="openOverviewUser(it)">
-            <img class="ov-photo" :src="it.photo" alt="" :loading="i < 6 ? 'eager' : 'lazy'" decoding="async"
-              :fetchpriority="i < 2 ? 'high' : 'auto'">
-            <span v-if="it.is_new" class="ov-badge ov-badge-new">新</span>
-            <span v-if="it.recommended" class="ov-badge ov-badge-rec">推荐</span>
+          <div v-for="(it, i) in overviewItems" :key="it.openid" class="ov-tile" :data-uid="it.user_id"
+            role="button" tabindex="0" :aria-label="'查看' + it.nickname + '的资料'"
+            @click="onOverviewTileClick(it)" @keydown.enter.prevent="onOverviewTileClick(it)"
+            @touchstart="ovGestureStart" @touchmove="ovGestureMove" @touchend="ovGestureEnd($event, it)" @touchcancel="ovGestureCancel"
+            @mousedown="ovGestureStart" @mousemove="ovGestureMove" @mouseup="ovGestureEnd($event, it)" @mouseleave="ovGestureCancel">
+            <div class="ov-photo-track" :style="{ transform: 'translateX(-' + overviewPhotoOf(it) * 100 + '%)' }">
+              <div v-for="(p, pi) in overviewPhotosOf(it)" :key="pi" class="ov-photo-slide">
+                <img v-if="Math.abs(pi - overviewPhotoOf(it)) <= 1" class="ov-photo" :src="p" alt=""
+                  :loading="(i < 4 && pi === 0) ? 'eager' : 'lazy'" decoding="async"
+                  :fetchpriority="(i < 2 && pi === 0) ? 'high' : 'auto'">
+              </div>
+            </div>
+            <span class="ov-badges">
+              <span v-if="it.is_new" class="ov-badge ov-badge-new">新</span>
+              <span v-if="it.recommended" class="ov-badge ov-badge-rec">推荐</span>
+            </span>
+            <span v-if="overviewPhotosOf(it).length > 1" class="ov-photo-count">{{ overviewPhotoOf(it) + 1 }}/{{ overviewPhotosOf(it).length }}</span>
             <span v-if="it.liked" class="ov-liked" aria-label="已喜欢">♥</span>
             <span class="ov-shade"></span>
+            <span class="ov-dots" v-if="overviewPhotosOf(it).length > 1">
+              <span v-for="(p, pi) in overviewPhotosOf(it)" :key="pi" class="ov-dot" :class="{ active: pi === overviewPhotoOf(it) }"></span>
+            </span>
             <span class="ov-info">
               <span class="ov-name">{{ it.nickname }}<span class="ov-gender">{{ it.gender === '男性' ? '♂' : '♀' }}</span></span>
               <span class="ov-meta">{{ overviewMeta(it) }}</span>
             </span>
-          </button>
+          </div>
         </div>
         <div class="ov-foot">
           <span v-if="overviewLoading">加载中…</span>
@@ -54,4 +72,77 @@
       </template>
     </template>
   </div>
+
+  <!-- 全览卡片浮层：大图多图滑动 + 完整资料 + 留言/反馈/点赞/爱心 -->
+  <van-popup v-model:show="showOverviewCard" position="bottom" round class="ov-sheet" :style="{ height: '88%' }">
+    <div class="ov-sheet-body" v-if="overviewSheet">
+      <div class="ov-sheet-head">
+        <div class="ov-sheet-head-main">
+          <div class="ov-sheet-name">{{ overviewSheet.nickname }}<span class="ov-gender">{{ overviewSheet.gender === '男性' ? '♂' : '♀' }}</span></div>
+          <div class="ov-sheet-sub" v-if="overviewSheet.display_fields && overviewSheet.display_fields.simple">{{ overviewSheet.display_fields.simple }}</div>
+          <div class="ov-sheet-sub" v-else-if="overviewSheet.user_id">{{ overviewSheet.user_id }}</div>
+        </div>
+        <button type="button" class="ov-sheet-close" aria-label="关闭" @click="showOverviewCard = false">
+          <van-icon name="cross"></van-icon>
+        </button>
+      </div>
+      <div class="ov-sheet-scroll">
+        <div class="ov-sheet-photo" @touchstart="onOvSheetTouchStart" @touchmove="onOvSheetTouchMove" @touchend="onOvSheetTouchEnd" @touchcancel="ovSheetGestureCancel"
+          @mousedown="onOvSheetMouseDown" @mousemove="onOvSheetMouseMove" @mouseup="onOvSheetMouseUp" @mouseleave="onOvSheetMouseLeave"
+          @click="openOverviewSheetPhoto">
+          <div class="ov-sheet-track" :style="{ transform: 'translateX(-' + overviewSheetPhotoIndex * 100 + '%)' }">
+            <img v-for="(p, i) in overviewSheetPhotos" :key="i" class="ov-sheet-img" :src="p" alt=""
+              :loading="i <= 1 ? 'eager' : 'lazy'" decoding="async">
+          </div>
+          <div v-if="overviewSheetLoading" class="ov-sheet-photo-loading"><van-loading size="20px" color="#fff"></van-loading></div>
+          <div class="photo-dots" v-if="overviewSheetCount() > 1">
+            <div v-for="(p, i) in overviewSheetPhotos" :key="i" class="photo-dot" :class="{ active: i === overviewSheetPhotoIndex }"></div>
+          </div>
+          <span v-if="overviewSheetCount() > 1" class="ov-photo-count ov-photo-count--sheet">{{ overviewSheetPhotoIndex + 1 }} / {{ overviewSheetCount() }}</span>
+        </div>
+        <div class="ov-sheet-sections">
+          <template v-if="overviewSheet.display_fields && overviewSheet.display_fields.sections">
+            <div class="card-section" v-for="(sec, si) in overviewSheet.display_fields.sections" :key="si">
+              <div class="profile-section-title"><span class="ps-icon">{{ sec.icon }}</span>{{ sec.title }}</div>
+              <div class="info-grid">
+                <div class="info-grid-item" v-for="f in sec.fields" :key="f.label"
+                  :class="{ full: f.label === '我是怎样的人' || f.label === '理想中的TA' }">
+                  <span class="df-label">{{ f.label }}：</span>
+                  <span class="df-value">{{ f.value }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div class="ov-sheet-msg">
+            <div class="ov-sheet-msg-title">留言<span v-if="overviewSheetMessages.length">（{{ overviewSheetMessages.length }}）</span></div>
+            <div v-if="!overviewSheetMessages.length" class="ov-sheet-msg-empty">还没有留言，快来抢沙发～</div>
+            <div v-else class="ov-sheet-msg-list">
+              <div v-for="m in overviewSheetMessages" :key="m.id" class="ov-sheet-msg-item">
+                <span class="ov-sheet-msg-author">{{ m.author_nickname }}：</span>{{ m.content }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="overviewMsgOpen" class="ov-sheet-compose">
+        <input v-model="overviewMsgText" maxlength="200" placeholder="写下你的留言…" @keyup.enter="sendOverviewMessage">
+        <button type="button" :disabled="!overviewMsgText.trim() || overviewMsgSending" @click="sendOverviewMessage">{{ overviewMsgSending ? '发送中…' : '发送' }}</button>
+      </div>
+      <div class="ov-sheet-actions">
+        <button type="button" class="ov-act" :class="{ active: overviewMsgOpen }" @click="toggleOverviewMsg">
+          <van-icon name="chat-o"></van-icon>留言
+        </button>
+        <button type="button" class="ov-act" @click="openOverviewFeedback">
+          <van-icon name="warning-o"></van-icon>反馈
+        </button>
+        <button type="button" class="ov-act" v-if="canPraiseOverviewSheet" :class="{ active: overviewSheetPraised }" @click="togglePraise(overviewSheet)">
+          <van-icon :name="overviewSheetPraised ? 'good-job' : 'good-job-o'"></van-icon>{{ overviewSheetPraised ? '已赞' : '点赞' }}
+        </button>
+        <button type="button" class="ov-act ov-act-like" v-if="canLikeOverviewSheet" @click="openLikeDialogForUser(overviewSheet)">
+          <van-icon name="like"></van-icon>爱心
+        </button>
+      </div>
+    </div>
+    <div v-else class="ov-sheet-loading"><van-loading size="24px"></van-loading></div>
+  </van-popup>
 </div>

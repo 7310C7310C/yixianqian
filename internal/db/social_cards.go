@@ -149,10 +149,11 @@ type CardOverviewEntry struct {
 
 // ListCardOverviewPage returns the eligible card pool ordered by newest
 // registration first (identity id DESC) together with the total pool size.
-// Eligibility is cardCandidateFilter, i.e. exactly the deck's predicate, so the
-// overview can never expose an account the cards endpoint hides.
+// Eligibility and filters are cardCandidateFilter / CardFilter, i.e. exactly
+// the deck's predicate, so the overview can never expose an account the cards
+// endpoint hides.
 func (d *DB) ListCardOverviewPage(ctx context.Context, viewerID int64, targetGender string,
-	limit, offset int) ([]CardOverviewEntry, int, error) {
+	f CardFilter, now time.Time, limit, offset int) ([]CardOverviewEntry, int, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -162,11 +163,23 @@ func (d *DB) ListCardOverviewPage(ctx context.Context, viewerID int64, targetGen
 	if offset < 0 {
 		offset = 0
 	}
-	// Same predicate as the deck; empty text/array/date args mean "not set".
+	ageMinAt, ageMaxAt := socialAgeThresholds(f.AgeMin, f.AgeMax, now)
+	var heightMin, heightMax *int
+	if f.HeightMin > 0 {
+		v := f.HeightMin
+		heightMin = &v
+	}
+	if f.HeightMax > 0 {
+		v := f.HeightMax
+		heightMax = &v
+	}
+	// Same predicate/args as ListCardCandidateIDs; empty values mean "not set".
 	args := []any{
-		viewerID, targetGender, "", "", "", "", "", "",
-		[]string{}, []string{}, []string{}, []string{},
-		nil, nil, nil, nil, []string{}, []string{},
+		viewerID, targetGender, f.Nickname, f.UserID, f.City, f.Church,
+		f.NativePlace, f.Industry, socialNonNilStrings(f.Education), socialNonNilStrings(f.Income),
+		socialNonNilStrings(f.House), socialNonNilStrings(f.Driving),
+		ageMinAt, ageMaxAt, heightMin, heightMax,
+		socialNonNilStrings(f.CityValues), socialNonNilStrings(f.NativePlaceValues),
 	}
 	rows, err := d.pool.Query(ctx,
 		`SELECT u.id, u.created_at, count(*) OVER () FROM users u

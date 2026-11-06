@@ -525,7 +525,7 @@ const yxqApp = createApp({
       // 未保存离开拦截（守卫注册表）：dirty → 弹窗；提交中 → 提示并停留
       if(guardLeave(() => { hist.back(); })) return;
       // 统一返回：有浮层先关浮层，无则 hist.back() 让 popstate 处理页面
-      if(showPhotoViewer.value || showFilter.value || showLikeDialog.value || showFeedbackDialog.value || showReportDialog.value || showSuggestionDialog.value || showInviteDialog.value || showAdminHelp.value || showSelectPopup.value || showMultiPopup.value || signupSheetShow.value || showRedeemPanel.value || showPointsRules.value || showRedemptions.value || signinDialogShow.value || embedOpen.value){
+      if(showPhotoViewer.value || showFilter.value || showLikeDialog.value || showFeedbackDialog.value || showReportDialog.value || showSuggestionDialog.value || showInviteDialog.value || showAdminHelp.value || showSelectPopup.value || showMultiPopup.value || signupSheetShow.value || showRedeemPanel.value || showPointsRules.value || showRedemptions.value || signinDialogShow.value || showOverviewCard.value || embedOpen.value){
         hist.back();
         return;
       }
@@ -755,16 +755,30 @@ const yxqApp = createApp({
     const selfCard = ref(null);
 
     // ===== 全览模式（牵线 tab 再点一次进入）=====
-    // 独立子页：按注册时间倒序（后端 u.id DESC），滚动分页；点卡片走 user_detail，
-    // 返回时保留列表与滚动位置（overviewReturnPending）。
+    // 独立子页：按注册时间倒序（后端 u.id DESC），滚动分页；筛选与牌堆同语义。
+    // 网格 tile 支持多图左右滑动；点 tile 打开卡片浮层（大图滑动 + 留言/反馈/点赞/爱心）。
     const overviewItems = ref([]);
     const overviewTotal = ref(0);
     const overviewLoading = ref(false);
     const overviewHasMore = ref(true);
     const overviewError = ref('');
     const OVERVIEW_PAGE_SIZE = 30;
-    let overviewReturnPending = false;   // 从他人资料返回：保留列表，只恢复滚动
-    let overviewScrollTop = 0;           // 离开全览（进他人资料）时的滚动位置
+    const overviewPhotoIndex = ref({});   // openid -> 网格 tile 当前图序号
+    const showOverviewCard = ref(false);  // 全览卡片浮层
+    const overviewSheet = ref(null);
+    const overviewSheetLoading = ref(false);
+    const overviewSheetPhotos = ref([]);
+    const overviewSheetPhotoIndex = ref(0);
+    const overviewSheetMessages = ref([]);
+    const overviewMsgOpen = ref(false);
+    const overviewMsgText = ref('');
+    const overviewMsgSending = ref(false);
+    let overviewSeq = 0;         // 全览请求序号：reset 打断在途加载更多
+    let overviewSheetSeq = 0;
+    let ovGesture = null;        // 网格 tile 手势
+    let ovSwipeAt = 0;           // 滑动后抑制随后的 click
+    let ovSheetGesture = null;   // 浮层大图手势
+    let ovSheetSwipeAt = 0;
     let cardsTabWasActive = false;       // 手势按下时牵线 tab 是否已激活
 
     // ===== 客户端重载/恢复痕迹（只观测，不改变业务行为）=====
@@ -2974,6 +2988,10 @@ const yxqApp = createApp({
       filter.value = emptyFilter();
       filterBaselineKey = JSON.stringify(filter.value);
       showFilter.value = false;
+      if (page.value === 'cards_overview') {
+        await loadCardsOverview(true);
+        return;
+      }
       cards.value = [];
       cardIndex.value = 0;
       await loadCards(true);
@@ -2984,6 +3002,10 @@ const yxqApp = createApp({
       if(guardOverlay('cardsMsg', () => applyFilter())) return;
       filterBaselineKey = JSON.stringify(filter.value);
       showFilter.value = false;
+      if (page.value === 'cards_overview') {
+        await loadCardsOverview(true);
+        return;
+      }
       cards.value = [];
       cardIndex.value = 0;
       await loadCards(true);
@@ -3090,18 +3112,76 @@ const yxqApp = createApp({
       if (item.city) parts.push(item.city);
       return parts.join(' · ');
     }
+    function overviewPhotosOf(item) {
+      if (!item) return [];
+      if (item.photos && item.photos.length) return item.photos;
+      return item.photo ? [item.photo] : [];
+    }
+    function overviewPhotoOf(item, idx) {
+      const n = overviewPhotosOf(item).length;
+      if (!n) return 0;
+      let v = (idx != null ? idx : overviewPhotoIndex.value[item.openid]) || 0;
+      if (v < 0) v = 0;
+      if (v >= n) v = n - 1;
+      return v;
+    }
+    function setOverviewPhoto(item, idx) {
+      if (!item || !item.openid) return;
+      overviewPhotoIndex.value = { ...overviewPhotoIndex.value, [item.openid]: overviewPhotoOf(item, idx) };
+    }
+    function stepOverviewPhoto(item, dir) {
+      const n = overviewPhotosOf(item).length;
+      if (!item || n <= 1) return;
+      setOverviewPhoto(item, (overviewPhotoOf(item) + dir + n) % n);
+    }
+    function ovGestureStart(e) {
+      const t = (e.touches && e.touches[0]) || e;
+      ovGesture = { x: t.clientX, y: t.clientY, moved: false };
+    }
+    function ovGestureMove(e) {
+      if (!ovGesture) return;
+      const t = (e.touches && e.touches[0]) || e;
+      if (Math.abs(t.clientX - ovGesture.x) > 10 || Math.abs(t.clientY - ovGesture.y) > 10) ovGesture.moved = true;
+    }
+    function ovGestureEnd(e, item) {
+      const g = ovGesture;
+      ovGesture = null;
+      if (!g) return;
+      const t = (e.changedTouches && e.changedTouches[0]) || e;
+      if (!t) return;
+      const dx = t.clientX - g.x;
+      const dy = t.clientY - g.y;
+      if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy)) {
+        stepOverviewPhoto(item, dx < 0 ? 1 : -1);
+        ovSwipeAt = Date.now();
+      } else if (g.moved) {
+        ovSwipeAt = Date.now();
+      }
+    }
+    function onOverviewTileClick(item) {
+      if (Date.now() - ovSwipeAt < 450) return;
+      openOverviewCard(item);
+    }
+    function overviewQuery() {
+      const q = buildFilterQuery();
+      return q ? q + '&' : '?';
+    }
     async function loadCardsOverview(reset) {
-      if (overviewLoading.value) return;
+      // 筛选/刷新（reset）要能打断在途的加载更多；用序号丢弃旧响应。
+      if (overviewLoading.value && !reset) return;
+      const seq = ++overviewSeq;
       overviewLoading.value = true;
       if (reset) {
         overviewItems.value = [];
         overviewTotal.value = 0;
         overviewHasMore.value = true;
         overviewError.value = '';
+        overviewPhotoIndex.value = {};
       }
       const offset = reset ? 0 : overviewItems.value.length;
       try {
-        const data = await api('/api/cards/overview?offset=' + offset + '&limit=' + OVERVIEW_PAGE_SIZE);
+        const data = await api('/api/cards/overview' + overviewQuery() + 'offset=' + offset + '&limit=' + OVERVIEW_PAGE_SIZE);
+        if (seq !== overviewSeq) return;
         const incoming = (data && data.items) || [];
         if (reset) {
           overviewItems.value = incoming;
@@ -3115,10 +3195,16 @@ const yxqApp = createApp({
         }
         overviewHasMore.value = !!(data && data.has_more) && overviewItems.value.length < overviewTotal.value;
       } catch(e) {
+        if (seq !== overviewSeq) return;
         overviewError.value = (e && e.message) || '加载失败，请稍后重试';
         if (!reset) overviewHasMore.value = false;
+      } finally {
+        if (seq === overviewSeq) overviewLoading.value = false;
       }
-      overviewLoading.value = false;
+      if (reset && seq === overviewSeq) nextTick(() => {
+        const el = document.querySelector('.cards-overview-scroll');
+        if (el) el.scrollTop = 0;
+      });
     }
     function loadMoreOverview() {
       if (overviewLoading.value || !overviewHasMore.value) return;
@@ -3131,35 +3217,15 @@ const yxqApp = createApp({
     }
     function reloadCardsOverview() {
       if (overviewLoading.value) return;
-      overviewScrollTop = 0;
       loadCardsOverview(true);
     }
     function onOverviewScroll(e) {
       const el = e && e.target;
       if (!el) return;
-      overviewScrollTop = el.scrollTop || 0;
       if (el.scrollHeight - el.scrollTop - el.clientHeight < 360) loadMoreOverview();
-    }
-    function readOverviewScrollTop() {
-      const el = document.querySelector('.cards-overview-scroll');
-      return (el && el.scrollTop) || 0;
-    }
-    function restoreOverviewScroll(y) {
-      if (!y || y <= 0) return;
-      const started = Date.now();
-      const tick = () => {
-        if (page.value !== 'cards_overview') return;
-        const el = document.querySelector('.cards-overview-scroll');
-        // 卡片是固定宽高比，列表高度不依赖图片解码；但仍等元素挂载后再还原。
-        if (el && el.scrollHeight - el.clientHeight >= y - 4) { el.scrollTop = y; return; }
-        if (Date.now() - started < 1200) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
     }
     function openCardsOverview() {
       if (page.value !== 'cards') return;
-      overviewReturnPending = false;
-      overviewScrollTop = 0;
       page.value = 'cards_overview';
     }
     function markCardsTabPress() {
@@ -3173,11 +3239,137 @@ const yxqApp = createApp({
       if (!wasActive || page.value !== 'cards') return;
       openCardsOverview();
     }
-    function openOverviewUser(item) {
+    function openOverviewCard(item) {
       if (!item || !item.openid) return;
-      overviewReturnPending = true;
-      overviewScrollTop = readOverviewScrollTop();
-      openUserDetailFromPage(item.openid, 'cards_overview');
+      overviewSheet.value = { ...item, photos: overviewPhotosOf(item) };
+      overviewSheetPhotos.value = overviewPhotosOf(item);
+      overviewSheetPhotoIndex.value = 0;
+      overviewSheetMessages.value = [];
+      overviewMsgOpen.value = false;
+      overviewMsgText.value = '';
+      overviewSheetLoading.value = true;
+      showOverviewCard.value = true;
+      const seq = ++overviewSheetSeq;
+      const oid = item.openid;
+      Promise.all([
+        api('/api/users/' + encodeURIComponent(oid) + '/public'),
+        api('/api/messages?target=' + encodeURIComponent(oid)).catch(() => ({ messages: [] })),
+      ]).then(([profile, msgs]) => {
+        if (seq !== overviewSheetSeq || !showOverviewCard.value) return;
+        if (profile && profile.openid) {
+          overviewSheet.value = profile;
+          overviewSheetPhotos.value = (profile.photos_thumb && profile.photos_thumb.length)
+            ? profile.photos_thumb
+            : (profile.photos || overviewSheetPhotos.value);
+          const maxIdx = Math.max(0, overviewSheetPhotos.value.length - 1);
+          if (overviewSheetPhotoIndex.value > maxIdx) overviewSheetPhotoIndex.value = maxIdx;
+        }
+        overviewSheetMessages.value = (msgs && msgs.messages) || [];
+      }).catch(e => {
+        if (seq === overviewSheetSeq) vant.showToast((e && e.message) || '资料加载失败');
+      }).finally(() => {
+        if (seq === overviewSheetSeq) overviewSheetLoading.value = false;
+      });
+    }
+    function ovGestureCancel() { ovGesture = null; }
+    function ovSheetGestureStart(e) {
+      const t = (e.touches && e.touches[0]) || e;
+      ovSheetGesture = { x: t.clientX, y: t.clientY, moved: false };
+    }
+    function ovSheetGestureMove(e) {
+      if (!ovSheetGesture) return;
+      const t = (e.touches && e.touches[0]) || e;
+      if (Math.abs(t.clientX - ovSheetGesture.x) > 10 || Math.abs(t.clientY - ovSheetGesture.y) > 10) ovSheetGesture.moved = true;
+    }
+    function ovSheetGestureEnd(e) {
+      const g = ovSheetGesture;
+      ovSheetGesture = null;
+      if (!g) return;
+      const t = (e.changedTouches && e.changedTouches[0]) || e;
+      if (!t) return;
+      const dx = t.clientX - g.x;
+      const dy = t.clientY - g.y;
+      if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy)) {
+        stepOverviewSheetPhoto(dx < 0 ? 1 : -1);
+        ovSheetSwipeAt = Date.now();
+      } else if (g.moved) {
+        ovSheetSwipeAt = Date.now();
+      }
+    }
+    function ovSheetGestureCancel() { ovSheetGesture = null; }
+    function onOvSheetTouchStart(e) { ovSheetGestureStart(e); }
+    function onOvSheetTouchMove(e) { ovSheetGestureMove(e); }
+    function onOvSheetTouchEnd(e) { ovSheetGestureEnd(e); }
+    function onOvSheetMouseDown(e) { ovSheetGestureStart(e); }
+    function onOvSheetMouseMove(e) { ovSheetGestureMove(e); }
+    function onOvSheetMouseUp(e) { ovSheetGestureEnd(e); }
+    function onOvSheetMouseLeave() { ovSheetGestureCancel(); }
+    function overviewSheetCount() { return overviewSheetPhotos.value.length; }
+    function stepOverviewSheetPhoto(dir) {
+      const n = overviewSheetPhotos.value.length;
+      if (n <= 1) return;
+      let idx = overviewSheetPhotoIndex.value + dir;
+      idx = ((idx % n) + n) % n;
+      overviewSheetPhotoIndex.value = idx;
+    }
+    function openOverviewSheetPhoto() {
+      if (Date.now() - ovSheetSwipeAt < 450) return;
+      const u = overviewSheet.value;
+      if (!u) return;
+      const photos = (u.photos && u.photos.length) ? u.photos : overviewSheetPhotos.value;
+      if (!photos || !photos.length) return;
+      const thumbs = (u.photos_thumb && u.photos_thumb.length) ? u.photos_thumb : photos;
+      openPhotoViewerForUser({ ...u, photos, photos_thumb: thumbs });
+    }
+    const canLikeOverviewSheet = computed(() => {
+      const u = overviewSheet.value;
+      if (!u || !u.openid || u.is_self || isObserver.value) return false;
+      if (u.liked || justLiked.has(u.openid)) return false;
+      if (u.gender && user.value && user.value.gender && u.gender === user.value.gender) return false;
+      return u.can_like !== false;
+    });
+    const canPraiseOverviewSheet = computed(() => {
+      const u = overviewSheet.value;
+      if (!u || !u.openid || u.is_self || isObserver.value) return false;
+      return !(u.liked || justLiked.has(u.openid)) && praiseReady.value;
+    });
+    const overviewSheetPraised = computed(() => !!overviewSheet.value && praisedSet.value.has(overviewSheet.value.openid));
+    function openOverviewFeedback() {
+      if (overviewSheet.value) openFeedbackDialog(overviewSheet.value);
+    }
+    function toggleOverviewMsg() {
+      overviewMsgOpen.value = !overviewMsgOpen.value;
+      if (overviewMsgOpen.value) nextTick(() => {
+        const el = document.querySelector('.ov-sheet-compose input');
+        if (el) { try { el.focus(); } catch(e) {} }
+      });
+    }
+    async function sendOverviewMessage() {
+      const u = overviewSheet.value;
+      const text = (overviewMsgText.value || '').trim();
+      if (!u || !u.openid) return false;
+      if (!text) { vant.showToast('请输入留言'); return false; }
+      if (overviewMsgSending.value) return false;
+      overviewMsgSending.value = true;
+      try {
+        await api('/api/messages', { method: 'POST', body: JSON.stringify({ target_openid: u.openid, content: text }) });
+        overviewSheetMessages.value = overviewSheetMessages.value.concat([{
+          id: 'local-' + Date.now(),
+          author_nickname: (user.value && user.value.nickname) || '我',
+          author_uid: (user.value && user.value.user_id) || '',
+          content: text,
+          is_mine: true,
+        }]);
+        overviewMsgText.value = '';
+        overviewMsgOpen.value = false;
+        vant.showToast('已发');
+        return true;
+      } catch(e) {
+        vant.showToast((e && e.message) || '发送失败');
+        return false;
+      } finally {
+        overviewMsgSending.value = false;
+      }
     }
     function trimCardsWindow() {
       // 内存上限：窗口最多 150 张；只在本窗口内截头/截尾，绝不引用窗口外页
@@ -4693,9 +4885,12 @@ const yxqApp = createApp({
     }
 
     // 反馈 - 弹出反馈弹窗
-    function openFeedbackDialog() {
-      if (!currentCard.value || !currentCard.value.openid) return;
-      feedbackTarget.value = { openid: currentCard.value.openid, nickname: currentCard.value.nickname };
+    function openFeedbackDialog(target) {
+      // 模板里 @click="openFeedbackDialog"（无括号）会把 MouseEvent 传进来；
+      // 只有带 openid 的对象才是目标，其余一律回落到当前牌堆卡片。
+      const t = (target && target.openid) ? target : currentCard.value;
+      if (!t || !t.openid) return;
+      feedbackTarget.value = { openid: t.openid, nickname: t.nickname };
       feedbackReason.value = '已有对象';
       feedbackText.value = '';
       showFeedbackDialog.value = true;
@@ -5599,6 +5794,10 @@ const yxqApp = createApp({
         if(guardOverlay('feedbackDialog', () => { showFeedbackDialog.value=false; })){ isHandlingPopState=false; pushHistory({overlay:'feedbackDialog'}); return; }
         showFeedbackDialog.value=false; isHandlingPopState=false; return;
       }
+      if(showOverviewCard.value){
+        if(overviewMsgOpen.value){ overviewMsgOpen.value=false; isHandlingPopState=false; pushHistory({overlay:'ovCard'}); return; }
+        showOverviewCard.value=false; isHandlingPopState=false; return;
+      }
       if(showOnetooneMsg.value){
         if(guardOverlay('onetooneMsg', () => { showOnetooneMsg.value=false; })){ isHandlingPopState=false; pushHistory({overlay:'onetooneMsg'}); return; }
         showOnetooneMsg.value=false; isHandlingPopState=false; return;
@@ -5699,12 +5898,8 @@ const yxqApp = createApp({
       if (p === 'home') loadActivities();
       if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
       if (p === 'cards_overview') {
-        if (overviewReturnPending) {
-          overviewReturnPending = false;
-          restoreOverviewScroll(overviewScrollTop);
-        } else {
-          loadCardsOverview(true);
-        }
+        loadCardsOverview(true);
+        loadPraiseState();
       }
       if (p === 'likes') loadNotifications();
       if (p === 'like_inbox') {
@@ -5788,6 +5983,7 @@ const yxqApp = createApp({
     watch(showFilter, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'filter'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='filter' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     watch(showLikeDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'likeDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='likeDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     watch(showFeedbackDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'feedbackDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='feedbackDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
+    watch(showOverviewCard, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'ovCard'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='ovCard'){ ignoreNextPop=true; hist.back(); } });
     watch(showReportDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'reportDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='reportDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     watch(showSuggestionDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'suggestionDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='suggestionDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     // onetooneMsg 打开时不单独 push（返回语义沿用页面条目），仅拦截时会补挂 overlay 条目；关闭时按需消费
@@ -7877,7 +8073,13 @@ const yxqApp = createApp({
       openActivity, doSignup, cancelSignup, onSignupClick, confirmPay, showPayDialog,
       cards, cardsTotal, cardsStart, loadingCards, currentCard, cardIndex, photoIndex, photoSlideDir, currentPhotoUrl, currentPhotoList, photoSrc, photoLoading,
       overviewItems, overviewTotal, overviewLoading, overviewHasMore, overviewError,
-      overviewMeta, onOverviewScroll, loadMoreOverview, retryOverviewMore, reloadCardsOverview, openOverviewUser, openCardsOverview,
+      overviewMeta, overviewPhotosOf, overviewPhotoOf, onOverviewScroll, loadMoreOverview, retryOverviewMore, reloadCardsOverview, openCardsOverview,
+      onOverviewTileClick, ovGestureStart, ovGestureMove, ovGestureEnd, ovGestureCancel,
+      showOverviewCard, overviewSheet, overviewSheetLoading, overviewSheetPhotos, overviewSheetPhotoIndex,
+      overviewSheetMessages, overviewMsgOpen, overviewMsgText, overviewMsgSending, overviewSheetCount,
+      onOvSheetTouchStart, onOvSheetTouchMove, onOvSheetTouchEnd, ovSheetGestureCancel, onOvSheetMouseDown, onOvSheetMouseMove,
+      onOvSheetMouseUp, onOvSheetMouseLeave, openOverviewSheetPhoto, canLikeOverviewSheet, canPraiseOverviewSheet,
+      overviewSheetPraised, openOverviewFeedback, toggleOverviewMsg, sendOverviewMessage,
       markCardsTabPress, onCardsTabTap,
       sharpPhotos, sharpReady, onSharpLoad,
       showSwipeGuide, closeSwipeGuide,

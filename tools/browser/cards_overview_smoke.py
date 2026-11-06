@@ -100,6 +100,30 @@ def tab_item(page, label: str):
     return page.locator(".van-tabbar-item").filter(has_text=label).first
 
 
+def touch_swipe(page, selector: str, dx: int) -> bool:
+    """在元素上派发一次水平触摸滑动（Chromium 支持 TouchEvent 构造）。"""
+    return page.evaluate(
+        """({sel, dx}) => {
+            const el = document.querySelector(sel);
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            const x = r.left + r.width * 0.7;
+            const y = r.top + r.height * 0.4;
+            const mk = (cx) => new Touch({identifier: 1, target: el, clientX: cx, clientY: y});
+            const fire = (type, cx, active) => el.dispatchEvent(new TouchEvent(type, {
+                bubbles: true, cancelable: true,
+                touches: active ? [mk(cx)] : [],
+                changedTouches: [mk(cx)],
+            }));
+            fire('touchstart', x, true);
+            fire('touchmove', x + dx / 2, true);
+            fire('touchend', x + dx, false);
+            return true;
+        }""",
+        {"sel": selector, "dx": dx},
+    )
+
+
 def click_tab(page, label: str, marker: str | None = None) -> None:
     # 已在目标页就不要点：牵线 tab 在激活态再点一次会进全览（产品行为）。
     if marker and page.locator(marker).count():
@@ -312,8 +336,8 @@ def main() -> int:
                 page.wait_for_selector(".ov-tile[data-uid]", timeout=15000)
                 page.wait_for_function(
                     """() => {
-                        const imgs = [...document.querySelectorAll('.ov-photo')].slice(0, 2);
-                        return imgs.length > 0 && imgs.every((img) => img.complete && img.naturalWidth > 0);
+                        const img = document.querySelector('.ov-tile[data-uid] .ov-photo');
+                        return !!img && img.complete && img.naturalWidth > 0;
                     }""",
                     timeout=15000,
                 )
@@ -361,51 +385,241 @@ def main() -> int:
                 if broken:
                     raise SmokeFailure(f"全览有 {broken} 张图片加载失败（404/损坏）")
 
-                # ---- 7. 进资料页 → 返回保留列表与滚动位置 ----
-                page.evaluate(
-                    "() => { const el = document.querySelector('.cards-overview-scroll'); el.scrollTop = 420; }"
-                )
-                page.wait_for_timeout(350)
-                scrolled = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
-                kept = len(tile_uids(page))
-                # 用 JS 点当前视口内完整可见的 tile：Playwright 的 click 会把 tile
-                # scrollIntoView（可能把列表拉回顶部），导致滚动位置断言失真。
-                page.evaluate(
+                # ---- 7. 底部空白：子页要铺满视口（#app 底栏预留不能留白带）----
+                gap = page.evaluate(
                     """() => {
-                        const sc = document.querySelector('.cards-overview-scroll');
-                        const box = sc.getBoundingClientRect();
-                        const tiles = [...document.querySelectorAll('.ov-tile[data-uid]')];
-                        const target = tiles.find((el) => {
-                            const r = el.getBoundingClientRect();
-                            return r.top >= box.top + 4 && r.bottom <= box.bottom - 4;
-                        }) || tiles[0];
-                        target.click();
+                        const el = document.querySelector('.cards-overview-page');
+                        const r = el.getBoundingClientRect();
+                        return {
+                            gap: Math.round(window.innerHeight - r.bottom),
+                            pageHeight: Math.round(r.height),
+                            viewport: window.innerHeight,
+                        };
                     }"""
                 )
-                page.wait_for_selector(".user-detail-card, .back-nav", timeout=15000)
-                page.wait_for_timeout(600)
-                page.locator(".back-nav").first.click()
-                page.wait_for_selector(".cards-overview-page", timeout=10000)
-                page.wait_for_timeout(800)
-                restored = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
-                if len(tile_uids(page)) < min(kept, 3):
-                    raise SmokeFailure(f"返回后全览列表丢失：{kept} → {len(tile_uids(page))}")
-                if scrolled > 100 and restored < min(scrolled, 120):
-                    diag = page.evaluate(
-                        """() => {
-                            const el = document.querySelector('.cards-overview-scroll');
-                            return {
-                                top: el ? el.scrollTop : null,
-                                scrollHeight: el ? el.scrollHeight : null,
-                                clientHeight: el ? el.clientHeight : null,
-                                items: document.querySelectorAll('.ov-tile[data-uid]').length,
-                                sub: (document.querySelector('.ov-sub') || {}).innerText || '',
-                                hist: window.__YXQ_HIST_DEBUG__ ? window.__YXQ_HIST_DEBUG__() : null,
-                            };
-                        }"""
+                if abs(gap["gap"]) > 2:
+                    raise SmokeFailure(f"全览页底部有空白带：{gap}")
+                notes.append(f"{label}: 全览页铺满视口 {gap['pageHeight']}px（留白 {gap['gap']}px）")
+
+                # ---- 8. 网格卡片多图滑动 ----
+                page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); el.scrollTop = 0; }")
+                page.wait_for_timeout(350)
+                swipe_uid = page.evaluate(
+                    """() => {
+                        const tiles = [...document.querySelectorAll('.ov-tile[data-uid]')];
+                        const el = tiles.find((t) => t.querySelector('.ov-photo-count'));
+                        return el ? el.dataset.uid : '';
+                    }"""
+                )
+                if not swipe_uid:
+                    notes.append(f"{label}: 首屏无多图卡片，跳过多图滑动")
+                else:
+                    # 先把目标 tile 滚到视口内，再取手势坐标（否则鼠标坐标落在视口外）。
+                    page.evaluate(
+                        """(uid) => {
+                            const sc = document.querySelector('.cards-overview-scroll');
+                            const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                            if (!sc || !el) return;
+                            const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+                            sc.scrollTop = Math.max(0, top - 120);
+                        }""",
+                        swipe_uid,
                     )
-                    raise SmokeFailure(f"返回后滚动位置未恢复：{scrolled} → {restored} diag={diag}")
-                notes.append(f"{label}: 返回资料页保留 {len(tile_uids(page))} 条，scrollTop={restored}")
+                    page.wait_for_timeout(300)
+                    swipe = page.evaluate(
+                        """(uid) => {
+                            const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                            if (!el) return null;
+                            const r = el.getBoundingClientRect();
+                            return {
+                                uid,
+                                counter: (el.querySelector('.ov-photo-count') || {}).textContent || '',
+                                x: r.left + r.width * 0.7,
+                                y: r.top + r.height * 0.35,
+                            };
+                        }""",
+                        swipe_uid,
+                    )
+                    if not swipe:
+                        raise SmokeFailure(f"找不到多图 tile：{swipe_uid}")
+                    page.mouse.move(swipe["x"], swipe["y"])
+                    page.mouse.down()
+                    page.mouse.move(swipe["x"] - 100, swipe["y"], steps=6)
+                    page.mouse.up()
+                    page.wait_for_timeout(400)
+                    if page.locator(".ov-sheet-body").count() and page.locator(".ov-sheet-body").first.is_visible():
+                        raise SmokeFailure("网格滑动被误判为点击，弹出了卡片浮层")
+                    after_counter = page.evaluate(
+                        """(uid) => {
+                            const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                            return el ? ((el.querySelector('.ov-photo-count') || {}).textContent || '') : '';
+                        }""",
+                        swipe["uid"],
+                    )
+                    if after_counter == swipe["counter"]:
+                        raise SmokeFailure(f"网格多图滑动未生效：{swipe['counter']} → {after_counter}")
+                    notes.append(f"{label}: 网格多图滑动 {swipe['counter']} → {after_counter}")
+                    # 触摸路径：同一 tile 反向滑回（网格的 ovGesture* 与浮层是两套 handler）。
+                    if touch_swipe(page, f'.ov-tile[data-uid="{swipe["uid"]}"]', 90):
+                        page.wait_for_timeout(400)
+                        touch_counter = page.evaluate(
+                            """(uid) => {
+                                const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                                return el ? ((el.querySelector('.ov-photo-count') || {}).textContent || '') : '';
+                            }""",
+                            swipe["uid"],
+                        )
+                        if touch_counter == after_counter:
+                            raise SmokeFailure(f"网格触摸滑动未生效：{after_counter} → {touch_counter}")
+                        if page.locator(".ov-sheet-body").count() and page.locator(".ov-sheet-body").first.is_visible():
+                            raise SmokeFailure("网格触摸滑动被误判为点击")
+                        notes.append(f"{label}: 网格触摸滑动 {after_counter} → {touch_counter}")
+
+                # ---- 9. 卡片浮层：大图 / 多图 / 留言 / 反馈 / 点赞 / 爱心 ----
+                items = api.get("items") or []
+                multi = [it for it in items if len(it.get("photos") or []) > 1]
+                target = None
+                for item in multi:
+                    if not item.get("liked"):
+                        target = item
+                        break
+                if target is None and multi:
+                    target = multi[0]
+                if target is None:
+                    for item in items:
+                        if not item.get("liked"):
+                            target = item
+                            break
+                if target is None:
+                    target = items[0] if items else {}
+                target_uid = target.get("user_id")
+                page.evaluate(
+                    """(uid) => {
+                        const sc = document.querySelector('.cards-overview-scroll');
+                        const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                        if (!sc || !el) return;
+                        const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+                        sc.scrollTop = Math.max(0, top - 80);
+                    }""",
+                    target_uid,
+                )
+                page.wait_for_timeout(250)
+                scroll_before_sheet = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
+                page.evaluate(
+                    """(uid) => {
+                        const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                        if (el) el.click();
+                    }""",
+                    target_uid,
+                )
+                page.wait_for_selector(".ov-sheet-body", timeout=15000)
+                page.wait_for_timeout(500)
+                sheet = page.evaluate(
+                    """() => {
+                        const body = document.querySelector('.ov-sheet-body');
+                        const acts = [...document.querySelectorAll('.ov-sheet-actions .ov-act')];
+                        const photos = document.querySelectorAll('.ov-sheet-img').length;
+                        const counter = (document.querySelector('.ov-sheet-actions') || {});
+                        return {
+                            name: (document.querySelector('.ov-sheet-name') || {}).innerText || '',
+                            actions: acts.map((el) => (el.innerText || '').trim()),
+                            likeVisible: !!document.querySelector('.ov-act-like'),
+                            photos,
+                            counter: (document.querySelector('.ov-photo-count--sheet') || {}).textContent || '',
+                            sections: document.querySelectorAll('.ov-sheet-sections .card-section').length,
+                            bodyVisible: !!body && body.getBoundingClientRect().height > 0,
+                        };
+                    }"""
+                )
+                if target.get("nickname") and target["nickname"] not in sheet["name"]:
+                    raise SmokeFailure(f"浮层姓名不符：{sheet['name']} vs {target['nickname']}")
+                if not sheet["bodyVisible"] or sheet["sections"] <= 0:
+                    raise SmokeFailure(f"浮层资料未渲染：{sheet}")
+                joined = " ".join(sheet["actions"])
+                if "留言" not in joined or "反馈" not in joined:
+                    raise SmokeFailure(f"浮层缺少留言/反馈：{sheet['actions']}")
+                if not target.get("liked") and not sheet["likeVisible"]:
+                    raise SmokeFailure(f"未喜欢对象缺少爱心按钮：{sheet}")
+                if sheet["photos"] > 1:
+                    before_counter = sheet["counter"]
+                    box = page.locator(".ov-sheet-photo").bounding_box()
+                    if box:
+                        page.mouse.move(box["x"] + box["width"] * 0.75, box["y"] + box["height"] * 0.5)
+                        page.mouse.down()
+                        page.mouse.move(box["x"] + box["width"] * 0.25, box["y"] + box["height"] * 0.5, steps=6)
+                        page.mouse.up()
+                        page.wait_for_timeout(400)
+                        after_counter = page.evaluate(
+                            "() => (document.querySelector('.ov-photo-count--sheet') || {}).textContent || ''"
+                        )
+                        if after_counter == before_counter:
+                            raise SmokeFailure(f"浮层大图滑动未生效：{before_counter} → {after_counter}")
+                        # 触摸路径单独再滑一次（onOvSheetTouch* 曾漏定义导致启动失败）。
+                        if touch_swipe(page, ".ov-sheet-photo", -80):
+                            page.wait_for_timeout(400)
+                            touch_counter = page.evaluate(
+                                "() => (document.querySelector('.ov-photo-count--sheet') || {}).textContent || ''"
+                            )
+                            if touch_counter == after_counter:
+                                raise SmokeFailure(f"浮层触摸滑动未生效：{after_counter} → {touch_counter}")
+                            notes.append(f"{label}: 浮层触摸滑动 {after_counter} → {touch_counter}")
+                        notes.append(f"{label}: 浮层大图滑动 {before_counter} → {after_counter}")
+                notes.append(f"{label}: 浮层动作 {sheet['actions']}，资料分区 {sheet['sections']}")
+
+                # 留言：打开输入框（不真正发送，避免污染 staging 数据）
+                page.locator(".ov-sheet-actions .ov-act").filter(has_text="留言").first.click()
+                page.wait_for_selector(".ov-sheet-compose input", timeout=5000)
+                page.fill(".ov-sheet-compose input", "smoke 测试留言")
+                if page.locator(".ov-sheet-compose button").is_disabled():
+                    raise SmokeFailure("留言输入后发送按钮仍禁用")
+                page.fill(".ov-sheet-compose input", "")
+                page.locator(".ov-sheet-actions .ov-act").filter(has_text="留言").first.click()
+                page.wait_for_selector(".ov-sheet-compose", state="detached", timeout=5000)
+
+                # 反馈：打开后取消（不提交）
+                page.locator(".ov-sheet-actions .ov-act").filter(has_text="反馈").first.click()
+                page.wait_for_selector(".van-dialog", timeout=8000)
+                if not page.get_by_text("反馈该用户", exact=True).count():
+                    raise SmokeFailure("反馈弹窗未出现")
+                page.locator(".van-dialog").last.get_by_text("取消", exact=True).click()
+                page.wait_for_timeout(400)
+
+                # 关闭浮层：列表与滚动位置保持不变
+                page.locator(".ov-sheet-close").click()
+                try:
+                    page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                except PlaywrightTimeoutError:
+                    pass
+                page.wait_for_timeout(300)
+                scroll_after_sheet = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
+                if abs(scroll_after_sheet - scroll_before_sheet) > 3:
+                    raise SmokeFailure(f"关闭浮层后滚动位置变化：{scroll_before_sheet} → {scroll_after_sheet}")
+                if len(tile_uids(page)) < 1:
+                    raise SmokeFailure("关闭浮层后列表丢失")
+                notes.append(f"{label}: 关闭浮层后列表与滚动位置保持（{scroll_after_sheet}px）")
+                page.screenshot(path=str(out_dir / f"sheet-{label}.png"))
+
+                # ---- 10. 筛选：应用无结果 → 清除 ----
+                page.locator(".ov-filter").click()
+                page.wait_for_selector(".filter-title", timeout=5000)
+                page.get_by_placeholder("如：张三").fill("zzzz-no-such-user")
+                page.get_by_text("应用筛选", exact=True).click()
+                page.wait_for_function(
+                    "() => (document.querySelector('.ov-state-text') || {}).innerText?.includes('没有符合筛选条件的人')",
+                    timeout=10000,
+                )
+                if not page.locator(".ov-filter.active").count():
+                    raise SmokeFailure("应用筛选后筛选按钮未高亮")
+                if page.locator(".ov-tile[data-uid]").count():
+                    raise SmokeFailure("无结果筛选仍显示卡片")
+                page.locator(".ov-filter-note span").click()
+                page.wait_for_function(
+                    "() => document.querySelectorAll('.ov-tile[data-uid]').length > 0",
+                    timeout=15000,
+                )
+                if page.locator(".ov-filter.active").count():
+                    raise SmokeFailure("清除筛选后按钮仍高亮")
+                notes.append(f"{label}: 筛选无结果 → 清除筛选恢复列表")
 
                 # ---- 8. 返回牵线 ----
                 page.locator(".ov-back").click()
@@ -413,6 +627,21 @@ def main() -> int:
                 if page.locator(".cards-overview-page").count():
                     raise SmokeFailure("返回后全览没有关闭")
                 page.screenshot(path=str(out_dir / f"back-{label}.png"))
+
+                # ---- 11. 回归：牌堆「反馈」仍可打开（openFeedbackDialog 改签名）----
+                # 牌堆首位通常是本人卡（没有反馈按钮），先切到下一张。
+                page.keyboard.press("ArrowRight")
+                page.wait_for_timeout(600)
+                feedback = page.locator(".feedback-btn")
+                if not feedback.count():
+                    raise SmokeFailure("牌堆卡片缺少反馈按钮")
+                feedback.first.click()
+                page.wait_for_selector(".van-dialog", timeout=8000)
+                if not page.get_by_text("反馈该用户", exact=True).count():
+                    raise SmokeFailure("牌堆反馈弹窗未出现")
+                page.locator(".van-dialog").last.get_by_text("取消", exact=True).click()
+                page.wait_for_timeout(300)
+                notes.append(f"{label}: 牌堆反馈按钮回归 PASS")
 
                 if errors:
                     raise SmokeFailure("出现 console error / pageerror：" + "；".join(errors[:5]))

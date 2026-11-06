@@ -1170,34 +1170,48 @@
     .embed-sk-shimmer { animation: none; }
     .embed-slide-enter-active, .embed-slide-leave-active { transition: none !important; }
   }
-  /* 全览模式：牵线 tab 再点一次进入；按注册时间从新到旧的照片网格 */
-  .cards-overview-page { height: calc(var(--yxq-vh, 100vh) - 60px - env(safe-area-inset-bottom)); display: flex; flex-direction: column; background: #f7f8fa; position: relative; z-index: 1; }
-  .ov-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 6px; padding-top: calc(10px + constant(safe-area-inset-top)); padding-top: calc(10px + env(safe-area-inset-top)); background: #fff; border-bottom: 1px solid #f2f3f5; }
+  /* 全览模式：牵线 tab 再点一次进入；按注册时间从新到旧的照片网格。
+     子页没有底栏，但 #app 仍预留 60px+safe 底栏空间：用负 margin 收回来，
+     否则内容区底部会留一条空白带（PM 反馈）。 */
+  .cards-overview-page { height: var(--yxq-vh, 100vh); margin-bottom: calc(-60px - env(safe-area-inset-bottom)); display: flex; flex-direction: column; background: #f7f8fa; position: relative; z-index: 1; }
+  .ov-head { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 10px 10px 10px 6px; padding-top: calc(10px + constant(safe-area-inset-top)); padding-top: calc(10px + env(safe-area-inset-top)); background: #fff; border-bottom: 1px solid #f2f3f5; }
   .ov-back, .ov-refresh { flex-shrink: 0; width: 42px; height: 42px; border: 0; padding: 0; border-radius: 50%; background: transparent; color: #323233; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .ov-back:active, .ov-refresh:active { background: #f2f3f5; }
   .ov-refresh { color: #969799; font-size: 18px; }
   .ov-head-main { flex: 1; min-width: 0; }
   .ov-title { font-size: 18px; font-weight: 600; color: #323233; line-height: 1.25; }
   .ov-sub { font-size: 12px; color: #969799; margin-top: 2px; }
-  .ov-filter-note { flex-shrink: 0; padding: 7px 14px; background: #fff7e8; color: #a4620a; font-size: 12px; line-height: 1.4; border-bottom: 1px solid #fdeccd; }
+  .ov-filter { flex-shrink: 0; height: 34px; padding: 0 10px; border: 1px solid #ebedf0; border-radius: 17px; background: #fff; color: #646566; font-size: 13px; line-height: 1; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .ov-filter .van-icon { font-size: 15px; }
+  .ov-filter.active { border-color: #ff6b81; color: #ff6b81; background: #fff0f3; }
+  .ov-filter-note { flex-shrink: 0; padding: 7px 14px; background: #fff7e8; color: #a4620a; font-size: 12px; line-height: 1.4; border-bottom: 1px solid #fdeccd; display: flex; align-items: center; gap: 10px; }
+  .ov-filter-note span { margin-left: auto; color: #ff6b81; font-weight: 600; cursor: pointer; }
   .cards-overview-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding: 12px 12px calc(18px + env(safe-area-inset-bottom)); }
   .ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   @media (min-width: 600px) { .ov-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
-  @media (min-width: 960px) { .ov-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .cards-overview-page { max-width: 1180px; margin: 0 auto; } }
+  @media (min-width: 960px) { .ov-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .cards-overview-page { max-width: 1180px; margin-left: auto; margin-right: auto; } }
   /* aspect-ratio 在 Safari 14.1（项目最低版本）不支持，先用 padding 撑高，
      支持后再用 aspect-ratio（子元素全是 absolute，padding 方案不会影响布局）。 */
-  .ov-tile { position: relative; display: block; width: 100%; height: 0; padding: 0 0 133.333%; border: 0; border-radius: 14px; overflow: hidden; background: #eceff3; color: #fff; cursor: pointer; text-align: left; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  .ov-tile { position: relative; display: block; width: 100%; height: 0; padding: 0 0 133.333%; border: 0; border-radius: 14px; overflow: hidden; background: #eceff3; color: #fff; cursor: pointer; text-align: left; box-shadow: 0 2px 10px rgba(0,0,0,0.08); touch-action: pan-y; }
   @supports (aspect-ratio: 3 / 4) { .ov-tile { height: auto; padding-bottom: 0; aspect-ratio: 3 / 4; } }
   .ov-tile:active { transform: scale(0.985); }
+  .ov-photo-track { position: absolute; inset: 0; display: flex; height: 100%; transition: transform 0.22s ease; will-change: transform; }
+  .ov-photo-slide { position: relative; flex: 0 0 100%; width: 100%; height: 100%; }
   .ov-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
   .ov-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 46%, rgba(0,0,0,0.32) 68%, rgba(0,0,0,0.72) 100%); pointer-events: none; }
   .ov-info { position: absolute; left: 10px; right: 10px; bottom: 9px; display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
   .ov-name { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0,0,0,0.45); }
   .ov-gender { margin-left: 3px; font-size: 12px; opacity: 0.9; }
   .ov-meta { font-size: 11.5px; color: rgba(255,255,255,0.88); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ov-badge { position: absolute; top: 8px; left: 8px; padding: 2px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; line-height: 1.5; letter-spacing: 0.3px; }
+  .ov-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; pointer-events: none; }
+  .ov-badge { padding: 2px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; line-height: 1.5; letter-spacing: 0.3px; }
   .ov-badge-new { background: #ff6b81; color: #fff; box-shadow: 0 2px 8px rgba(255,107,129,0.45); }
-  .ov-badge-rec { left: auto; right: 8px; background: rgba(255,176,32,0.95); color: #fff; }
+  .ov-badge-rec { background: rgba(255,176,32,0.95); color: #fff; }
+  .ov-photo-count { position: absolute; top: 8px; right: 8px; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,0.42); color: #fff; font-size: 10.5px; line-height: 1.5; letter-spacing: 0.3px; }
+  .ov-photo-count--sheet { top: 12px; right: 12px; font-size: 12px; padding: 3px 9px; }
+  .ov-dots { position: absolute; left: 0; right: 0; bottom: 44px; display: flex; justify-content: center; gap: 4px; pointer-events: none; }
+  .ov-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.5); }
+  .ov-dot.active { background: #fff; }
   .ov-liked { position: absolute; right: 8px; bottom: 8px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.42); color: #ff8fa0; font-size: 12px; line-height: 22px; text-align: center; }
   .ov-state { padding: 56px 20px; text-align: center; color: #969799; }
   .ov-state-icon { font-size: 40px; margin-bottom: 10px; }
@@ -1211,18 +1225,61 @@
   .ov-skel-photo { position: absolute; inset: 0; background: linear-gradient(90deg, #eef0f3 25%, #e3e6ea 37%, #eef0f3 63%); background-size: 400% 100%; animation: ov-shimmer 1.3s ease infinite; }
   .ov-skel-line { position: absolute; left: 10px; right: 34%; bottom: 12px; height: 12px; border-radius: 6px; background: rgba(255,255,255,0.55); }
   @keyframes ov-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+  /* 全览卡片浮层 */
+  .ov-sheet { background: #fff; }
+  .ov-sheet-body { height: 100%; display: flex; flex-direction: column; background: #fff; }
+  .ov-sheet-head { flex-shrink: 0; display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px 10px; border-bottom: 1px solid #f2f3f5; }
+  .ov-sheet-head-main { flex: 1; min-width: 0; }
+  .ov-sheet-name { font-size: 18px; font-weight: 600; color: #323233; line-height: 1.3; }
+  .ov-sheet-sub { font-size: 12px; color: #969799; margin-top: 3px; line-height: 1.4; }
+  .ov-sheet-close { flex-shrink: 0; width: 36px; height: 36px; border: 0; padding: 0; border-radius: 50%; background: #f7f8fa; color: #646566; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .ov-sheet-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
+  .ov-sheet-photo { position: relative; width: 100%; height: clamp(240px, 44vh, 460px); overflow: hidden; background: #111; }
+  .ov-sheet-track { display: flex; height: 100%; transition: transform 0.22s ease; will-change: transform; }
+  .ov-sheet-img { flex: 0 0 100%; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ov-sheet-photo-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.25); }
+  .ov-sheet-sections { padding: 14px 16px 20px; }
+  .ov-sheet-msg { margin-top: 18px; padding-top: 4px; border-top: 1px solid #f2f3f5; }
+  .ov-sheet-msg-title { font-size: 15px; font-weight: 600; color: #323233; margin: 12px 0 6px; }
+  .ov-sheet-msg-empty { font-size: 13px; color: #969799; padding: 4px 0; }
+  .ov-sheet-msg-item { font-size: 13.5px; color: #323233; line-height: 1.55; padding: 7px 0; border-bottom: 1px dashed #f2f3f5; word-break: break-word; }
+  .ov-sheet-msg-item:last-child { border-bottom: 0; }
+  .ov-sheet-msg-author { color: #ff6b81; font-weight: 600; }
+  .ov-sheet-compose { flex-shrink: 0; display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid #f2f3f5; background: #fff; }
+  .ov-sheet-compose input { flex: 1; min-width: 0; height: 40px; border: 1px solid #ebedf0; border-radius: 10px; padding: 0 12px; font-size: 14px; background: #fff; color: #323233; }
+  .ov-sheet-compose button { flex-shrink: 0; min-width: 64px; height: 40px; border: 0; border-radius: 10px; background: #ff6b81; color: #fff; font-size: 14px; cursor: pointer; }
+  .ov-sheet-compose button:disabled { opacity: 0.5; }
+  .ov-sheet-actions { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid #f2f3f5; background: #fff; }
+  .ov-act { flex: 1; min-width: 0; min-height: 44px; padding: 0 4px; border: 1px solid #ebedf0; border-radius: 12px; background: #fff; color: #323233; font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+  .ov-act .van-icon { font-size: 17px; }
+  .ov-act.active { border-color: #ff6b81; color: #ff6b81; background: #fff0f3; }
+  .ov-act-like { flex: 1.15; border: 0; background: linear-gradient(135deg, #ff6b81, #ff8e9b); color: #fff; font-weight: 600; box-shadow: 0 4px 14px rgba(255,107,129,0.32); }
+  .ov-sheet-loading { height: 100%; display: flex; align-items: center; justify-content: center; }
   .van-theme-dark .cards-overview-page { background: #111; }
   .van-theme-dark .ov-head { background: #1c1c1e; border-bottom-color: #2c2c2e; }
   .van-theme-dark .ov-title, .van-theme-dark .ov-back { color: #f5f5f5; }
   .van-theme-dark .ov-refresh { color: #a0a0a4; }
   .van-theme-dark .ov-back:active, .van-theme-dark .ov-refresh:active { background: #2c2c2e; }
+  .van-theme-dark .ov-filter { background: #1c1c1e; border-color: #3a3a3e; color: #c8c9cc; }
+  .van-theme-dark .ov-filter.active { border-color: #ff6b81; color: #ffb3bf; background: #2a1b1f; }
   .van-theme-dark .ov-filter-note { background: #2a2417; color: #e0b060; border-bottom-color: #3a3220; }
   .van-theme-dark .ov-tile { background: #1f1f22; box-shadow: none; }
   .van-theme-dark .ov-skel-photo { background-image: linear-gradient(90deg, #2a2a2e 25%, #3a3a3e 37%, #2a2a2e 63%); }
   .van-theme-dark .ov-skel-line { background: rgba(255,255,255,0.16); }
+  .van-theme-dark .ov-sheet, .van-theme-dark .ov-sheet-body, .van-theme-dark .ov-sheet-actions, .van-theme-dark .ov-sheet-compose { background: #1c1c1e; }
+  .van-theme-dark .ov-sheet-head, .van-theme-dark .ov-sheet-actions, .van-theme-dark .ov-sheet-compose, .van-theme-dark .ov-sheet-msg { border-color: #2c2c2e; }
+  .van-theme-dark .ov-sheet-name, .van-theme-dark .ov-sheet-msg-title, .van-theme-dark .ov-sheet-msg-item { color: #f5f5f5; }
+  .van-theme-dark .ov-sheet-sub, .van-theme-dark .ov-sheet-msg-empty { color: #a0a0a4; }
+  .van-theme-dark .ov-sheet-close { background: #2c2c2e; color: #c8c9cc; }
+  .van-theme-dark .ov-sheet-compose input { background: #1c1c1e; border-color: #3a3a3e; color: #f5f5f5; }
+  .van-theme-dark .ov-act { background: #1c1c1e; border-color: #3a3a3e; color: #f5f5f5; }
+  .van-theme-dark .ov-act.active { border-color: #ff6b81; color: #ffb3bf; background: #2a1b1f; }
+  .van-theme-dark .ov-act-like { border: 0; background: linear-gradient(135deg, #ff6b81, #ff8e9b); color: #fff; }
+  .van-theme-dark .ov-sheet-msg-item { border-bottom-color: #2c2c2e; }
   @media (prefers-reduced-motion: reduce) {
     .ov-skel-photo { animation: none; }
     .ov-spin { animation: none; }
+    .ov-photo-track, .ov-sheet-track { transition: none; }
   }
   /* 牵线 tab 爱心光晕：只在该 tab 激活时呼吸，提示「再点一次看全览」 */
   /* 光晕的包含块必须是图标 wrapper：Vant 的 .van-tabbar-item__icon 是 static，
