@@ -21,6 +21,7 @@ type CardOverviewItem struct {
 	City        string   `json:"city"`
 	Photo       string   `json:"photo"`
 	Photos      []string `json:"photos"`
+	Faces       []any    `json:"faces"`
 	IsNew       bool     `json:"is_new"`
 	Recommended bool     `json:"recommended"`
 	Liked       bool     `json:"liked"`
@@ -34,6 +35,20 @@ const (
 	// anchor because the overview order itself is registration order.
 	cardOverviewNewWindow = 14 * 24 * time.Hour
 )
+
+// cardFacesForPhotos mirrors legacyCardFaces for the light overview payload:
+// one {c,box,tb,lr} (or nil) per photo, aligned with p.Photos order.
+func cardFacesForPhotos(photoIDs []string, faces []db.ProfilePhotoFace) []any {
+	byMediaID := make(map[string]db.ProfilePhotoFace, len(faces))
+	for _, item := range faces {
+		byMediaID[item.MediaID] = item
+	}
+	out := make([]any, 0, len(photoIDs))
+	for _, id := range photoIDs {
+		out = append(out, legacyFaceItem(byMediaID[id]))
+	}
+	return out
+}
 
 // buildCardOverviewItem projects a profile into the overview tile. Pure so the
 // badge/age/photo rules are unit-testable without HTTP or a database.
@@ -118,6 +133,10 @@ func (a *App) handleLegacyCardsOverview(w http.ResponseWriter, r *http.Request) 
 		legacyServerError(a, w, r, err, "legacy cards overview profiles failed")
 		return
 	}
+	facesByUser, err := a.db.FaceCentersForProfiles(r.Context(), ids)
+	if err != nil {
+		a.logger(r).Warn("legacy cards overview face lookup failed", "error", err)
+	}
 	state, recommendedIDs, err := a.db.LoadCardDeckState(r.Context(), viewer.ID, now, db.WeekKey(now))
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy cards overview state failed")
@@ -136,6 +155,7 @@ func (a *App) handleLegacyCardsOverview(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		item := buildCardOverviewItem(p, entry.CreatedAt, now)
+		item.Faces = cardFacesForPhotos(p.Photos, facesByUser[entry.ID])
 		item.Recommended = recommended[entry.ID]
 		item.Liked = state.LikedTargets[entry.ID]
 		item.Praised = state.PraisedTargets[entry.ID]

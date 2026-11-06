@@ -5,8 +5,8 @@
     "file": "app.render.js",
     "templateSha256": "4971864549c016b31577a030f397364404f65450232963f08c280551f9a1f530",
     "templateSize": 54820,
-    "bytes": 191813,
-    "sha256": "d9ed8be4aad682ee7e1a75ca453b405ddd570775881fb7dfe369e6abf02888f2"
+    "bytes": 192895,
+    "sha256": "e9fe4e44058714fa21049b4fee9a7c835479ec02a861a853d0107530b4ea2aef"
   },
   "initial": [
     "cards"
@@ -52,8 +52,8 @@
         "user_detail",
         "cards_overview"
       ],
-      "bytes": 49322,
-      "sha256": "a0299c2a646689956587489453f1ea9598e03c1ec0415cbc9507f6b7c516965a"
+      "bytes": 51676,
+      "sha256": "eb94b9ad921794a6a101826f566eb7280a562c06e4f374ea0533ee300d4434c2"
     },
     "group": {
       "file": "pages/group.render.js",
@@ -76,8 +76,8 @@
     "cards": {
       "group": "initial",
       "file": "app.render.js",
-      "templateSha256": "c37335e3cefcba86e843726d2a48c2ff5b3e39e0166c325f71f960ac6b8f853b",
-      "templateSize": 10662
+      "templateSha256": "4a7a5953fffab62cf6924485e7ba836d75e5b09c76b39f09c09d4cefffb1b5ad",
+      "templateSize": 10903
     },
     "likes": {
       "group": "likes",
@@ -166,8 +166,8 @@
     "cards_overview": {
       "group": "detail",
       "file": "pages/detail.render.js",
-      "templateSha256": "376ce37a0e9fb33e691612f6625fc7899f369ef7df862fe592148ba42f004d0a",
-      "templateSize": 13070
+      "templateSha256": "0d5f0e46bb7d02fd6302a8c2749825de1f04ffe738e0bc8c3274036b7f7886c7",
+      "templateSize": 13563
     },
     "group_admin": {
       "group": "group",

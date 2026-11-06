@@ -14,7 +14,6 @@
       <van-icon name="replay" :class="{ 'ov-spin': overviewLoading }"></van-icon>
     </button>
   </div>
-  <div v-if="hasActiveFilter" class="ov-filter-note">已按牵线筛选展示<span @click="resetFilter">清除筛选</span></div>
   <div class="cards-overview-scroll" @scroll.passive="onOverviewScroll">
     <div v-if="overviewError && !overviewItems.length" class="ov-state">
       <div class="ov-state-icon">😕</div>
@@ -74,16 +73,23 @@
   </div>
 
   <!-- 全览卡片浮层：与 deck 同款 .swipe-card 结构/样式（资料、留言、悬浮反馈/点赞/爱心） -->
-  <van-popup v-model:show="showOverviewCard" position="bottom" round class="ov-sheet" :style="{ height: '88%' }">
-    <div class="ov-card-stage" v-if="overviewSheet">
-      <div class="swipe-card ov-card">
+  <van-popup v-model:show="showOverviewCard" position="bottom" overlay-class="ov-sheet-overlay"
+    :close-on-click-overlay="false" @click-overlay="closeOverviewCard"
+    class="ov-sheet" :style="{ height: '100%', background: 'transparent' }">
+    <div class="ov-sheet-backdrop" @click.self="closeOverviewCard">
+      <div class="ov-card-stage" @click.self="closeOverviewCard">
+        <div class="ov-card-frame" v-if="overviewSheet">
+          <div class="swipe-card ov-card" :style="ovCardDragStyle()"
+            @touchstart="ovCardDragStart" @touchmove="ovCardDragMove" @touchend="ovCardDragEnd" @touchcancel="ovCardDragCancel">
         <div class="card-photo-wrap" @touchstart="ovPhotoStart" @touchmove="ovPhotoMove" @touchend="ovPhotoEnd" @touchcancel="ovPhotoCancel"
           @mousedown="ovPhotoStart" @mousemove="ovPhotoMove" @mouseup="ovPhotoEnd" @mouseleave="ovPhotoCancel" @click="ovPhotoClick">
           <div v-if="overviewSheetLoading" class="photo-loading"></div>
           <div v-if="ovPhotos().length" class="card-photo-track" :style="{ transform: 'translateX(-' + ovPhotoIndex * 100 + '%)' }">
             <div v-for="(p, i) in ovPhotos()" :key="i" class="card-photo-slide">
-              <img :src="p" class="card-photo-item card-photo-base" alt=""
-                :loading="(i === ovPhotoIndex || i === ovPhotoIndex + 1) ? 'eager' : 'lazy'" decoding="async">
+              <img :src="p" class="card-photo-item card-photo-base" :data-ov-i="i" alt=""
+                :loading="(i === ovPhotoIndex || i === ovPhotoIndex + 1) ? 'eager' : 'lazy'" decoding="async"
+                :style="ovPhotoPosition(i) ? { objectPosition: ovPhotoPosition(i) } : null"
+                @load="ovRecalcPhotoPosition($event, i)">
             </div>
           </div>
           <div v-else class="card-photo-placeholder">{{ overviewSheet.gender === '男性' ? '👨' : '👩' }}</div>
@@ -185,11 +191,13 @@
           <button v-if="ovCanLike" class="heart-btn" :class="{ liked: ovLiked }"
             @click="openLikeDialogForUser(overviewSheet)" :disabled="actionLoading || ovLiked">♥</button>
         </div>
+          </div>
+          <button type="button" class="ov-card-close" aria-label="关闭" @click="closeOverviewCard">
+            <van-icon name="cross"></van-icon>
+          </button>
+        </div>
+        <div v-else class="ov-sheet-loading"><van-loading size="24px"></van-loading></div>
       </div>
     </div>
-    <button type="button" class="ov-card-close" aria-label="关闭" @click="showOverviewCard = false">
-      <van-icon name="cross"></van-icon>
-    </button>
-    <div v-if="!overviewSheet" class="ov-sheet-loading"><van-loading size="24px"></van-loading></div>
   </van-popup>
 </div>

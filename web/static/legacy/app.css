@@ -1184,8 +1184,6 @@
   .ov-filter { flex-shrink: 0; height: 34px; padding: 0 10px; border: 1px solid #ebedf0; border-radius: 17px; background: #fff; color: #646566; font-size: 13px; line-height: 1; display: flex; align-items: center; gap: 4px; cursor: pointer; }
   .ov-filter .van-icon { font-size: 15px; }
   .ov-filter.active { border-color: #ff6b81; color: #ff6b81; background: #fff0f3; }
-  .ov-filter-note { flex-shrink: 0; padding: 7px 14px; background: #fff7e8; color: #a4620a; font-size: 12px; line-height: 1.4; border-bottom: 1px solid #fdeccd; display: flex; align-items: center; gap: 10px; }
-  .ov-filter-note span { margin-left: auto; color: #ff6b81; font-weight: 600; cursor: pointer; }
   .cards-overview-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding: 12px 12px calc(18px + env(safe-area-inset-bottom)); }
   .ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   @media (min-width: 600px) { .ov-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
@@ -1225,10 +1223,14 @@
   .ov-skel-photo { position: absolute; inset: 0; background: linear-gradient(90deg, #eef0f3 25%, #e3e6ea 37%, #eef0f3 63%); background-size: 400% 100%; animation: ov-shimmer 1.3s ease infinite; }
   .ov-skel-line { position: absolute; left: 10px; right: 34%; bottom: 12px; height: 12px; border-radius: 6px; background: rgba(255,255,255,0.55); }
   @keyframes ov-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
-  /* 全览卡片浮层：内部就是 deck 的 .swipe-card，浮层只提供舞台与关闭按钮 */
-  .ov-sheet { background: #f7f8fa; }
-  .ov-card-stage { height: 100%; display: flex; align-items: center; justify-content: center; padding: 10px 0; box-sizing: border-box; }
-  .ov-card-stage .swipe-card { height: 100%; max-height: none; }
+  /* 全览卡片浮层：卡外留出可见空白（点外收卡），内部就是 deck 的 .swipe-card */
+  .ov-sheet { background: transparent; }
+  /* 遮罩交给 Vant overlay（不在 popup 滑入动画里）：进场第一帧点卡外就能收卡，不会穿透。 */
+  .ov-sheet-overlay { background: rgba(0,0,0,0.55); }
+  .ov-sheet-backdrop { height: 100%; background: transparent; }
+  .ov-card-stage { height: 100%; display: flex; align-items: center; justify-content: center; padding: calc(44px + env(safe-area-inset-top)) 0 calc(44px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+  .ov-card-frame { position: relative; width: 96%; max-width: 420px; height: 100%; }
+  .ov-card-frame .swipe-card { width: 100%; height: 100%; max-height: none; }
   .ov-card-close { position: absolute; top: 12px; right: 12px; z-index: 30; width: 36px; height: 36px; border: 0; padding: 0; border-radius: 50%; background: rgba(0,0,0,0.45); color: #fff; font-size: 17px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .ov-card-close:active { background: rgba(0,0,0,0.62); }
   .ov-sheet-loading { height: 100%; display: flex; align-items: center; justify-content: center; }
@@ -1239,11 +1241,9 @@
   .van-theme-dark .ov-back:active, .van-theme-dark .ov-refresh:active { background: #2c2c2e; }
   .van-theme-dark .ov-filter { background: #1c1c1e; border-color: #3a3a3e; color: #c8c9cc; }
   .van-theme-dark .ov-filter.active { border-color: #ff6b81; color: #ffb3bf; background: #2a1b1f; }
-  .van-theme-dark .ov-filter-note { background: #2a2417; color: #e0b060; border-bottom-color: #3a3220; }
   .van-theme-dark .ov-tile { background: #1f1f22; box-shadow: none; }
   .van-theme-dark .ov-skel-photo { background-image: linear-gradient(90deg, #2a2a2e 25%, #3a3a3e 37%, #2a2a2e 63%); }
   .van-theme-dark .ov-skel-line { background: rgba(255,255,255,0.16); }
-  .van-theme-dark .ov-sheet { background: #111; }
   @media (prefers-reduced-motion: reduce) {
     .ov-skel-photo { animation: none; }
     .ov-spin { animation: none; }

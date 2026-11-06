@@ -124,6 +124,48 @@ def touch_swipe(page, selector: str, dx: int) -> bool:
     )
 
 
+def touch_drag(page, selector: str, dy: int) -> bool:
+    """在元素上派发一次垂直触摸拖拽（用于下滑收卡/滚动守卫）。"""
+    return page.evaluate(
+        """({sel, dy}) => {
+            const el = document.querySelector(sel);
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            const x = r.left + r.width * 0.5;
+            const y = r.top + Math.min(r.height * 0.4, 120);
+            const mk = (cy) => new Touch({identifier: 3, target: el, clientX: x, clientY: cy});
+            const fire = (type, cy, active) => el.dispatchEvent(new TouchEvent(type, {
+                bubbles: true, cancelable: true,
+                touches: active ? [mk(cy)] : [],
+                changedTouches: [mk(cy)],
+            }));
+            fire('touchstart', y, true);
+            fire('touchmove', y + dy / 2, true);
+            fire('touchmove', y + dy, true);
+            fire('touchend', y + dy, false);
+            return true;
+        }""",
+        {"sel": selector, "dy": dy},
+    )
+
+
+def apply_overview_filter(page, placeholder: str, value: str) -> None:
+    page.locator(".ov-filter").click()
+    page.wait_for_selector(".filter-title", timeout=5000)
+    page.get_by_placeholder(placeholder).fill(value)
+    page.get_by_text("应用筛选", exact=True).click()
+
+
+def clear_overview_filter(page) -> None:
+    page.locator(".ov-filter").click()
+    page.wait_for_selector(".filter-title", timeout=5000)
+    page.locator(".filter-title").locator("..").get_by_text("清除筛选", exact=True).click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('.ov-tile[data-uid]').length > 0",
+        timeout=15000,
+    )
+
+
 def click_tab(page, label: str, marker: str | None = None) -> None:
     # 已在目标页就不要点：牵线 tab 在激活态再点一次会进全览（产品行为）。
     if marker and page.locator(marker).count():
@@ -504,6 +546,20 @@ def main() -> int:
                             raise SmokeFailure("网格触摸滑动被误判为点击")
                         notes.append(f"{label}: 网格触摸滑动 {after_counter} → {touch_counter}")
 
+                if swipe_uid and swipe:
+                    # PM 反馈：滑图后要能立即点卡；不能等 450ms 时间窗。
+                    page.mouse.click(swipe["x"], swipe["y"])
+                    page.wait_for_selector(".ov-sheet .swipe-card", timeout=15000)
+                    page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
+                    notes.append(f"{label}: 滑图后立即点卡弹出浮层")
+                    # 卡外空白区域：点击卡上方留白应收卡。
+                    page.mouse.click(width // 2, 16)
+                    try:
+                        page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                    except PlaywrightTimeoutError:
+                        raise SmokeFailure("点击卡片外空白未关闭浮层") from None
+                    notes.append(f"{label}: 点卡外空白关闭浮层")
+
                 # ---- 9. 卡片浮层：大图 / 多图 / 留言 / 反馈 / 点赞 / 爱心 ----
                 items = api.get("items") or []
                 target = multi_target
@@ -610,6 +666,23 @@ def main() -> int:
                 if page.locator(".ov-sheet .msg-send").is_disabled():
                     raise SmokeFailure("留言输入后发送按钮仍禁用")
                 page.fill(".ov-sheet .msg-input", "")
+                # 留言列表（.msg-list）滚动后下滑不应收卡（滚动容器不是 .card-info）。
+                msg_scrollable = page.evaluate(
+                    """() => {
+                        const el = document.querySelector('.ov-sheet .msg-list');
+                        return !!el && el.scrollHeight > el.clientHeight + 4;
+                    }"""
+                )
+                if msg_scrollable:
+                    page.evaluate("() => { const el = document.querySelector('.ov-sheet .msg-list'); el.scrollTop = 120; }")
+                    page.wait_for_timeout(200)
+                    touch_drag(page, ".ov-sheet .msg-list", 150)
+                    page.wait_for_timeout(400)
+                    if not page.locator(".ov-sheet .swipe-card").first.is_visible():
+                        raise SmokeFailure("留言列表滚动中下滑被误判为收卡")
+                    page.evaluate("() => { const el = document.querySelector('.ov-sheet .msg-list'); el.scrollTop = 0; }")
+                    page.wait_for_timeout(150)
+                    notes.append(f"{label}: 留言列表滚动中下滑不误收")
                 # 作者头像 → 资料页 → 返回：浮层与全览页应恢复（不是关掉浮层停在资料页）。
                 if page.locator(".ov-sheet .msg-item .msg-avatar-sm").count():
                     page.locator(".ov-sheet .msg-item .msg-avatar-sm").first.click()
@@ -649,12 +722,42 @@ def main() -> int:
                 notes.append(f"{label}: 关闭浮层后列表与滚动位置保持（{scroll_after_sheet}px）")
                 page.screenshot(path=str(out_dir / f"sheet-{label}.png"))
 
+                # 下滑收卡：内容滚动中不误收，滑至顶后下滑才收。
+                page.evaluate(
+                    """(uid) => {
+                        const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                        if (el) el.click();
+                    }""",
+                    target_uid,
+                )
+                page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
+                page.wait_for_timeout(300)
+                scrollable = page.evaluate(
+                    """() => {
+                        const el = document.querySelector('.ov-sheet .card-info');
+                        return !!el && el.scrollHeight > el.clientHeight + 4;
+                    }"""
+                )
+                if scrollable:
+                    page.evaluate("() => { const el = document.querySelector('.ov-sheet .card-info'); el.scrollTop = 200; }")
+                    page.wait_for_timeout(200)
+                    touch_drag(page, ".ov-sheet .card-info", 150)
+                    page.wait_for_timeout(400)
+                    if not page.locator(".ov-sheet .swipe-card").first.is_visible():
+                        raise SmokeFailure("资料滚动中下滑被误判为收卡")
+                    page.evaluate("() => { const el = document.querySelector('.ov-sheet .card-info'); el.scrollTop = 0; }")
+                    page.wait_for_timeout(200)
+                    notes.append(f"{label}: 内容滚动中下滑不误收")
+                touch_drag(page, ".ov-sheet .card-info", 160)
+                page.wait_for_timeout(500)
+                try:
+                    page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                except PlaywrightTimeoutError:
+                    raise SmokeFailure("滑至顶后下滑未收卡") from None
+                notes.append(f"{label}: 滑至顶后下滑收卡")
+
                 if filter_applied:
-                    page.locator(".ov-filter-note span").click()
-                    page.wait_for_function(
-                        "() => document.querySelectorAll('.ov-tile[data-uid]').length > 0",
-                        timeout=15000,
-                    )
+                    clear_overview_filter(page)
                     # 推荐徽标：public profile 不含 recommended，合并后浮层仍应显示「推荐」。
                     if recommended_target:
                         page.locator(".ov-filter").click()
@@ -685,11 +788,7 @@ def main() -> int:
                             page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
                         except PlaywrightTimeoutError:
                             pass
-                        page.locator(".ov-filter-note span").click()
-                        page.wait_for_function(
-                            "() => document.querySelectorAll('.ov-tile[data-uid]').length > 0",
-                            timeout=15000,
-                        )
+                        clear_overview_filter(page)
                     # 长列表上验证「打开/关闭浮层不改变列表滚动位置」。
                     # 清筛选的 reset 会异步滚顶，先落 0 再设置 420，避免测成 0→0 假绿。
                     page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); el.scrollTop = 0; }")
@@ -737,7 +836,9 @@ def main() -> int:
                     raise SmokeFailure("应用筛选后筛选按钮未高亮")
                 if page.locator(".ov-tile[data-uid]").count():
                     raise SmokeFailure("无结果筛选仍显示卡片")
-                page.locator(".ov-filter-note span").click()
+                if page.locator(".ov-filter-note").count():
+                    raise SmokeFailure("全览页头不应再有「已按牵线筛选展示」提示行")
+                page.locator(".ov-state").get_by_text("清除筛选", exact=True).click()
                 page.wait_for_function(
                     "() => document.querySelectorAll('.ov-tile[data-uid]').length > 0",
                     timeout=15000,
@@ -746,12 +847,56 @@ def main() -> int:
                     raise SmokeFailure("清除筛选后按钮仍高亮")
                 notes.append(f"{label}: 筛选无结果 → 清除筛选恢复列表")
 
+                # ---- 10.5 人脸裁切：与牵线页同一套 computeFaceCrop（U-0079 有已检测人脸）----
+                apply_overview_filter(page, "如：0003", "0079")
+                page.wait_for_selector('.ov-tile[data-uid="U-0079"]', timeout=15000)
+                page.evaluate("() => { const el = document.querySelector('.ov-tile[data-uid=\"U-0079\"]'); if (el) el.click(); }")
+                page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
+                page.wait_for_function(
+                    """() => {
+                        const img = document.querySelector('.ov-sheet .card-photo-base');
+                        return !!img && img.complete && img.naturalWidth > 0;
+                    }""",
+                    timeout=15000,
+                )
+                page.wait_for_timeout(400)
+                face_pos = page.evaluate(
+                    """() => {
+                        const imgs = [...document.querySelectorAll('.ov-sheet .card-photo-base')];
+                        return imgs.slice(0, 2).map((img) => img.style.objectPosition || '');
+                    }"""
+                )
+                if not any(face_pos):
+                    raise SmokeFailure(f"U-0079 浮层卡面未应用人脸 objectPosition：{face_pos}")
+                notes.append(f"{label}: 浮层人脸裁切生效（U-0079 objectPosition={face_pos}）")
+                page.locator(".ov-card-close").click()
+                try:
+                    page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                except PlaywrightTimeoutError:
+                    pass
+                clear_overview_filter(page)
+
                 # ---- 8. 返回牵线 ----
                 page.locator(".ov-back").click()
                 page.wait_for_selector(".cards-page", timeout=10000)
                 if page.locator(".cards-overview-page").count():
                     raise SmokeFailure("返回后全览没有关闭")
                 page.screenshot(path=str(out_dir / f"back-{label}.png"))
+
+                # ---- 10.8 牵线页纵向滑动（上/下）进入全览 ----
+                page.wait_for_selector(".swipe-card", timeout=10000)
+                touch_drag(page, ".swipe-card", 140)
+                page.wait_for_selector(".cards-overview-page", timeout=10000)
+                if not page.locator(".ov-title").count():
+                    raise SmokeFailure("牵线页下滑未进入全览")
+                notes.append(f"{label}: 牵线页下滑进入全览")
+                page.locator(".ov-back").click()
+                page.wait_for_selector(".cards-page", timeout=10000)
+                touch_drag(page, ".swipe-card", -140)
+                page.wait_for_selector(".cards-overview-page", timeout=10000)
+                notes.append(f"{label}: 牵线页上滑进入全览")
+                page.locator(".ov-back").click()
+                page.wait_for_selector(".cards-page", timeout=10000)
 
                 # ---- 11. 回归：牌堆「反馈」仍可打开（openFeedbackDialog 改签名）----
                 # 牌堆首位通常是本人卡（没有反馈按钮），先切到下一张。

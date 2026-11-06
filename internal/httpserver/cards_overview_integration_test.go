@@ -22,6 +22,7 @@ type cardOverviewItemPayload struct {
 	City        string   `json:"city"`
 	Photo       string   `json:"photo"`
 	Photos      []string `json:"photos"`
+	Faces       []any    `json:"faces"`
 	IsNew       bool     `json:"is_new"`
 	Recommended bool     `json:"recommended"`
 	Liked       bool     `json:"liked"`
@@ -94,6 +95,9 @@ func TestIntegrationCardsOverviewNewestFirst(t *testing.T) {
 		}
 		if item.Photo == "" || len(item.Photos) == 0 || item.Photos[0] != item.Photo {
 			t.Fatalf("overview item without photo(s): %+v", item)
+		}
+		if len(item.Faces) != len(item.Photos) {
+			t.Fatalf("faces not aligned with photos: %d vs %d", len(item.Faces), len(item.Photos))
 		}
 	}
 	oldestAt, okOldest := index[legacyOf(oldest)]

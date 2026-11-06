@@ -20,7 +20,9 @@
     <van-empty v-if="!cards.length" :description="hasActiveFilter ? '没有符合筛选条件的人，试试调整筛选' : '暂时没有可推荐的人了～'"></van-empty>
     <template v-else>
     <div v-if="currentCard" class="swipe-card" :key="cardIndex"
-      :class="slideDir === 'right' ? 'slide-in-right' : (slideDir === 'left' ? 'slide-in-left' : '')">
+      :class="slideDir === 'right' ? 'slide-in-right' : (slideDir === 'left' ? 'slide-in-left' : '')"
+      @touchstart="onCardVertStart" @touchmove="onCardVertMove" @touchend="onCardVertEnd" @touchcancel="onCardVertCancel"
+      @mousedown="onCardVertStart" @mousemove="onCardVertMove" @mouseup="onCardVertEnd" @mouseleave="onCardVertCancel">
       <div class="card-photo-wrap" @touchstart="onPhotoTouchStart" @touchmove="onPhotoTouchMove" @touchend="onPhotoTouchEnd" @mousedown="onPhotoMouseDown" @mousemove="onPhotoMouseMove" @mouseup="onPhotoMouseUp" @mouseleave="onPhotoMouseLeave" @click="onPhotoClick">
         <div v-if="photoLoading" class="photo-loading"></div>
         <div v-if="currentPhotoList.length" class="card-photo-track" :style="{ transform: 'translateX(-' + photoIndex * 100 + '%)' }">
