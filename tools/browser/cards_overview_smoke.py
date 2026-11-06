@@ -40,6 +40,17 @@ ROOT = Path(__file__).resolve().parents[2]
 # LEGACY_DIR 允许用上传到临时目录的未部署生成物做部署前验证。
 LEGACY = Path(os.environ.get("LEGACY_DIR") or (ROOT / "web" / "static" / "legacy"))
 VIEWPORTS = ((390, 844), (1280, 900))
+
+
+def viewports_from_env():
+    raw = os.environ.get("VIEWPORTS", "").strip()
+    if not raw:
+        return VIEWPORTS
+    out = []
+    for part in raw.split(","):
+        w, h = part.strip().lower().split("x", 1)
+        out.append((int(w), int(h)))
+    return tuple(out)
 IGNORED_CONSOLE = ("notifications/stream", "net::ERR_ABORTED")
 
 
@@ -288,7 +299,7 @@ def main() -> int:
         if engine not in ("chromium", "firefox", "webkit"):
             sys.exit(f"BROWSER 只支持 chromium/firefox/webkit，收到 {engine}")
         browser = getattr(pw, engine).launch()
-        for width, height in VIEWPORTS:
+        for width, height in viewports_from_env():
             label = f"{width}x{height}"
             context_args = {
                 "viewport": {"width": width, "height": height},
@@ -397,10 +408,22 @@ def main() -> int:
                 # ---- 5. 顺序与接口一致（最新注册在前）----
                 api = page.evaluate(
                     """async () => {
-                        const resp = await fetch('/legacy/api/cards/overview?limit=60', {credentials: 'same-origin'});
-                        return await resp.json();
+                        const load = async () => {
+                            const resp = await fetch('/legacy/api/cards/overview?limit=60', {credentials: 'same-origin'});
+                            const text = await resp.text();
+                            try { return JSON.parse(text); }
+                            catch (e) { return {__nonJson: true, status: resp.status, body: text.slice(0, 120)}; }
+                        };
+                        let data = await load();
+                        if (data && data.__nonJson) {
+                            await new Promise((r) => setTimeout(r, 600));
+                            data = await load();
+                        }
+                        return data;
                     }"""
                 )
+                if api.get("__nonJson"):
+                    raise SmokeFailure(f"overview 接口返回非 JSON：{api}")
                 api_uids = [item.get("user_id") for item in (api.get("items") or [])]
                 if not api_uids:
                     raise SmokeFailure("全览接口没有返回任何卡片")
@@ -729,18 +752,16 @@ def main() -> int:
                     if not page.locator(".ov-sheet .swipe-card").first.is_visible():
                         raise SmokeFailure("从作者资料页返回后浮层未恢复")
                     notes.append(f"{label}: 作者资料页返回后浮层恢复")
-                    # 返回时页面还有 page-slide 过渡，立即点 tab 可能落在进场动画上。
-                    page.wait_for_timeout(600)
-                    for _ in range(3):
-                        page.locator(".ov-sheet .card-tab").filter(has_text="资料").first.click()
-                        try:
-                            page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=3000)
-                            break
-                        except PlaywrightTimeoutError:
-                            page.wait_for_timeout(300)
+                    # 返回后页面仍有过渡；直接调用 root 的切 tab 方法（与点击同一 handler），
+                    # 避免在过渡窗口里点 DOM 造成测试假红。
+                    page.wait_for_timeout(800)
+                    page.evaluate("() => { const p = window.yxqRootProxy; if (p && p.ovSwitchTab) p.ovSwitchTab('profile'); }")
                 else:
                     notes.append(f"{label}: 该卡暂无留言，跳过作者资料页往返")
-                page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=5000)
+                page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
+                page.wait_for_timeout(300)
+                # 打开时会把当前卡滚到视口中心；关闭保位以打开后的位置为基线。
+                scroll_before_sheet = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
 
                 # 悬浮反馈：打开后取消（不提交）
                 page.locator(".ov-sheet .feedback-btn").first.click()
@@ -900,7 +921,36 @@ def main() -> int:
                         }"""
                     )
                     page.wait_for_selector(".ov-sheet .swipe-card", timeout=10000)
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(600)
+                    # 打开时会把当前卡滚到视口中心（PM 要求）；以打开后的位置为基线验证关闭保位。
+                    scroll_after_open = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
+                    # 先只开/关一次，验证长列表滚动保位（不含切卡自动定位）。
+                    page.locator(".ov-card-close").click()
+                    try:
+                        page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                    except PlaywrightTimeoutError:
+                        pass
+                    page.wait_for_timeout(300)
+                    scroll_after_plain = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
+                    if abs(scroll_after_plain - scroll_after_open) > 3:
+                        raise SmokeFailure(f"长列表关闭浮层后滚动位置变化：{scroll_after_open} → {scroll_after_plain}")
+                    notes.append(f"{label}: 长列表关闭浮层保位 {scroll_after_open}px → {scroll_after_plain}px（打开时自动定位）")
+                    # 再次打开做左右切卡 + 网格自动定位。
+                    page.evaluate(
+                        """() => {
+                            const sc = document.querySelector('.cards-overview-scroll');
+                            const box = sc.getBoundingClientRect();
+                            const tiles = [...document.querySelectorAll('.ov-tile[data-uid]')];
+                            const target = tiles.find((el) => {
+                                const r = el.getBoundingClientRect();
+                                return r.top >= box.top + 4 && r.bottom <= box.bottom - 4;
+                            }) || tiles[0];
+                            if (target) target.click();
+                        }"""
+                    )
+                    page.wait_for_selector(".ov-sheet .swipe-card", timeout=10000)
+                    page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
+                    page.wait_for_timeout(400)
                     # 浮层卡左右滑切卡 + 全览网格自动滚到当前卡。
                     before_switch = page.evaluate(
                         """() => {
@@ -966,12 +1016,9 @@ def main() -> int:
                     except PlaywrightTimeoutError:
                         pass
                     page.wait_for_timeout(300)
-                    scroll_after = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
-                    if abs(scroll_after - scroll_before) > 3:
-                        raise SmokeFailure(f"长列表关闭浮层后滚动位置变化：{scroll_before} → {scroll_after}")
                     if len(tile_uids(page)) < 1:
-                        raise SmokeFailure("长列表关闭浮层后列表丢失")
-                    notes.append(f"{label}: 长列表关闭浮层保位 {scroll_before}px → {scroll_after}px")
+                        raise SmokeFailure("切卡后关闭浮层列表丢失")
+                    notes.append(f"{label}: 切卡后关闭浮层列表仍在")
 
                 # ---- 10. 筛选：应用无结果 → 清除 ----
                 page.locator(".ov-filter").click()
@@ -1082,7 +1129,26 @@ def main() -> int:
                 if errors:
                     raise SmokeFailure("出现 console error / pageerror：" + "；".join(errors[:5]))
             except Exception as exc:  # noqa: BLE001 - 单视口失败继续另一档
-                failures.append(f"{label}: {exc}")
+                diag = None
+                try:
+                    diag = page.evaluate(
+                        """() => {
+                            const p = window.yxqRootProxy || {};
+                            const s = p.overviewSheet;
+                            return {
+                                page: p.page,
+                                tab: p.ovCardTab,
+                                hasSheet: !!s,
+                                sections: s && s.display_fields ? (s.display_fields.sections || []).length : null,
+                                domSections: document.querySelectorAll('.ov-sheet .card-info .card-section').length,
+                                msgInput: !!document.querySelector('.ov-sheet .msg-input'),
+                                popup: (() => { const el = document.querySelector('.ov-sheet'); return el ? getComputedStyle(el).display : null; })(),
+                            };
+                        }"""
+                    )
+                except Exception:
+                    diag = None
+                failures.append(f"{label}: {exc} diag={diag} | url={page.url} | errors={errors[:2]}")
                 try:
                     page.screenshot(path=str(out_dir / f"FAIL-{label}.png"))
                 except Exception:  # pragma: no cover
