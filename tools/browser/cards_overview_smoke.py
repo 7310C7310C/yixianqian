@@ -353,6 +353,16 @@ def main() -> int:
                 page.goto(base_url + "/app", wait_until="domcontentloaded")
                 page.wait_for_selector(".cards-page", timeout=20000)
                 dismiss_guides(page)
+                # Vant CSS 是异步加载的；等底栏图标按 22px 布局后再量光晕几何。
+                page.wait_for_function(
+                    """() => {
+                        const w = document.querySelector('.van-tabbar-item .van-tabbar-item__icon');
+                        if (!w) return false;
+                        const r = w.getBoundingClientRect();
+                        return r.width > 0 && r.width < 40;
+                    }""",
+                    timeout=8000,
+                )
 
                 # ---- 1. 牵线 tab 爱心光晕 ----
                 state = glow_state(page)
