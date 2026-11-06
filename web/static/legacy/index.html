@@ -873,80 +873,80 @@
       <div class="filter-title">筛选</div>
       <div style="color:#ff6b81; font-size:14px; cursor:pointer;" @click="resetFilter">清除筛选</div>
     </div>
-    <div style="overflow-y:auto; max-height:62vh; padding-top:8px;">
+    <div style="overflow-y:auto; max-height:62vh; padding-top:8px;" @keyup.enter="onFilterEnter">
       <div class="filter-row" v-if="isObserver">
         <div class="filter-label">性别</div>
         <div class="filter-tags">
-          <span v-for="g in ['男性','女性']" :key="g" class="filter-tag" :class="{active: filter.gender===g}" @click="filter.gender = (filter.gender===g ? '' : g)">{{ g }}</span>
+          <span v-for="g in ['男性','女性']" :key="g" class="filter-tag" :class="{active: activeFilter.gender===g}" @click="activeFilter.gender = (activeFilter.gender===g ? '' : g)">{{ g }}</span>
         </div>
       </div>
       <div class="filter-row">
         <div class="filter-label">昵称</div>
-        <van-field v-model="filter.nickname" placeholder="如：张三" class="filter-input"></van-field>
+        <van-field v-model="activeFilter.nickname" placeholder="如：张三" class="filter-input"></van-field>
       </div>
       <div class="filter-row">
         <div class="filter-label">用户ID</div>
         <div style="display:flex; align-items:center;">
           <span style="color:#969799; font-size:14px; margin-right:2px;">U-</span>
-          <van-field v-model="filter.user_id" placeholder="如：0003" class="filter-input" style="flex:1;"></van-field>
+          <van-field v-model="activeFilter.user_id" placeholder="如：0003" class="filter-input" style="flex:1;"></van-field>
         </div>
       </div>
       <div class="filter-row">
         <div class="filter-label">身高 (cm)</div>
         <div style="display:flex; gap:8px; align-items:center;">
-          <van-field v-model="filter.height_min" type="number" placeholder="最低" class="filter-input" style="flex:1; min-width:0;"></van-field>
+          <van-field v-model="activeFilter.height_min" type="number" placeholder="最低" class="filter-input" style="flex:1; min-width:0;"></van-field>
           <span style="color:#969799;">-</span>
-          <van-field v-model="filter.height_max" type="number" placeholder="最高" class="filter-input" style="flex:1; min-width:0;"></van-field>
+          <van-field v-model="activeFilter.height_max" type="number" placeholder="最高" class="filter-input" style="flex:1; min-width:0;"></van-field>
         </div>
       </div>
       <div class="filter-row">
         <div class="filter-label">年龄</div>
         <div style="display:flex; gap:8px; align-items:center;">
-          <van-field v-model="filter.age_min" type="number" placeholder="最小" class="filter-input" style="flex:1; min-width:0;"></van-field>
+          <van-field v-model="activeFilter.age_min" type="number" placeholder="最小" class="filter-input" style="flex:1; min-width:0;"></van-field>
           <span style="color:#969799;">-</span>
-          <van-field v-model="filter.age_max" type="number" placeholder="最大" class="filter-input" style="flex:1; min-width:0;"></van-field>
+          <van-field v-model="activeFilter.age_max" type="number" placeholder="最大" class="filter-input" style="flex:1; min-width:0;"></van-field>
         </div>
       </div>
       <div class="filter-row">
         <div class="filter-label">现居省份（可多选）</div>
         <details class="filter-province-details">
-          <summary class="filter-tag" :class="{active: filter.city_provinces.length}">{{ regionProvinces.length ? '选择省份' : '加载中…' }}</summary>
+          <summary class="filter-tag" :class="{active: activeFilter.city_provinces.length}">{{ regionProvinces.length ? '选择省份' : '加载中…' }}</summary>
           <div class="filter-province-scroll" style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 2px;" @touchstart="onProvinceTouchStart" @touchmove="onProvinceTouchMove" @touchend="onProvinceTouchEnd" @touchcancel="onProvinceTouchEnd">
-            <span v-for="p in filterProvinces" :key="p.code" class="filter-tag" :class="{active: filter.city_provinces.includes(p.code)}" @click="toggleMultiTag('city_provinces', p.code)">{{ p.name }}</span>
+            <span v-for="p in filterProvinces" :key="p.code" class="filter-tag" :class="{active: activeFilter.city_provinces.includes(p.code)}" @click="toggleMultiTag('city_provinces', p.code)">{{ p.name }}</span>
           </div>
         </details>
       </div>
       <div class="filter-row">
         <div class="filter-label">家乡省份（可多选）</div>
         <details class="filter-province-details">
-          <summary class="filter-tag" :class="{active: filter.native_provinces.length}">{{ regionProvinces.length ? '选择省份' : '加载中…' }}</summary>
+          <summary class="filter-tag" :class="{active: activeFilter.native_provinces.length}">{{ regionProvinces.length ? '选择省份' : '加载中…' }}</summary>
           <div class="filter-province-scroll" style="display:flex; flex-wrap:wrap; gap:6px; padding:8px 2px 2px;" @touchstart="onProvinceTouchStart" @touchmove="onProvinceTouchMove" @touchend="onProvinceTouchEnd" @touchcancel="onProvinceTouchEnd">
-            <span v-for="p in filterProvinces" :key="p.code" class="filter-tag" :class="{active: filter.native_provinces.includes(p.code)}" @click="toggleMultiTag('native_provinces', p.code)">{{ p.name }}</span>
+            <span v-for="p in filterProvinces" :key="p.code" class="filter-tag" :class="{active: activeFilter.native_provinces.includes(p.code)}" @click="toggleMultiTag('native_provinces', p.code)">{{ p.name }}</span>
           </div>
         </details>
       </div>
       <div class="filter-row">
         <div class="filter-label">学历（可多选）</div>
         <div class="filter-tags">
-          <span v-for="e in educationOptions" :key="e" class="filter-tag" :class="{active: filter.education.includes(e)}" @click="toggleMultiTag('education', e)">{{ e }}</span>
+          <span v-for="e in educationOptions" :key="e" class="filter-tag" :class="{active: activeFilter.education.includes(e)}" @click="toggleMultiTag('education', e)">{{ e }}</span>
         </div>
       </div>
       <div class="filter-row">
         <div class="filter-label">年收入（可多选）</div>
         <div class="filter-tags">
-          <span v-for="i in incomeOptions" :key="i" class="filter-tag" :class="{active: filter.income.includes(i)}" @click="toggleMultiTag('income', i)">{{ i }}</span>
+          <span v-for="i in incomeOptions" :key="i" class="filter-tag" :class="{active: activeFilter.income.includes(i)}" @click="toggleMultiTag('income', i)">{{ i }}</span>
         </div>
       </div>
       <div class="filter-row">
         <div class="filter-label">房产状况（可多选）</div>
         <div class="filter-tags">
-          <span v-for="o in ['有','无','未填']" :key="o" class="filter-tag" :class="{active: filter.house.includes(o)}" @click="toggleMultiTag('house', o)">{{ o }}</span>
+          <span v-for="o in ['有','无','未填']" :key="o" class="filter-tag" :class="{active: activeFilter.house.includes(o)}" @click="toggleMultiTag('house', o)">{{ o }}</span>
         </div>
       </div>
       <div class="filter-row">
         <div class="filter-label">汽车（可多选）</div>
         <div class="filter-tags">
-          <span v-for="o in ['有','无','未填']" :key="o" class="filter-tag" :class="{active: filter.driving.includes(o)}" @click="toggleMultiTag('driving', o)">{{ o }}</span>
+          <span v-for="o in ['有','无','未填']" :key="o" class="filter-tag" :class="{active: activeFilter.driving.includes(o)}" @click="toggleMultiTag('driving', o)">{{ o }}</span>
         </div>
       </div>
     </div>

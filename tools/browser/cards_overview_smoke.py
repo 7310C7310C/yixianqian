@@ -324,6 +324,15 @@ def main() -> int:
             )
             page = context.new_page()
             errors = attach_errors(page)
+            public_reqs = {}
+
+            def count_public(request):
+                url = request.url
+                if "/legacy/api/users/" in url and url.endswith("/public"):
+                    oid = url.split("/users/")[-1].rsplit("/public", 1)[0]
+                    public_reqs[oid] = public_reqs.get(oid, 0) + 1
+
+            page.on("request", count_public)
             try:
                 if local_assets:
                     # 真实加载一次：服务端下发 csrf cookie，后续写请求才不会被 403。
@@ -466,11 +475,28 @@ def main() -> int:
                     page.locator(".ov-filter").click()
                     page.wait_for_selector(".filter-title", timeout=5000)
                     page.get_by_placeholder("如：张三").fill(multi_target["nickname"])
-                    page.get_by_text("应用筛选", exact=True).click()
+                    # 两处筛选都支持 Enter 应用；这里走 Enter（不点按钮）。
+                    page.keyboard.press("Enter")
                     page.wait_for_selector(
                         f'.ov-tile[data-uid="{multi_target["user_id"]}"]',
                         timeout=15000,
                     )
+                    indep = page.evaluate(
+                        """() => {
+                            const p = window.yxqRootProxy;
+                            return {
+                                deck: p ? p.filter && p.filter.nickname : null,
+                                deckActive: p ? !!p.hasActiveFilter : null,
+                                ov: p ? p.overviewFilter && p.overviewFilter.nickname : null,
+                                ovActive: p ? !!p.ovHasActiveFilter : null,
+                            };
+                        }"""
+                    )
+                    if indep["deck"] or indep["deckActive"]:
+                        raise SmokeFailure(f"全览筛选污染了牵线筛选：{indep}")
+                    if indep["ov"] != multi_target["nickname"] or not indep["ovActive"]:
+                        raise SmokeFailure(f"全览筛选未写入独立 store：{indep}")
+                    notes.append(f"{label}: 全览筛选独立于牵线（Enter 应用）{indep}")
                     filter_applied = True
                     notes.append(f"{label}: 昵称筛选置顶多图用户 {multi_target['nickname']}（{len(multi_target['photos'])} 图）")
                 page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); el.scrollTop = 0; }")
@@ -559,6 +585,15 @@ def main() -> int:
                     except PlaywrightTimeoutError:
                         raise SmokeFailure("点击卡片外空白未关闭浮层") from None
                     notes.append(f"{label}: 点卡外空白关闭浮层")
+                    # 桌面鼠标纵向拖拽不应被当成点击弹出浮层。
+                    page.mouse.move(swipe["x"], swipe["y"])
+                    page.mouse.down()
+                    page.mouse.move(swipe["x"], swipe["y"] + 100, steps=6)
+                    page.mouse.up()
+                    page.wait_for_timeout(350)
+                    if page.locator(".ov-sheet .swipe-card").count() and page.locator(".ov-sheet .swipe-card").first.is_visible():
+                        raise SmokeFailure("鼠标纵向拖拽被误判为点击，弹出了浮层")
+                    notes.append(f"{label}: 鼠标纵向拖拽不误开浮层")
 
                 # ---- 9. 卡片浮层：大图 / 多图 / 留言 / 反馈 / 点赞 / 爱心 ----
                 items = api.get("items") or []
@@ -763,6 +798,33 @@ def main() -> int:
                 except PlaywrightTimeoutError:
                     raise SmokeFailure("滑至顶后下滑未收卡") from None
                 notes.append(f"{label}: 滑至顶后下滑收卡")
+
+                # 筛选取消/放弃不能写回牵线的 filter store（用户强调两处互不影响）。
+                page.evaluate("() => { const p = window.yxqRootProxy; if (p && p.filter) p.filter.nickname = 'DECK-KEEP'; }")
+                page.locator(".ov-filter").click()
+                page.wait_for_selector(".filter-title", timeout=5000)
+                page.get_by_placeholder("如：张三").fill("X-CANCEL")
+                page.get_by_text("取消", exact=True).click()
+                page.get_by_text("放弃", exact=True).click()
+                page.wait_for_timeout(300)
+                cancel_state = page.evaluate(
+                    """() => {
+                        const p = window.yxqRootProxy;
+                        return { deck: p ? (p.filter && p.filter.nickname) : null, ov: p ? (p.overviewFilter && p.overviewFilter.nickname) : null };
+                    }"""
+                )
+                if cancel_state["deck"] != "DECK-KEEP":
+                    raise SmokeFailure(f"全览筛选取消写回了牵线筛选：{cancel_state}")
+                if cancel_state["ov"] != (multi_target or {}).get("nickname"):
+                    raise SmokeFailure(f"全览筛选取消未恢复自身基线：{cancel_state}")
+                page.evaluate("() => { const p = window.yxqRootProxy; if (p && p.filter) p.filter.nickname = ''; }")
+                notes.append(f"{label}: 全览筛选取消/放弃不影响牵线筛选 {cancel_state}")
+
+                oid = target.get("openid") or ""
+                if oid and public_reqs.get(oid, 0) > 1:
+                    raise SmokeFailure(f"同一张卡重复请求 public profile：{public_reqs.get(oid)} 次")
+                if oid:
+                    notes.append(f"{label}: 二次打开同卡复用资料缓存（public 请求 {public_reqs.get(oid, 0)} 次）")
 
                 if filter_applied:
                     clear_overview_filter(page)

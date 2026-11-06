@@ -372,7 +372,7 @@ function render(_ctx, _cache) {
       ]),
       _createElementVNode("button", {
         type: "button",
-        class: _normalizeClass(["ov-filter", { active: _ctx.hasActiveFilter }]),
+        class: _normalizeClass(["ov-filter", { active: _ctx.ovHasActiveFilter }]),
         "aria-label": "筛选",
         onClick: _cache[1] || (_cache[1] = $event => (_ctx.showFilter = true))
       }, [
@@ -418,8 +418,8 @@ function render(_ctx, _cache) {
               : (!_ctx.overviewItems.length)
                 ? (_openBlock(), _createElementBlock("div", _hoisted_14, [
                     _hoisted_15,
-                    _createElementVNode("div", _hoisted_16, _toDisplayString(_ctx.hasActiveFilter ? '没有符合筛选条件的人' : '还没有可展示的会员'), 1 /* TEXT */),
-                    (_ctx.hasActiveFilter)
+                    _createElementVNode("div", _hoisted_16, _toDisplayString(_ctx.ovHasActiveFilter ? '没有符合筛选条件的人' : '还没有可展示的会员'), 1 /* TEXT */),
+                    (_ctx.ovHasActiveFilter)
                       ? (_openBlock(), _createElementBlock("button", {
                           key: 0,
                           type: "button",
@@ -567,7 +567,7 @@ function render(_ctx, _cache) {
                       onMouseleave: _cache[20] || (_cache[20] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
                       onClick: _cache[21] || (_cache[21] = (...args) => (_ctx.ovPhotoClick && _ctx.ovPhotoClick(...args)))
                     }, [
-                      (_ctx.overviewSheetLoading)
+                      (_ctx.overviewSheetLoading && !_ctx.ovPhotos().length)
                         ? (_openBlock(), _createElementBlock("div", _hoisted_37))
                         : _createCommentVNode("v-if", true),
                       (_ctx.ovPhotos().length)
@@ -840,7 +840,7 @@ function render(_ctx, _cache) {
                                 _createVNode(_component_van_icon, { name: "good-job" })
                               ], 10 /* CLASS, PROPS */, _hoisted_98))
                             : _createCommentVNode("v-if", true),
-                          (_ctx.ovCanLike)
+                          (!_ctx.overviewSheet.is_self && !_ctx.isObserver)
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 2,
                                 class: _normalizeClass(["heart-btn", { liked: _ctx.ovLiked }]),

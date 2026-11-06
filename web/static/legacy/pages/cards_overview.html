@@ -7,7 +7,7 @@
       <div class="ov-title">全览</div>
       <div class="ov-sub">最新加入在前<span v-if="overviewTotal"> · 共 {{ overviewTotal }} 位</span></div>
     </div>
-    <button type="button" class="ov-filter" :class="{ active: hasActiveFilter }" aria-label="筛选" @click="showFilter = true">
+    <button type="button" class="ov-filter" :class="{ active: ovHasActiveFilter }" aria-label="筛选" @click="showFilter = true">
       <van-icon name="filter-o"></van-icon>筛选
     </button>
     <button type="button" class="ov-refresh" aria-label="刷新全览" @click="reloadCardsOverview">
@@ -29,8 +29,8 @@
       </div>
       <div v-else-if="!overviewItems.length" class="ov-state">
         <div class="ov-state-icon">🌱</div>
-        <div class="ov-state-text">{{ hasActiveFilter ? '没有符合筛选条件的人' : '还没有可展示的会员' }}</div>
-        <button v-if="hasActiveFilter" type="button" class="ov-retry" @click="resetFilter">清除筛选</button>
+        <div class="ov-state-text">{{ ovHasActiveFilter ? '没有符合筛选条件的人' : '还没有可展示的会员' }}</div>
+        <button v-if="ovHasActiveFilter" type="button" class="ov-retry" @click="resetFilter">清除筛选</button>
       </div>
       <template v-else>
         <div class="ov-grid">
@@ -83,7 +83,7 @@
             @touchstart="ovCardDragStart" @touchmove="ovCardDragMove" @touchend="ovCardDragEnd" @touchcancel="ovCardDragCancel">
         <div class="card-photo-wrap" @touchstart="ovPhotoStart" @touchmove="ovPhotoMove" @touchend="ovPhotoEnd" @touchcancel="ovPhotoCancel"
           @mousedown="ovPhotoStart" @mousemove="ovPhotoMove" @mouseup="ovPhotoEnd" @mouseleave="ovPhotoCancel" @click="ovPhotoClick">
-          <div v-if="overviewSheetLoading" class="photo-loading"></div>
+          <div v-if="overviewSheetLoading && !ovPhotos().length" class="photo-loading"></div>
           <div v-if="ovPhotos().length" class="card-photo-track" :style="{ transform: 'translateX(-' + ovPhotoIndex * 100 + '%)' }">
             <div v-for="(p, i) in ovPhotos()" :key="i" class="card-photo-slide">
               <img :src="p" class="card-photo-item card-photo-base" :data-ov-i="i" alt=""
@@ -188,7 +188,7 @@
             @click="togglePraise(overviewSheet)" :disabled="actionLoading || praiseBusy">
             <van-icon name="good-job"></van-icon>
           </button>
-          <button v-if="ovCanLike" class="heart-btn" :class="{ liked: ovLiked }"
+          <button v-if="!overviewSheet.is_self && !isObserver" class="heart-btn" :class="{ liked: ovLiked }"
             @click="openLikeDialogForUser(overviewSheet)" :disabled="actionLoading || ovLiked">♥</button>
         </div>
           </div>

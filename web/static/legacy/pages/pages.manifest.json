@@ -3,10 +3,10 @@
   "vue": "3.4.27",
   "root": {
     "file": "app.render.js",
-    "templateSha256": "4971864549c016b31577a030f397364404f65450232963f08c280551f9a1f530",
-    "templateSize": 54820,
-    "bytes": 192895,
-    "sha256": "e9fe4e44058714fa21049b4fee9a7c835479ec02a861a853d0107530b4ea2aef"
+    "templateSha256": "8d3aa53064af72662bedea1437915a62409f16b2828d24be18943e553896758b",
+    "templateSize": 54951,
+    "bytes": 193228,
+    "sha256": "e2a46545340ec44b07e5de4b3e850f6fb61f04c358d88370bc293eeee0b68db2"
   },
   "initial": [
     "cards"
@@ -52,8 +52,8 @@
         "user_detail",
         "cards_overview"
       ],
-      "bytes": 51676,
-      "sha256": "eb94b9ad921794a6a101826f566eb7280a562c06e4f374ea0533ee300d4434c2"
+      "bytes": 51742,
+      "sha256": "b6d364df621f099516a720010178a55ed786e2a97519894000b0ca30c4aa450f"
     },
     "group": {
       "file": "pages/group.render.js",
@@ -166,8 +166,8 @@
     "cards_overview": {
       "group": "detail",
       "file": "pages/detail.render.js",
-      "templateSha256": "0d5f0e46bb7d02fd6302a8c2749825de1f04ffe738e0bc8c3274036b7f7886c7",
-      "templateSize": 13563
+      "templateSha256": "e68bbb8fb788e713c9716b6f1467fa772e2dd05927e8e6e4e040c4d5a1a5692e",
+      "templateSize": 13619
     },
     "group_admin": {
       "group": "group",

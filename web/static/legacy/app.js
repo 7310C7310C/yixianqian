@@ -314,10 +314,12 @@ const yxqApp = createApp({
       if (root) root.classList.toggle('native-admin', !!v);
     }, { immediate: true });
     const page = ref('cards');
+    let overviewEntryDir = '';   // 'up' | 'down'：牵线页纵向滑动进入全览的过场方向
     // 四 Tab / 子页流畅过渡：按 tab 顺序与子页层级自动选动画
     const pageTransition = ref('tab-transition');
     const TAB_ORDER = ['cards','likes','home','profile'];
     function pickTransition(nv, ov){
+      if (nv === 'cards_overview' && overviewEntryDir) return overviewEntryDir === 'up' ? 'ov-rise' : 'ov-drop';
       if(!ov) return 'tab-transition';
       const isTab = p => TAB_ORDER.includes(p);
       const isSub = p => subPages.includes(p);
@@ -776,6 +778,7 @@ const yxqApp = createApp({
     const ovMsgSending = ref(false);
     const ovMsgText = ref('');
     const ovReplyTarget = ref(null);
+    const ovProfileCache = new Map();    // openid -> public profile：二次打开不重复请求/闪加载
     const ovPhotoPositions = ref({});   // 浮层卡面人脸 objectPosition（按图索引）
     const ovDragY = ref(0);              // 下滑收卡的位移
     const ovDragging = ref(false);
@@ -1642,7 +1645,13 @@ const yxqApp = createApp({
       } catch(e){}
     }
     function restoreFilterBaseline(){
-      try { if(filterBaselineKey !== null) filter.value = JSON.parse(filterBaselineKey); } catch(e){}
+      try {
+        if(filterBaselineKey === null) return;
+        const parsed = JSON.parse(filterBaselineKey);
+        // 按当前页恢复对应 store，绝不把全览的取消写回牵线筛选。
+        if (page.value === 'cards_overview') overviewFilter.value = parsed;
+        else filter.value = parsed;
+      } catch(e){}
     }
     const overlayGuards = {
       cardsMsg: cardsMsgGuard,
@@ -1689,7 +1698,7 @@ const yxqApp = createApp({
         discard: (cb) => { if(cb) cb(); else closeRedeemPanel(); }
       },
       filter: {
-        dirty: () => showFilter.value && filterBaselineKey !== null && JSON.stringify(filter.value) !== filterBaselineKey,
+        dirty: () => showFilter.value && filterBaselineKey !== null && JSON.stringify(activeFilter.value) !== filterBaselineKey,
         body: '筛选条件还没应用，离开后本次修改不会保留。',
         discard: (cb) => { restoreFilterBaseline(); if(cb) cb(); else showFilter.value = false; }
         // 筛选为「两钮」场景：无保存语义，要应用的走面板里的「应用筛选」
@@ -2275,7 +2284,8 @@ const yxqApp = createApp({
     }
     async function togglePraise(u) {
       if (!u || !u.openid || praiseBusy.value) return;
-      const wasPraised = praisedSet.value.has(u.openid);
+      // item/cache 的 praised 可能比 /praise/me 快照新；显示用同一组合，动作也用它。
+      const wasPraised = !!(u.praised || praisedSet.value.has(u.openid));
       // 今日额度已用完：直接弹限额说明，别先弹「点赞成功」再被后端 400 打回。
       if (!wasPraised && praiseReady.value && praiseLeft.value <= 0) {
         const limit = (praiseState.value && praiseState.value.limit) || 0;
@@ -2309,6 +2319,11 @@ const yxqApp = createApp({
           ? await api('/api/praise/' + encodeURIComponent(u.openid), { method: 'DELETE' })
           : await api('/api/praise', { method: 'POST', body: JSON.stringify({ target_openid: u.openid }) });
         praiseState.value = { ...(praiseState.value || {}), ...r };
+        patchOverviewItem(u.openid, { praised: !wasPraised });
+        {
+          const cp = ovProfileCache.get(u.openid);
+          if (cp) cp.praised = !wasPraised;
+        }
       } catch (e) {
         praiseState.value = prev;
         if (userDetail.value && userDetail.value.openid === u.openid) {
@@ -2921,7 +2936,15 @@ const yxqApp = createApp({
     function emptyFilter() {
       return { gender: '', nickname: '', user_id: '', height_min: '', height_max: '', age_min: '', age_max: '', city_provinces: [], native_provinces: [], education: [], income: [], house: [], driving: [] };
     }
-    const filter = ref(emptyFilter());
+    const filter = ref(emptyFilter());          // 牵线页牌堆筛选
+    const overviewFilter = ref(emptyFilter());  // 全览筛选：与牌堆完全独立
+    // 筛选面板按当前页取对应 store；两处互不影响。
+    const activeFilter = computed(() => (page.value === 'cards_overview' ? overviewFilter.value : filter.value));
+    function filterIsActive(f) {
+      return !!(f.gender || f.nickname || f.user_id || f.height_min || f.height_max || f.age_min || f.age_max ||
+        f.city_provinces.length || f.native_provinces.length || f.education.length || f.income.length ||
+        f.house.length || f.driving.length);
+    }
     const educationOptions = ['大专以下', '大专', '本科', '硕士', '博士'];
     const incomeOptions = ['10W以下', '10W - 20W', '20W - 30W', '30W - 50W', '50W以上', '未填'];
     const showFilter = ref(false);
@@ -2940,12 +2963,10 @@ const yxqApp = createApp({
       return [...regionProvinces.value].sort((a, b) => (order.get(a.code) ?? 999) - (order.get(b.code) ?? 999));
     });
     const slideDir = ref('');
-    const hasActiveFilter = computed(() => {
-      const f = filter.value;
-      return !!(f.gender || f.nickname || f.user_id || f.height_min || f.height_max || f.age_min || f.age_max || f.city_provinces.length || f.native_provinces.length || f.education.length || f.income.length || f.house.length || f.driving.length);
-    });
-    function buildFilterQuery() {
-      const f = filter.value;
+    const hasActiveFilter = computed(() => filterIsActive(filter.value));
+    const ovHasActiveFilter = computed(() => filterIsActive(overviewFilter.value));
+    function buildFilterQuery(f) {
+      f = f || filter.value;
       const parts = [];
       if (f.gender) parts.push('gender=' + encodeURIComponent(f.gender));
       const nick = (f.nickname || '').trim();
@@ -2963,7 +2984,7 @@ const yxqApp = createApp({
       return parts.length ? ('?' + parts.join('&')) : '';
     }
     function toggleMultiTag(field, val) {
-      const arr = filter.value[field];
+      const arr = activeFilter.value[field];
       const idx = arr.indexOf(val);
       if (idx >= 0) arr.splice(idx, 1);
       else arr.push(val);
@@ -3004,10 +3025,11 @@ const yxqApp = createApp({
     }
     function onProvinceTouchEnd() { provinceTouch = null; }
     async function resetFilter() {
-      // 卡片留言草稿会被随后的切卡/重载清掉：提交筛选动作前先拦截
-      if(guardOverlay('cardsMsg', () => resetFilter())) return;
-      filter.value = emptyFilter();
-      filterBaselineKey = JSON.stringify(filter.value);
+      // 卡片留言草稿会被随后的切卡/重载清掉：仅牵线页需要拦截（全览筛选互不影响）。
+      if(page.value !== 'cards_overview' && guardOverlay('cardsMsg', () => resetFilter())) return;
+      if (page.value === 'cards_overview') overviewFilter.value = emptyFilter();
+      else filter.value = emptyFilter();
+      filterBaselineKey = JSON.stringify(activeFilter.value);
       showFilter.value = false;
       if (page.value === 'cards_overview') {
         await loadCardsOverview(true);
@@ -3018,10 +3040,15 @@ const yxqApp = createApp({
       await loadCards(true);
     }
 
+    function onFilterEnter(e) {
+      // 中文输入法用 Enter 选词不应提交筛选。
+      if (e && (e.isComposing || e.keyCode === 229)) return;
+      applyFilter();
+    }
     async function applyFilter() {
-      // 卡片留言草稿会被随后的切卡/重载清掉：提交筛选动作前先拦截
-      if(guardOverlay('cardsMsg', () => applyFilter())) return;
-      filterBaselineKey = JSON.stringify(filter.value);
+      // 卡片留言草稿会被随后的切卡/重载清掉：仅牵线页需要拦截（全览筛选互不影响）。
+      if(page.value !== 'cards_overview' && guardOverlay('cardsMsg', () => applyFilter())) return;
+      filterBaselineKey = JSON.stringify(activeFilter.value);
       showFilter.value = false;
       if (page.value === 'cards_overview') {
         await loadCardsOverview(true);
@@ -3032,7 +3059,7 @@ const yxqApp = createApp({
       await loadCards(true);
     }
     // 筛选面板打开时对齐基线：面板里改的算「未应用」，关闭/返回时拦截
-    watch(showFilter, (v) => { if(v) { filterBaselineKey = JSON.stringify(filter.value); ensureRegions(); } });
+    watch(showFilter, (v) => { if(v) { filterBaselineKey = JSON.stringify(activeFilter.value); ensureRegions(); } });
     // 筛选面板「取消」/返回：changed 未应用 → 先走通用离开拦截（两钮）
     function requestCloseFilter(){
       if(guardOverlay('filter', () => { showFilter.value = false; })) return;
@@ -3176,7 +3203,8 @@ const yxqApp = createApp({
       if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy)) {
         stepOverviewPhoto(item, dx < 0 ? 1 : -1);
         ovSwallowClick = true;
-      } else if (g.moved) {
+      } else if (Math.abs(dx) > 24 || Math.abs(dy) > 24) {
+        // 纵向/斜向拖拽（尤其桌面鼠标）也会产生 click；只吞真实拖拽，轻微抖动仍可点开。
         ovSwallowClick = true;
       }
     }
@@ -3187,7 +3215,7 @@ const yxqApp = createApp({
       openOverviewCard(item);
     }
     function overviewQuery() {
-      const q = buildFilterQuery();
+      const q = buildFilterQuery(overviewFilter.value);
       return q ? q + '&' : '?';
     }
     async function loadCardsOverview(reset) {
@@ -3263,9 +3291,11 @@ const yxqApp = createApp({
       };
       requestAnimationFrame(tick);
     }
-    function openCardsOverview() {
+    function openCardsOverview(dir) {
       if (page.value !== 'cards') return;
+      overviewEntryDir = dir === 'up' || dir === 'down' ? dir : '';
       page.value = 'cards_overview';
+      if (overviewEntryDir) setTimeout(() => { overviewEntryDir = ''; }, 600);
     }
     function markCardsTabPress() {
       cardsTabWasActive = page.value === 'cards';
@@ -3318,7 +3348,7 @@ const yxqApp = createApp({
       if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy)) {
         ovStepPhoto(dx < 0 ? 1 : -1);
         ovPhotoSwallowClick = true;
-      } else if (g.moved) {
+      } else if (Math.abs(dx) > 24 || Math.abs(dy) > 24) {
         ovPhotoSwallowClick = true;
       }
     }
@@ -3352,6 +3382,24 @@ const yxqApp = createApp({
       ovPhotoPositions.value = next;
     }
     function ovPhotoPosition(i) { return ovPhotoPositions.value[i] || null; }
+    function patchOverviewItem(openid, patch) {
+      if (!openid) return;
+      overviewItems.value = overviewItems.value.map((it) => (it.openid === openid ? { ...it, ...patch } : it));
+      // 浮层正在展示同一人时同步，避免动作后按钮显示还是旧状态。
+      if (overviewSheet.value && overviewSheet.value.openid === openid) {
+        overviewSheet.value = { ...overviewSheet.value, ...patch };
+      }
+    }
+    function recomputeOvPhotoPositions() {
+      try {
+        const imgs = document.querySelectorAll('.ov-sheet .card-photo-base');
+        for (let i = 0; i < imgs.length; i++) {
+          const img = imgs[i];
+          const idx = parseInt(img.getAttribute('data-ov-i') || '0', 10);
+          if (img && img.complete && img.naturalWidth && !isNaN(idx)) ovRecalcPhotoPosition({ target: img }, idx);
+        }
+      } catch (_) {}
+    }
     function closeOverviewCard() {
       ovCardDrag = null;
       ovDragging.value = false;
@@ -3517,13 +3565,29 @@ const yxqApp = createApp({
       ovMsgSeq++;
       ovMsgLoading.value = false;
       ovMsgSending.value = false;
-      overviewSheetLoading.value = true;
       showOverviewCard.value = true;
       const seq = ++overviewSheetSeq;
       const oid = item.openid;
+      const cached = ovProfileCache.get(oid);
+      if (cached) {
+        // 同一张卡二次打开：直接用内存里的完整资料，不再请求、不闪加载。
+        // liked/praised 取并集（item 可能更新，缓存可能保留更早的 true）；can_like 优先 item。
+        overviewSheet.value = {
+          ...item,
+          ...cached,
+          liked: !!(item.liked || cached.liked),
+          praised: !!(item.praised || cached.praised),
+          can_like: item.can_like !== undefined ? item.can_like : cached.can_like,
+        };
+        overviewSheetLoading.value = false;
+        nextTick(recomputeOvPhotoPositions);
+        return;
+      }
+      overviewSheetLoading.value = true;
       api('/api/users/' + encodeURIComponent(oid) + '/public').then((profile) => {
         if (seq !== overviewSheetSeq || !showOverviewCard.value) return;
         if (profile && profile.openid) {
+          ovProfileCache.set(oid, profile);
           // public profile 不含 recommended：保留列表 item 上的推荐徽标。
           overviewSheet.value = { ...overviewSheet.value, ...profile };
           const maxIdx = Math.max(0, ovPhotos().length - 1);
@@ -3544,13 +3608,18 @@ const yxqApp = createApp({
     });
     const ovCanLike = computed(() => {
       const u = overviewSheet.value;
-      return !!(u && u.openid && !u.is_self && !isObserver.value);
+      if (!u || !u.openid || u.is_self || isObserver.value) return false;
+      if (u.can_like === false) return false;
+      return !(u.liked || justLiked.has(u.openid));
     });
     const ovCanPraise = computed(() => {
       const u = overviewSheet.value;
       return !!(u && u.openid && !u.is_self && !isObserver.value && !ovLiked.value && praiseReady.value);
     });
-    const ovPraised = computed(() => !!overviewSheet.value && praisedSet.value.has(overviewSheet.value.openid));
+    const ovPraised = computed(() => {
+      const u = overviewSheet.value;
+      return !!(u && u.openid && (u.praised || praisedSet.value.has(u.openid)));
+    });
     const ovThreaded = computed(() => buildThreadedMessages(ovMessages.value));
     const ovMsgCount = computed(() => ovMessages.value.length);
     const ovSimple = computed(() => {
@@ -3921,7 +3990,7 @@ const yxqApp = createApp({
       const dy = t.clientY - g.y;
       if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
         photoDidSwipe = true;   // 防止 touchend 后的 click 打开大图
-        openCardsOverview();
+        openCardsOverview(dy < 0 ? 'up' : 'down');
       }
     }
     function onCardVertCancel() { cardVertGesture = null; }
@@ -5079,6 +5148,11 @@ const yxqApp = createApp({
           vant.showDialog({ title: '💕 相互喜欢', message: '恭喜！你和' + target.nickname + '相互喜欢了！到「相互喜欢」填写并同意交换后，就能看到对方微信号。', confirmButtonColor: '#ff6b81' });
         } else { vant.showToast('喜欢成功'); }
         justLiked.add(target.openid);
+        patchOverviewItem(target.openid, { liked: true, can_like: false });
+        {
+          const cp = ovProfileCache.get(target.openid);
+          if (cp) cp.liked = true;
+        }
         lastLikeAt.value = Date.now();
         // 原地置灰：卡片保留在牌堆，♥ 变灰不可点击（产品语义：喜欢≠消失）
         const deckCard = cards.value.find(c => c.openid === target.openid);
@@ -8329,7 +8403,7 @@ const yxqApp = createApp({
       sharpPhotos, sharpReady, onSharpLoad,
       showSwipeGuide, closeSwipeGuide,
       showActivityPromo, gotoPromoActivity, promoPoster, showUpdateNotes,
-      filter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, requestCloseFilter,
+      filter, overviewFilter, activeFilter, ovHasActiveFilter, educationOptions, incomeOptions, showFilter, hasActiveFilter, toggleMultiTag, resetFilter, applyFilter, onFilterEnter, requestCloseFilter,
       filterProvinces, onProvinceTouchStart, onProvinceTouchMove, onProvinceTouchEnd,
       showIdInvalidDialog, idInvalidCountdown, goIdInvalidNow, guardTabChange,
       showRegionInvalidDialog, regionInvalidCountdown, goRegionInvalidNow,
