@@ -65,7 +65,7 @@ make perf-bench PERF_SOURCE=edge PERF_N=10 PERF_WARMUP=3
 make perf-lcp PERF_LCP_RUNS=3   # 需 BASE_URL + SESSION_COOKIE + Playwright
 ```
 
-- 预算在 `tools/perf/budgets.json`，每项 = 基线 +10%；只能手工修改并走 Review，没有自动更新。改预算时 `notes` 与 commit 都必须记录旧值→新值、实测值与理由；基线抬高不得只为凑上限（新增真实功能、UI 迭代、视觉/交互修复（含查看器/过渡/通知/红点/未读计数/全览卡片浮层（复用 deck 卡/左右切卡/卡外收卡/人脸裁切/上下滑入口/独立筛选/回牵线手势/上滑向上离场））按实测重设 baseline，连续迭代每次记录实测值，不得复用旧 baseline 掩盖回归）。当前值与变更记录查该文件的 `limits`/`notes`，不在本文件复制数值。
+- 预算在 `tools/perf/budgets.json`，每项 = 基线 +10%；只能手工修改并走 Review，没有自动更新。改预算时 `notes` 与 commit 都必须记录旧值→新值、实测值与理由；基线抬高不得只为凑上限（新增真实功能、UI 迭代、视觉/交互修复（含查看器/过渡/通知/红点/未读计数/全览卡片浮层（复用 deck 卡/左右切卡/平滑自动定位/卡外收卡/人脸裁切/上下滑入口/独立筛选/回牵线手势/上滑向上离场））按实测重设 baseline，连续迭代每次记录实测值，不得复用旧 baseline 掩盖回归）。当前值与变更记录查该文件的 `limits`/`notes`，不在本文件复制数值。
 - 采集点：`edge` 在 server2 本机、`origin`/`app` 在 server1；浏览器参考主机固定 390×844、CPU×4、1.6Mbps/150ms。
 - HTTP：N≥10、warmup≥3；p95 = 排序后第 `ceil(0.95n)` 个；记录 p50/p95、N、主机、时间。
 - LCP：N≥3（正式对比建议 5），取中位并记录 min–max；冷/热分开。

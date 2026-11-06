@@ -69,7 +69,7 @@ sources:
 - 热路径（`web/static/legacy/**`、`deploy/nginx/**`、`internal/httpserver/{middleware,handlers_media,media_serve,legacy_ui,readcache,app}.go`、DB home/cards/profile/notifications/照片授权、热索引 migration）必须给 `make perf-bench`/`make perf-lcp` 前后数字；前后必须对同一基线提交（通常是本次改动前的 HEAD），不是更早的历史基线；p95 不得比基线差 >10%。
 - 不得移除：边缘 keepalive、静态 gzip/identity 分键缓存、TLS session ticket、缩略图磁盘缓存、媒体 ETag/304、10s 读缓存 + epoch、`0008`–`0010` 热索引；不得给 `/legacy/api` 加边缘 `proxy_cache`，cache key 不含 `$cookie_`。
 - 不得把 `app.css`/`app.min.js`/`app.render.js` 大段内联回壳；不得退回 `vant.full.min.*`；生成物必须走 `make spa-check`。
-- 预算只改 `tools/perf/budgets.json` 并走 Review；`notes` 与 commit 都要记录旧值→新值、实测值与理由，基线抬高不得只为凑上限（新增真实功能、UI 迭代、视觉/交互修复（含查看器/过渡/通知/红点/未读计数/全览卡片浮层（复用 deck 卡/左右切卡/卡外收卡/人脸裁切/上下滑入口/独立筛选/回牵线手势/上滑向上离场））按实测重设 baseline，连续迭代每次记录实测值，不得复用旧 baseline 掩盖回归）；没有自动更新命令。当前值与变更记录只查该文件，不在本文件或 `tools/README.md` 复制数值。
+- 预算只改 `tools/perf/budgets.json` 并走 Review；`notes` 与 commit 都要记录旧值→新值、实测值与理由，基线抬高不得只为凑上限（新增真实功能、UI 迭代、视觉/交互修复（含查看器/过渡/通知/红点/未读计数/全览卡片浮层（复用 deck 卡/左右切卡/平滑自动定位/卡外收卡/人脸裁切/上下滑入口/独立筛选/回牵线手势/上滑向上离场））按实测重设 baseline，连续迭代每次记录实测值，不得复用旧 baseline 掩盖回归）；没有自动更新命令。当前值与变更记录只查该文件，不在本文件或 `tools/README.md` 复制数值。
 
 ## 文档地图
 

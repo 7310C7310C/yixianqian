@@ -399,10 +399,11 @@ function render(_ctx, _cache) {
     _createElementVNode("div", {
       class: "cards-overview-scroll",
       onScrollPassive: _cache[12] || (_cache[12] = (...args) => (_ctx.onOverviewScroll && _ctx.onOverviewScroll(...args))),
-      onTouchstart: _cache[13] || (_cache[13] = (...args) => (_ctx.onOverviewPullStart && _ctx.onOverviewPullStart(...args))),
-      onTouchmove: _cache[14] || (_cache[14] = (...args) => (_ctx.onOverviewPullMove && _ctx.onOverviewPullMove(...args))),
-      onTouchend: _cache[15] || (_cache[15] = (...args) => (_ctx.onOverviewPullEnd && _ctx.onOverviewPullEnd(...args))),
-      onTouchcancel: _cache[16] || (_cache[16] = (...args) => (_ctx.onOverviewPullCancel && _ctx.onOverviewPullCancel(...args)))
+      onWheelPassive: _cache[13] || (_cache[13] = (...args) => (_ctx.cancelOvGridScroll && _ctx.cancelOvGridScroll(...args))),
+      onTouchstart: _cache[14] || (_cache[14] = (...args) => (_ctx.onOverviewPullStart && _ctx.onOverviewPullStart(...args))),
+      onTouchmove: _cache[15] || (_cache[15] = (...args) => (_ctx.onOverviewPullMove && _ctx.onOverviewPullMove(...args))),
+      onTouchend: _cache[16] || (_cache[16] = (...args) => (_ctx.onOverviewPullEnd && _ctx.onOverviewPullEnd(...args))),
+      onTouchcancel: _cache[17] || (_cache[17] = (...args) => (_ctx.onOverviewPullCancel && _ctx.onOverviewPullCancel(...args)))
     }, [
       (_ctx.overviewError && !_ctx.overviewItems.length)
         ? (_openBlock(), _createElementBlock("div", _hoisted_7, [
@@ -537,7 +538,7 @@ function render(_ctx, _cache) {
     ], 32 /* NEED_HYDRATION */),
     _createVNode(_component_van_popup, {
       show: _ctx.showOverviewCard,
-      "onUpdate:show": _cache[51] || (_cache[51] = $event => ((_ctx.showOverviewCard) = $event)),
+      "onUpdate:show": _cache[52] || (_cache[52] = $event => ((_ctx.showOverviewCard) = $event)),
       position: "bottom",
       "overlay-class": "ov-sheet-overlay",
       "close-on-click-overlay": false,
@@ -549,33 +550,33 @@ function render(_ctx, _cache) {
       default: _withCtx(() => [
         _createElementVNode("div", {
           class: "ov-sheet-backdrop",
-          onClick: _cache[50] || (_cache[50] = _withModifiers((...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)), ["self"]))
+          onClick: _cache[51] || (_cache[51] = _withModifiers((...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)), ["self"]))
         }, [
           _createElementVNode("div", {
             class: "ov-card-stage",
-            onClick: _cache[49] || (_cache[49] = _withModifiers((...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)), ["self"]))
+            onClick: _cache[50] || (_cache[50] = _withModifiers((...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)), ["self"]))
           }, [
             (_ctx.overviewSheet)
               ? (_openBlock(), _createElementBlock("div", _hoisted_36, [
                   _createElementVNode("div", {
                     class: _normalizeClass(["swipe-card ov-card", _ctx.ovCardSlide === 'left' ? 'slide-in-left' : (_ctx.ovCardSlide === 'right' ? 'slide-in-right' : '')]),
                     style: _normalizeStyle(_ctx.ovCardDragStyle()),
-                    onTouchstart: _cache[44] || (_cache[44] = (...args) => (_ctx.ovCardDragStart && _ctx.ovCardDragStart(...args))),
-                    onTouchmove: _cache[45] || (_cache[45] = (...args) => (_ctx.ovCardDragMove && _ctx.ovCardDragMove(...args))),
-                    onTouchend: _cache[46] || (_cache[46] = (...args) => (_ctx.ovCardDragEnd && _ctx.ovCardDragEnd(...args))),
-                    onTouchcancel: _cache[47] || (_cache[47] = (...args) => (_ctx.ovCardDragCancel && _ctx.ovCardDragCancel(...args)))
+                    onTouchstart: _cache[45] || (_cache[45] = (...args) => (_ctx.ovCardDragStart && _ctx.ovCardDragStart(...args))),
+                    onTouchmove: _cache[46] || (_cache[46] = (...args) => (_ctx.ovCardDragMove && _ctx.ovCardDragMove(...args))),
+                    onTouchend: _cache[47] || (_cache[47] = (...args) => (_ctx.ovCardDragEnd && _ctx.ovCardDragEnd(...args))),
+                    onTouchcancel: _cache[48] || (_cache[48] = (...args) => (_ctx.ovCardDragCancel && _ctx.ovCardDragCancel(...args)))
                   }, [
                     _createElementVNode("div", {
                       class: "card-photo-wrap",
-                      onTouchstart: _cache[17] || (_cache[17] = (...args) => (_ctx.ovPhotoStart && _ctx.ovPhotoStart(...args))),
-                      onTouchmove: _cache[18] || (_cache[18] = (...args) => (_ctx.ovPhotoMove && _ctx.ovPhotoMove(...args))),
-                      onTouchend: _cache[19] || (_cache[19] = (...args) => (_ctx.ovPhotoEnd && _ctx.ovPhotoEnd(...args))),
-                      onTouchcancel: _cache[20] || (_cache[20] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
-                      onMousedown: _cache[21] || (_cache[21] = (...args) => (_ctx.ovPhotoStart && _ctx.ovPhotoStart(...args))),
-                      onMousemove: _cache[22] || (_cache[22] = (...args) => (_ctx.ovPhotoMove && _ctx.ovPhotoMove(...args))),
-                      onMouseup: _cache[23] || (_cache[23] = (...args) => (_ctx.ovPhotoEnd && _ctx.ovPhotoEnd(...args))),
-                      onMouseleave: _cache[24] || (_cache[24] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
-                      onClick: _cache[25] || (_cache[25] = (...args) => (_ctx.ovPhotoClick && _ctx.ovPhotoClick(...args)))
+                      onTouchstart: _cache[18] || (_cache[18] = (...args) => (_ctx.ovPhotoStart && _ctx.ovPhotoStart(...args))),
+                      onTouchmove: _cache[19] || (_cache[19] = (...args) => (_ctx.ovPhotoMove && _ctx.ovPhotoMove(...args))),
+                      onTouchend: _cache[20] || (_cache[20] = (...args) => (_ctx.ovPhotoEnd && _ctx.ovPhotoEnd(...args))),
+                      onTouchcancel: _cache[21] || (_cache[21] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
+                      onMousedown: _cache[22] || (_cache[22] = (...args) => (_ctx.ovPhotoStart && _ctx.ovPhotoStart(...args))),
+                      onMousemove: _cache[23] || (_cache[23] = (...args) => (_ctx.ovPhotoMove && _ctx.ovPhotoMove(...args))),
+                      onMouseup: _cache[24] || (_cache[24] = (...args) => (_ctx.ovPhotoEnd && _ctx.ovPhotoEnd(...args))),
+                      onMouseleave: _cache[25] || (_cache[25] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
+                      onClick: _cache[26] || (_cache[26] = (...args) => (_ctx.ovPhotoClick && _ctx.ovPhotoClick(...args)))
                     }, [
                       (_ctx.overviewSheetLoading && !_ctx.ovPhotos().length)
                         ? (_openBlock(), _createElementBlock("div", _hoisted_37))
@@ -634,21 +635,21 @@ function render(_ctx, _cache) {
                     ], 32 /* NEED_HYDRATION */),
                     _createElementVNode("div", {
                       class: "card-main",
-                      onTouchstart: _cache[35] || (_cache[35] = (...args) => (_ctx.ovCardMainStart && _ctx.ovCardMainStart(...args))),
-                      onTouchend: _cache[36] || (_cache[36] = (...args) => (_ctx.ovCardMainEnd && _ctx.ovCardMainEnd(...args))),
-                      onTouchcancel: _cache[37] || (_cache[37] = (...args) => (_ctx.ovCardMainCancel && _ctx.ovCardMainCancel(...args))),
-                      onMousedown: _cache[38] || (_cache[38] = (...args) => (_ctx.ovCardMainStart && _ctx.ovCardMainStart(...args))),
-                      onMouseup: _cache[39] || (_cache[39] = (...args) => (_ctx.ovCardMainEnd && _ctx.ovCardMainEnd(...args))),
-                      onMouseleave: _cache[40] || (_cache[40] = (...args) => (_ctx.ovCardMainCancel && _ctx.ovCardMainCancel(...args)))
+                      onTouchstart: _cache[36] || (_cache[36] = (...args) => (_ctx.ovCardMainStart && _ctx.ovCardMainStart(...args))),
+                      onTouchend: _cache[37] || (_cache[37] = (...args) => (_ctx.ovCardMainEnd && _ctx.ovCardMainEnd(...args))),
+                      onTouchcancel: _cache[38] || (_cache[38] = (...args) => (_ctx.ovCardMainCancel && _ctx.ovCardMainCancel(...args))),
+                      onMousedown: _cache[39] || (_cache[39] = (...args) => (_ctx.ovCardMainStart && _ctx.ovCardMainStart(...args))),
+                      onMouseup: _cache[40] || (_cache[40] = (...args) => (_ctx.ovCardMainEnd && _ctx.ovCardMainEnd(...args))),
+                      onMouseleave: _cache[41] || (_cache[41] = (...args) => (_ctx.ovCardMainCancel && _ctx.ovCardMainCancel(...args)))
                     }, [
                       _createElementVNode("div", _hoisted_50, [
                         _createElementVNode("div", {
                           class: _normalizeClass(["card-tab", { active: _ctx.ovCardTab === 'profile' }]),
-                          onClick: _cache[26] || (_cache[26] = $event => (_ctx.ovSwitchTab('profile')))
+                          onClick: _cache[27] || (_cache[27] = $event => (_ctx.ovSwitchTab('profile')))
                         }, "资料", 2 /* CLASS */),
                         _createElementVNode("div", {
                           class: _normalizeClass(["card-tab", { active: _ctx.ovCardTab === 'messages' }]),
-                          onClick: _cache[27] || (_cache[27] = $event => (_ctx.ovSwitchTab('messages')))
+                          onClick: _cache[28] || (_cache[28] = $event => (_ctx.ovSwitchTab('messages')))
                         }, [
                           _createTextVNode("留言"),
                           (_ctx.ovMsgCount > 0)
@@ -709,8 +710,8 @@ function render(_ctx, _cache) {
                                                   _createElementVNode("div", {
                                                     class: "msg-avatar-sm msg-avatar-click",
                                                     onClick: _withModifiers($event => (_ctx.ovOpenAuthor(m)), ["stop"]),
-                                                    onTouchstart: _cache[28] || (_cache[28] = _withModifiers(() => {}, ["stop"])),
-                                                    onTouchend: _cache[29] || (_cache[29] = _withModifiers(() => {}, ["stop"]))
+                                                    onTouchstart: _cache[29] || (_cache[29] = _withModifiers(() => {}, ["stop"])),
+                                                    onTouchend: _cache[30] || (_cache[30] = _withModifiers(() => {}, ["stop"]))
                                                   }, [
                                                     (m.author_avatar)
                                                       ? (_openBlock(), _createElementBlock("img", {
@@ -756,8 +757,8 @@ function render(_ctx, _cache) {
                                                     _createElementVNode("div", {
                                                       class: "msg-avatar-sm msg-avatar-click",
                                                       onClick: _withModifiers($event => (_ctx.ovOpenAuthor(r)), ["stop"]),
-                                                      onTouchstart: _cache[30] || (_cache[30] = _withModifiers(() => {}, ["stop"])),
-                                                      onTouchend: _cache[31] || (_cache[31] = _withModifiers(() => {}, ["stop"]))
+                                                      onTouchstart: _cache[31] || (_cache[31] = _withModifiers(() => {}, ["stop"])),
+                                                      onTouchend: _cache[32] || (_cache[32] = _withModifiers(() => {}, ["stop"]))
                                                     }, [
                                                       (r.author_avatar)
                                                         ? (_openBlock(), _createElementBlock("img", {
@@ -815,13 +816,13 @@ function render(_ctx, _cache) {
                                         _createElementVNode("span", null, "正在回复 " + _toDisplayString(_ctx.ovReplyTarget.author_nickname), 1 /* TEXT */),
                                         _createElementVNode("span", {
                                           class: "msg-reply-cancel",
-                                          onClick: _cache[32] || (_cache[32] = (...args) => (_ctx.ovCancelReply && _ctx.ovCancelReply(...args)))
+                                          onClick: _cache[33] || (_cache[33] = (...args) => (_ctx.ovCancelReply && _ctx.ovCancelReply(...args)))
                                         }, "取消")
                                       ]))
                                     : _createCommentVNode("v-if", true),
                                   _createElementVNode("div", _hoisted_93, [
                                     _withDirectives(_createElementVNode("input", {
-                                      "onUpdate:modelValue": _cache[33] || (_cache[33] = $event => ((_ctx.ovMsgText) = $event)),
+                                      "onUpdate:modelValue": _cache[34] || (_cache[34] = $event => ((_ctx.ovMsgText) = $event)),
                                       class: "msg-input",
                                       placeholder: _ctx.ovReplyTarget ? '回复 ' + _ctx.ovReplyTarget.author_nickname + '：' : '写下你的留言…'
                                     }, null, 8 /* PROPS */, _hoisted_94), [
@@ -830,7 +831,7 @@ function render(_ctx, _cache) {
                                     _createElementVNode("button", {
                                       class: "msg-send",
                                       disabled: !_ctx.ovMsgText.trim() || _ctx.ovMsgSending,
-                                      onClick: _cache[34] || (_cache[34] = (...args) => (_ctx.ovSendMessage && _ctx.ovSendMessage(...args)))
+                                      onClick: _cache[35] || (_cache[35] = (...args) => (_ctx.ovSendMessage && _ctx.ovSendMessage(...args)))
                                     }, _toDisplayString(_ctx.ovMsgSending ? '发送中…' : '发送'), 9 /* TEXT, PROPS */, _hoisted_95)
                                   ])
                                 ]))
@@ -845,14 +846,14 @@ function render(_ctx, _cache) {
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 0,
                                 class: "feedback-btn",
-                                onClick: _cache[41] || (_cache[41] = (...args) => (_ctx.ovOpenFeedback && _ctx.ovOpenFeedback(...args)))
+                                onClick: _cache[42] || (_cache[42] = (...args) => (_ctx.ovOpenFeedback && _ctx.ovOpenFeedback(...args)))
                               }, "反馈"))
                             : _createCommentVNode("v-if", true),
                           (_ctx.ovCanPraise)
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 1,
                                 class: _normalizeClass(["praise-btn", { praised: _ctx.ovPraised }]),
-                                onClick: _cache[42] || (_cache[42] = $event => (_ctx.togglePraise(_ctx.overviewSheet))),
+                                onClick: _cache[43] || (_cache[43] = $event => (_ctx.togglePraise(_ctx.overviewSheet))),
                                 disabled: _ctx.actionLoading || _ctx.praiseBusy
                               }, [
                                 _createVNode(_component_van_icon, { name: "good-job" })
@@ -862,7 +863,7 @@ function render(_ctx, _cache) {
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 2,
                                 class: _normalizeClass(["heart-btn", { liked: _ctx.ovLiked }]),
-                                onClick: _cache[43] || (_cache[43] = $event => (_ctx.openLikeDialogForUser(_ctx.overviewSheet))),
+                                onClick: _cache[44] || (_cache[44] = $event => (_ctx.openLikeDialogForUser(_ctx.overviewSheet))),
                                 disabled: _ctx.actionLoading || _ctx.ovLiked
                               }, "♥", 10 /* CLASS, PROPS */, _hoisted_98))
                             : _createCommentVNode("v-if", true)
@@ -873,7 +874,7 @@ function render(_ctx, _cache) {
                     type: "button",
                     class: "ov-card-close",
                     "aria-label": "关闭",
-                    onClick: _cache[48] || (_cache[48] = (...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)))
+                    onClick: _cache[49] || (_cache[49] = (...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)))
                   }, [
                     _createVNode(_component_van_icon, { name: "cross" })
                   ])

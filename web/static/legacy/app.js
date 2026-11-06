@@ -784,6 +784,7 @@ const yxqApp = createApp({
     const ovCloseDir = ref('');          // 收起方向：'up' 上滑收卡向上离场；其余默认向下
     let ovCardMainGesture = null;
     let ovCardSlideTimer = 0;
+    let ovGridScrollRaf = 0;   // 网格自动定位的 rAF（平滑滚动，不闪变）
     const ovPhotoPositions = ref({});   // 浮层卡面人脸 objectPosition（按图索引）
     const ovDragY = ref(0);              // 下滑收卡的位移
     const ovDragging = ref(false);
@@ -3317,6 +3318,7 @@ const yxqApp = createApp({
       requestAnimationFrame(tick);
     }
     function onOverviewPullStart(e) {
+      cancelOvGridScroll();
       const el = e.currentTarget;
       const t = e.touches && e.touches[0];
       if (!t) return;
@@ -3455,15 +3457,37 @@ const yxqApp = createApp({
         overviewSheet.value = { ...overviewSheet.value, ...patch };
       }
     }
+    function cancelOvGridScroll() {
+      if (ovGridScrollRaf) {
+        cancelAnimationFrame(ovGridScrollRaf);
+        ovGridScrollRaf = 0;
+      }
+    }
     function ovScrollGridToItem(item) {
       if (!item || !item.user_id) return;
+      cancelOvGridScroll();   // 新目标先停旧动画（tile 未渲染/距离为 0 也不留旧动画）
       nextTick(() => {
+        if (page.value !== 'cards_overview') return;
         const sc = document.querySelector('.cards-overview-scroll');
         const el = document.querySelector('.ov-tile[data-uid="' + item.user_id + '"]');
         if (!sc || !el) return;
         const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
         const target = Math.max(0, top - (sc.clientHeight - el.clientHeight) / 2);
-        sc.scrollTop = target;
+        const start = sc.scrollTop;
+        const delta = target - start;
+        if (Math.abs(delta) < 2) return;
+        const now = (window.performance && performance.now) ? performance.now.bind(performance) : Date.now;
+        const t0 = now();
+        const dur = Math.min(460, Math.max(220, Math.abs(delta) * 0.7));
+        const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+        const step = () => {
+          if (page.value !== 'cards_overview' || !sc.isConnected) { ovGridScrollRaf = 0; return; }
+          const p = Math.min(1, (now() - t0) / dur);
+          sc.scrollTop = start + delta * ease(p);
+          if (p < 1) ovGridScrollRaf = requestAnimationFrame(step);
+          else ovGridScrollRaf = 0;
+        };
+        ovGridScrollRaf = requestAnimationFrame(step);
       });
     }
     function ovOpenCardAt(idx) {
@@ -3543,6 +3567,7 @@ const yxqApp = createApp({
       // 不要在这里清 ovDragY：否则收起前会瞬间弹回原位（PM 反馈闪到顶部）。
       // 等 popup @closed 再复位；上滑收卡时让 popup 也向上离场（与手势方向一致）。
       ovCloseDir.value = dir === 'up' ? 'up' : '';
+      cancelOvGridScroll();
       ovCardDrag = null;
       ovDragging.value = false;
       showOverviewCard.value = false;
@@ -6478,7 +6503,11 @@ const yxqApp = createApp({
     watch(showFilter, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'filter'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='filter' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     watch(showLikeDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'likeDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='likeDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     watch(showFeedbackDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'feedbackDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='feedbackDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
-    watch(showOverviewCard, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'ovCard'}); else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='ovCard'){ ignoreNextPop=true; hist.back(); } });
+    watch(showOverviewCard, (v)=>{
+      if(!v) cancelOvGridScroll();   // 任何关闭路径（X/点外/下滑/popstate）都停止网格自动滚动
+      if(v && !isHandlingPopState) pushHistory({overlay:'ovCard'});
+      else if(!v && !isHandlingPopState && hist.state && hist.state.overlay==='ovCard'){ ignoreNextPop=true; hist.back(); }
+    });
     watch(showReportDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'reportDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='reportDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     watch(showSuggestionDialog, (v)=>{ if(v && !isHandlingPopState) pushHistory({overlay:'suggestionDialog'}); else if(!v && !isHandlingPopState && hist.state && (hist.state.overlay==='suggestionDialog' || hist.state.overlay==='unsavedConfirm')){ requestPopConsume(); } });
     // onetooneMsg 打开时不单独 push（返回语义沿用页面条目），仅拦截时会补挂 overlay 条目；关闭时按需消费
@@ -8577,7 +8606,7 @@ const yxqApp = createApp({
       ovLiked, ovCanLike, ovCanPraise, ovPraised, ovSimple, ovOpenFeedback,
       closeOverviewCard, onOverviewSheetClosed, ovCardDragStart, ovCardDragMove, ovCardDragEnd, ovCardDragCancel, ovCardDragStyle,
       ovRecalcPhotoPosition, ovPhotoPosition, ovCardIndex, ovCardSlide, ovCloseDir, ovCardMainStart, ovCardMainEnd, ovCardMainCancel,
-      ovPullHint, onOverviewPullStart, onOverviewPullMove, onOverviewPullEnd, onOverviewPullCancel,
+      ovPullHint, onOverviewPullStart, onOverviewPullMove, onOverviewPullEnd, onOverviewPullCancel, cancelOvGridScroll,
       markCardsTabPress, onCardsTabTap,
       sharpPhotos, sharpReady, onSharpLoad,
       showSwipeGuide, closeSwipeGuide,

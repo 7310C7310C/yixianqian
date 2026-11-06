@@ -977,10 +977,32 @@ def main() -> int:
                     )
                     box = page.locator(".ov-sheet .card-main").bounding_box()
                     if box:
+                        # 把网格滚到离目标最远的一端，切卡时的自动定位必须平滑滚动（不能瞬跳）。
+                        page.evaluate("() => { const p = window.yxqRootProxy; if (p) p.overviewHasMore = false; }")
+                        scroll_info = page.evaluate(
+                            """() => {
+                                const p = window.yxqRootProxy;
+                                const idx = p.ovCardIndex + 1;
+                                const it = p.overviewItems[idx];
+                                const sc = document.querySelector('.cards-overview-scroll');
+                                if (!it || !sc) return null;
+                                const el = document.querySelector('.ov-tile[data-uid="' + it.user_id + '"]');
+                                if (!el) return null;
+                                const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+                                const target = Math.max(0, top - (sc.clientHeight - el.clientHeight) / 2);
+                                const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
+                                const start = target > max / 2 ? 0 : max;
+                                sc.scrollTop = start;
+                                return { start, target, max };
+                            }"""
+                        )
+                        page.wait_for_timeout(150)
                         page.mouse.move(box["x"] + box["width"] * 0.78, box["y"] + box["height"] * 0.4)
                         page.mouse.down()
                         page.mouse.move(box["x"] + box["width"] * 0.2, box["y"] + box["height"] * 0.4, steps=8)
                         page.mouse.up()
+                        page.wait_for_timeout(150)
+                        scroll_mid = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
                         try:
                             page.wait_for_function(
                                 "() => { const el = document.querySelector('.ov-sheet .swipe-card'); return !!el && el.classList.contains('slide-in-right'); }",
@@ -989,6 +1011,14 @@ def main() -> int:
                         except PlaywrightTimeoutError:
                             raise SmokeFailure("浮层卡左滑没有 slide-in-right 过场") from None
                         page.wait_for_timeout(700)
+                        scroll_final = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
+                        if scroll_info and abs(scroll_final - scroll_info["start"]) >= 40:
+                            lo, hi = sorted((scroll_info["start"], scroll_final))
+                            if not (lo < scroll_mid < hi):
+                                raise SmokeFailure(f"网格自动定位不是平滑滚动（mid={scroll_mid} final={scroll_final} start={scroll_info['start']}）")
+                            notes.append(f"{label}: 网格自动定位平滑滚动 {scroll_info['start']}px → {scroll_mid}px → {scroll_final}px")
+                        else:
+                            notes.append(f"{label}: 切卡目标距离过小，跳过平滑滚动采样")
                         after_switch = page.evaluate(
                             """() => {
                                 const p = window.yxqRootProxy;

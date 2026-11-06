@@ -15,7 +15,7 @@
     </button>
   </div>
   <div v-if="ovPullHint" class="ov-pull-hint" :class="'ov-pull-hint--' + ovPullHint">{{ ovPullHint === 'top' ? '继续下拉回到牵线' : '继续上滑回到牵线' }}</div>
-  <div class="cards-overview-scroll" @scroll.passive="onOverviewScroll"
+  <div class="cards-overview-scroll" @scroll.passive="onOverviewScroll" @wheel.passive="cancelOvGridScroll"
     @touchstart="onOverviewPullStart" @touchmove="onOverviewPullMove" @touchend="onOverviewPullEnd" @touchcancel="onOverviewPullCancel">
     <div v-if="overviewError && !overviewItems.length" class="ov-state">
       <div class="ov-state-icon">😕</div>
