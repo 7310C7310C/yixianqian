@@ -542,7 +542,10 @@ def main() -> int:
                     target_uid,
                 )
                 page.wait_for_selector(".ov-sheet .swipe-card", timeout=15000)
-                page.wait_for_timeout(700)
+                # 等 public profile 回来（推荐徽标/资料分区/多图替换都依赖它），
+                # 固定 700ms 在 staging 慢时会假红。
+                page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
+                page.wait_for_timeout(300)
                 sheet = page.evaluate(
                     """() => {
                         const card = document.querySelector('.ov-sheet .swipe-card');
@@ -669,7 +672,8 @@ def main() -> int:
                             recommended_target["user_id"],
                         )
                         page.wait_for_selector(".ov-sheet .swipe-card", timeout=15000)
-                        page.wait_for_timeout(900)
+                        page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
+                        page.wait_for_timeout(300)
                         overlay_text = page.evaluate(
                             "() => (document.querySelector('.ov-sheet .card-photo-overlay') || {}).innerText || ''"
                         )
