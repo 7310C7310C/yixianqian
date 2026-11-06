@@ -799,6 +799,25 @@ def main() -> int:
                     raise SmokeFailure("滑至顶后下滑未收卡") from None
                 notes.append(f"{label}: 滑至顶后下滑收卡")
 
+                # 内容滑到最底部后继续上滑，也要能收卡。
+                page.evaluate(
+                    """(uid) => {
+                        const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                        if (el) el.click();
+                    }""",
+                    target_uid,
+                )
+                page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
+                page.evaluate("() => { const el = document.querySelector('.ov-sheet .card-info'); if (el) el.scrollTop = el.scrollHeight; }")
+                page.wait_for_timeout(250)
+                touch_drag(page, ".ov-sheet .card-info", -160)
+                page.wait_for_timeout(500)
+                try:
+                    page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                except PlaywrightTimeoutError:
+                    raise SmokeFailure("滑至底后上滑未收卡") from None
+                notes.append(f"{label}: 滑至底后上滑收卡")
+
                 # 筛选取消/放弃不能写回牵线的 filter store（用户强调两处互不影响）。
                 page.evaluate("() => { const p = window.yxqRootProxy; if (p && p.filter) p.filter.nickname = 'DECK-KEEP'; }")
                 page.locator(".ov-filter").click()
@@ -881,7 +900,66 @@ def main() -> int:
                         }"""
                     )
                     page.wait_for_selector(".ov-sheet .swipe-card", timeout=10000)
-                    page.wait_for_timeout(400)
+                    page.wait_for_timeout(500)
+                    # 浮层卡左右滑切卡 + 全览网格自动滚到当前卡。
+                    before_switch = page.evaluate(
+                        """() => {
+                            const p = window.yxqRootProxy;
+                            const i = p.ovCardIndex;
+                            return { i, name: p.overviewSheet.nickname, uid: p.overviewItems[i] && p.overviewItems[i].user_id };
+                        }"""
+                    )
+                    box = page.locator(".ov-sheet .card-main").bounding_box()
+                    if box:
+                        page.mouse.move(box["x"] + box["width"] * 0.78, box["y"] + box["height"] * 0.4)
+                        page.mouse.down()
+                        page.mouse.move(box["x"] + box["width"] * 0.2, box["y"] + box["height"] * 0.4, steps=8)
+                        page.mouse.up()
+                        try:
+                            page.wait_for_function(
+                                "() => { const el = document.querySelector('.ov-sheet .swipe-card'); return !!el && el.classList.contains('slide-in-right'); }",
+                                timeout=2000,
+                            )
+                        except PlaywrightTimeoutError:
+                            raise SmokeFailure("浮层卡左滑没有 slide-in-right 过场") from None
+                        page.wait_for_timeout(700)
+                        after_switch = page.evaluate(
+                            """() => {
+                                const p = window.yxqRootProxy;
+                                const i = p.ovCardIndex;
+                                const cur = p.overviewItems[i];
+                                const sc = document.querySelector('.cards-overview-scroll');
+                                const tile = cur ? document.querySelector('.ov-tile[data-uid="' + cur.user_id + '"]') : null;
+                                const visible = !!(sc && tile) && tile.getBoundingClientRect().top < sc.getBoundingClientRect().bottom && tile.getBoundingClientRect().bottom > sc.getBoundingClientRect().top;
+                                return { i, name: p.overviewSheet.nickname, visible };
+                            }"""
+                        )
+                        if after_switch["i"] != before_switch["i"] + 1:
+                            raise SmokeFailure(f"浮层卡左滑未切到下一张：{before_switch} → {after_switch}")
+                        if after_switch["name"] == before_switch["name"]:
+                            raise SmokeFailure(f"浮层卡左滑姓名未变：{before_switch} → {after_switch}")
+                        if not after_switch["visible"]:
+                            raise SmokeFailure(f"切卡后全览未自动滚动到当前卡：{after_switch}")
+                        notes.append(f"{label}: 浮层卡左滑切卡并自动滚动到当前卡 {before_switch['name']} → {after_switch['name']}")
+                        # 右滑回上一张
+                        page.mouse.move(box["x"] + box["width"] * 0.2, box["y"] + box["height"] * 0.4)
+                        page.mouse.down()
+                        page.mouse.move(box["x"] + box["width"] * 0.78, box["y"] + box["height"] * 0.4, steps=8)
+                        page.mouse.up()
+                        try:
+                            page.wait_for_function(
+                                "() => { const el = document.querySelector('.ov-sheet .swipe-card'); return !!el && el.classList.contains('slide-in-left'); }",
+                                timeout=2000,
+                            )
+                        except PlaywrightTimeoutError:
+                            raise SmokeFailure("浮层卡右滑没有 slide-in-left 过场") from None
+                        page.wait_for_timeout(700)
+                        back_switch = page.evaluate(
+                            "() => { const p = window.yxqRootProxy; return { i: p.ovCardIndex, name: p.overviewSheet.nickname }; }"
+                        )
+                        if back_switch["i"] != before_switch["i"]:
+                            raise SmokeFailure(f"浮层卡右滑未回到上一张：{after_switch} → {back_switch}")
+                        notes.append(f"{label}: 浮层卡右滑回上一张 {after_switch['name']} → {back_switch['name']}")
                     page.locator(".ov-card-close").click()
                     try:
                         page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
@@ -948,11 +1026,27 @@ def main() -> int:
                     pass
                 clear_overview_filter(page)
 
-                # ---- 8. 返回牵线 ----
-                page.locator(".ov-back").click()
+                # ---- 8. 全览到顶继续下拉 / 到底继续上滑 → 回牵线 ----
+                page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); if (el) el.scrollTop = 0; }")
+                page.wait_for_timeout(200)
+                touch_drag(page, ".cards-overview-scroll", 120)
                 page.wait_for_selector(".cards-page", timeout=10000)
                 if page.locator(".cards-overview-page").count():
-                    raise SmokeFailure("返回后全览没有关闭")
+                    raise SmokeFailure("全览到顶下拉未回到牵线")
+                notes.append(f"{label}: 全览到顶继续下拉回牵线")
+
+                # 重新进入全览，模拟已加载到底后上滑回牵线。
+                page.locator(".van-tabbar-item").filter(has_text="牵线").first.click()
+                page.wait_for_selector(".cards-overview-page", timeout=10000)
+                page.wait_for_selector(".ov-tile[data-uid]", timeout=15000)
+                page.evaluate("() => { const p = window.yxqRootProxy; if (p) p.overviewHasMore = false; }")
+                page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); if (el) el.scrollTop = el.scrollHeight; }")
+                page.wait_for_timeout(300)
+                touch_drag(page, ".cards-overview-scroll", -120)
+                page.wait_for_selector(".cards-page", timeout=10000)
+                if page.locator(".cards-overview-page").count():
+                    raise SmokeFailure("全览到底上滑未回到牵线")
+                notes.append(f"{label}: 全览到底继续上滑回牵线")
                 page.screenshot(path=str(out_dir / f"back-{label}.png"))
 
                 # ---- 10.8 牵线页纵向滑动（上/下）进入全览 ----

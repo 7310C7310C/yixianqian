@@ -1218,6 +1218,9 @@
   .ov-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.5); }
   .ov-dot.active { background: #fff; }
   .ov-liked { position: absolute; right: 8px; bottom: 8px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.42); color: #ff8fa0; font-size: 12px; line-height: 22px; text-align: center; }
+  .ov-pull-hint { position: absolute; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 14px; border-radius: 999px; background: rgba(0,0,0,0.62); color: #fff; font-size: 12px; line-height: 1.4; pointer-events: none; white-space: nowrap; }
+  .ov-pull-hint--top { top: calc(env(safe-area-inset-top) + 58px); }
+  .ov-pull-hint--bottom { bottom: calc(env(safe-area-inset-bottom) + 26px); }
   .ov-state { padding: 56px 20px; text-align: center; color: #969799; }
   .ov-state-icon { font-size: 40px; margin-bottom: 10px; }
   .ov-state-text { font-size: 14px; line-height: 1.6; }

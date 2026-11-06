@@ -260,88 +260,87 @@ const _hoisted_49 = {
   key: 1,
   class: "card-subtitle"
 }
-const _hoisted_50 = { class: "card-main" }
-const _hoisted_51 = { class: "card-tabs" }
-const _hoisted_52 = {
+const _hoisted_50 = { class: "card-tabs" }
+const _hoisted_51 = {
   key: 0,
   class: "msg-count-badge"
 }
-const _hoisted_53 = { class: "card-info" }
-const _hoisted_54 = { key: "profile" }
-const _hoisted_55 = { class: "profile-section-title" }
-const _hoisted_56 = { class: "ps-icon" }
-const _hoisted_57 = { class: "info-grid" }
-const _hoisted_58 = { class: "df-label" }
-const _hoisted_59 = { class: "df-value" }
-const _hoisted_60 = {
+const _hoisted_52 = { class: "card-info" }
+const _hoisted_53 = { key: "profile" }
+const _hoisted_54 = { class: "profile-section-title" }
+const _hoisted_55 = { class: "ps-icon" }
+const _hoisted_56 = { class: "info-grid" }
+const _hoisted_57 = { class: "df-label" }
+const _hoisted_58 = { class: "df-value" }
+const _hoisted_59 = {
   key: "messages",
   class: "message-panel"
 }
-const _hoisted_61 = {
+const _hoisted_60 = {
   key: 0,
   class: "msg-tip",
   "aria-label": "正在加载"
 }
-const _hoisted_62 = {
+const _hoisted_61 = {
   key: 1,
   class: "msg-tip"
 }
-const _hoisted_63 = {
+const _hoisted_62 = {
   key: 2,
   class: "msg-list"
 }
-const _hoisted_64 = ["onClick"]
-const _hoisted_65 = { class: "msg-head" }
-const _hoisted_66 = ["onClick"]
-const _hoisted_67 = ["src"]
-const _hoisted_68 = {
+const _hoisted_63 = ["onClick"]
+const _hoisted_64 = { class: "msg-head" }
+const _hoisted_65 = ["onClick"]
+const _hoisted_66 = ["src"]
+const _hoisted_67 = {
   key: 1,
   class: "msg-avatar-sm-fallback"
 }
-const _hoisted_69 = { class: "msg-author" }
-const _hoisted_70 = /*#__PURE__*/_createElementVNode("span", { style: {"flex":"1"} }, null, -1 /* HOISTED */)
+const _hoisted_68 = { class: "msg-author" }
+const _hoisted_69 = /*#__PURE__*/_createElementVNode("span", { style: {"flex":"1"} }, null, -1 /* HOISTED */)
+const _hoisted_70 = ["onClick"]
 const _hoisted_71 = ["onClick"]
-const _hoisted_72 = ["onClick"]
-const _hoisted_73 = { class: "msg-content" }
-const _hoisted_74 = { class: "msg-foot" }
-const _hoisted_75 = { class: "msg-time" }
+const _hoisted_72 = { class: "msg-content" }
+const _hoisted_73 = { class: "msg-foot" }
+const _hoisted_74 = { class: "msg-time" }
+const _hoisted_75 = ["onClick"]
 const _hoisted_76 = ["onClick"]
-const _hoisted_77 = ["onClick"]
-const _hoisted_78 = { class: "msg-head" }
-const _hoisted_79 = ["onClick"]
-const _hoisted_80 = ["src"]
-const _hoisted_81 = {
+const _hoisted_77 = { class: "msg-head" }
+const _hoisted_78 = ["onClick"]
+const _hoisted_79 = ["src"]
+const _hoisted_80 = {
   key: 1,
   class: "msg-avatar-sm-fallback"
 }
-const _hoisted_82 = { class: "msg-author" }
-const _hoisted_83 = /*#__PURE__*/_createElementVNode("span", { style: {"flex":"1"} }, null, -1 /* HOISTED */)
+const _hoisted_81 = { class: "msg-author" }
+const _hoisted_82 = /*#__PURE__*/_createElementVNode("span", { style: {"flex":"1"} }, null, -1 /* HOISTED */)
+const _hoisted_83 = ["onClick"]
 const _hoisted_84 = ["onClick"]
-const _hoisted_85 = ["onClick"]
-const _hoisted_86 = { class: "msg-content" }
-const _hoisted_87 = {
+const _hoisted_85 = { class: "msg-content" }
+const _hoisted_86 = {
   key: 0,
   class: "msg-reply-tag"
 }
-const _hoisted_88 = { class: "msg-reply-target" }
-const _hoisted_89 = { key: 0 }
-const _hoisted_90 = { class: "msg-foot" }
-const _hoisted_91 = { class: "msg-time" }
-const _hoisted_92 = ["onClick"]
-const _hoisted_93 = {
+const _hoisted_87 = { class: "msg-reply-target" }
+const _hoisted_88 = { key: 0 }
+const _hoisted_89 = { class: "msg-foot" }
+const _hoisted_90 = { class: "msg-time" }
+const _hoisted_91 = ["onClick"]
+const _hoisted_92 = {
   key: 3,
   class: "msg-reply-bar"
 }
-const _hoisted_94 = { class: "msg-input-bar" }
-const _hoisted_95 = ["placeholder"]
-const _hoisted_96 = ["disabled"]
-const _hoisted_97 = {
+const _hoisted_93 = { class: "msg-input-bar" }
+const _hoisted_94 = ["placeholder"]
+const _hoisted_95 = ["disabled"]
+const _hoisted_96 = {
   key: 0,
   class: "card-actions"
 }
+const _hoisted_97 = ["disabled"]
 const _hoisted_98 = ["disabled"]
-const _hoisted_99 = ["disabled"]
-const _hoisted_100 = {
+const _hoisted_99 = {
   key: 1,
   class: "ov-sheet-loading"
 }
@@ -391,9 +390,19 @@ function render(_ctx, _cache) {
         }, null, 8 /* PROPS */, ["class"])
       ])
     ]),
+    (_ctx.ovPullHint)
+      ? (_openBlock(), _createElementBlock("div", {
+          key: 0,
+          class: _normalizeClass(["ov-pull-hint", 'ov-pull-hint--' + _ctx.ovPullHint])
+        }, _toDisplayString(_ctx.ovPullHint === 'top' ? '继续下拉回到牵线' : '继续上滑回到牵线'), 3 /* TEXT, CLASS */))
+      : _createCommentVNode("v-if", true),
     _createElementVNode("div", {
       class: "cards-overview-scroll",
-      onScrollPassive: _cache[12] || (_cache[12] = (...args) => (_ctx.onOverviewScroll && _ctx.onOverviewScroll(...args)))
+      onScrollPassive: _cache[12] || (_cache[12] = (...args) => (_ctx.onOverviewScroll && _ctx.onOverviewScroll(...args))),
+      onTouchstart: _cache[13] || (_cache[13] = (...args) => (_ctx.onOverviewPullStart && _ctx.onOverviewPullStart(...args))),
+      onTouchmove: _cache[14] || (_cache[14] = (...args) => (_ctx.onOverviewPullMove && _ctx.onOverviewPullMove(...args))),
+      onTouchend: _cache[15] || (_cache[15] = (...args) => (_ctx.onOverviewPullEnd && _ctx.onOverviewPullEnd(...args))),
+      onTouchcancel: _cache[16] || (_cache[16] = (...args) => (_ctx.onOverviewPullCancel && _ctx.onOverviewPullCancel(...args)))
     }, [
       (_ctx.overviewError && !_ctx.overviewItems.length)
         ? (_openBlock(), _createElementBlock("div", _hoisted_7, [
@@ -528,44 +537,45 @@ function render(_ctx, _cache) {
     ], 32 /* NEED_HYDRATION */),
     _createVNode(_component_van_popup, {
       show: _ctx.showOverviewCard,
-      "onUpdate:show": _cache[41] || (_cache[41] = $event => ((_ctx.showOverviewCard) = $event)),
+      "onUpdate:show": _cache[51] || (_cache[51] = $event => ((_ctx.showOverviewCard) = $event)),
       position: "bottom",
       "overlay-class": "ov-sheet-overlay",
       "close-on-click-overlay": false,
       onClickOverlay: _ctx.closeOverviewCard,
+      onClosed: _ctx.onOverviewSheetClosed,
       class: "ov-sheet",
       style: { height: '100%', background: 'transparent' }
     }, {
       default: _withCtx(() => [
         _createElementVNode("div", {
           class: "ov-sheet-backdrop",
-          onClick: _cache[40] || (_cache[40] = _withModifiers((...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)), ["self"]))
+          onClick: _cache[50] || (_cache[50] = _withModifiers((...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)), ["self"]))
         }, [
           _createElementVNode("div", {
             class: "ov-card-stage",
-            onClick: _cache[39] || (_cache[39] = _withModifiers((...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)), ["self"]))
+            onClick: _cache[49] || (_cache[49] = _withModifiers((...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)), ["self"]))
           }, [
             (_ctx.overviewSheet)
               ? (_openBlock(), _createElementBlock("div", _hoisted_36, [
                   _createElementVNode("div", {
-                    class: "swipe-card ov-card",
+                    class: _normalizeClass(["swipe-card ov-card", _ctx.ovCardSlide === 'left' ? 'slide-in-left' : (_ctx.ovCardSlide === 'right' ? 'slide-in-right' : '')]),
                     style: _normalizeStyle(_ctx.ovCardDragStyle()),
-                    onTouchstart: _cache[34] || (_cache[34] = (...args) => (_ctx.ovCardDragStart && _ctx.ovCardDragStart(...args))),
-                    onTouchmove: _cache[35] || (_cache[35] = (...args) => (_ctx.ovCardDragMove && _ctx.ovCardDragMove(...args))),
-                    onTouchend: _cache[36] || (_cache[36] = (...args) => (_ctx.ovCardDragEnd && _ctx.ovCardDragEnd(...args))),
-                    onTouchcancel: _cache[37] || (_cache[37] = (...args) => (_ctx.ovCardDragCancel && _ctx.ovCardDragCancel(...args)))
+                    onTouchstart: _cache[44] || (_cache[44] = (...args) => (_ctx.ovCardDragStart && _ctx.ovCardDragStart(...args))),
+                    onTouchmove: _cache[45] || (_cache[45] = (...args) => (_ctx.ovCardDragMove && _ctx.ovCardDragMove(...args))),
+                    onTouchend: _cache[46] || (_cache[46] = (...args) => (_ctx.ovCardDragEnd && _ctx.ovCardDragEnd(...args))),
+                    onTouchcancel: _cache[47] || (_cache[47] = (...args) => (_ctx.ovCardDragCancel && _ctx.ovCardDragCancel(...args)))
                   }, [
                     _createElementVNode("div", {
                       class: "card-photo-wrap",
-                      onTouchstart: _cache[13] || (_cache[13] = (...args) => (_ctx.ovPhotoStart && _ctx.ovPhotoStart(...args))),
-                      onTouchmove: _cache[14] || (_cache[14] = (...args) => (_ctx.ovPhotoMove && _ctx.ovPhotoMove(...args))),
-                      onTouchend: _cache[15] || (_cache[15] = (...args) => (_ctx.ovPhotoEnd && _ctx.ovPhotoEnd(...args))),
-                      onTouchcancel: _cache[16] || (_cache[16] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
-                      onMousedown: _cache[17] || (_cache[17] = (...args) => (_ctx.ovPhotoStart && _ctx.ovPhotoStart(...args))),
-                      onMousemove: _cache[18] || (_cache[18] = (...args) => (_ctx.ovPhotoMove && _ctx.ovPhotoMove(...args))),
-                      onMouseup: _cache[19] || (_cache[19] = (...args) => (_ctx.ovPhotoEnd && _ctx.ovPhotoEnd(...args))),
-                      onMouseleave: _cache[20] || (_cache[20] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
-                      onClick: _cache[21] || (_cache[21] = (...args) => (_ctx.ovPhotoClick && _ctx.ovPhotoClick(...args)))
+                      onTouchstart: _cache[17] || (_cache[17] = (...args) => (_ctx.ovPhotoStart && _ctx.ovPhotoStart(...args))),
+                      onTouchmove: _cache[18] || (_cache[18] = (...args) => (_ctx.ovPhotoMove && _ctx.ovPhotoMove(...args))),
+                      onTouchend: _cache[19] || (_cache[19] = (...args) => (_ctx.ovPhotoEnd && _ctx.ovPhotoEnd(...args))),
+                      onTouchcancel: _cache[20] || (_cache[20] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
+                      onMousedown: _cache[21] || (_cache[21] = (...args) => (_ctx.ovPhotoStart && _ctx.ovPhotoStart(...args))),
+                      onMousemove: _cache[22] || (_cache[22] = (...args) => (_ctx.ovPhotoMove && _ctx.ovPhotoMove(...args))),
+                      onMouseup: _cache[23] || (_cache[23] = (...args) => (_ctx.ovPhotoEnd && _ctx.ovPhotoEnd(...args))),
+                      onMouseleave: _cache[24] || (_cache[24] = (...args) => (_ctx.ovPhotoCancel && _ctx.ovPhotoCancel(...args))),
+                      onClick: _cache[25] || (_cache[25] = (...args) => (_ctx.ovPhotoClick && _ctx.ovPhotoClick(...args)))
                     }, [
                       (_ctx.overviewSheetLoading && !_ctx.ovPhotos().length)
                         ? (_openBlock(), _createElementBlock("div", _hoisted_37))
@@ -622,48 +632,56 @@ function render(_ctx, _cache) {
                         ])
                       ])
                     ], 32 /* NEED_HYDRATION */),
-                    _createElementVNode("div", _hoisted_50, [
-                      _createElementVNode("div", _hoisted_51, [
+                    _createElementVNode("div", {
+                      class: "card-main",
+                      onTouchstart: _cache[35] || (_cache[35] = (...args) => (_ctx.ovCardMainStart && _ctx.ovCardMainStart(...args))),
+                      onTouchend: _cache[36] || (_cache[36] = (...args) => (_ctx.ovCardMainEnd && _ctx.ovCardMainEnd(...args))),
+                      onTouchcancel: _cache[37] || (_cache[37] = (...args) => (_ctx.ovCardMainCancel && _ctx.ovCardMainCancel(...args))),
+                      onMousedown: _cache[38] || (_cache[38] = (...args) => (_ctx.ovCardMainStart && _ctx.ovCardMainStart(...args))),
+                      onMouseup: _cache[39] || (_cache[39] = (...args) => (_ctx.ovCardMainEnd && _ctx.ovCardMainEnd(...args))),
+                      onMouseleave: _cache[40] || (_cache[40] = (...args) => (_ctx.ovCardMainCancel && _ctx.ovCardMainCancel(...args)))
+                    }, [
+                      _createElementVNode("div", _hoisted_50, [
                         _createElementVNode("div", {
                           class: _normalizeClass(["card-tab", { active: _ctx.ovCardTab === 'profile' }]),
-                          onClick: _cache[22] || (_cache[22] = $event => (_ctx.ovSwitchTab('profile')))
+                          onClick: _cache[26] || (_cache[26] = $event => (_ctx.ovSwitchTab('profile')))
                         }, "资料", 2 /* CLASS */),
                         _createElementVNode("div", {
                           class: _normalizeClass(["card-tab", { active: _ctx.ovCardTab === 'messages' }]),
-                          onClick: _cache[23] || (_cache[23] = $event => (_ctx.ovSwitchTab('messages')))
+                          onClick: _cache[27] || (_cache[27] = $event => (_ctx.ovSwitchTab('messages')))
                         }, [
                           _createTextVNode("留言"),
                           (_ctx.ovMsgCount > 0)
-                            ? (_openBlock(), _createElementBlock("span", _hoisted_52, _toDisplayString(_ctx.ovMsgCount), 1 /* TEXT */))
+                            ? (_openBlock(), _createElementBlock("span", _hoisted_51, _toDisplayString(_ctx.ovMsgCount), 1 /* TEXT */))
                             : _createCommentVNode("v-if", true)
                         ], 2 /* CLASS */)
                       ]),
-                      _createElementVNode("div", _hoisted_53, [
+                      _createElementVNode("div", _hoisted_52, [
                         _createVNode(_Transition, {
                           name: _ctx.ovCardTabDir === 'left' ? 'card-tab-left' : 'card-tab-right',
                           mode: "out-in"
                         }, {
                           default: _withCtx(() => [
                             (_ctx.ovCardTab === 'profile')
-                              ? (_openBlock(), _createElementBlock("div", _hoisted_54, [
+                              ? (_openBlock(), _createElementBlock("div", _hoisted_53, [
                                   (_ctx.overviewSheet.display_fields && _ctx.overviewSheet.display_fields.sections)
                                     ? (_openBlock(true), _createElementBlock(_Fragment, { key: 0 }, _renderList(_ctx.overviewSheet.display_fields.sections, (sec, si) => {
                                         return (_openBlock(), _createElementBlock("div", {
                                           class: "card-section",
                                           key: si
                                         }, [
-                                          _createElementVNode("div", _hoisted_55, [
-                                            _createElementVNode("span", _hoisted_56, _toDisplayString(sec.icon), 1 /* TEXT */),
+                                          _createElementVNode("div", _hoisted_54, [
+                                            _createElementVNode("span", _hoisted_55, _toDisplayString(sec.icon), 1 /* TEXT */),
                                             _createTextVNode(_toDisplayString(sec.title), 1 /* TEXT */)
                                           ]),
-                                          _createElementVNode("div", _hoisted_57, [
+                                          _createElementVNode("div", _hoisted_56, [
                                             (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(sec.fields, (f) => {
                                               return (_openBlock(), _createElementBlock("div", {
                                                 class: _normalizeClass(["info-grid-item", { full: f.label === '我是怎样的人' || f.label === '理想中的TA' }]),
                                                 key: f.label
                                               }, [
-                                                _createElementVNode("span", _hoisted_58, _toDisplayString(f.label) + "：", 1 /* TEXT */),
-                                                _createElementVNode("span", _hoisted_59, _toDisplayString(f.value), 1 /* TEXT */)
+                                                _createElementVNode("span", _hoisted_57, _toDisplayString(f.label) + "：", 1 /* TEXT */),
+                                                _createElementVNode("span", _hoisted_58, _toDisplayString(f.value), 1 /* TEXT */)
                                               ], 2 /* CLASS */))
                                             }), 128 /* KEYED_FRAGMENT */))
                                           ])
@@ -671,12 +689,12 @@ function render(_ctx, _cache) {
                                       }), 128 /* KEYED_FRAGMENT */))
                                     : _createCommentVNode("v-if", true)
                                 ]))
-                              : (_openBlock(), _createElementBlock("div", _hoisted_60, [
+                              : (_openBlock(), _createElementBlock("div", _hoisted_59, [
                                   (_ctx.ovMsgLoading)
-                                    ? (_openBlock(), _createElementBlock("div", _hoisted_61))
+                                    ? (_openBlock(), _createElementBlock("div", _hoisted_60))
                                     : (!_ctx.ovThreaded.length)
-                                      ? (_openBlock(), _createElementBlock("div", _hoisted_62, "还没有留言，快来抢沙发～"))
-                                      : (_openBlock(), _createElementBlock("div", _hoisted_63, [
+                                      ? (_openBlock(), _createElementBlock("div", _hoisted_61, "还没有留言，快来抢沙发～"))
+                                      : (_openBlock(), _createElementBlock("div", _hoisted_62, [
                                           (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.ovThreaded, (m) => {
                                             return (_openBlock(), _createElementBlock("div", {
                                               key: m.id,
@@ -687,46 +705,46 @@ function render(_ctx, _cache) {
                                                 onClick: $event => (_ctx.ovReplyTo(m, m)),
                                                 style: {"cursor":"pointer"}
                                               }, [
-                                                _createElementVNode("div", _hoisted_65, [
+                                                _createElementVNode("div", _hoisted_64, [
                                                   _createElementVNode("div", {
                                                     class: "msg-avatar-sm msg-avatar-click",
                                                     onClick: _withModifiers($event => (_ctx.ovOpenAuthor(m)), ["stop"]),
-                                                    onTouchstart: _cache[24] || (_cache[24] = _withModifiers(() => {}, ["stop"])),
-                                                    onTouchend: _cache[25] || (_cache[25] = _withModifiers(() => {}, ["stop"]))
+                                                    onTouchstart: _cache[28] || (_cache[28] = _withModifiers(() => {}, ["stop"])),
+                                                    onTouchend: _cache[29] || (_cache[29] = _withModifiers(() => {}, ["stop"]))
                                                   }, [
                                                     (m.author_avatar)
                                                       ? (_openBlock(), _createElementBlock("img", {
                                                           key: 0,
                                                           src: m.author_avatar,
                                                           alt: ""
-                                                        }, null, 8 /* PROPS */, _hoisted_67))
-                                                      : (_openBlock(), _createElementBlock("span", _hoisted_68, _toDisplayString((m.author_nickname || '?')[0]), 1 /* TEXT */))
-                                                  ], 40 /* PROPS, NEED_HYDRATION */, _hoisted_66),
-                                                  _createElementVNode("span", _hoisted_69, _toDisplayString(m.author_nickname) + " · " + _toDisplayString(m.author_uid), 1 /* TEXT */),
-                                                  _hoisted_70,
+                                                        }, null, 8 /* PROPS */, _hoisted_66))
+                                                      : (_openBlock(), _createElementBlock("span", _hoisted_67, _toDisplayString((m.author_nickname || '?')[0]), 1 /* TEXT */))
+                                                  ], 40 /* PROPS, NEED_HYDRATION */, _hoisted_65),
+                                                  _createElementVNode("span", _hoisted_68, _toDisplayString(m.author_nickname) + " · " + _toDisplayString(m.author_uid), 1 /* TEXT */),
+                                                  _hoisted_69,
                                                   (m.can_delete)
                                                     ? (_openBlock(), _createElementBlock("span", {
                                                         key: 0,
                                                         class: "msg-del",
                                                         onClick: _withModifiers($event => (_ctx.ovDeleteMessage(m)), ["stop"])
-                                                      }, "删除", 8 /* PROPS */, _hoisted_71))
+                                                      }, "删除", 8 /* PROPS */, _hoisted_70))
                                                     : (!m.is_mine)
                                                       ? (_openBlock(), _createElementBlock("span", {
                                                           key: 1,
                                                           class: "msg-report",
                                                           onClick: _withModifiers($event => (_ctx.openReportDialog(m)), ["stop"])
-                                                        }, "举报", 8 /* PROPS */, _hoisted_72))
+                                                        }, "举报", 8 /* PROPS */, _hoisted_71))
                                                       : _createCommentVNode("v-if", true)
                                                 ]),
-                                                _createElementVNode("div", _hoisted_73, _toDisplayString(m.content), 1 /* TEXT */),
-                                                _createElementVNode("div", _hoisted_74, [
-                                                  _createElementVNode("span", _hoisted_75, _toDisplayString(_ctx.fmtTimeAgo(m.created_at)), 1 /* TEXT */),
+                                                _createElementVNode("div", _hoisted_72, _toDisplayString(m.content), 1 /* TEXT */),
+                                                _createElementVNode("div", _hoisted_73, [
+                                                  _createElementVNode("span", _hoisted_74, _toDisplayString(_ctx.fmtTimeAgo(m.created_at)), 1 /* TEXT */),
                                                   _createElementVNode("span", {
                                                     class: "msg-reply-btn",
                                                     onClick: _withModifiers($event => (_ctx.ovReplyTo(m, m)), ["stop"])
-                                                  }, "回复", 8 /* PROPS */, _hoisted_76)
+                                                  }, "回复", 8 /* PROPS */, _hoisted_75)
                                                 ])
-                                              ], 8 /* PROPS */, _hoisted_64),
+                                              ], 8 /* PROPS */, _hoisted_63),
                                               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(m.replies, (r) => {
                                                 return (_openBlock(), _createElementBlock("div", {
                                                   key: r.id,
@@ -734,45 +752,45 @@ function render(_ctx, _cache) {
                                                   onClick: $event => (_ctx.ovReplyTo(r, m)),
                                                   style: {"cursor":"pointer"}
                                                 }, [
-                                                  _createElementVNode("div", _hoisted_78, [
+                                                  _createElementVNode("div", _hoisted_77, [
                                                     _createElementVNode("div", {
                                                       class: "msg-avatar-sm msg-avatar-click",
                                                       onClick: _withModifiers($event => (_ctx.ovOpenAuthor(r)), ["stop"]),
-                                                      onTouchstart: _cache[26] || (_cache[26] = _withModifiers(() => {}, ["stop"])),
-                                                      onTouchend: _cache[27] || (_cache[27] = _withModifiers(() => {}, ["stop"]))
+                                                      onTouchstart: _cache[30] || (_cache[30] = _withModifiers(() => {}, ["stop"])),
+                                                      onTouchend: _cache[31] || (_cache[31] = _withModifiers(() => {}, ["stop"]))
                                                     }, [
                                                       (r.author_avatar)
                                                         ? (_openBlock(), _createElementBlock("img", {
                                                             key: 0,
                                                             src: r.author_avatar,
                                                             alt: ""
-                                                          }, null, 8 /* PROPS */, _hoisted_80))
-                                                        : (_openBlock(), _createElementBlock("span", _hoisted_81, _toDisplayString((r.author_nickname || '?')[0]), 1 /* TEXT */))
-                                                    ], 40 /* PROPS, NEED_HYDRATION */, _hoisted_79),
-                                                    _createElementVNode("span", _hoisted_82, _toDisplayString(r.author_nickname) + " · " + _toDisplayString(r.author_uid), 1 /* TEXT */),
-                                                    _hoisted_83,
+                                                          }, null, 8 /* PROPS */, _hoisted_79))
+                                                        : (_openBlock(), _createElementBlock("span", _hoisted_80, _toDisplayString((r.author_nickname || '?')[0]), 1 /* TEXT */))
+                                                    ], 40 /* PROPS, NEED_HYDRATION */, _hoisted_78),
+                                                    _createElementVNode("span", _hoisted_81, _toDisplayString(r.author_nickname) + " · " + _toDisplayString(r.author_uid), 1 /* TEXT */),
+                                                    _hoisted_82,
                                                     (r.can_delete)
                                                       ? (_openBlock(), _createElementBlock("span", {
                                                           key: 0,
                                                           class: "msg-del",
                                                           onClick: _withModifiers($event => (_ctx.ovDeleteMessage(r)), ["stop"])
-                                                        }, "删除", 8 /* PROPS */, _hoisted_84))
+                                                        }, "删除", 8 /* PROPS */, _hoisted_83))
                                                       : (!r.is_mine)
                                                         ? (_openBlock(), _createElementBlock("span", {
                                                             key: 1,
                                                             class: "msg-report",
                                                             onClick: _withModifiers($event => (_ctx.openReportDialog(r)), ["stop"])
-                                                          }, "举报", 8 /* PROPS */, _hoisted_85))
+                                                          }, "举报", 8 /* PROPS */, _hoisted_84))
                                                         : _createCommentVNode("v-if", true)
                                                   ]),
-                                                  _createElementVNode("div", _hoisted_86, [
+                                                  _createElementVNode("div", _hoisted_85, [
                                                     (r.reply_to_nickname && r.reply_to_id && r.reply_to_id !== m.id)
-                                                      ? (_openBlock(), _createElementBlock("span", _hoisted_87, [
+                                                      ? (_openBlock(), _createElementBlock("span", _hoisted_86, [
                                                           _createTextVNode("回复 "),
-                                                          _createElementVNode("span", _hoisted_88, [
+                                                          _createElementVNode("span", _hoisted_87, [
                                                             _createTextVNode("@" + _toDisplayString(r.reply_to_nickname), 1 /* TEXT */),
                                                             (r.reply_to_uid)
-                                                              ? (_openBlock(), _createElementBlock("span", _hoisted_89, " · " + _toDisplayString(r.reply_to_uid), 1 /* TEXT */))
+                                                              ? (_openBlock(), _createElementBlock("span", _hoisted_88, " · " + _toDisplayString(r.reply_to_uid), 1 /* TEXT */))
                                                               : _createCommentVNode("v-if", true)
                                                           ]),
                                                           _createTextVNode("：")
@@ -780,94 +798,94 @@ function render(_ctx, _cache) {
                                                       : _createCommentVNode("v-if", true),
                                                     _createTextVNode(_toDisplayString(r.content), 1 /* TEXT */)
                                                   ]),
-                                                  _createElementVNode("div", _hoisted_90, [
-                                                    _createElementVNode("span", _hoisted_91, _toDisplayString(_ctx.fmtTimeAgo(r.created_at)), 1 /* TEXT */),
+                                                  _createElementVNode("div", _hoisted_89, [
+                                                    _createElementVNode("span", _hoisted_90, _toDisplayString(_ctx.fmtTimeAgo(r.created_at)), 1 /* TEXT */),
                                                     _createElementVNode("span", {
                                                       class: "msg-reply-btn",
                                                       onClick: _withModifiers($event => (_ctx.ovReplyTo(r, m)), ["stop"])
-                                                    }, "回复", 8 /* PROPS */, _hoisted_92)
+                                                    }, "回复", 8 /* PROPS */, _hoisted_91)
                                                   ])
-                                                ], 8 /* PROPS */, _hoisted_77))
+                                                ], 8 /* PROPS */, _hoisted_76))
                                               }), 128 /* KEYED_FRAGMENT */))
                                             ]))
                                           }), 128 /* KEYED_FRAGMENT */))
                                         ])),
                                   (_ctx.ovReplyTarget)
-                                    ? (_openBlock(), _createElementBlock("div", _hoisted_93, [
+                                    ? (_openBlock(), _createElementBlock("div", _hoisted_92, [
                                         _createElementVNode("span", null, "正在回复 " + _toDisplayString(_ctx.ovReplyTarget.author_nickname), 1 /* TEXT */),
                                         _createElementVNode("span", {
                                           class: "msg-reply-cancel",
-                                          onClick: _cache[28] || (_cache[28] = (...args) => (_ctx.ovCancelReply && _ctx.ovCancelReply(...args)))
+                                          onClick: _cache[32] || (_cache[32] = (...args) => (_ctx.ovCancelReply && _ctx.ovCancelReply(...args)))
                                         }, "取消")
                                       ]))
                                     : _createCommentVNode("v-if", true),
-                                  _createElementVNode("div", _hoisted_94, [
+                                  _createElementVNode("div", _hoisted_93, [
                                     _withDirectives(_createElementVNode("input", {
-                                      "onUpdate:modelValue": _cache[29] || (_cache[29] = $event => ((_ctx.ovMsgText) = $event)),
+                                      "onUpdate:modelValue": _cache[33] || (_cache[33] = $event => ((_ctx.ovMsgText) = $event)),
                                       class: "msg-input",
                                       placeholder: _ctx.ovReplyTarget ? '回复 ' + _ctx.ovReplyTarget.author_nickname + '：' : '写下你的留言…'
-                                    }, null, 8 /* PROPS */, _hoisted_95), [
+                                    }, null, 8 /* PROPS */, _hoisted_94), [
                                       [_vModelText, _ctx.ovMsgText]
                                     ]),
                                     _createElementVNode("button", {
                                       class: "msg-send",
                                       disabled: !_ctx.ovMsgText.trim() || _ctx.ovMsgSending,
-                                      onClick: _cache[30] || (_cache[30] = (...args) => (_ctx.ovSendMessage && _ctx.ovSendMessage(...args)))
-                                    }, _toDisplayString(_ctx.ovMsgSending ? '发送中…' : '发送'), 9 /* TEXT, PROPS */, _hoisted_96)
+                                      onClick: _cache[34] || (_cache[34] = (...args) => (_ctx.ovSendMessage && _ctx.ovSendMessage(...args)))
+                                    }, _toDisplayString(_ctx.ovMsgSending ? '发送中…' : '发送'), 9 /* TEXT, PROPS */, _hoisted_95)
                                   ])
                                 ]))
                           ]),
                           _: 1 /* STABLE */
                         }, 8 /* PROPS */, ["name"])
                       ])
-                    ]),
+                    ], 32 /* NEED_HYDRATION */),
                     (_ctx.ovCardTab === 'profile')
-                      ? (_openBlock(), _createElementBlock("div", _hoisted_97, [
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_96, [
                           (!_ctx.overviewSheet.is_self)
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 0,
                                 class: "feedback-btn",
-                                onClick: _cache[31] || (_cache[31] = (...args) => (_ctx.ovOpenFeedback && _ctx.ovOpenFeedback(...args)))
+                                onClick: _cache[41] || (_cache[41] = (...args) => (_ctx.ovOpenFeedback && _ctx.ovOpenFeedback(...args)))
                               }, "反馈"))
                             : _createCommentVNode("v-if", true),
                           (_ctx.ovCanPraise)
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 1,
                                 class: _normalizeClass(["praise-btn", { praised: _ctx.ovPraised }]),
-                                onClick: _cache[32] || (_cache[32] = $event => (_ctx.togglePraise(_ctx.overviewSheet))),
+                                onClick: _cache[42] || (_cache[42] = $event => (_ctx.togglePraise(_ctx.overviewSheet))),
                                 disabled: _ctx.actionLoading || _ctx.praiseBusy
                               }, [
                                 _createVNode(_component_van_icon, { name: "good-job" })
-                              ], 10 /* CLASS, PROPS */, _hoisted_98))
+                              ], 10 /* CLASS, PROPS */, _hoisted_97))
                             : _createCommentVNode("v-if", true),
                           (!_ctx.overviewSheet.is_self && !_ctx.isObserver)
                             ? (_openBlock(), _createElementBlock("button", {
                                 key: 2,
                                 class: _normalizeClass(["heart-btn", { liked: _ctx.ovLiked }]),
-                                onClick: _cache[33] || (_cache[33] = $event => (_ctx.openLikeDialogForUser(_ctx.overviewSheet))),
+                                onClick: _cache[43] || (_cache[43] = $event => (_ctx.openLikeDialogForUser(_ctx.overviewSheet))),
                                 disabled: _ctx.actionLoading || _ctx.ovLiked
-                              }, "♥", 10 /* CLASS, PROPS */, _hoisted_99))
+                              }, "♥", 10 /* CLASS, PROPS */, _hoisted_98))
                             : _createCommentVNode("v-if", true)
                         ]))
                       : _createCommentVNode("v-if", true)
-                  ], 36 /* STYLE, NEED_HYDRATION */),
+                  ], 38 /* CLASS, STYLE, NEED_HYDRATION */),
                   _createElementVNode("button", {
                     type: "button",
                     class: "ov-card-close",
                     "aria-label": "关闭",
-                    onClick: _cache[38] || (_cache[38] = (...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)))
+                    onClick: _cache[48] || (_cache[48] = (...args) => (_ctx.closeOverviewCard && _ctx.closeOverviewCard(...args)))
                   }, [
                     _createVNode(_component_van_icon, { name: "cross" })
                   ])
                 ]))
-              : (_openBlock(), _createElementBlock("div", _hoisted_100, [
+              : (_openBlock(), _createElementBlock("div", _hoisted_99, [
                   _createVNode(_component_van_loading, { size: "24px" })
                 ]))
           ])
         ])
       ]),
       _: 1 /* STABLE */
-    }, 8 /* PROPS */, ["show", "onClickOverlay"])
+    }, 8 /* PROPS */, ["show", "onClickOverlay", "onClosed"])
   ]))
 }
 window.__YXQ_PAGES__ = window.__YXQ_PAGES__ || {};

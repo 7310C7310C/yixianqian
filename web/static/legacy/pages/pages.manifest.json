@@ -52,8 +52,8 @@
         "user_detail",
         "cards_overview"
       ],
-      "bytes": 51742,
-      "sha256": "b6d364df621f099516a720010178a55ed786e2a97519894000b0ca30c4aa450f"
+      "bytes": 53622,
+      "sha256": "4c2c9386b275dff7d304aac047d75856ca331b133ff2f38a37bbeb057c32da5c"
     },
     "group": {
       "file": "pages/group.render.js",
@@ -166,8 +166,8 @@
     "cards_overview": {
       "group": "detail",
       "file": "pages/detail.render.js",
-      "templateSha256": "e68bbb8fb788e713c9716b6f1467fa772e2dd05927e8e6e4e040c4d5a1a5692e",
-      "templateSize": 13619
+      "templateSha256": "201053de31ec9614b3e1de47301ec0671f4288626435ad1575c4597bd9900324",
+      "templateSize": 14272
     },
     "group_admin": {
       "group": "group",

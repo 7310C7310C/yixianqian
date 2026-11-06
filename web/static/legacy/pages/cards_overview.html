@@ -14,7 +14,9 @@
       <van-icon name="replay" :class="{ 'ov-spin': overviewLoading }"></van-icon>
     </button>
   </div>
-  <div class="cards-overview-scroll" @scroll.passive="onOverviewScroll">
+  <div v-if="ovPullHint" class="ov-pull-hint" :class="'ov-pull-hint--' + ovPullHint">{{ ovPullHint === 'top' ? '继续下拉回到牵线' : '继续上滑回到牵线' }}</div>
+  <div class="cards-overview-scroll" @scroll.passive="onOverviewScroll"
+    @touchstart="onOverviewPullStart" @touchmove="onOverviewPullMove" @touchend="onOverviewPullEnd" @touchcancel="onOverviewPullCancel">
     <div v-if="overviewError && !overviewItems.length" class="ov-state">
       <div class="ov-state-icon">😕</div>
       <div class="ov-state-text">{{ overviewError }}</div>
@@ -74,12 +76,14 @@
 
   <!-- 全览卡片浮层：与 deck 同款 .swipe-card 结构/样式（资料、留言、悬浮反馈/点赞/爱心） -->
   <van-popup v-model:show="showOverviewCard" position="bottom" overlay-class="ov-sheet-overlay"
-    :close-on-click-overlay="false" @click-overlay="closeOverviewCard"
+    :close-on-click-overlay="false" @click-overlay="closeOverviewCard" @closed="onOverviewSheetClosed"
     class="ov-sheet" :style="{ height: '100%', background: 'transparent' }">
     <div class="ov-sheet-backdrop" @click.self="closeOverviewCard">
       <div class="ov-card-stage" @click.self="closeOverviewCard">
         <div class="ov-card-frame" v-if="overviewSheet">
-          <div class="swipe-card ov-card" :style="ovCardDragStyle()"
+          <div class="swipe-card ov-card"
+            :class="ovCardSlide === 'left' ? 'slide-in-left' : (ovCardSlide === 'right' ? 'slide-in-right' : '')"
+            :style="ovCardDragStyle()"
             @touchstart="ovCardDragStart" @touchmove="ovCardDragMove" @touchend="ovCardDragEnd" @touchcancel="ovCardDragCancel">
         <div class="card-photo-wrap" @touchstart="ovPhotoStart" @touchmove="ovPhotoMove" @touchend="ovPhotoEnd" @touchcancel="ovPhotoCancel"
           @mousedown="ovPhotoStart" @mousemove="ovPhotoMove" @mouseup="ovPhotoEnd" @mouseleave="ovPhotoCancel" @click="ovPhotoClick">
@@ -108,7 +112,8 @@
             </div>
           </div>
         </div>
-        <div class="card-main">
+        <div class="card-main" @touchstart="ovCardMainStart" @touchend="ovCardMainEnd" @touchcancel="ovCardMainCancel"
+          @mousedown="ovCardMainStart" @mouseup="ovCardMainEnd" @mouseleave="ovCardMainCancel">
           <div class="card-tabs">
             <div class="card-tab" :class="{ active: ovCardTab === 'profile' }" @click="ovSwitchTab('profile')">资料</div>
             <div class="card-tab" :class="{ active: ovCardTab === 'messages' }" @click="ovSwitchTab('messages')">留言<span v-if="ovMsgCount > 0" class="msg-count-badge">{{ ovMsgCount }}</span></div>
