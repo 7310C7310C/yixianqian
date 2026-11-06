@@ -781,6 +781,7 @@ const yxqApp = createApp({
     const ovProfileCache = new Map();    // openid -> public profile：二次打开不重复请求/闪加载
     const ovCardIndex = ref(-1);         // 浮层卡在 overviewItems 中的下标（左右滑切换/回滚定位）
     const ovCardSlide = ref('');         // 切卡过场 left/right
+    const ovCloseDir = ref('');          // 收起方向：'up' 上滑收卡向上离场；其余默认向下
     let ovCardMainGesture = null;
     let ovCardSlideTimer = 0;
     const ovPhotoPositions = ref({});   // 浮层卡面人脸 objectPosition（按图索引）
@@ -3538,9 +3539,10 @@ const yxqApp = createApp({
         }
       } catch (_) {}
     }
-    function closeOverviewCard() {
+    function closeOverviewCard(dir) {
       // 不要在这里清 ovDragY：否则收起前会瞬间弹回原位（PM 反馈闪到顶部）。
-      // 等 popup @closed 再复位；没有拖拽时本来就是 0。
+      // 等 popup @closed 再复位；上滑收卡时让 popup 也向上离场（与手势方向一致）。
+      ovCloseDir.value = dir === 'up' ? 'up' : '';
       ovCardDrag = null;
       ovDragging.value = false;
       showOverviewCard.value = false;
@@ -3549,6 +3551,7 @@ const yxqApp = createApp({
       ovCardDrag = null;
       ovDragging.value = false;
       ovDragY.value = 0;
+      ovCloseDir.value = '';
     }
     // 下滑收卡：只有内容已到顶（或手势在照片上）才接管；内容滚动中不误收。
     function ovCardScroller(target) {
@@ -3598,8 +3601,8 @@ const yxqApp = createApp({
       if (!g || !g.active) { ovDragY.value = 0; return; }
       const passed = Math.abs(ovDragY.value) > 110;
       if (passed) {
-        // 保持当前位移交给 popup 收起动画，清位移会在收起前闪回顶部。
-        closeOverviewCard();
+        // 保持当前位移交给 popup 收起动画；上滑收卡时向上离场，下滑时默认向下。
+        closeOverviewCard(ovDragY.value < 0 ? 'up' : 'down');
         return;
       }
       ovDragY.value = 0;   // 未过阈值：回弹
@@ -3710,6 +3713,7 @@ const yxqApp = createApp({
       ovCardDrag = null;
       ovDragging.value = false;
       ovDragY.value = 0;
+      ovCloseDir.value = '';   // 快速关闭后重开：清掉上一次的上滑离场方向
       overviewSheet.value = { ...item, photos: overviewPhotosOf(item) };
       ovCardIndex.value = overviewItems.value.findIndex((it) => it.openid === item.openid);
       if (!keepTab) {
@@ -8572,7 +8576,7 @@ const yxqApp = createApp({
       ovMsgCount, ovLoadMessages, ovReplyTo, ovCancelReply, ovSendMessage, ovDeleteMessage, ovOpenAuthor,
       ovLiked, ovCanLike, ovCanPraise, ovPraised, ovSimple, ovOpenFeedback,
       closeOverviewCard, onOverviewSheetClosed, ovCardDragStart, ovCardDragMove, ovCardDragEnd, ovCardDragCancel, ovCardDragStyle,
-      ovRecalcPhotoPosition, ovPhotoPosition, ovCardIndex, ovCardSlide, ovCardMainStart, ovCardMainEnd, ovCardMainCancel,
+      ovRecalcPhotoPosition, ovPhotoPosition, ovCardIndex, ovCardSlide, ovCloseDir, ovCardMainStart, ovCardMainEnd, ovCardMainCancel,
       ovPullHint, onOverviewPullStart, onOverviewPullMove, onOverviewPullEnd, onOverviewPullCancel,
       markCardsTabPress, onCardsTabTap,
       sharpPhotos, sharpReady, onSharpLoad,

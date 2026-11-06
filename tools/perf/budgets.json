@@ -30,7 +30,8 @@
     "2026-11-06：全览浮层交互收尾（卡外留白/点外与下滑收卡/滑图后立即点卡/复用 deck 人脸裁切 faces）；app.min 实测 57,644B（含牵线页纵向滑动入口/留言列表收卡守卫/人脸重算）→ baseline 51,625→52,410、budget 56,787→57,651；page chunks 实测 52,790B（浮层遮罩/留白调整）→ baseline 47,790→47,995、budget 52,569→52,794；critical CSS 8,733B 不变。",
     "2026-11-06：全览筛选独立 store + Enter 应用 + 滑图后立点修正 + 上下滑不同进场方向 + 浮层资料缓存；app.min 实测 58,127B（含筛选守卫/IME/缓存并集/爱心同款）→ baseline 52,410→52,845、budget 57,651→58,129；page chunks 实测 52,806B → baseline 47,995→48,010、budget 52,794→52,811；critical CSS 8,732B 不变。",
     "2026-11-06：全览滑后立点改为 touchend 直接开卡 + 顶部/底部回牵线手势；app.min 实测 58,452B → baseline 52,845→53,140、budget 58,129→58,454；page chunks 实测 52,963B → baseline 48,010→48,150、budget 52,811→52,965；critical CSS 8,732B 不变。",
-    "2026-11-06：全览滑后立点（touchend 直接开卡）、顶/底回牵线、浮层底部上滑收卡、浮层左右滑切卡+网格自动定位、收起不闪回；app.min 实测 58,962B（含切卡过场/草稿守卫/加载回调守门）→ baseline 53,140→53,605、budget 58,454→58,965；page chunks 实测 53,101B → baseline 48,150→48,275、budget 52,965→53,102；critical CSS 8,732B 不变。"
+    "2026-11-06：全览滑后立点（touchend 直接开卡）、顶/底回牵线、浮层底部上滑收卡、浮层左右滑切卡+网格自动定位、收起不闪回；app.min 实测 58,962B（含切卡过场/草稿守卫/加载回调守门）→ baseline 53,140→53,605、budget 58,454→58,965；page chunks 实测 53,101B → baseline 48,150→48,275、budget 52,965→53,102；critical CSS 8,732B 不变。",
+    "2026-11-06：上滑收卡时 popup 也向上离场（方向与手势一致）；app.min 实测 58,997B → baseline 53,605→53,635、budget 58,965→58,998；page chunks 实测 53,127B → baseline 48,275→48,300、budget 53,102→53,130；critical CSS 8,732B 不变。"
   ],
   "limits": {
     "shell_gzip": {
@@ -40,8 +41,8 @@
     },
     "app_min_gzip": {
       "label": "app.min.js",
-      "baseline_bytes": 53605,
-      "budget_bytes": 58965
+      "baseline_bytes": 53635,
+      "budget_bytes": 58998
     },
     "initial_render_gzip": {
       "label": "app.render.js（根 + cards）",
@@ -65,8 +66,8 @@
     },
     "page_chunks_gzip": {
       "label": "页面懒加载 chunks 合计",
-      "baseline_bytes": 48275,
-      "budget_bytes": 53102
+      "baseline_bytes": 48300,
+      "budget_bytes": 53130
     },
     "first_load_static_gzip": {
       "label": "首载静态估算（不含 API/图片）",

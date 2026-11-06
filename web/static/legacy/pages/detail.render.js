@@ -543,7 +543,7 @@ function render(_ctx, _cache) {
       "close-on-click-overlay": false,
       onClickOverlay: _ctx.closeOverviewCard,
       onClosed: _ctx.onOverviewSheetClosed,
-      class: "ov-sheet",
+      class: _normalizeClass([{ 'ov-sheet-up': _ctx.ovCloseDir === 'up' }, "ov-sheet"]),
       style: { height: '100%', background: 'transparent' }
     }, {
       default: _withCtx(() => [
@@ -885,7 +885,7 @@ function render(_ctx, _cache) {
         ])
       ]),
       _: 1 /* STABLE */
-    }, 8 /* PROPS */, ["show", "onClickOverlay", "onClosed"])
+    }, 8 /* PROPS */, ["show", "onClickOverlay", "onClosed", "class"])
   ]))
 }
 window.__YXQ_PAGES__ = window.__YXQ_PAGES__ || {};

@@ -1235,6 +1235,8 @@
   @keyframes ov-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
   /* 全览卡片浮层：卡外留出可见空白（点外收卡），内部就是 deck 的 .swipe-card */
   .ov-sheet { background: transparent; }
+  /* 上滑收卡：popup 跟随手势向上离场（默认仍是 Vant 的向下滑出） */
+  .van-popup.ov-sheet.ov-sheet-up.van-popup-slide-bottom-leave-to { transform: translate3d(0, -100%, 0); }
   /* 遮罩交给 Vant overlay（不在 popup 滑入动画里）：进场第一帧点卡外就能收卡，不会穿透。 */
   .ov-sheet-overlay { background: rgba(0,0,0,0.55); }
   .ov-sheet-backdrop { height: 100%; background: transparent; }

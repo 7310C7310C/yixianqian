@@ -832,12 +832,18 @@ def main() -> int:
                 page.evaluate("() => { const el = document.querySelector('.ov-sheet .card-info'); if (el) el.scrollTop = el.scrollHeight; }")
                 page.wait_for_timeout(250)
                 touch_drag(page, ".ov-sheet .card-info", -160)
-                page.wait_for_timeout(500)
+                try:
+                    page.wait_for_function(
+                        "() => { const el = document.querySelector('.ov-sheet'); return !!el && el.classList.contains('ov-sheet-up'); }",
+                        timeout=2000,
+                    )
+                except PlaywrightTimeoutError:
+                    raise SmokeFailure("上滑收卡时 popup 未使用向上离场") from None
                 try:
                     page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
                 except PlaywrightTimeoutError:
                     raise SmokeFailure("滑至底后上滑未收卡") from None
-                notes.append(f"{label}: 滑至底后上滑收卡")
+                notes.append(f"{label}: 滑至底后上滑收卡（向上离场）")
 
                 # 筛选取消/放弃不能写回牵线的 filter store（用户强调两处互不影响）。
                 page.evaluate("() => { const p = window.yxqRootProxy; if (p && p.filter) p.filter.nickname = 'DECK-KEEP'; }")
