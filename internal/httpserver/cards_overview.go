@@ -12,20 +12,24 @@ import (
 // CardOverviewItem is the light card rendered by the 全览 grid. It deliberately
 // carries only what a tile needs: the full profile stays behind /users/{openid}/public.
 type CardOverviewItem struct {
-	OpenID      string   `json:"openid"`
-	UserID      string   `json:"user_id"`
-	Nickname    string   `json:"nickname"`
-	Gender      string   `json:"gender"`
-	Age         int      `json:"age,omitempty"`
-	Height      int      `json:"height,omitempty"`
-	City        string   `json:"city"`
-	Photo       string   `json:"photo"`
-	Photos      []string `json:"photos"`
-	Faces       []any    `json:"faces"`
-	IsNew       bool     `json:"is_new"`
-	Recommended bool     `json:"recommended"`
-	Liked       bool     `json:"liked"`
-	Praised     bool     `json:"praised"`
+	OpenID     string   `json:"openid"`
+	UserID     string   `json:"user_id"`
+	Nickname   string   `json:"nickname"`
+	Gender     string   `json:"gender"`
+	Age        int      `json:"age,omitempty"`
+	Height     int      `json:"height,omitempty"`
+	City       string   `json:"city"`
+	Photo      string   `json:"photo"`
+	Photos     []string `json:"photos"`
+	PhotosOrig []string `json:"photos_orig"`
+	PhotosMeta []any    `json:"photos_meta"`
+	Faces      []any    `json:"faces"`
+	// DisplayFields 与 deck 的卡片同构：浮层打开即可完整渲染，不再逐卡请求 public profile。
+	DisplayFields CardDisplayFields `json:"display_fields"`
+	IsNew         bool              `json:"is_new"`
+	Recommended   bool              `json:"recommended"`
+	Liked         bool              `json:"liked"`
+	Praised       bool              `json:"praised"`
 }
 
 const (
@@ -159,6 +163,10 @@ func (a *App) handleLegacyCardsOverview(w http.ResponseWriter, r *http.Request) 
 		item.Recommended = recommended[entry.ID]
 		item.Liked = state.LikedTargets[entry.ID]
 		item.Praised = state.PraisedTargets[entry.ID]
+		full := buildCardView(p, item.Liked, item.Praised, 0, now)
+		item.DisplayFields = full.DisplayFields
+		item.PhotosOrig = full.PhotoURLs
+		item.PhotosMeta = legacyCardPhotoMeta(full.Photos)
 		items = append(items, item)
 		owners = append(owners, entry.ID)
 	}

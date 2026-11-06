@@ -778,7 +778,6 @@ const yxqApp = createApp({
     const ovMsgSending = ref(false);
     const ovMsgText = ref('');
     const ovReplyTarget = ref(null);
-    const ovProfileCache = new Map();    // openid -> public profile：二次打开不重复请求/闪加载
     const ovCardIndex = ref(-1);         // 浮层卡在 overviewItems 中的下标（左右滑切换/回滚定位）
     const ovCardSlide = ref('');         // 切卡过场 left/right
     const ovCloseDir = ref('');          // 收起方向：'up' 上滑收卡向上离场；其余默认向下
@@ -794,7 +793,6 @@ const yxqApp = createApp({
     let overviewReturnPending = false;  // 从作者资料页返回：保留列表/浮层，只恢复滚动
     let overviewScrollTop = 0;
     let overviewSeq = 0;         // 全览请求序号：reset 打断在途加载更多
-    let overviewSheetSeq = 0;
     let ovGesture = null;        // 网格 tile 手势
     let ovSwallowClick = false;  // 只吞掉滑动本身产生的 click（下一次手势开始即清）
     let ovClickGuardUntil = 0;   // touchend 直接开卡后，吃掉浏览器补发的 click（避免误关新浮层）
@@ -2338,10 +2336,6 @@ const yxqApp = createApp({
           : await api('/api/praise', { method: 'POST', body: JSON.stringify({ target_openid: u.openid }) });
         praiseState.value = { ...(praiseState.value || {}), ...r };
         patchOverviewItem(u.openid, { praised: !wasPraised });
-        {
-          const cp = ovProfileCache.get(u.openid);
-          if (cp) cp.praised = !wasPraised;
-        }
       } catch (e) {
         praiseState.value = prev;
         if (userDetail.value && userDetail.value.openid === u.openid) {
@@ -3739,9 +3733,16 @@ const yxqApp = createApp({
       ovDragging.value = false;
       ovDragY.value = 0;
       ovCloseDir.value = '';   // 快速关闭后重开：清掉上一次的上滑离场方向
-      overviewSheet.value = { ...item, photos: overviewPhotosOf(item) };
+      const thumbs = overviewPhotosOf(item);
+      const orig = (item.photos_orig && item.photos_orig.length) ? item.photos_orig : thumbs;
+      // 列表接口已带齐卡面资料（display_fields/photos/photos_meta/faces），打开即完整，不再逐卡请求 public。
+      overviewSheet.value = {
+        ...item,
+        photos: orig,
+        photos_thumb: thumbs,
+        photos_meta: item.photos_meta || [],
+      };
       ovCardIndex.value = overviewItems.value.findIndex((it) => it.openid === item.openid);
-      // 网格定位与 profile 加载无关：立刻开始平滑滚动，避免等接口才动。
       ovScrollGridToItem(item);
       if (!keepTab) {
         ovCardTab.value = 'profile';
@@ -3756,51 +3757,16 @@ const yxqApp = createApp({
       ovMsgSeq++;
       ovMsgLoading.value = false;
       ovMsgSending.value = false;
+      overviewSheetLoading.value = false;
       showOverviewCard.value = true;
-      const seq = ++overviewSheetSeq;
-      const oid = item.openid;
-      const cached = ovProfileCache.get(oid);
-      if (cached) {
-        // 同一张卡二次打开：直接用内存里的完整资料，不再请求、不闪加载。
-        // liked/praised 取并集（item 可能更新，缓存可能保留更早的 true）；can_like 优先 item。
-        overviewSheet.value = {
-          ...item,
-          ...cached,
-          liked: !!(item.liked || cached.liked),
-          praised: !!(item.praised || cached.praised),
-          can_like: item.can_like !== undefined ? item.can_like : cached.can_like,
-        };
-        overviewSheetLoading.value = false;
-        nextTick(() => {
-          recomputeOvPhotoPositions();
-          const info = document.querySelector('.ov-sheet .card-info');
-          if (info) info.scrollTop = 0;
-          const ml = document.querySelector('.ov-sheet .msg-list');
-          if (ml) ml.scrollTop = 0;
-        });
-        if (keepTab && ovCardTab.value === 'messages') ovLoadMessages(true);
-        return;
-      }
-      overviewSheetLoading.value = true;
-      api('/api/users/' + encodeURIComponent(oid) + '/public').then((profile) => {
-        if (seq !== overviewSheetSeq || !showOverviewCard.value) return;
-        if (profile && profile.openid) {
-          ovProfileCache.set(oid, profile);
-          // public profile 不含 recommended：保留列表 item 上的推荐徽标。
-          overviewSheet.value = { ...overviewSheet.value, ...profile };
-          const maxIdx = Math.max(0, ovPhotos().length - 1);
-          if (ovPhotoIndex.value > maxIdx) ovPhotoIndex.value = maxIdx;
-          if (keepTab && ovCardTab.value === 'messages') ovLoadMessages(true);
-          nextTick(() => {
-            const info = document.querySelector('.ov-sheet .card-info');
-            if (info) info.scrollTop = 0;
-          });
-        }
-      }).catch(e => {
-        if (seq === overviewSheetSeq) vant.showToast((e && e.message) || '资料加载失败');
-      }).finally(() => {
-        if (seq === overviewSheetSeq) overviewSheetLoading.value = false;
+      nextTick(() => {
+        recomputeOvPhotoPositions();
+        const info = document.querySelector('.ov-sheet .card-info');
+        if (info) info.scrollTop = 0;
+        const ml = document.querySelector('.ov-sheet .msg-list');
+        if (ml) ml.scrollTop = 0;
       });
+      if (keepTab && ovCardTab.value === 'messages') ovLoadMessages(true);
     }
     function ovOpenFeedback() {
       if (overviewSheet.value) openFeedbackDialog(overviewSheet.value);
@@ -5352,10 +5318,6 @@ const yxqApp = createApp({
         } else { vant.showToast('喜欢成功'); }
         justLiked.add(target.openid);
         patchOverviewItem(target.openid, { liked: true, can_like: false });
-        {
-          const cp = ovProfileCache.get(target.openid);
-          if (cp) cp.liked = true;
-        }
         lastLikeAt.value = Date.now();
         // 原地置灰：卡片保留在牌堆，♥ 变灰不可点击（产品语义：喜欢≠消失）
         const deckCard = cards.value.find(c => c.openid === target.openid);

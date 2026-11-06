@@ -666,10 +666,14 @@ def main() -> int:
                     target_uid,
                 )
                 page.wait_for_selector(".ov-sheet .swipe-card", timeout=15000)
-                # 等 public profile 回来（推荐徽标/资料分区/多图替换都依赖它），
-                # 固定 700ms 在 staging 慢时会假红。
+                # 列表已带全量卡面；这里只等渲染，不再有 public profile 请求。
                 page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
                 page.wait_for_timeout(300)
+                oid = target.get("openid") or ""
+                if oid and public_reqs.get(oid, 0) != 0:
+                    raise SmokeFailure(f"浮层不应请求 public profile：{public_reqs.get(oid)} 次")
+                if oid:
+                    notes.append(f"{label}: 浮层直接使用列表完整资料（public 请求 0 次）")
                 sheet = page.evaluate(
                     """() => {
                         const card = document.querySelector('.ov-sheet .swipe-card');
@@ -878,15 +882,9 @@ def main() -> int:
                 page.evaluate("() => { const p = window.yxqRootProxy; if (p && p.filter) p.filter.nickname = ''; }")
                 notes.append(f"{label}: 全览筛选取消/放弃不影响牵线筛选 {cancel_state}")
 
-                oid = target.get("openid") or ""
-                if oid and public_reqs.get(oid, 0) > 1:
-                    raise SmokeFailure(f"同一张卡重复请求 public profile：{public_reqs.get(oid)} 次")
-                if oid:
-                    notes.append(f"{label}: 二次打开同卡复用资料缓存（public 请求 {public_reqs.get(oid, 0)} 次）")
-
                 if filter_applied:
                     clear_overview_filter(page)
-                    # 推荐徽标：public profile 不含 recommended，合并后浮层仍应显示「推荐」。
+                    # 推荐徽标：列表 item 自带 recommended，打开浮层后仍应显示「推荐」。
                     if recommended_target:
                         page.locator(".ov-filter").click()
                         page.wait_for_selector(".filter-title", timeout=5000)

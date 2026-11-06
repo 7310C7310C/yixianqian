@@ -13,20 +13,26 @@ import (
 )
 
 type cardOverviewItemPayload struct {
-	OpenID      string   `json:"openid"`
-	UserID      string   `json:"user_id"`
-	Nickname    string   `json:"nickname"`
-	Gender      string   `json:"gender"`
-	Age         int      `json:"age"`
-	Height      int      `json:"height"`
-	City        string   `json:"city"`
-	Photo       string   `json:"photo"`
-	Photos      []string `json:"photos"`
-	Faces       []any    `json:"faces"`
-	IsNew       bool     `json:"is_new"`
-	Recommended bool     `json:"recommended"`
-	Liked       bool     `json:"liked"`
-	Praised     bool     `json:"praised"`
+	OpenID        string   `json:"openid"`
+	UserID        string   `json:"user_id"`
+	Nickname      string   `json:"nickname"`
+	Gender        string   `json:"gender"`
+	Age           int      `json:"age"`
+	Height        int      `json:"height"`
+	City          string   `json:"city"`
+	Photo         string   `json:"photo"`
+	Photos        []string `json:"photos"`
+	PhotosOrig    []string `json:"photos_orig"`
+	PhotosMeta    []any    `json:"photos_meta"`
+	Faces         []any    `json:"faces"`
+	DisplayFields struct {
+		Simple   string `json:"simple"`
+		Sections []any  `json:"sections"`
+	} `json:"display_fields"`
+	IsNew       bool `json:"is_new"`
+	Recommended bool `json:"recommended"`
+	Liked       bool `json:"liked"`
+	Praised     bool `json:"praised"`
 }
 
 type cardOverviewPayload struct {
@@ -98,6 +104,12 @@ func TestIntegrationCardsOverviewNewestFirst(t *testing.T) {
 		}
 		if len(item.Faces) != len(item.Photos) {
 			t.Fatalf("faces not aligned with photos: %d vs %d", len(item.Faces), len(item.Photos))
+		}
+		if len(item.PhotosOrig) != len(item.Photos) || len(item.PhotosMeta) != len(item.Photos) {
+			t.Fatalf("orig/meta not aligned with photos: %d/%d vs %d", len(item.PhotosOrig), len(item.PhotosMeta), len(item.Photos))
+		}
+		if len(item.DisplayFields.Sections) == 0 {
+			t.Fatalf("overview item missing display fields: %+v", item)
 		}
 	}
 	oldestAt, okOldest := index[legacyOf(oldest)]
