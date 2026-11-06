@@ -3741,6 +3741,8 @@ const yxqApp = createApp({
       ovCloseDir.value = '';   // 快速关闭后重开：清掉上一次的上滑离场方向
       overviewSheet.value = { ...item, photos: overviewPhotosOf(item) };
       ovCardIndex.value = overviewItems.value.findIndex((it) => it.openid === item.openid);
+      // 网格定位与 profile 加载无关：立刻开始平滑滚动，避免等接口才动。
+      ovScrollGridToItem(item);
       if (!keepTab) {
         ovCardTab.value = 'profile';
         ovCardTabDir.value = 'right';
@@ -3777,7 +3779,6 @@ const yxqApp = createApp({
           if (ml) ml.scrollTop = 0;
         });
         if (keepTab && ovCardTab.value === 'messages') ovLoadMessages(true);
-        ovScrollGridToItem(item);
         return;
       }
       overviewSheetLoading.value = true;
@@ -3790,7 +3791,6 @@ const yxqApp = createApp({
           const maxIdx = Math.max(0, ovPhotos().length - 1);
           if (ovPhotoIndex.value > maxIdx) ovPhotoIndex.value = maxIdx;
           if (keepTab && ovCardTab.value === 'messages') ovLoadMessages(true);
-          ovScrollGridToItem(item);
           nextTick(() => {
             const info = document.querySelector('.ov-sheet .card-info');
             if (info) info.scrollTop = 0;
