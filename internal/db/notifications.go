@@ -282,6 +282,22 @@ func (d *DB) ListNotifications(ctx context.Context, userID int64, limit int) ([]
 	return out, nil
 }
 
+// UnreadNonMessageNotificationCount counts unread feed rows excluding message
+// notifications. Received-message unread is counted separately from
+// message_reads, so the UI must not add those notification rows twice.
+func (d *DB) UnreadNonMessageNotificationCount(ctx context.Context, userID int64) (int, error) {
+	var count int
+	err := d.pool.QueryRow(ctx,
+		`SELECT count(*) FROM notifications
+		  WHERE user_id = $1 AND read_at IS NULL AND cleared_at IS NULL
+		    AND kind NOT IN ('message', 'message_reply', 'message_sent')`,
+		userID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("db: count unread non-message notifications: %w", err)
+	}
+	return count, nil
+}
+
 // UnreadNotificationCount counts unread visible rows for one owner.
 func (d *DB) UnreadNotificationCount(ctx context.Context, userID int64) (int, error) {
 	var count int

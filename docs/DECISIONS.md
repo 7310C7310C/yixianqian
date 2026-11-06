@@ -55,7 +55,7 @@ sources: []
 - 不要做：不把中文写回公开页；不恢复二维码到首页；不恢复 `/welcome` 或独立登录页；不把身份证改回选填。验证：`TestPublicScanPagesAreHanFree`、`TestParseRegisterRegionFields`、`TestRegisterRegionsEndpoint`。
 
 ### 2.5 消息中心与广播
-- 决策：消息页默认动态流 + 喜欢/留言子页；收到留言 = 卡上留言 + 回复我的留言，已读存 `message_reads`；tabbar 红点取「动态未读」与「收到留言未读」的较大值（避免留言重复计数），管理员待办也计入；单条/全部已读/清空持久，清空写 `notifications.cleared_at` 不删行；发送喜欢/留言也写 sender-side 已读动态；卡上留言和回复可点进留言串高亮，纯结果类通知不跳转。全员图文广播只经 `/admin/broadcasts`（`content.moderate`），写 broadcasts + 批量 notifications + 审计；注册审核、举报、反馈、兑换等管理员待办同时写入管理员动态（notifications），点击进入对应处理队列。
+- 决策：消息页默认动态流 + 喜欢/留言子页；收到留言 = 卡上留言 + 回复我的留言，已读存 `message_reads`；tabbar 红点 = 非留言动态未读 + 收到留言未读（message 通知不重复计数），管理员待办也计入；单条/全部已读/清空持久，清空写 `notifications.cleared_at` 不删行；发送喜欢/留言也写 sender-side 已读动态；卡上留言和回复可点进留言串高亮，纯结果类通知不跳转。全员图文广播只经 `/admin/broadcasts`（`content.moderate`），写 broadcasts + 批量 notifications + 审计；注册审核、举报、反馈、兑换等管理员待办同时写入管理员动态（notifications），点击进入对应处理队列。
 - 不要做：不用 `notifications.read_at` 冒充已读；不删行清空；清空不得清除收到留言未读；不整体放宽 `/media/{id}`；不假设 `legacy_open_id` 唯一。验证：`TestIntegrationMessageInboxAndNotifications`、`TestIntegrationLegacyMessageInboxHTTP`、`TestIntegrationAdminBroadcast`、`TestIntegrationFindUserByDuplicateLegacyOpenID`。
 
 ### 2.6 牵线筛选：现居/家乡省份多选

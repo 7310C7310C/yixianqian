@@ -872,10 +872,16 @@ func (a *App) handleLegacyNotificationsList(w http.ResponseWriter, r *http.Reque
 		legacyServerError(a, w, r, err, "legacy notifications messages unread failed")
 		return
 	}
+	unreadNonMessage, err := a.db.UnreadNonMessageNotificationCount(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications non-message unread failed")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"notifications":   legacyNotifications(rows),
-		"unread":          unread,
-		"unread_messages": unreadMessages,
+		"notifications":      legacyNotifications(rows),
+		"unread":             unread,
+		"unread_messages":    unreadMessages,
+		"unread_non_message": unreadNonMessage,
 	})
 }
 
@@ -928,7 +934,25 @@ func (a *App) handleLegacyNotificationsReadAll(w http.ResponseWriter, r *http.Re
 		legacyServerError(a, w, r, err, "legacy notifications read all failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "updated": updated, "unread": 0})
+	unread, err := a.db.UnreadNotificationCount(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications read all unread failed")
+		return
+	}
+	unreadMessages, err := a.db.CountUnreadReceivedMessages(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications read all messages failed")
+		return
+	}
+	unreadNonMessage, err := a.db.UnreadNonMessageNotificationCount(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications read all non-message failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "updated": updated,
+		"unread": unread, "unread_messages": unreadMessages, "unread_non_message": unreadNonMessage,
+	})
 }
 
 func (a *App) handleLegacyNotificationsClear(w http.ResponseWriter, r *http.Request) {
@@ -947,15 +971,23 @@ func (a *App) handleLegacyNotificationsClear(w http.ResponseWriter, r *http.Requ
 		legacyServerError(a, w, r, err, "legacy notifications clear failed")
 		return
 	}
+	unread, err := a.db.UnreadNotificationCount(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications clear unread failed")
+		return
+	}
 	unreadMessages, err := a.db.CountUnreadReceivedMessages(r.Context(), user.ID)
 	if err != nil {
 		legacyServerError(a, w, r, err, "legacy notifications clear unread failed")
 		return
 	}
+	unreadNonMessage, err := a.db.UnreadNonMessageNotificationCount(r.Context(), user.ID)
+	if err != nil {
+		legacyServerError(a, w, r, err, "legacy notifications clear non-message failed")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":              true,
-		"cleared":         cleared,
-		"unread":          0,
-		"unread_messages": unreadMessages,
+		"ok": true, "cleared": cleared,
+		"unread": unread, "unread_messages": unreadMessages, "unread_non_message": unreadNonMessage,
 	})
 }

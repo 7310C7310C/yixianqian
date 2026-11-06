@@ -681,11 +681,17 @@ func (a *App) apiListNotifications(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")
 		return
 	}
+	unreadNonMessage, err := a.db.UnreadNonMessageNotificationCount(r.Context(), user.ID)
+	if err != nil {
+		a.logger(r).Error("count unread non-message notifications failed", "error", err, "user_id", user.ID)
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")
+		return
+	}
 	out := make([]notificationJSON, 0, len(rows))
 	for _, n := range rows {
 		out = append(out, notificationJSONFor(n))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"notifications": out, "unread": unread})
+	writeJSON(w, http.StatusOK, map[string]any{"notifications": out, "unread": unread, "unread_non_message": unreadNonMessage})
 }
 
 func (a *App) apiNotificationRead(w http.ResponseWriter, r *http.Request) {

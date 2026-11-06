@@ -2128,14 +2128,14 @@ const yxqApp = createApp({
     // 消息-动态
     const notifications = ref([]);
     // 未读角标：SSE 推送 / 轮询兜底 / 进入消息页时更新；0 时隐藏。
-    // unreadCount = 动态未读（feed），unreadMessages = 收到的留言未读。
-    // Tabbar 只显示后者，符合「只有收到的留言给数字红点」的产品约定。
-    const unreadCount = ref(0);
-    const unreadMessages = ref(0);
+    // unreadCount = 动态未读总数，unreadNonMessage = 其中非留言通知，
+    // unreadMessages = 收到的留言未读；红点 = 非留言未读 + 留言未读。
+    const unreadCount = ref(0);          // 动态未读总数（含 message 通知）
+    const unreadMessages = ref(0);       // 收到的留言未读（message_reads）
+    const unreadNonMessage = ref(0);     // 动态未读中非留言通知的数量
     const unreadBadge = computed(() => {
-      // 动态未读（管理员待办、喜欢、积分、举报处理等）和收到的留言未读都算；
-      // 取较大值避免同一条留言在 notifications 与 message_reads 里重复计数。
-      const n = Math.max(unreadCount.value, unreadMessages.value);
+      // 非留言未读 + 收到的留言未读；留言通知不重复计数。
+      const n = unreadNonMessage.value + unreadMessages.value;
       return n > 99 ? '99+' : (n > 0 ? String(n) : '');
     });
     const likeScope = ref('mine');        // mine | mutual | liked
@@ -4012,6 +4012,8 @@ const yxqApp = createApp({
       page.value = 'cards';
     }
     let notificationsPromise = null;
+    let notificationsDirty = false;
+    let notificationsGeneration = 0;
     let readAllPromise = null;
     let pendingReadIds = new Set();
     let messageReadInFlight = false;
@@ -4023,27 +4025,49 @@ const yxqApp = createApp({
     function applyNotificationSnapshot(data) {
       const rows = data.notifications || [];
       const pendingUnread = rows.filter(n => !n.read && pendingReadIds.has(n.id)).length;
+      const pendingNonMessage = rows.filter(n => !n.read && pendingReadIds.has(n.id) &&
+        ['message', 'message_reply', 'message_sent'].indexOf(n.kind || '') < 0).length;
       notifications.value = rows.map(n => pendingReadIds.has(n.id) ? { ...n, read: true } : n);
       unreadCount.value = Math.max(0, (Number(data.unread) || 0) - pendingUnread);
       if (!messageReadInFlight) unreadMessages.value = Number(data.unread_messages) || 0;
+      const nextNonMessage = Number(data.unread_non_message);
+      if (Number.isFinite(nextNonMessage)) {
+        unreadNonMessage.value = Math.max(0, nextNonMessage - pendingNonMessage);
+      } else {
+        unreadNonMessage.value = Math.max(0, unreadCount.value - unreadMessages.value);
+      }
     }
-    function loadNotifications() {
-      if (notificationsPromise) return notificationsPromise;
+    function loadNotifications(force) {
+      if (notificationsPromise) {
+        if (force) notificationsDirty = true;
+        return notificationsPromise;
+      }
+      const generation = notificationsGeneration;
       notificationsPromise = api('/api/notifications').then((data) => {
-        applyNotificationSnapshot(data);
+        if (generation === notificationsGeneration) applyNotificationSnapshot(data);
       }).catch(() => {}).then(() => {
         notificationsPromise = null;
+        if (notificationsDirty) {
+          notificationsDirty = false;
+          loadNotifications(true);
+        }
       });
       return notificationsPromise;
     }
     function markNotificationsRead() {
       if (readAllPromise) return readAllPromise;
       if (unreadCount.value <= 0) return Promise.resolve();
+      notificationsGeneration++;
       readAllPromise = api('/api/notifications/read-all', { method: 'POST' }).then((data) => {
         pendingReadIds.clear();
         unreadCount.value = Number(data.unread) || 0;
         if (typeof data.unread_messages === 'number') unreadMessages.value = data.unread_messages;
+        unreadNonMessage.value = typeof data.unread_non_message === 'number'
+          ? Math.max(0, data.unread_non_message)
+          : 0;
         notifications.value = notifications.value.map(n => ({ ...n, read: true }));
+        notificationsGeneration++;
+        loadNotifications(true);
       }).catch(() => {}).then(() => {
         readAllPromise = null;
       });
@@ -4089,8 +4113,14 @@ const yxqApp = createApp({
         const next = Number(data.unread) || 0;
         const nextMessages = Number(data.unread_messages) || 0;
         const messagesIncreased = nextMessages > unreadMessages.value;
-        if (pendingReadIds.size || page.value === 'likes') loadNotifications();
-        else unreadCount.value = next;
+        if (pendingReadIds.size || page.value === 'likes') loadNotifications(true);
+        else {
+          unreadCount.value = next;
+          const nextNonMessage = Number(data.unread_non_message);
+          unreadNonMessage.value = Number.isFinite(nextNonMessage)
+            ? Math.max(0, nextNonMessage)
+            : Math.max(0, next - nextMessages);
+        }
         if (!messageReadInFlight) unreadMessages.value = nextMessages;
         if (page.value === 'message_inbox' && msgScope.value === 'received' && messagesIncreased) {
           loadReceivedMessages({ markRead: false, quiet: true });
@@ -6190,6 +6220,9 @@ const yxqApp = createApp({
       pendingReadIds.add(n.id);
       n.read = true;
       unreadCount.value = Math.max(0, unreadCount.value - 1);
+      if (['message', 'message_reply', 'message_sent'].indexOf(n.kind || '') < 0) {
+        unreadNonMessage.value = Math.max(0, unreadNonMessage.value - 1);
+      }
       api('/api/notifications/' + n.id + '/read', { method: 'POST' }).then((data) => {
         if (typeof data.unread === 'number') unreadCount.value = Math.min(unreadCount.value, data.unread);
         setTimeout(() => pendingReadIds.delete(n.id), 5000);
@@ -6255,13 +6288,17 @@ const yxqApp = createApp({
           confirmButtonColor: '#ee0a24',
         });
       } catch (e) { return; }
+      notificationsGeneration++;
       try {
         const data = await api('/api/notifications/clear', { method: 'POST' });
         pendingReadIds.clear();
         notifications.value = [];
-        unreadCount.value = 0;
+        unreadCount.value = (data && Number(data.unread)) || 0;
+        unreadNonMessage.value = (data && typeof data.unread_non_message === 'number')
+          ? Math.max(0, data.unread_non_message) : 0;
         if (data && typeof data.unread_messages === 'number') unreadMessages.value = data.unread_messages;
-
+        notificationsGeneration++;
+        loadNotifications(true);
       } catch (e) {
         vant.showToast(e.message || '清空失败');
       }

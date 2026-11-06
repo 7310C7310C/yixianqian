@@ -361,7 +361,16 @@ func (d *DB) MarkReceivedMessagesRead(ctx context.Context, userID int64) (int64,
 	if err != nil {
 		return 0, fmt.Errorf("db: mark received messages read: %w", err)
 	}
-	if tag.RowsAffected() > 0 {
+	// Reading the inbox also clears its message notifications; otherwise the
+	// feed keeps an unread copy of a message the user already read.
+	notifTag, err := tx.Exec(ctx,
+		`UPDATE notifications SET read_at = now()
+		  WHERE user_id = $1 AND read_at IS NULL AND kind IN ('message', 'message_reply')`,
+		userID)
+	if err != nil {
+		return 0, fmt.Errorf("db: mark received message notifications read: %w", err)
+	}
+	if tag.RowsAffected() > 0 || notifTag.RowsAffected() > 0 {
 		if err := notifyUserTx(ctx, tx, userID); err != nil {
 			return 0, err
 		}
@@ -389,7 +398,21 @@ func (d *DB) MarkThreadMessagesRead(ctx context.Context, userID, targetUserID in
 	if err != nil {
 		return 0, fmt.Errorf("db: mark thread messages read: %w", err)
 	}
-	if tag.RowsAffected() > 0 {
+	notifTag, err := tx.Exec(ctx,
+		`UPDATE notifications n SET read_at = now()
+		  WHERE n.user_id = $1 AND n.read_at IS NULL
+		    AND n.kind IN ('message', 'message_reply')
+		    AND (n.payload->>'message_id') ~ '^[0-9]+$'
+		    AND EXISTS (
+		      SELECT 1 FROM messages m
+		       WHERE m.id = (n.payload->>'message_id')::bigint
+		         AND m.target_user_id = $2 AND m.status <> $3 AND m.author_id <> $1
+		    )`,
+		userID, targetUserID, MessageStatusDeleted)
+	if err != nil {
+		return 0, fmt.Errorf("db: mark thread message notifications read: %w", err)
+	}
+	if tag.RowsAffected() > 0 || notifTag.RowsAffected() > 0 {
 		if err := notifyUserTx(ctx, tx, userID); err != nil {
 			return 0, err
 		}

@@ -101,6 +101,13 @@ func TestIntegrationMessageInboxAndNotifications(t *testing.T) {
 	if unread, err := database.CountUnreadReceivedMessages(ctx, me.ID); err != nil || unread != 0 {
 		t.Fatalf("unread after read = %d err=%v, want 0", unread, err)
 	}
+	// Reading the inbox also clears its message notifications.
+	if unread, err := database.UnreadNotificationCount(ctx, me.ID); err != nil || unread != 0 {
+		t.Fatalf("feed unread after inbox read = %d err=%v, want 0", unread, err)
+	}
+	if unread, err := database.UnreadNonMessageNotificationCount(ctx, me.ID); err != nil || unread != 0 {
+		t.Fatalf("non-message unread after inbox read = %d err=%v, want 0", unread, err)
+	}
 
 	// Notifications: card message + reply, no notification for the third-party reply.
 	notes, err := database.ListNotifications(ctx, me.ID, 50)
@@ -123,10 +130,21 @@ func TestIntegrationMessageInboxAndNotifications(t *testing.T) {
 	if kinds["message"] != 1 || kinds["message_reply"] != 1 || kinds["message_sent"] != 1 {
 		t.Fatalf("notification kinds = %v, want message + message_reply + message_sent", kinds)
 	}
+	// A non-message notification is counted separately and must not be
+	// double-counted with received-message unread.
+	if err := database.CreateNotification(ctx, me.ID, "points", "麦穗有变动", "测试非留言通知"); err != nil {
+		t.Fatal(err)
+	}
+	if unread, err := database.UnreadNonMessageNotificationCount(ctx, me.ID); err != nil || unread != 1 {
+		t.Fatalf("non-message unread = %d err=%v, want 1", unread, err)
+	}
+	if unread, err := database.UnreadNotificationCount(ctx, me.ID); err != nil || unread != 1 {
+		t.Fatalf("total unread = %d err=%v, want 1", unread, err)
+	}
 
 	// Clearing the feed hides existing rows forever, but a later message still appears.
-	if cleared, err := database.ClearNotifications(ctx, me.ID); err != nil || cleared != 3 {
-		t.Fatalf("clear notifications = %d err=%v, want 3", cleared, err)
+	if cleared, err := database.ClearNotifications(ctx, me.ID); err != nil || cleared != 4 {
+		t.Fatalf("clear notifications = %d err=%v, want 4", cleared, err)
 	}
 	if notes, err := database.ListNotifications(ctx, me.ID, 50); err != nil || len(notes) != 0 {
 		t.Fatalf("notifications after clear = %d err=%v, want 0", len(notes), err)

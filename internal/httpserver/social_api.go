@@ -492,8 +492,15 @@ func (a *App) handleAPINotifications(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "暂时无法载入，请稍后再试。")
 		return
 	}
+	unreadNonMessage, err := a.db.UnreadNonMessageNotificationCount(r.Context(), viewer.ID)
+	if err != nil {
+		a.logger(r).Error("api notifications non-message unread failed", "error", err, "user_id", user.ID)
+		writeAPIError(w, http.StatusInternalServerError, "internal_error", "暂时无法载入，请稍后再试。")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"notifications": notificationViews(rows),
-		"unread":        unread,
+		"notifications":      notificationViews(rows),
+		"unread":             unread,
+		"unread_non_message": unreadNonMessage,
 	})
 }

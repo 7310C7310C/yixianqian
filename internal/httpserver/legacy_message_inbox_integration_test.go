@@ -75,9 +75,10 @@ func TestIntegrationLegacyMessageInboxHTTP(t *testing.T) {
 	// The feed exposes the same unread count and a structured message row.
 	resp = bobClient.get("/legacy/api/notifications")
 	var feed struct {
-		Notifications []legacyNotificationJSON `json:"notifications"`
-		Unread        int                      `json:"unread"`
-		UnreadMessage int                      `json:"unread_messages"`
+		Notifications    []legacyNotificationJSON `json:"notifications"`
+		Unread           int                      `json:"unread"`
+		UnreadMessage    int                      `json:"unread_messages"`
+		UnreadNonMessage int                      `json:"unread_non_message"`
 	}
 	decode(resp, &feed)
 	if resp.StatusCode != http.StatusOK || feed.UnreadMessage != 1 {
@@ -96,7 +97,7 @@ func TestIntegrationLegacyMessageInboxHTTP(t *testing.T) {
 		t.Fatalf("bob feed missing message notification: %+v", feed.Notifications)
 	}
 
-	// Opening the inbox marks it read; the feed unread count is independent.
+	// Opening the inbox marks it read; its message notifications are cleared too.
 	resp = bobClient.postJSON("/legacy/api/messages/read", bobClient.csrfCookie(), nil)
 	var readResp struct {
 		OK             bool `json:"ok"`
@@ -108,13 +109,15 @@ func TestIntegrationLegacyMessageInboxHTTP(t *testing.T) {
 	}
 	resp = bobClient.get("/legacy/api/notifications")
 	feed = struct {
-		Notifications []legacyNotificationJSON `json:"notifications"`
-		Unread        int                      `json:"unread"`
-		UnreadMessage int                      `json:"unread_messages"`
+		Notifications    []legacyNotificationJSON `json:"notifications"`
+		Unread           int                      `json:"unread"`
+		UnreadMessage    int                      `json:"unread_messages"`
+		UnreadNonMessage int                      `json:"unread_non_message"`
 	}{}
 	decode(resp, &feed)
-	if feed.UnreadMessage != 0 || feed.Unread == 0 {
-		t.Fatalf("after read: unread=%d unread_messages=%d, want feed unread still >0", feed.Unread, feed.UnreadMessage)
+	if feed.Unread != 0 || feed.UnreadMessage != 0 || feed.UnreadNonMessage != 0 {
+		t.Fatalf("after read: unread=%d unread_messages=%d unread_non_message=%d, want all 0",
+			feed.Unread, feed.UnreadMessage, feed.UnreadNonMessage)
 	}
 
 	// Bob replies on his own card; Alice's inbox receives the reply even though
@@ -178,9 +181,10 @@ func TestIntegrationLegacyMessageInboxHTTP(t *testing.T) {
 	}
 	resp = bobClient.get("/legacy/api/notifications")
 	feed = struct {
-		Notifications []legacyNotificationJSON `json:"notifications"`
-		Unread        int                      `json:"unread"`
-		UnreadMessage int                      `json:"unread_messages"`
+		Notifications    []legacyNotificationJSON `json:"notifications"`
+		Unread           int                      `json:"unread"`
+		UnreadMessage    int                      `json:"unread_messages"`
+		UnreadNonMessage int                      `json:"unread_non_message"`
 	}{}
 	decode(resp, &feed)
 	if len(feed.Notifications) != 0 || feed.Unread != 0 || feed.UnreadMessage != 0 {
