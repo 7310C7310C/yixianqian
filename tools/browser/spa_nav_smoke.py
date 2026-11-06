@@ -86,8 +86,21 @@ def dismiss_guides(page) -> None:
         page.wait_for_timeout(300)
 
 
+def tab_is_active(page, label: str) -> bool:
+    return bool(page.evaluate(
+        """(label) => {
+            const el = document.querySelector('.van-tabbar-item--active');
+            return !!el && (el.innerText || '').includes(label);
+        }""",
+        label,
+    ))
+
+
 def tap_tab(page, label: str) -> None:
     """点击底部 tab；晚到的一次性引导可能拦截点击，带重试。"""
+    # 牵线 tab 在激活态再点一次会进入全览（产品行为）；本脚本只做导航。
+    if tab_is_active(page, label):
+        return
     item = page.locator(".van-tabbar-item").filter(has_text=label)
     last_error = None
     for _ in range(4):

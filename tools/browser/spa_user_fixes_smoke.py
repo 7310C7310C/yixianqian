@@ -154,6 +154,15 @@ def wait_app(page, base_url: str, timeout_ms: int = 30000) -> None:
 
 
 def click_tab(page, label: str) -> None:
+    # 牵线 tab 在激活态再点一次会进入全览（产品行为）；本脚本只做导航。
+    active = page.evaluate(
+        """() => {
+            const el = document.querySelector('.van-tabbar-item--active');
+            return el ? (el.innerText || '') : '';
+        }"""
+    )
+    if label in (active or ""):
+        return
     item = page.locator(".van-tabbar-item").filter(has_text=label).first
     click(page, item, label=f"底部 tab「{label}」")
     page.wait_for_timeout(450)

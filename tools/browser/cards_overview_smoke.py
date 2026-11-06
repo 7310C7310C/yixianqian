@@ -101,10 +101,43 @@ def tab_item(page, label: str):
 
 
 def click_tab(page, label: str, marker: str | None = None) -> None:
-    dismiss_guides(page)
-    tab_item(page, label).click()
-    if marker:
-        page.wait_for_selector(marker, timeout=10000)
+    # 已在目标页就不要点：牵线 tab 在激活态再点一次会进全览（产品行为）。
+    if marker and page.locator(marker).count():
+        return
+    last_error = None
+    for _ in range(6):
+        dismiss_guides(page)
+        try:
+            tab_item(page, label).click(timeout=4000)
+            if marker:
+                page.wait_for_selector(marker, timeout=10000)
+            return
+        except PlaywrightTimeoutError as exc:
+            last_error = exc
+            # 第一次点击可能已切页、只是 marker 等待超时；此时不能再点牵线（会进全览）。
+            if marker and page.locator(marker).count():
+                return
+            # 晚到的一次性弹层（不同视口/慢网下出现时机不同）会盖住底栏：关掉再试。
+            dismiss_guides(page)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(350)
+    raise SmokeFailure(f"无法点击 tab {label}（6 次尝试）：{last_error}")
+
+
+def tap_cards_again(page) -> None:
+    """已激活的牵线 tab 再点一次：晚到弹层可能盖住底栏，关掉后重试。"""
+    last_error = None
+    for _ in range(3):
+        dismiss_guides(page)
+        try:
+            tab_item(page, "牵线").click(timeout=4000)
+            return
+        except PlaywrightTimeoutError as exc:
+            last_error = exc
+            dismiss_guides(page)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+    raise SmokeFailure(f"无法再次点击牵线 tab：{last_error}")
 
 
 def install_local_assets(context, base_url: str) -> None:
@@ -214,6 +247,15 @@ def main() -> int:
                     "sameSite": "Lax",
                 }]
             )
+            # 一次性引导（更新说明/活动引导/滑动提示）会在首屏后弹层并拦截 tab 点击；
+            # smoke 只验证本次功能，进入前把它们标记为已读。
+            context.add_init_script(
+                """try {
+                    localStorage.setItem('yxq_update_notes_v1', '1');
+                    localStorage.setItem('yxq_swipe_guide_v1', '1');
+                    sessionStorage.setItem('yxq_activity_promo_v1', '1');
+                } catch (e) {}"""
+            )
             page = context.new_page()
             errors = attach_errors(page)
             try:
@@ -260,7 +302,7 @@ def main() -> int:
                     raise SmokeFailure(f"回到牵线后光晕未恢复：{state}")
 
                 # ---- 4. 再点一次进入全览 ----
-                tab_item(page, "牵线").click()
+                tap_cards_again(page)
                 page.wait_for_selector(".cards-overview-page", timeout=10000)
                 if page.locator(".van-tabbar").count():
                     raise SmokeFailure("全览子页不应显示底栏")
@@ -326,7 +368,20 @@ def main() -> int:
                 page.wait_for_timeout(350)
                 scrolled = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
                 kept = len(tile_uids(page))
-                page.locator(".ov-tile").nth(3).click()
+                # 用 JS 点当前视口内完整可见的 tile：Playwright 的 click 会把 tile
+                # scrollIntoView（可能把列表拉回顶部），导致滚动位置断言失真。
+                page.evaluate(
+                    """() => {
+                        const sc = document.querySelector('.cards-overview-scroll');
+                        const box = sc.getBoundingClientRect();
+                        const tiles = [...document.querySelectorAll('.ov-tile[data-uid]')];
+                        const target = tiles.find((el) => {
+                            const r = el.getBoundingClientRect();
+                            return r.top >= box.top + 4 && r.bottom <= box.bottom - 4;
+                        }) || tiles[0];
+                        target.click();
+                    }"""
+                )
                 page.wait_for_selector(".user-detail-card, .back-nav", timeout=15000)
                 page.wait_for_timeout(600)
                 page.locator(".back-nav").first.click()
@@ -336,7 +391,20 @@ def main() -> int:
                 if len(tile_uids(page)) < min(kept, 3):
                     raise SmokeFailure(f"返回后全览列表丢失：{kept} → {len(tile_uids(page))}")
                 if scrolled > 100 and restored < min(scrolled, 120):
-                    raise SmokeFailure(f"返回后滚动位置未恢复：{scrolled} → {restored}")
+                    diag = page.evaluate(
+                        """() => {
+                            const el = document.querySelector('.cards-overview-scroll');
+                            return {
+                                top: el ? el.scrollTop : null,
+                                scrollHeight: el ? el.scrollHeight : null,
+                                clientHeight: el ? el.clientHeight : null,
+                                items: document.querySelectorAll('.ov-tile[data-uid]').length,
+                                sub: (document.querySelector('.ov-sub') || {}).innerText || '',
+                                hist: window.__YXQ_HIST_DEBUG__ ? window.__YXQ_HIST_DEBUG__() : null,
+                            };
+                        }"""
+                    )
+                    raise SmokeFailure(f"返回后滚动位置未恢复：{scrolled} → {restored} diag={diag}")
                 notes.append(f"{label}: 返回资料页保留 {len(tile_uids(page))} 条，scrollTop={restored}")
 
                 # ---- 8. 返回牵线 ----

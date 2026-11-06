@@ -315,6 +315,10 @@ def click_visible(page, selector: str, timeout: int = 12000) -> None:
 
 
 def tap_tab(page, label: str, key: str) -> None:
+    # 牵线 tab 已在激活态时再点一次会进入全览（产品行为）；本套件只想切页，
+    # 已在目标页就直接返回，避免把「再次点击」当成导航。
+    if proxy(page, "p.page") == key:
+        return
     page.locator(".van-tabbar-item").filter(has_text=label).first.click(timeout=12000)
     wait_page(page, key)
 

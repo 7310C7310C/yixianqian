@@ -220,6 +220,9 @@ def click_back(page, parent: str) -> None:
 
 
 def tap_tab(page, label: str, page_key: str) -> None:
+    # 牵线 tab 在激活态再点一次会进入全览（产品行为）；本脚本只做导航。
+    if page.evaluate("() => window.yxqRootProxy && window.yxqRootProxy.page") == page_key:
+        return
     page.locator(".van-tabbar-item").filter(has_text=label).first.click(timeout=12000)
     wait_page(page, page_key)
     page.wait_for_timeout(450)
