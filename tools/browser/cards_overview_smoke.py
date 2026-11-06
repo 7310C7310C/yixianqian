@@ -401,10 +401,37 @@ def main() -> int:
                     raise SmokeFailure(f"全览页底部有空白带：{gap}")
                 notes.append(f"{label}: 全览页铺满视口 {gap['pageHeight']}px（留白 {gap['gap']}px）")
 
-                # ---- 8. 网格卡片多图滑动 ----
+                # ---- 8. 网格卡片多图滑动（优先找真实多图用户，用昵称筛选置顶）----
+                multi_target = None
+                offset = 0
+                while offset < 600 and not multi_target:
+                    page_data = page.evaluate(
+                        """async (off) => {
+                            const r = await fetch('/legacy/api/cards/overview?limit=60&offset=' + off, {credentials: 'same-origin'});
+                            return await r.json();
+                        }""",
+                        offset,
+                    )
+                    for item in page_data.get("items") or []:
+                        if len(item.get("photos") or []) > 1 and not item.get("liked"):
+                            multi_target = item
+                            break
+                    offset += 60
+                filter_applied = False
+                if multi_target:
+                    page.locator(".ov-filter").click()
+                    page.wait_for_selector(".filter-title", timeout=5000)
+                    page.get_by_placeholder("如：张三").fill(multi_target["nickname"])
+                    page.get_by_text("应用筛选", exact=True).click()
+                    page.wait_for_selector(
+                        f'.ov-tile[data-uid="{multi_target["user_id"]}"]',
+                        timeout=15000,
+                    )
+                    filter_applied = True
+                    notes.append(f"{label}: 昵称筛选置顶多图用户 {multi_target['nickname']}（{len(multi_target['photos'])} 图）")
                 page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); el.scrollTop = 0; }")
                 page.wait_for_timeout(350)
-                swipe_uid = page.evaluate(
+                swipe_uid = (multi_target or {}).get("user_id") or page.evaluate(
                     """() => {
                         const tiles = [...document.querySelectorAll('.ov-tile[data-uid]')];
                         const el = tiles.find((t) => t.querySelector('.ov-photo-count'));
@@ -477,9 +504,9 @@ def main() -> int:
 
                 # ---- 9. 卡片浮层：大图 / 多图 / 留言 / 反馈 / 点赞 / 爱心 ----
                 items = api.get("items") or []
+                target = multi_target
                 multi = [it for it in items if len(it.get("photos") or []) > 1]
-                target = None
-                for item in multi:
+                for item in ([] if target else multi):
                     if not item.get("liked"):
                         target = item
                         break
@@ -598,6 +625,46 @@ def main() -> int:
                     raise SmokeFailure("关闭浮层后列表丢失")
                 notes.append(f"{label}: 关闭浮层后列表与滚动位置保持（{scroll_after_sheet}px）")
                 page.screenshot(path=str(out_dir / f"sheet-{label}.png"))
+
+                if filter_applied:
+                    page.locator(".ov-filter-note span").click()
+                    page.wait_for_function(
+                        "() => document.querySelectorAll('.ov-tile[data-uid]').length > 0",
+                        timeout=15000,
+                    )
+                    # 长列表上验证「打开/关闭浮层不改变列表滚动位置」。
+                    # 清筛选的 reset 会异步滚顶，先落 0 再设置 420，避免测成 0→0 假绿。
+                    page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); el.scrollTop = 0; }")
+                    page.wait_for_timeout(250)
+                    page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); el.scrollTop = 420; }")
+                    page.wait_for_timeout(350)
+                    scroll_before = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
+                    page.evaluate(
+                        """() => {
+                            const sc = document.querySelector('.cards-overview-scroll');
+                            const box = sc.getBoundingClientRect();
+                            const tiles = [...document.querySelectorAll('.ov-tile[data-uid]')];
+                            const target = tiles.find((el) => {
+                                const r = el.getBoundingClientRect();
+                                return r.top >= box.top + 4 && r.bottom <= box.bottom - 4;
+                            }) || tiles[0];
+                            if (target) target.click();
+                        }"""
+                    )
+                    page.wait_for_selector(".ov-sheet-body", timeout=10000)
+                    page.wait_for_timeout(400)
+                    page.locator(".ov-sheet-close").click()
+                    try:
+                        page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                    except PlaywrightTimeoutError:
+                        pass
+                    page.wait_for_timeout(300)
+                    scroll_after = page.evaluate("() => document.querySelector('.cards-overview-scroll').scrollTop")
+                    if abs(scroll_after - scroll_before) > 3:
+                        raise SmokeFailure(f"长列表关闭浮层后滚动位置变化：{scroll_before} → {scroll_after}")
+                    if len(tile_uids(page)) < 1:
+                        raise SmokeFailure("长列表关闭浮层后列表丢失")
+                    notes.append(f"{label}: 长列表关闭浮层保位 {scroll_before}px → {scroll_after}px")
 
                 # ---- 10. 筛选：应用无结果 → 清除 ----
                 page.locator(".ov-filter").click()
