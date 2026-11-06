@@ -804,7 +804,9 @@ def main() -> int:
                 page.locator(".ov-filter").click()
                 page.wait_for_selector(".filter-title", timeout=5000)
                 page.get_by_placeholder("如：张三").fill("X-CANCEL")
-                page.get_by_text("取消", exact=True).click()
+                page.locator(".van-popup").filter(has=page.locator(".filter-title")).first.get_by_text(
+                    "取消", exact=True
+                ).click()
                 page.get_by_text("放弃", exact=True).click()
                 page.wait_for_timeout(300)
                 cancel_state = page.evaluate(
