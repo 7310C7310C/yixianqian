@@ -766,10 +766,22 @@ def main() -> int:
                     if not page.locator(".ov-sheet .swipe-card").first.is_visible():
                         raise SmokeFailure("从作者资料页返回后浮层未恢复")
                     notes.append(f"{label}: 作者资料页返回后浮层恢复")
-                    # 返回后页面仍有过渡；直接调用 root 的切 tab 方法（与点击同一 handler），
-                    # 避免在过渡窗口里点 DOM 造成测试假红。
-                    page.wait_for_timeout(800)
-                    page.evaluate("() => { const p = window.yxqRootProxy; if (p && p.ovSwitchTab) p.ovSwitchTab('profile'); }")
+                    # 返回后页面仍有过渡；关闭并重新打开（资料随身携带，重开即完整、
+                    # 默认资料 tab），避免在过渡窗口里切 tab 的时序竞态。
+                    page.wait_for_timeout(500)
+                    page.locator(".ov-card-close").click()
+                    try:
+                        page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                    except PlaywrightTimeoutError:
+                        pass
+                    page.evaluate(
+                        """(uid) => {
+                            const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                            if (el) el.click();
+                        }""",
+                        target["user_id"],
+                    )
+                    page.wait_for_selector(".ov-sheet .swipe-card", timeout=10000)
                 else:
                     notes.append(f"{label}: 该卡暂无留言，跳过作者资料页往返")
                 page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=15000)
