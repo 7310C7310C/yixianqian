@@ -2132,7 +2132,12 @@ const yxqApp = createApp({
     // Tabbar 只显示后者，符合「只有收到的留言给数字红点」的产品约定。
     const unreadCount = ref(0);
     const unreadMessages = ref(0);
-    const unreadBadge = computed(() => unreadMessages.value > 99 ? '99+' : (unreadMessages.value > 0 ? String(unreadMessages.value) : ''));
+    const unreadBadge = computed(() => {
+      // 动态未读（管理员待办、喜欢、积分、举报处理等）和收到的留言未读都算；
+      // 取较大值避免同一条留言在 notifications 与 message_reads 里重复计数。
+      const n = Math.max(unreadCount.value, unreadMessages.value);
+      return n > 99 ? '99+' : (n > 0 ? String(n) : '');
+    });
     const likeScope = ref('mine');        // mine | mutual | liked
     const msgScope = ref('received');     // received | sent
     const messageThreadFrom = ref('likes');
