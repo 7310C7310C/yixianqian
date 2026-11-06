@@ -73,76 +73,123 @@
     </template>
   </div>
 
-  <!-- 全览卡片浮层：大图多图滑动 + 完整资料 + 留言/反馈/点赞/爱心 -->
+  <!-- 全览卡片浮层：与 deck 同款 .swipe-card 结构/样式（资料、留言、悬浮反馈/点赞/爱心） -->
   <van-popup v-model:show="showOverviewCard" position="bottom" round class="ov-sheet" :style="{ height: '88%' }">
-    <div class="ov-sheet-body" v-if="overviewSheet">
-      <div class="ov-sheet-head">
-        <div class="ov-sheet-head-main">
-          <div class="ov-sheet-name">{{ overviewSheet.nickname }}<span class="ov-gender">{{ overviewSheet.gender === '男性' ? '♂' : '♀' }}</span></div>
-          <div class="ov-sheet-sub" v-if="overviewSheet.display_fields && overviewSheet.display_fields.simple">{{ overviewSheet.display_fields.simple }}</div>
-          <div class="ov-sheet-sub" v-else-if="overviewSheet.user_id">{{ overviewSheet.user_id }}</div>
-        </div>
-        <button type="button" class="ov-sheet-close" aria-label="关闭" @click="showOverviewCard = false">
-          <van-icon name="cross"></van-icon>
-        </button>
-      </div>
-      <div class="ov-sheet-scroll">
-        <div class="ov-sheet-photo" @touchstart="onOvSheetTouchStart" @touchmove="onOvSheetTouchMove" @touchend="onOvSheetTouchEnd" @touchcancel="ovSheetGestureCancel"
-          @mousedown="onOvSheetMouseDown" @mousemove="onOvSheetMouseMove" @mouseup="onOvSheetMouseUp" @mouseleave="onOvSheetMouseLeave"
-          @click="openOverviewSheetPhoto">
-          <div class="ov-sheet-track" :style="{ transform: 'translateX(-' + overviewSheetPhotoIndex * 100 + '%)' }">
-            <img v-for="(p, i) in overviewSheetPhotos" :key="i" class="ov-sheet-img" :src="p" alt=""
-              :loading="i <= 1 ? 'eager' : 'lazy'" decoding="async">
+    <div class="ov-card-stage" v-if="overviewSheet">
+      <div class="swipe-card ov-card">
+        <div class="card-photo-wrap" @touchstart="ovPhotoStart" @touchmove="ovPhotoMove" @touchend="ovPhotoEnd" @touchcancel="ovPhotoCancel"
+          @mousedown="ovPhotoStart" @mousemove="ovPhotoMove" @mouseup="ovPhotoEnd" @mouseleave="ovPhotoCancel" @click="ovPhotoClick">
+          <div v-if="overviewSheetLoading" class="photo-loading"></div>
+          <div v-if="ovPhotos().length" class="card-photo-track" :style="{ transform: 'translateX(-' + ovPhotoIndex * 100 + '%)' }">
+            <div v-for="(p, i) in ovPhotos()" :key="i" class="card-photo-slide">
+              <img :src="p" class="card-photo-item card-photo-base" alt=""
+                :loading="(i === ovPhotoIndex || i === ovPhotoIndex + 1) ? 'eager' : 'lazy'" decoding="async">
+            </div>
           </div>
-          <div v-if="overviewSheetLoading" class="ov-sheet-photo-loading"><van-loading size="20px" color="#fff"></van-loading></div>
-          <div class="photo-dots" v-if="overviewSheetCount() > 1">
-            <div v-for="(p, i) in overviewSheetPhotos" :key="i" class="photo-dot" :class="{ active: i === overviewSheetPhotoIndex }"></div>
+          <div v-else class="card-photo-placeholder">{{ overviewSheet.gender === '男性' ? '👨' : '👩' }}</div>
+          <div class="photo-dots" v-if="ovPhotos().length > 1">
+            <div v-for="(p, i) in ovPhotos()" :key="i" class="photo-dot" :class="{ active: i === ovPhotoIndex }"></div>
           </div>
-          <span v-if="overviewSheetCount() > 1" class="ov-photo-count ov-photo-count--sheet">{{ overviewSheetPhotoIndex + 1 }} / {{ overviewSheetCount() }}</span>
+          <div class="card-photo-overlay">
+            <div class="card-overlay-box">
+              <div class="card-overlay-text">
+                <div v-if="overviewSheet.recommended" style="margin-bottom:6px;"><span style="background:#ffb020;color:#fff;font-size:11px;padding:3px 9px;border-radius:999px;">推荐</span></div>
+                <div class="card-name">{{ overviewSheet.nickname }}
+                  <span class="gender-icon">{{ overviewSheet.gender === '男性' ? '♂' : '♀' }}</span>
+                </div>
+                <div class="card-subtitle" v-if="ovSimple">{{ ovSimple }}</div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="ov-sheet-sections">
-          <template v-if="overviewSheet.display_fields && overviewSheet.display_fields.sections">
-            <div class="card-section" v-for="(sec, si) in overviewSheet.display_fields.sections" :key="si">
-              <div class="profile-section-title"><span class="ps-icon">{{ sec.icon }}</span>{{ sec.title }}</div>
-              <div class="info-grid">
-                <div class="info-grid-item" v-for="f in sec.fields" :key="f.label"
-                  :class="{ full: f.label === '我是怎样的人' || f.label === '理想中的TA' }">
-                  <span class="df-label">{{ f.label }}：</span>
-                  <span class="df-value">{{ f.value }}</span>
+        <div class="card-main">
+          <div class="card-tabs">
+            <div class="card-tab" :class="{ active: ovCardTab === 'profile' }" @click="ovSwitchTab('profile')">资料</div>
+            <div class="card-tab" :class="{ active: ovCardTab === 'messages' }" @click="ovSwitchTab('messages')">留言<span v-if="ovMsgCount > 0" class="msg-count-badge">{{ ovMsgCount }}</span></div>
+          </div>
+          <div class="card-info">
+            <Transition :name="ovCardTabDir === 'left' ? 'card-tab-left' : 'card-tab-right'" mode="out-in">
+              <div v-if="ovCardTab === 'profile'" key="profile">
+                <template v-if="overviewSheet.display_fields && overviewSheet.display_fields.sections">
+                  <div class="card-section" v-for="(sec, si) in overviewSheet.display_fields.sections" :key="si">
+                    <div class="profile-section-title"><span class="ps-icon">{{ sec.icon }}</span>{{ sec.title }}</div>
+                    <div class="info-grid">
+                      <div class="info-grid-item" v-for="f in sec.fields" :key="f.label"
+                        :class="{ full: f.label === '我是怎样的人' || f.label === '理想中的TA' }">
+                        <span class="df-label">{{ f.label }}：</span>
+                        <span class="df-value">{{ f.value }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <div v-else key="messages" class="message-panel">
+                <div v-if="ovMsgLoading" class="msg-tip" aria-label="正在加载"></div>
+                <div v-else-if="!ovThreaded.length" class="msg-tip">还没有留言，快来抢沙发～</div>
+                <div v-else class="msg-list">
+                  <div v-for="m in ovThreaded" :key="m.id" class="msg-thread">
+                    <div class="msg-item" @click="ovReplyTo(m, m)" style="cursor:pointer;">
+                      <div class="msg-head">
+                        <div class="msg-avatar-sm msg-avatar-click" @click.stop="ovOpenAuthor(m)" @touchstart.stop @touchend.stop>
+                          <img v-if="m.author_avatar" :src="m.author_avatar" alt="">
+                          <span v-else class="msg-avatar-sm-fallback">{{ (m.author_nickname || '?')[0] }}</span>
+                        </div>
+                        <span class="msg-author">{{ m.author_nickname }} · {{ m.author_uid }}</span>
+                        <span style="flex:1"></span>
+                        <span v-if="m.can_delete" class="msg-del" @click.stop="ovDeleteMessage(m)">删除</span>
+                        <span v-else-if="!m.is_mine" class="msg-report" @click.stop="openReportDialog(m)">举报</span>
+                      </div>
+                      <div class="msg-content">{{ m.content }}</div>
+                      <div class="msg-foot">
+                        <span class="msg-time">{{ fmtTimeAgo(m.created_at) }}</span>
+                        <span class="msg-reply-btn" @click.stop="ovReplyTo(m, m)">回复</span>
+                      </div>
+                    </div>
+                    <div v-for="r in m.replies" :key="r.id" class="msg-item msg-reply" @click="ovReplyTo(r, m)" style="cursor:pointer;">
+                      <div class="msg-head">
+                        <div class="msg-avatar-sm msg-avatar-click" @click.stop="ovOpenAuthor(r)" @touchstart.stop @touchend.stop>
+                          <img v-if="r.author_avatar" :src="r.author_avatar" alt="">
+                          <span v-else class="msg-avatar-sm-fallback">{{ (r.author_nickname || '?')[0] }}</span>
+                        </div>
+                        <span class="msg-author">{{ r.author_nickname }} · {{ r.author_uid }}</span>
+                        <span style="flex:1"></span>
+                        <span v-if="r.can_delete" class="msg-del" @click.stop="ovDeleteMessage(r)">删除</span>
+                        <span v-else-if="!r.is_mine" class="msg-report" @click.stop="openReportDialog(r)">举报</span>
+                      </div>
+                      <div class="msg-content"><span v-if="r.reply_to_nickname && r.reply_to_id && r.reply_to_id !== m.id" class="msg-reply-tag">回复 <span class="msg-reply-target">@{{ r.reply_to_nickname }}<span v-if="r.reply_to_uid"> · {{ r.reply_to_uid }}</span></span>：</span>{{ r.content }}</div>
+                      <div class="msg-foot">
+                        <span class="msg-time">{{ fmtTimeAgo(r.created_at) }}</span>
+                        <span class="msg-reply-btn" @click.stop="ovReplyTo(r, m)">回复</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="msg-reply-bar" v-if="ovReplyTarget">
+                  <span>正在回复 {{ ovReplyTarget.author_nickname }}</span>
+                  <span class="msg-reply-cancel" @click="ovCancelReply">取消</span>
+                </div>
+                <div class="msg-input-bar">
+                  <input v-model="ovMsgText" class="msg-input" :placeholder="ovReplyTarget ? '回复 ' + ovReplyTarget.author_nickname + '：' : '写下你的留言…'" />
+                  <button class="msg-send" :disabled="!ovMsgText.trim() || ovMsgSending" @click="ovSendMessage">{{ ovMsgSending ? '发送中…' : '发送' }}</button>
                 </div>
               </div>
-            </div>
-          </template>
-          <div class="ov-sheet-msg">
-            <div class="ov-sheet-msg-title">留言<span v-if="overviewSheetMessages.length">（{{ overviewSheetMessages.length }}）</span></div>
-            <div v-if="!overviewSheetMessages.length" class="ov-sheet-msg-empty">还没有留言，快来抢沙发～</div>
-            <div v-else class="ov-sheet-msg-list">
-              <div v-for="m in overviewSheetMessages" :key="m.id" class="ov-sheet-msg-item">
-                <span class="ov-sheet-msg-author">{{ m.author_nickname }}：</span>{{ m.content }}
-              </div>
-            </div>
+            </Transition>
           </div>
         </div>
-      </div>
-      <div v-if="overviewMsgOpen" class="ov-sheet-compose">
-        <input v-model="overviewMsgText" maxlength="200" placeholder="写下你的留言…" @keyup.enter="sendOverviewMessage">
-        <button type="button" :disabled="!overviewMsgText.trim() || overviewMsgSending" @click="sendOverviewMessage">{{ overviewMsgSending ? '发送中…' : '发送' }}</button>
-      </div>
-      <div class="ov-sheet-actions">
-        <button type="button" class="ov-act" :class="{ active: overviewMsgOpen }" @click="toggleOverviewMsg">
-          <van-icon name="chat-o"></van-icon>留言
-        </button>
-        <button type="button" class="ov-act" @click="openOverviewFeedback">
-          <van-icon name="warning-o"></van-icon>反馈
-        </button>
-        <button type="button" class="ov-act" v-if="canPraiseOverviewSheet" :class="{ active: overviewSheetPraised }" @click="togglePraise(overviewSheet)">
-          <van-icon :name="overviewSheetPraised ? 'good-job' : 'good-job-o'"></van-icon>{{ overviewSheetPraised ? '已赞' : '点赞' }}
-        </button>
-        <button type="button" class="ov-act ov-act-like" v-if="canLikeOverviewSheet" @click="openLikeDialogForUser(overviewSheet)">
-          <van-icon name="like"></van-icon>爱心
-        </button>
+        <div class="card-actions" v-if="ovCardTab === 'profile'">
+          <button v-if="!overviewSheet.is_self" class="feedback-btn" @click="ovOpenFeedback">反馈</button>
+          <button v-if="ovCanPraise" class="praise-btn" :class="{ praised: ovPraised }"
+            @click="togglePraise(overviewSheet)" :disabled="actionLoading || praiseBusy">
+            <van-icon name="good-job"></van-icon>
+          </button>
+          <button v-if="ovCanLike" class="heart-btn" :class="{ liked: ovLiked }"
+            @click="openLikeDialogForUser(overviewSheet)" :disabled="actionLoading || ovLiked">♥</button>
+        </div>
       </div>
     </div>
-    <div v-else class="ov-sheet-loading"><van-loading size="24px"></van-loading></div>
+    <button type="button" class="ov-card-close" aria-label="关闭" @click="showOverviewCard = false">
+      <van-icon name="cross"></van-icon>
+    </button>
+    <div v-if="!overviewSheet" class="ov-sheet-loading"><van-loading size="24px"></van-loading></div>
   </van-popup>
 </div>

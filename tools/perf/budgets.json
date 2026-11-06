@@ -25,7 +25,8 @@
     "2026-11-06：已读/清空使在途通知快照失效，app.min 实测 54,407B；基线 49,450→49,470、budget 54,395→54,417。",
     "2026-11-06：已读/清空后按服务端计数刷新并补拉，app.min 实测 54,476B；基线 49,470→49,540、budget 54,417→54,494。",
     "2026-11-06：牵线爱心光晕 + 全览模式（新子页 cards_overview / 新 API），首次载入真实新增 UI；app.min 实测 55,140B → baseline 49,540→50,130、budget 54,494→55,143；critical CSS 实测 8,732B（只含底栏光晕规则，全览子页样式已排除）→ baseline 7,660→7,946、budget 8,426→8,740；page chunks 实测 48,593B → baseline 43,521→44,176、budget 47,874→48,593。",
-    "2026-11-06：全览第二批（卡片浮层多图/留言/反馈/点赞/爱心 + 全览筛选 + 底栏空白修复）；app.min 实测 56,438B → baseline 50,130→51,310、budget 55,143→56,441；page chunks 实测 51,091B（cards_overview 页面模板扩容）→ baseline 44,176→46,450、budget 48,593→51,095；critical CSS 8,733B 不变（浮层样式不在首屏）。"
+    "2026-11-06：全览第二批（卡片浮层多图/留言/反馈/点赞/爱心 + 全览筛选 + 底栏空白修复）；app.min 实测 56,438B → baseline 50,130→51,310、budget 55,143→56,441；page chunks 实测 51,091B（cards_overview 页面模板扩容）→ baseline 44,176→46,450、budget 48,593→51,095；critical CSS 8,733B 不变（浮层样式不在首屏）。",
+    "2026-11-06：全览浮层改为复用 deck 同款卡片（资料/留言 tab、悬浮反馈/点赞/爱心），并把浮层滚动状态并入卡片；app.min 实测 56,782B → baseline 51,310→51,625、budget 56,441→56,787；page chunks 实测 52,562B（cards_overview 卡片模板）→ baseline 46,450→47,790、budget 51,095→52,569；critical CSS 8,733B 不变。"
   ],
   "limits": {
     "shell_gzip": {
@@ -35,8 +36,8 @@
     },
     "app_min_gzip": {
       "label": "app.min.js",
-      "baseline_bytes": 51310,
-      "budget_bytes": 56441
+      "baseline_bytes": 51625,
+      "budget_bytes": 56787
     },
     "initial_render_gzip": {
       "label": "app.render.js（根 + cards）",
@@ -60,8 +61,8 @@
     },
     "page_chunks_gzip": {
       "label": "页面懒加载 chunks 合计",
-      "baseline_bytes": 46450,
-      "budget_bytes": 51095
+      "baseline_bytes": 47790,
+      "budget_bytes": 52569
     },
     "first_load_static_gzip": {
       "label": "首载静态估算（不含 API/图片）",

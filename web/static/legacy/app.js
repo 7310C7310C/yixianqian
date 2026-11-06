@@ -756,7 +756,8 @@ const yxqApp = createApp({
 
     // ===== 全览模式（牵线 tab 再点一次进入）=====
     // 独立子页：按注册时间倒序（后端 u.id DESC），滚动分页；筛选与牌堆同语义。
-    // 网格 tile 支持多图左右滑动；点 tile 打开卡片浮层（大图滑动 + 留言/反馈/点赞/爱心）。
+    // 网格 tile 支持多图左右滑动；点 tile 打开与 deck 同款卡片浮层（同一套 .swipe-card
+    // 结构与样式、资料/留言 tab、悬浮的反馈/点赞/爱心）。
     const overviewItems = ref([]);
     const overviewTotal = ref(0);
     const overviewLoading = ref(false);
@@ -765,20 +766,26 @@ const yxqApp = createApp({
     const OVERVIEW_PAGE_SIZE = 30;
     const overviewPhotoIndex = ref({});   // openid -> 网格 tile 当前图序号
     const showOverviewCard = ref(false);  // 全览卡片浮层
-    const overviewSheet = ref(null);
+    const overviewSheet = ref(null);      // 浮层卡片（public profile 全量）
     const overviewSheetLoading = ref(false);
-    const overviewSheetPhotos = ref([]);
-    const overviewSheetPhotoIndex = ref(0);
-    const overviewSheetMessages = ref([]);
-    const overviewMsgOpen = ref(false);
-    const overviewMsgText = ref('');
-    const overviewMsgSending = ref(false);
+    const ovCardTab = ref('profile');
+    const ovCardTabDir = ref('right');
+    const ovPhotoIndex = ref(0);
+    const ovMessages = ref([]);
+    const ovMsgLoading = ref(false);
+    const ovMsgSending = ref(false);
+    const ovMsgText = ref('');
+    const ovReplyTarget = ref(null);
+    let ovMsgLoadedFor = '';
+    let ovMsgSeq = 0;            // 留言请求序号：快速切卡时丢弃旧卡响应
+    let overviewReturnPending = false;  // 从作者资料页返回：保留列表/浮层，只恢复滚动
+    let overviewScrollTop = 0;
     let overviewSeq = 0;         // 全览请求序号：reset 打断在途加载更多
     let overviewSheetSeq = 0;
     let ovGesture = null;        // 网格 tile 手势
     let ovSwipeAt = 0;           // 滑动后抑制随后的 click
-    let ovSheetGesture = null;   // 浮层大图手势
-    let ovSheetSwipeAt = 0;
+    let ovPhotoGesture = null;   // 浮层卡面手势
+    let ovPhotoSwipeAt = 0;
     let cardsTabWasActive = false;       // 手势按下时牵线 tab 是否已激活
 
     // ===== 客户端重载/恢复痕迹（只观测，不改变业务行为）=====
@@ -3158,6 +3165,7 @@ const yxqApp = createApp({
         ovSwipeAt = Date.now();
       }
     }
+    function ovGestureCancel() { ovGesture = null; }
     function onOverviewTileClick(item) {
       if (Date.now() - ovSwipeAt < 450) return;
       openOverviewCard(item);
@@ -3224,6 +3232,21 @@ const yxqApp = createApp({
       if (!el) return;
       if (el.scrollHeight - el.scrollTop - el.clientHeight < 360) loadMoreOverview();
     }
+    function readOverviewScrollTop() {
+      const el = document.querySelector('.cards-overview-scroll');
+      return (el && el.scrollTop) || 0;
+    }
+    function restoreOverviewScroll(y) {
+      if (!y || y <= 0) return;
+      const started = Date.now();
+      const tick = () => {
+        if (page.value !== 'cards_overview') return;
+        const el = document.querySelector('.cards-overview-scroll');
+        if (el && el.scrollHeight - el.clientHeight >= y - 4) { el.scrollTop = y; return; }
+        if (Date.now() - started < 1200) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
     function openCardsOverview() {
       if (page.value !== 'cards') return;
       page.value = 'cards_overview';
@@ -3239,138 +3262,195 @@ const yxqApp = createApp({
       if (!wasActive || page.value !== 'cards') return;
       openCardsOverview();
     }
-    function openOverviewCard(item) {
-      if (!item || !item.openid) return;
-      overviewSheet.value = { ...item, photos: overviewPhotosOf(item) };
-      overviewSheetPhotos.value = overviewPhotosOf(item);
-      overviewSheetPhotoIndex.value = 0;
-      overviewSheetMessages.value = [];
-      overviewMsgOpen.value = false;
-      overviewMsgText.value = '';
-      overviewSheetLoading.value = true;
-      showOverviewCard.value = true;
-      const seq = ++overviewSheetSeq;
-      const oid = item.openid;
-      Promise.all([
-        api('/api/users/' + encodeURIComponent(oid) + '/public'),
-        api('/api/messages?target=' + encodeURIComponent(oid)).catch(() => ({ messages: [] })),
-      ]).then(([profile, msgs]) => {
-        if (seq !== overviewSheetSeq || !showOverviewCard.value) return;
-        if (profile && profile.openid) {
-          overviewSheet.value = profile;
-          overviewSheetPhotos.value = (profile.photos_thumb && profile.photos_thumb.length)
-            ? profile.photos_thumb
-            : (profile.photos || overviewSheetPhotos.value);
-          const maxIdx = Math.max(0, overviewSheetPhotos.value.length - 1);
-          if (overviewSheetPhotoIndex.value > maxIdx) overviewSheetPhotoIndex.value = maxIdx;
-        }
-        overviewSheetMessages.value = (msgs && msgs.messages) || [];
-      }).catch(e => {
-        if (seq === overviewSheetSeq) vant.showToast((e && e.message) || '资料加载失败');
-      }).finally(() => {
-        if (seq === overviewSheetSeq) overviewSheetLoading.value = false;
-      });
+    // —— 浮层卡片（与 deck 同款）——
+    function ovPhotos() {
+      const u = overviewSheet.value;
+      if (!u) return [];
+      if (u.photos_thumb && u.photos_thumb.length) return u.photos_thumb;
+      if (u.photos && u.photos.length) return u.photos;
+      return u.photo ? [u.photo] : [];
     }
-    function ovGestureCancel() { ovGesture = null; }
-    function ovSheetGestureStart(e) {
+    function ovPhotoAt(i) {
+      const list = ovPhotos();
+      if (!list.length) return '';
+      const idx = Math.min(Math.max(i || 0, 0), list.length - 1);
+      return list[idx];
+    }
+    function ovStepPhoto(dir) {
+      const n = ovPhotos().length;
+      if (n <= 1) return;
+      ovPhotoIndex.value = ((ovPhotoIndex.value + dir) % n + n) % n;
+    }
+    function ovPhotoStart(e) {
       const t = (e.touches && e.touches[0]) || e;
-      ovSheetGesture = { x: t.clientX, y: t.clientY, moved: false };
+      ovPhotoGesture = { x: t.clientX, y: t.clientY, moved: false };
     }
-    function ovSheetGestureMove(e) {
-      if (!ovSheetGesture) return;
+    function ovPhotoMove(e) {
+      if (!ovPhotoGesture) return;
       const t = (e.touches && e.touches[0]) || e;
-      if (Math.abs(t.clientX - ovSheetGesture.x) > 10 || Math.abs(t.clientY - ovSheetGesture.y) > 10) ovSheetGesture.moved = true;
+      if (Math.abs(t.clientX - ovPhotoGesture.x) > 10 || Math.abs(t.clientY - ovPhotoGesture.y) > 10) ovPhotoGesture.moved = true;
     }
-    function ovSheetGestureEnd(e) {
-      const g = ovSheetGesture;
-      ovSheetGesture = null;
+    function ovPhotoEnd(e) {
+      const g = ovPhotoGesture;
+      ovPhotoGesture = null;
       if (!g) return;
       const t = (e.changedTouches && e.changedTouches[0]) || e;
       if (!t) return;
       const dx = t.clientX - g.x;
       const dy = t.clientY - g.y;
       if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy)) {
-        stepOverviewSheetPhoto(dx < 0 ? 1 : -1);
-        ovSheetSwipeAt = Date.now();
+        ovStepPhoto(dx < 0 ? 1 : -1);
+        ovPhotoSwipeAt = Date.now();
       } else if (g.moved) {
-        ovSheetSwipeAt = Date.now();
+        ovPhotoSwipeAt = Date.now();
       }
     }
-    function ovSheetGestureCancel() { ovSheetGesture = null; }
-    function onOvSheetTouchStart(e) { ovSheetGestureStart(e); }
-    function onOvSheetTouchMove(e) { ovSheetGestureMove(e); }
-    function onOvSheetTouchEnd(e) { ovSheetGestureEnd(e); }
-    function onOvSheetMouseDown(e) { ovSheetGestureStart(e); }
-    function onOvSheetMouseMove(e) { ovSheetGestureMove(e); }
-    function onOvSheetMouseUp(e) { ovSheetGestureEnd(e); }
-    function onOvSheetMouseLeave() { ovSheetGestureCancel(); }
-    function overviewSheetCount() { return overviewSheetPhotos.value.length; }
-    function stepOverviewSheetPhoto(dir) {
-      const n = overviewSheetPhotos.value.length;
-      if (n <= 1) return;
-      let idx = overviewSheetPhotoIndex.value + dir;
-      idx = ((idx % n) + n) % n;
-      overviewSheetPhotoIndex.value = idx;
-    }
-    function openOverviewSheetPhoto() {
-      if (Date.now() - ovSheetSwipeAt < 450) return;
+    function ovPhotoCancel() { ovPhotoGesture = null; }
+    function ovPhotoClick() {
+      if (Date.now() - ovPhotoSwipeAt < 450) return;
       const u = overviewSheet.value;
       if (!u) return;
-      const photos = (u.photos && u.photos.length) ? u.photos : overviewSheetPhotos.value;
-      if (!photos || !photos.length) return;
-      const thumbs = (u.photos_thumb && u.photos_thumb.length) ? u.photos_thumb : photos;
-      openPhotoViewerForUser({ ...u, photos, photos_thumb: thumbs });
+      const photos = (u.photos && u.photos.length) ? u.photos : ovPhotos();
+      if (!photos.length) return;
+      openPhotoViewerForUser({ ...u, photos, photos_thumb: ovPhotos() });
     }
-    const canLikeOverviewSheet = computed(() => {
-      const u = overviewSheet.value;
-      if (!u || !u.openid || u.is_self || isObserver.value) return false;
-      if (u.liked || justLiked.has(u.openid)) return false;
-      if (u.gender && user.value && user.value.gender && u.gender === user.value.gender) return false;
-      return u.can_like !== false;
-    });
-    const canPraiseOverviewSheet = computed(() => {
-      const u = overviewSheet.value;
-      if (!u || !u.openid || u.is_self || isObserver.value) return false;
-      return !(u.liked || justLiked.has(u.openid)) && praiseReady.value;
-    });
-    const overviewSheetPraised = computed(() => !!overviewSheet.value && praisedSet.value.has(overviewSheet.value.openid));
-    function openOverviewFeedback() {
-      if (overviewSheet.value) openFeedbackDialog(overviewSheet.value);
+    function ovSwitchTab(tab) {
+      if (ovCardTab.value === tab) return;
+      ovCardTabDir.value = tab === 'messages' ? 'left' : 'right';
+      ovCardTab.value = tab;
+      if (tab === 'messages') ovLoadMessages();
     }
-    function toggleOverviewMsg() {
-      overviewMsgOpen.value = !overviewMsgOpen.value;
-      if (overviewMsgOpen.value) nextTick(() => {
-        const el = document.querySelector('.ov-sheet-compose input');
-        if (el) { try { el.focus(); } catch(e) {} }
-      });
-    }
-    async function sendOverviewMessage() {
+    async function ovLoadMessages(force) {
       const u = overviewSheet.value;
-      const text = (overviewMsgText.value || '').trim();
+      if (!u || !u.openid) return;
+      if (!force && ovMsgLoadedFor === u.openid) return;
+      const seq = ++ovMsgSeq;
+      const oid = u.openid;
+      ovMsgLoading.value = true;
+      try {
+        const data = await api('/api/messages?target=' + encodeURIComponent(oid));
+        // 快速切卡：旧卡的响应必须丢弃，否则会串留言/计数。
+        if (seq !== ovMsgSeq || !overviewSheet.value || overviewSheet.value.openid !== oid) return;
+        ovMessages.value = data.messages || [];
+        ovMsgLoadedFor = oid;
+      } catch(e) {
+        if (seq === ovMsgSeq) ovMessages.value = [];
+      } finally {
+        if (seq === ovMsgSeq) ovMsgLoading.value = false;
+      }
+    }
+    function ovReplyTo(m, root) {
+      if (!m) return;
+      ovReplyTarget.value = {
+        id: m.id,
+        parentId: (root && root.id) || '',
+        author_nickname: m.author_nickname,
+      };
+    }
+    function ovCancelReply() { ovReplyTarget.value = null; }
+    async function ovSendMessage() {
+      if (ovMsgSending.value) return false;
+      const u = overviewSheet.value;
+      const text = (ovMsgText.value || '').trim();
       if (!u || !u.openid) return false;
       if (!text) { vant.showToast('请输入留言'); return false; }
-      if (overviewMsgSending.value) return false;
-      overviewMsgSending.value = true;
+      const parentId = ovReplyTarget.value ? (ovReplyTarget.value.parentId || '') : '';
+      const replyToId = ovReplyTarget.value ? ovReplyTarget.value.id : '';
+      const oid = u.openid;
+      ovMsgSending.value = true;
       try {
-        await api('/api/messages', { method: 'POST', body: JSON.stringify({ target_openid: u.openid, content: text }) });
-        overviewSheetMessages.value = overviewSheetMessages.value.concat([{
-          id: 'local-' + Date.now(),
-          author_nickname: (user.value && user.value.nickname) || '我',
-          author_uid: (user.value && user.value.user_id) || '',
-          content: text,
-          is_mine: true,
-        }]);
-        overviewMsgText.value = '';
-        overviewMsgOpen.value = false;
+        await api('/api/messages', {
+          method: 'POST',
+          body: JSON.stringify({ target_openid: oid, content: text, parent_id: parentId, reply_to_id: replyToId }),
+        });
+        if (!overviewSheet.value || overviewSheet.value.openid !== oid) return true;
+        ovMsgText.value = '';
+        ovReplyTarget.value = null;
+        await ovLoadMessages(true);
         vant.showToast('已发');
         return true;
       } catch(e) {
         vant.showToast((e && e.message) || '发送失败');
         return false;
       } finally {
-        overviewMsgSending.value = false;
+        ovMsgSending.value = false;
       }
     }
+    async function ovDeleteMessage(m) {
+      if (!m) return;
+      try {
+        await vant.showConfirmDialog({ title: '删除留言', message: '删除？', confirmButtonColor: '#ee0a24' });
+      } catch(e) { return; }
+      const oid = overviewSheet.value && overviewSheet.value.openid;
+      try {
+        await api('/api/messages/' + m.id, { method: 'DELETE' });
+        if (overviewSheet.value && overviewSheet.value.openid === oid) await ovLoadMessages(true);
+        vant.showToast('已删除');
+      } catch(e) {
+        vant.showToast((e && e.message) || '删除失败');
+      }
+    }
+    function ovOpenAuthor(m) {
+      const oid = m && m.author_openid;
+      if (!oid) { vant.showToast('对方资料暂不可见'); return; }
+      // 保留浮层状态：从资料页返回时浮层仍在，列表/筛选/滚动也不丢。
+      overviewReturnPending = true;
+      overviewScrollTop = readOverviewScrollTop();
+      openUserDetailFromPage(oid, 'cards_overview');
+    }
+    function openOverviewCard(item) {
+      if (!item || !item.openid) return;
+      overviewSheet.value = { ...item, photos: overviewPhotosOf(item) };
+      ovCardTab.value = 'profile';
+      ovCardTabDir.value = 'right';
+      ovPhotoIndex.value = 0;
+      ovMessages.value = [];
+      ovMsgText.value = '';
+      ovReplyTarget.value = null;
+      ovMsgLoadedFor = '';
+      ovMsgSeq++;
+      ovMsgLoading.value = false;
+      ovMsgSending.value = false;
+      overviewSheetLoading.value = true;
+      showOverviewCard.value = true;
+      const seq = ++overviewSheetSeq;
+      const oid = item.openid;
+      api('/api/users/' + encodeURIComponent(oid) + '/public').then((profile) => {
+        if (seq !== overviewSheetSeq || !showOverviewCard.value) return;
+        if (profile && profile.openid) {
+          // public profile 不含 recommended：保留列表 item 上的推荐徽标。
+          overviewSheet.value = { ...overviewSheet.value, ...profile };
+          const maxIdx = Math.max(0, ovPhotos().length - 1);
+          if (ovPhotoIndex.value > maxIdx) ovPhotoIndex.value = maxIdx;
+        }
+      }).catch(e => {
+        if (seq === overviewSheetSeq) vant.showToast((e && e.message) || '资料加载失败');
+      }).finally(() => {
+        if (seq === overviewSheetSeq) overviewSheetLoading.value = false;
+      });
+    }
+    function ovOpenFeedback() {
+      if (overviewSheet.value) openFeedbackDialog(overviewSheet.value);
+    }
+    const ovLiked = computed(() => {
+      const u = overviewSheet.value;
+      return !!(u && u.openid && (u.liked || justLiked.has(u.openid)));
+    });
+    const ovCanLike = computed(() => {
+      const u = overviewSheet.value;
+      return !!(u && u.openid && !u.is_self && !isObserver.value);
+    });
+    const ovCanPraise = computed(() => {
+      const u = overviewSheet.value;
+      return !!(u && u.openid && !u.is_self && !isObserver.value && !ovLiked.value && praiseReady.value);
+    });
+    const ovPraised = computed(() => !!overviewSheet.value && praisedSet.value.has(overviewSheet.value.openid));
+    const ovThreaded = computed(() => buildThreadedMessages(ovMessages.value));
+    const ovMsgCount = computed(() => ovMessages.value.length);
+    const ovSimple = computed(() => {
+      const u = overviewSheet.value;
+      return (u && u.display_fields && u.display_fields.simple) || '';
+    });
     function trimCardsWindow() {
       // 内存上限：窗口最多 150 张；只在本窗口内截头/截尾，绝不引用窗口外页
       // （截头/截尾均为正偏移切片，杜绝负切片空窗 0/0）
@@ -5795,7 +5875,13 @@ const yxqApp = createApp({
         showFeedbackDialog.value=false; isHandlingPopState=false; return;
       }
       if(showOverviewCard.value){
-        if(overviewMsgOpen.value){ overviewMsgOpen.value=false; isHandlingPopState=false; pushHistory({overlay:'ovCard'}); return; }
+        if(page.value !== 'cards_overview'){
+          // 从作者资料页返回：先落回全览页，浮层保持打开（下一拍恢复滚动）。
+          // isHandlingPopState 保持到 nextTick，避免 page watcher 误当成前进补历史。
+          page.value = 'cards_overview';
+          nextTick(() => { isHandlingPopState = false; });
+          return;
+        }
         showOverviewCard.value=false; isHandlingPopState=false; return;
       }
       if(showOnetooneMsg.value){
@@ -5898,7 +5984,12 @@ const yxqApp = createApp({
       if (p === 'home') loadActivities();
       if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
       if (p === 'cards_overview') {
-        loadCardsOverview(true);
+        if (overviewReturnPending) {
+          overviewReturnPending = false;
+          restoreOverviewScroll(overviewScrollTop);
+        } else {
+          loadCardsOverview(true);
+        }
         loadPraiseState();
       }
       if (p === 'likes') loadNotifications();
@@ -8075,11 +8166,11 @@ const yxqApp = createApp({
       overviewItems, overviewTotal, overviewLoading, overviewHasMore, overviewError,
       overviewMeta, overviewPhotosOf, overviewPhotoOf, onOverviewScroll, loadMoreOverview, retryOverviewMore, reloadCardsOverview, openCardsOverview,
       onOverviewTileClick, ovGestureStart, ovGestureMove, ovGestureEnd, ovGestureCancel,
-      showOverviewCard, overviewSheet, overviewSheetLoading, overviewSheetPhotos, overviewSheetPhotoIndex,
-      overviewSheetMessages, overviewMsgOpen, overviewMsgText, overviewMsgSending, overviewSheetCount,
-      onOvSheetTouchStart, onOvSheetTouchMove, onOvSheetTouchEnd, ovSheetGestureCancel, onOvSheetMouseDown, onOvSheetMouseMove,
-      onOvSheetMouseUp, onOvSheetMouseLeave, openOverviewSheetPhoto, canLikeOverviewSheet, canPraiseOverviewSheet,
-      overviewSheetPraised, openOverviewFeedback, toggleOverviewMsg, sendOverviewMessage,
+      showOverviewCard, overviewSheet, overviewSheetLoading,
+      ovCardTab, ovCardTabDir, ovSwitchTab, ovPhotoIndex, ovPhotos, ovPhotoAt, ovPhotoStart, ovPhotoMove, ovPhotoEnd,
+      ovPhotoCancel, ovPhotoClick, ovMessages, ovMsgLoading, ovMsgSending, ovMsgText, ovReplyTarget, ovThreaded,
+      ovMsgCount, ovLoadMessages, ovReplyTo, ovCancelReply, ovSendMessage, ovDeleteMessage, ovOpenAuthor,
+      ovLiked, ovCanLike, ovCanPraise, ovPraised, ovSimple, ovOpenFeedback,
       markCardsTabPress, onCardsTabTap,
       sharpPhotos, sharpReady, onSharpLoad,
       showSwipeGuide, closeSwipeGuide,

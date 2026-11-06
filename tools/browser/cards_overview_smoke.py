@@ -403,8 +403,9 @@ def main() -> int:
 
                 # ---- 8. 网格卡片多图滑动（优先找真实多图用户，用昵称筛选置顶）----
                 multi_target = None
+                recommended_target = None
                 offset = 0
-                while offset < 600 and not multi_target:
+                while offset < 600 and not (multi_target and recommended_target):
                     page_data = page.evaluate(
                         """async (off) => {
                             const r = await fetch('/legacy/api/cards/overview?limit=60&offset=' + off, {credentials: 'same-origin'});
@@ -413,9 +414,10 @@ def main() -> int:
                         offset,
                     )
                     for item in page_data.get("items") or []:
-                        if len(item.get("photos") or []) > 1 and not item.get("liked"):
+                        if not recommended_target and item.get("recommended"):
+                            recommended_target = item
+                        if not multi_target and len(item.get("photos") or []) > 1 and not item.get("liked"):
                             multi_target = item
-                            break
                     offset += 60
                 filter_applied = False
                 if multi_target:
@@ -474,7 +476,7 @@ def main() -> int:
                     page.mouse.move(swipe["x"] - 100, swipe["y"], steps=6)
                     page.mouse.up()
                     page.wait_for_timeout(400)
-                    if page.locator(".ov-sheet-body").count() and page.locator(".ov-sheet-body").first.is_visible():
+                    if page.locator(".ov-sheet .swipe-card").count() and page.locator(".ov-sheet .swipe-card").first.is_visible():
                         raise SmokeFailure("网格滑动被误判为点击，弹出了卡片浮层")
                     after_counter = page.evaluate(
                         """(uid) => {
@@ -498,7 +500,7 @@ def main() -> int:
                         )
                         if touch_counter == after_counter:
                             raise SmokeFailure(f"网格触摸滑动未生效：{after_counter} → {touch_counter}")
-                        if page.locator(".ov-sheet-body").count() and page.locator(".ov-sheet-body").first.is_visible():
+                        if page.locator(".ov-sheet .swipe-card").count() and page.locator(".ov-sheet .swipe-card").first.is_visible():
                             raise SmokeFailure("网格触摸滑动被误判为点击")
                         notes.append(f"{label}: 网格触摸滑动 {after_counter} → {touch_counter}")
 
@@ -539,72 +541,90 @@ def main() -> int:
                     }""",
                     target_uid,
                 )
-                page.wait_for_selector(".ov-sheet-body", timeout=15000)
-                page.wait_for_timeout(500)
+                page.wait_for_selector(".ov-sheet .swipe-card", timeout=15000)
+                page.wait_for_timeout(700)
                 sheet = page.evaluate(
                     """() => {
-                        const body = document.querySelector('.ov-sheet-body');
-                        const acts = [...document.querySelectorAll('.ov-sheet-actions .ov-act')];
-                        const photos = document.querySelectorAll('.ov-sheet-img').length;
-                        const counter = (document.querySelector('.ov-sheet-actions') || {});
+                        const card = document.querySelector('.ov-sheet .swipe-card');
+                        const track = card && card.querySelector('.card-photo-track');
+                        const acts = card ? [...card.querySelectorAll('.card-actions button')] : [];
+                        const tabs = card ? [...card.querySelectorAll('.card-tab')].map((el) => (el.innerText || '').trim()) : [];
                         return {
-                            name: (document.querySelector('.ov-sheet-name') || {}).innerText || '',
+                            name: (card && card.querySelector('.card-name') ? card.querySelector('.card-name').innerText : ''),
                             actions: acts.map((el) => (el.innerText || '').trim()),
-                            likeVisible: !!document.querySelector('.ov-act-like'),
-                            photos,
-                            counter: (document.querySelector('.ov-photo-count--sheet') || {}).textContent || '',
-                            sections: document.querySelectorAll('.ov-sheet-sections .card-section').length,
-                            bodyVisible: !!body && body.getBoundingClientRect().height > 0,
+                            tabs,
+                            likeVisible: !!(card && card.querySelector('.heart-btn')),
+                            praiseVisible: !!(card && card.querySelector('.praise-btn')),
+                            feedbackVisible: !!(card && card.querySelector('.feedback-btn')),
+                            photos: card ? card.querySelectorAll('.card-photo-slide img').length : 0,
+                            transform: track ? track.style.transform : '',
+                            sections: card ? card.querySelectorAll('.card-info .card-section').length : 0,
+                            visible: !!card && card.getBoundingClientRect().height > 0,
                         };
                     }"""
                 )
                 if target.get("nickname") and target["nickname"] not in sheet["name"]:
                     raise SmokeFailure(f"浮层姓名不符：{sheet['name']} vs {target['nickname']}")
-                if not sheet["bodyVisible"] or sheet["sections"] <= 0:
-                    raise SmokeFailure(f"浮层资料未渲染：{sheet}")
-                joined = " ".join(sheet["actions"])
-                if "留言" not in joined or "反馈" not in joined:
-                    raise SmokeFailure(f"浮层缺少留言/反馈：{sheet['actions']}")
+                if not sheet["visible"] or sheet["sections"] <= 0:
+                    raise SmokeFailure(f"浮层卡片资料未渲染：{sheet}")
+                if "资料" not in sheet["tabs"] or "留言" not in sheet["tabs"]:
+                    raise SmokeFailure(f"浮层缺少资料/留言 tab：{sheet['tabs']}")
+                if not sheet["feedbackVisible"]:
+                    raise SmokeFailure(f"浮层缺少悬浮反馈按钮：{sheet}")
                 if not target.get("liked") and not sheet["likeVisible"]:
-                    raise SmokeFailure(f"未喜欢对象缺少爱心按钮：{sheet}")
+                    raise SmokeFailure(f"未喜欢对象缺少悬浮爱心：{sheet}")
+                if not target.get("liked") and not sheet["praiseVisible"]:
+                    raise SmokeFailure(f"未喜欢对象缺少悬浮点赞：{sheet}")
                 if sheet["photos"] > 1:
-                    before_counter = sheet["counter"]
-                    box = page.locator(".ov-sheet-photo").bounding_box()
+                    before_transform = sheet["transform"]
+                    box = page.locator(".ov-sheet .card-photo-wrap").bounding_box()
                     if box:
                         page.mouse.move(box["x"] + box["width"] * 0.75, box["y"] + box["height"] * 0.5)
                         page.mouse.down()
                         page.mouse.move(box["x"] + box["width"] * 0.25, box["y"] + box["height"] * 0.5, steps=6)
                         page.mouse.up()
                         page.wait_for_timeout(400)
-                        after_counter = page.evaluate(
-                            "() => (document.querySelector('.ov-photo-count--sheet') || {}).textContent || ''"
+                        after_transform = page.evaluate(
+                            "() => { const t = document.querySelector('.ov-sheet .card-photo-track'); return t ? t.style.transform : ''; }"
                         )
-                        if after_counter == before_counter:
-                            raise SmokeFailure(f"浮层大图滑动未生效：{before_counter} → {after_counter}")
-                        # 触摸路径单独再滑一次（onOvSheetTouch* 曾漏定义导致启动失败）。
-                        if touch_swipe(page, ".ov-sheet-photo", -80):
+                        if after_transform == before_transform:
+                            raise SmokeFailure(f"浮层卡面鼠标滑动未生效：{before_transform} → {after_transform}")
+                        if touch_swipe(page, ".ov-sheet .card-photo-wrap", -80):
                             page.wait_for_timeout(400)
-                            touch_counter = page.evaluate(
-                                "() => (document.querySelector('.ov-photo-count--sheet') || {}).textContent || ''"
+                            touch_transform = page.evaluate(
+                                "() => { const t = document.querySelector('.ov-sheet .card-photo-track'); return t ? t.style.transform : ''; }"
                             )
-                            if touch_counter == after_counter:
-                                raise SmokeFailure(f"浮层触摸滑动未生效：{after_counter} → {touch_counter}")
-                            notes.append(f"{label}: 浮层触摸滑动 {after_counter} → {touch_counter}")
-                        notes.append(f"{label}: 浮层大图滑动 {before_counter} → {after_counter}")
-                notes.append(f"{label}: 浮层动作 {sheet['actions']}，资料分区 {sheet['sections']}")
+                            if touch_transform == after_transform:
+                                raise SmokeFailure(f"浮层卡面触摸滑动未生效：{after_transform} → {touch_transform}")
+                            notes.append(f"{label}: 浮层卡面触摸滑动 {after_transform} → {touch_transform}")
+                        notes.append(f"{label}: 浮层卡面鼠标滑动 {before_transform} → {after_transform}")
+                notes.append(f"{label}: 浮层 tab {sheet['tabs']}、悬浮动作 {sheet['actions']}、资料分区 {sheet['sections']}")
 
-                # 留言：打开输入框（不真正发送，避免污染 staging 数据）
-                page.locator(".ov-sheet-actions .ov-act").filter(has_text="留言").first.click()
-                page.wait_for_selector(".ov-sheet-compose input", timeout=5000)
-                page.fill(".ov-sheet-compose input", "smoke 测试留言")
-                if page.locator(".ov-sheet-compose button").is_disabled():
+                # 留言 tab：打开后输入（不真正发送，避免污染 staging 数据），再切回资料
+                page.locator(".ov-sheet .card-tab").filter(has_text="留言").first.click()
+                page.wait_for_selector(".ov-sheet .msg-input", timeout=8000)
+                page.fill(".ov-sheet .msg-input", "smoke 测试留言")
+                if page.locator(".ov-sheet .msg-send").is_disabled():
                     raise SmokeFailure("留言输入后发送按钮仍禁用")
-                page.fill(".ov-sheet-compose input", "")
-                page.locator(".ov-sheet-actions .ov-act").filter(has_text="留言").first.click()
-                page.wait_for_selector(".ov-sheet-compose", state="detached", timeout=5000)
+                page.fill(".ov-sheet .msg-input", "")
+                # 作者头像 → 资料页 → 返回：浮层与全览页应恢复（不是关掉浮层停在资料页）。
+                if page.locator(".ov-sheet .msg-item .msg-avatar-sm").count():
+                    page.locator(".ov-sheet .msg-item .msg-avatar-sm").first.click()
+                    page.wait_for_selector(".user-detail-card", timeout=15000)
+                    page.wait_for_timeout(400)
+                    page.locator(".back-nav").first.click()
+                    page.wait_for_selector(".cards-overview-page", timeout=10000)
+                    page.wait_for_selector(".ov-sheet .swipe-card", timeout=10000)
+                    if not page.locator(".ov-sheet .swipe-card").first.is_visible():
+                        raise SmokeFailure("从作者资料页返回后浮层未恢复")
+                    notes.append(f"{label}: 作者资料页返回后浮层恢复")
+                    page.locator(".ov-sheet .card-tab").filter(has_text="资料").first.click()
+                else:
+                    notes.append(f"{label}: 该卡暂无留言，跳过作者资料页往返")
+                page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=5000)
 
-                # 反馈：打开后取消（不提交）
-                page.locator(".ov-sheet-actions .ov-act").filter(has_text="反馈").first.click()
+                # 悬浮反馈：打开后取消（不提交）
+                page.locator(".ov-sheet .feedback-btn").first.click()
                 page.wait_for_selector(".van-dialog", timeout=8000)
                 if not page.get_by_text("反馈该用户", exact=True).count():
                     raise SmokeFailure("反馈弹窗未出现")
@@ -612,7 +632,7 @@ def main() -> int:
                 page.wait_for_timeout(400)
 
                 # 关闭浮层：列表与滚动位置保持不变
-                page.locator(".ov-sheet-close").click()
+                page.locator(".ov-card-close").click()
                 try:
                     page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
                 except PlaywrightTimeoutError:
@@ -632,6 +652,40 @@ def main() -> int:
                         "() => document.querySelectorAll('.ov-tile[data-uid]').length > 0",
                         timeout=15000,
                     )
+                    # 推荐徽标：public profile 不含 recommended，合并后浮层仍应显示「推荐」。
+                    if recommended_target:
+                        page.locator(".ov-filter").click()
+                        page.wait_for_selector(".filter-title", timeout=5000)
+                        page.get_by_placeholder("如：张三").fill(recommended_target["nickname"])
+                        page.get_by_text("应用筛选", exact=True).click()
+                        page.wait_for_selector(
+                            f'.ov-tile[data-uid="{recommended_target["user_id"]}"]', timeout=15000
+                        )
+                        page.evaluate(
+                            """(uid) => {
+                                const el = document.querySelector('.ov-tile[data-uid="' + uid + '"]');
+                                if (el) el.click();
+                            }""",
+                            recommended_target["user_id"],
+                        )
+                        page.wait_for_selector(".ov-sheet .swipe-card", timeout=15000)
+                        page.wait_for_timeout(900)
+                        overlay_text = page.evaluate(
+                            "() => (document.querySelector('.ov-sheet .card-photo-overlay') || {}).innerText || ''"
+                        )
+                        if "推荐" not in overlay_text:
+                            raise SmokeFailure(f"推荐用户浮层丢失推荐徽标：{overlay_text!r}")
+                        notes.append(f"{label}: 浮层保留推荐徽标（{recommended_target['nickname']}）")
+                        page.locator(".ov-card-close").click()
+                        try:
+                            page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
+                        except PlaywrightTimeoutError:
+                            pass
+                        page.locator(".ov-filter-note span").click()
+                        page.wait_for_function(
+                            "() => document.querySelectorAll('.ov-tile[data-uid]').length > 0",
+                            timeout=15000,
+                        )
                     # 长列表上验证「打开/关闭浮层不改变列表滚动位置」。
                     # 清筛选的 reset 会异步滚顶，先落 0 再设置 420，避免测成 0→0 假绿。
                     page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); el.scrollTop = 0; }")
@@ -651,9 +705,9 @@ def main() -> int:
                             if (target) target.click();
                         }"""
                     )
-                    page.wait_for_selector(".ov-sheet-body", timeout=10000)
+                    page.wait_for_selector(".ov-sheet .swipe-card", timeout=10000)
                     page.wait_for_timeout(400)
-                    page.locator(".ov-sheet-close").click()
+                    page.locator(".ov-card-close").click()
                     try:
                         page.locator(".ov-sheet").first.wait_for(state="hidden", timeout=8000)
                     except PlaywrightTimeoutError:
