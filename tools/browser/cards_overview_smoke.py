@@ -694,7 +694,15 @@ def main() -> int:
                     if not page.locator(".ov-sheet .swipe-card").first.is_visible():
                         raise SmokeFailure("从作者资料页返回后浮层未恢复")
                     notes.append(f"{label}: 作者资料页返回后浮层恢复")
-                    page.locator(".ov-sheet .card-tab").filter(has_text="资料").first.click()
+                    # 返回时页面还有 page-slide 过渡，立即点 tab 可能落在进场动画上。
+                    page.wait_for_timeout(600)
+                    for _ in range(3):
+                        page.locator(".ov-sheet .card-tab").filter(has_text="资料").first.click()
+                        try:
+                            page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=3000)
+                            break
+                        except PlaywrightTimeoutError:
+                            page.wait_for_timeout(300)
                 else:
                     notes.append(f"{label}: 该卡暂无留言，跳过作者资料页往返")
                 page.wait_for_selector(".ov-sheet .card-info .card-section", timeout=5000)
