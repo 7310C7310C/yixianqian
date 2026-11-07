@@ -101,6 +101,26 @@ pii_marker_state() {
   return 1
 }
 
+# maintenance_dsn rewrites the service DSN (user=yxq) to root for the
+# deploy-time migrate/rotate/backup commands. They run as root; Unix-socket
+# peer auth as yxq would be rejected. The app's systemd env is unchanged.
+maintenance_dsn() {
+  local dsn=$1 sep after
+  # Only rewrite an exact Unix-socket host and an exact user=yxq token.
+  # Prefixes such as user=yxq_app or a TCP DSN must be left untouched.
+  if [[ $dsn =~ ([?&])host=/var/run/postgresql([&]|$) ]]; then
+    if [[ $dsn =~ ([?&])user=yxq([&]|$) ]]; then
+      sep=${BASH_REMATCH[1]}
+      after=${BASH_REMATCH[2]}
+      local token="${sep}user=yxq${after}"
+      local prefix=${dsn%%"$token"*}
+      local suffix=${dsn#*"$token"}
+      dsn="${prefix}${sep}user=root${after}${suffix}"
+    fi
+  fi
+  printf '%s' "$dsn"
+}
+
 # write_pg_service converts DATABASE_URL into a root-only libpq service file,
 # so pg_dump never receives the DSN (and any password) in its argv.
 write_pg_service() {
@@ -111,15 +131,20 @@ u = urllib.parse.urlparse(os.environ["DATABASE_URL"])
 q = urllib.parse.parse_qs(u.query)
 def emit(key, value):
     if value:
-        print(f"{key}={urllib.parse.unquote(str(value))}")
+        print(f"{key}={value}")
+def qval(key, fallback=None):
+    # parse_qs already percent-decodes query values; do not unquote twice.
+    if q.get(key):
+        return q[key][0]
+    return fallback
 print("[yxq]")
-emit("dbname", u.path.lstrip("/"))
-emit("host", q.get("host", [None])[0] or u.hostname)
+emit("dbname", urllib.parse.unquote(u.path.lstrip("/")))
+emit("host", qval("host", u.hostname))
 emit("port", u.port)
-emit("user", u.username)
-emit("password", u.password)
+emit("user", qval("user", urllib.parse.unquote(u.username) if u.username else None))
+emit("password", qval("password", urllib.parse.unquote(u.password) if u.password else None))
 for key in ("sslmode", "connect_timeout", "sslcert", "sslkey", "sslrootcert", "options", "application_name"):
-    emit(key, q.get(key, [None])[0])
+    emit(key, qval(key))
 PY
   chmod 600 "$out"
 }
@@ -721,6 +746,8 @@ main() {
     record_failure "migrate env unreadable"
     exit 1
   fi
+  DATABASE_URL=$(maintenance_dsn "$DATABASE_URL")
+  export DATABASE_URL
 
   log "切换二进制并重启 $SERVICE"
   mv -f "$BIN/server.next" "$BIN/server"
