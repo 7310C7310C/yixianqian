@@ -33,13 +33,14 @@
     "2026-11-06：全览滑后立点（touchend 直接开卡）、顶/底回牵线、浮层底部上滑收卡、浮层左右滑切卡+网格自动定位、收起不闪回；app.min 实测 58,962B（含切卡过场/草稿守卫/加载回调守门）→ baseline 53,140→53,605、budget 58,454→58,965；page chunks 实测 53,101B → baseline 48,150→48,275、budget 52,965→53,102；critical CSS 8,732B 不变。",
     "2026-11-06：上滑收卡时 popup 也向上离场（方向与手势一致）；app.min 实测 58,997B → baseline 53,605→53,635、budget 58,965→58,998；page chunks 实测 53,127B → baseline 48,275→48,300、budget 53,102→53,130；critical CSS 8,732B 不变。",
     "2026-11-06：全览网格自动定位改为 rAF 平滑滚动（跟随切卡/打开，不再瞬跳）；app.min 实测 59,225B（定位改到打开时立即触发）→ baseline 53,635→53,842、budget 58,998→59,226；page chunks 实测 53,154B → baseline 48,300→48,325、budget 53,130→53,157；critical CSS 8,732B 不变。",
-    "2026-11-07：牵线⇄全览改为跟手拖拽过场（进入时全览页跟手盖上来、返回时全览页滑走露出牵线；点 tab/返回键走同一动画，去掉顶部/底部提示条）；shell 实测 30,796B → baseline 27,978→28,000、budget 30,776→30,800；app.min 实测 60,673B（牵线页跟手位移+缩放、底栏同步；回牵线清掉切卡动画方向）→ baseline 53,842→55,160、budget 59,226→60,676；initial_render 实测 26,434B（预算内不变）；page chunks 实测 53,074B（预算内不变）；critical CSS 8,732B 不变。"
+    "2026-11-07：牵线⇄全览改为跟手拖拽过场（进入时全览页跟手盖上来、返回时全览页滑走露出牵线；点 tab/返回键走同一动画，去掉顶部/底部提示条）；shell 实测 30,796B → baseline 27,978→28,000、budget 30,776→30,800；app.min 实测 60,673B（牵线页跟手位移+缩放、底栏同步；回牵线清掉切卡动画方向）→ baseline 53,842→55,160、budget 59,226→60,676；initial_render 实测 26,434B（预算内不变）；page chunks 实测 53,074B（预算内不变）；critical CSS 8,732B 不变。",
+    "2026-11-07：桌面 Chrome/Edge 滚动条跟随日夜主题（卡片资料/留言、全览网格、抽屉/列表等；仅 hover/精确指针设备，放 @media 里避免进 critical）。shell 实测 30,840B → baseline 28,000→28,040、budget 30,800→30,844；critical CSS 实测 8,777B → baseline 7,946→7,983、budget 8,740→8,781；first_load 实测 266,741B → baseline 242,310→242,496、budget 266,541→266,745；app.min 60,673B、page chunks 53,074B 不变。"
   ],
   "limits": {
     "shell_gzip": {
       "label": "SPA 壳（含 critical CSS）",
-      "baseline_bytes": 28000,
-      "budget_bytes": 30800
+      "baseline_bytes": 28040,
+      "budget_bytes": 30844
     },
     "app_min_gzip": {
       "label": "app.min.js",
@@ -63,8 +64,8 @@
     },
     "critical_css_gzip": {
       "label": "首屏 critical CSS",
-      "baseline_bytes": 7946,
-      "budget_bytes": 8740
+      "baseline_bytes": 7983,
+      "budget_bytes": 8781
     },
     "page_chunks_gzip": {
       "label": "页面懒加载 chunks 合计",
@@ -73,8 +74,8 @@
     },
     "first_load_static_gzip": {
       "label": "首载静态估算（不含 API/图片）",
-      "baseline_bytes": 242310,
-      "budget_bytes": 266541
+      "baseline_bytes": 242496,
+      "budget_bytes": 266745
     }
   },
   "bootstrap_allowance_bytes": 3309

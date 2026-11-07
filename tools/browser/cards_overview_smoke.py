@@ -239,6 +239,49 @@ def wait_real_page(page, selector: str, label: str) -> None:
         raise SmokeFailure(f"{label}: 跟手过场预览层未撤掉") from None
 
 
+def assert_scrollbar_theme(page, label: str, require_webkit: bool = True) -> bool:
+    """桌面滚动条要跟随日夜主题：暗色变量必须是亮色，且与日间不同。"""
+    state = page.evaluate(
+        """() => {
+            const root = document.documentElement;
+            if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return {skip: true};
+            const el = document.querySelector('.tab-main > .cards-page .card-info, .tab-main > .cards-page .msg-list');
+            if (!el) return null;
+            const had = root.classList.contains('van-theme-dark');
+            const thumb = (node) => {
+                try { return getComputedStyle(node, '::-webkit-scrollbar-thumb').backgroundColor; }
+                catch (e) { return ''; }
+            };
+            const lc = getComputedStyle(el);
+            const light = {
+                v: lc.getPropertyValue('--yxq-scroll-thumb').trim(),
+                c: lc.scrollbarColor,
+                t: thumb(el),
+            };
+            root.classList.add('van-theme-dark');
+            const dc = getComputedStyle(el);
+            const dark = {
+                v: dc.getPropertyValue('--yxq-scroll-thumb').trim(),
+                c: dc.scrollbarColor,
+                t: thumb(el),
+            };
+            if (!had) root.classList.remove('van-theme-dark');
+            return {light: light, dark: dark};
+        }"""
+    )
+    if not state:
+        raise SmokeFailure(f"{label}: 找不到卡片滚动区")
+    if state.get("skip"):
+        return False
+    if "255" not in state["dark"]["v"] or state["dark"]["v"] == state["light"]["v"]:
+        raise SmokeFailure(f"{label}: 暗色滚动条变量未切换：{state}")
+    if "auto" in state["dark"]["c"] or "255" not in state["dark"]["c"]:
+        raise SmokeFailure(f"{label}: 暗色 scrollbar-color 未生效/未用亮色：{state}")
+    if require_webkit and "255" not in state["dark"]["t"]:
+        raise SmokeFailure(f"{label}: 暗色 ::-webkit-scrollbar-thumb 未用亮色：{state}")
+    return True
+
+
 def assert_no_card_enter_anim(page, label: str) -> None:
     """回到牵线后，卡片应直接在最终位置出现；不能重播上一次切卡的 slide-in 动画。"""
     state = page.evaluate(
@@ -1260,6 +1303,7 @@ def main() -> int:
                 touch_drag_finish(page, ".cards-overview-scroll", 120)
                 wait_real_page(page, ".cards-page", label)
                 assert_no_card_enter_anim(page, label)
+                assert_scrollbar_theme(page, label, engine == "chromium")
                 if page.locator(".tab-main > .cards-overview-page").count():
                     raise SmokeFailure("全览到顶下拉未回到牵线")
                 notes.append(f"{label}: 全览到顶继续下拉回牵线")
@@ -1384,6 +1428,54 @@ def main() -> int:
                     pass
             finally:
                 context.close()
+        # 滚动条主题只在 hover/fine 命中时检查；主流程两个视口都开了 touch，
+        # 单独用非 touch 的桌面 context 验证一次，避免断言被静默跳过。
+        if engine == "chromium":
+            desktop = None
+            try:
+                desktop = browser.new_context(
+                    viewport={"width": 1280, "height": 900},
+                    device_scale_factor=1,
+                    locale="zh-CN",
+                    is_mobile=False,
+                    has_touch=False,
+                    user_agent=(
+                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                )
+                desktop.add_cookies(
+                    [{
+                        "name": "yxq_session",
+                        "value": cookie,
+                        "url": base_url,
+                        "httpOnly": True,
+                        "sameSite": "Lax",
+                    }]
+                )
+                desktop.add_init_script(
+                    """try {
+                        localStorage.setItem('yxq_update_notes_v1', '1');
+                        localStorage.setItem('yxq_swipe_guide_v1', '1');
+                        sessionStorage.setItem('yxq_activity_promo_v1', '1');
+                    } catch (e) {}"""
+                )
+                if local_assets:
+                    install_local_assets(desktop, base_url)
+                dp = desktop.new_page()
+                dp.goto(base_url + "/app", wait_until="domcontentloaded", timeout=30000)
+                dp.wait_for_selector(
+                    ".tab-main > .cards-page .card-info, .tab-main > .cards-page .msg-list",
+                    timeout=20000,
+                )
+                if not assert_scrollbar_theme(dp, "1280x900 desktop"):
+                    raise SmokeFailure("1280x900 desktop: 滚动条断言未执行（hover/fine 未命中）")
+                notes.append("1280x900 desktop: 滚动条明暗切换 PASS")
+            except Exception as exc:  # noqa: BLE001 - 单列失败不掩盖主流程结果
+                failures.append(f"1280x900 desktop 滚动条: {exc}")
+            finally:
+                if desktop is not None:
+                    desktop.close()
         browser.close()
 
     if failures:

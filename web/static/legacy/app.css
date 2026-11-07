@@ -1,6 +1,8 @@
   /* 统一主题色：Vant 默认主色（蓝）覆盖为品牌粉，保证按钮/标签/单选框/开关等一致 */
 [v-cloak]{display:none !important;}
-  :root { --van-primary-color: #ff6b81; --yxq-brand-ink: #cc304e; --yxq-vh: 100vh; --yxq-vv-bottom: 0px; }
+  :root { --van-primary-color: #ff6b81; --yxq-brand-ink: #cc304e; --yxq-vh: 100vh; --yxq-vv-bottom: 0px;
+    --yxq-scroll-thumb: rgba(0,0,0,0.24); --yxq-scroll-thumb-hover: rgba(0,0,0,0.38); }
+  .van-theme-dark { --yxq-scroll-thumb: rgba(255,255,255,0.30); --yxq-scroll-thumb-hover: rgba(255,255,255,0.48); }
   /* 移动浏览器地址栏/推荐搜索栏：100vh 是「最大视口」，内容会溢出到可见区外。
      支持 dvh 时用动态视口；壳内联脚本会再按 visualViewport.height 写成 px（优先级更高）。 */
   @supports (height: 100dvh) {
@@ -1079,6 +1081,48 @@
   .card-info, .msg-list, .gs-tray-list, .redeem-list, .redeem-form,
   .picker-options, .multi-options, .wish-target-list, .pa-detail,
   .admin-help-list, .embed-loading { overscroll-behavior: contain; }
+  /* 桌面 Chrome/Edge 的滚动条跟随日夜主题（仅 hover/精确指针设备；触屏用系统 overlay 滚动条）。 */
+  @media (hover: hover) and (pointer: fine) {
+    /* 新版 Chromium/Firefox 用 scrollbar-color；旧版 Chromium 用 ::-webkit-scrollbar。 */
+    .card-info, .msg-list, .cards-overview-scroll, .thread-msg-scroll,
+    .gs-tray-list, .redeem-list, .redeem-form, .admin-help-list, .pa-detail,
+    .picker-options, .multi-options, .wish-target-list, .filter-province-scroll,
+    .embed-loading, html { scrollbar-width: thin; scrollbar-color: var(--yxq-scroll-thumb) transparent; }
+    .card-info::-webkit-scrollbar, .msg-list::-webkit-scrollbar, .cards-overview-scroll::-webkit-scrollbar,
+    .thread-msg-scroll::-webkit-scrollbar, .gs-tray-list::-webkit-scrollbar, .redeem-list::-webkit-scrollbar,
+    .redeem-form::-webkit-scrollbar, .admin-help-list::-webkit-scrollbar, .pa-detail::-webkit-scrollbar,
+    .picker-options::-webkit-scrollbar, .multi-options::-webkit-scrollbar, .wish-target-list::-webkit-scrollbar,
+    .filter-province-scroll::-webkit-scrollbar, .embed-loading::-webkit-scrollbar, html::-webkit-scrollbar { width: 8px; height: 8px; }
+    .card-info::-webkit-scrollbar-track, .msg-list::-webkit-scrollbar-track, .cards-overview-scroll::-webkit-scrollbar-track,
+    .thread-msg-scroll::-webkit-scrollbar-track, .gs-tray-list::-webkit-scrollbar-track, .redeem-list::-webkit-scrollbar-track,
+    .redeem-form::-webkit-scrollbar-track, .admin-help-list::-webkit-scrollbar-track, .pa-detail::-webkit-scrollbar-track,
+    .picker-options::-webkit-scrollbar-track, .multi-options::-webkit-scrollbar-track, .wish-target-list::-webkit-scrollbar-track,
+    .filter-province-scroll::-webkit-scrollbar-track, .embed-loading::-webkit-scrollbar-track, html::-webkit-scrollbar-track { background: transparent; }
+    .card-info::-webkit-scrollbar-thumb, .msg-list::-webkit-scrollbar-thumb, .cards-overview-scroll::-webkit-scrollbar-thumb,
+    .thread-msg-scroll::-webkit-scrollbar-thumb, .gs-tray-list::-webkit-scrollbar-thumb, .redeem-list::-webkit-scrollbar-thumb,
+    .redeem-form::-webkit-scrollbar-thumb, .admin-help-list::-webkit-scrollbar-thumb, .pa-detail::-webkit-scrollbar-thumb,
+    .picker-options::-webkit-scrollbar-thumb, .multi-options::-webkit-scrollbar-thumb, .wish-target-list::-webkit-scrollbar-thumb,
+    .filter-province-scroll::-webkit-scrollbar-thumb, .embed-loading::-webkit-scrollbar-thumb, html::-webkit-scrollbar-thumb {
+      background: var(--yxq-scroll-thumb); border-radius: 4px; border: 2px solid transparent; background-clip: content-box;
+    }
+    .card-info::-webkit-scrollbar-thumb:hover, .msg-list::-webkit-scrollbar-thumb:hover, .cards-overview-scroll::-webkit-scrollbar-thumb:hover,
+    .thread-msg-scroll::-webkit-scrollbar-thumb:hover, .gs-tray-list::-webkit-scrollbar-thumb:hover, .redeem-list::-webkit-scrollbar-thumb:hover,
+    .redeem-form::-webkit-scrollbar-thumb:hover, .admin-help-list::-webkit-scrollbar-thumb:hover, .pa-detail::-webkit-scrollbar-thumb:hover,
+    .picker-options::-webkit-scrollbar-thumb:hover, .multi-options::-webkit-scrollbar-thumb:hover, .wish-target-list::-webkit-scrollbar-thumb:hover,
+    .filter-province-scroll::-webkit-scrollbar-thumb:hover, .embed-loading::-webkit-scrollbar-thumb:hover, html::-webkit-scrollbar-thumb:hover {
+      background: var(--yxq-scroll-thumb-hover); background-clip: content-box;
+    }
+    .card-info::-webkit-scrollbar-button, .msg-list::-webkit-scrollbar-button, .cards-overview-scroll::-webkit-scrollbar-button,
+    .thread-msg-scroll::-webkit-scrollbar-button, .gs-tray-list::-webkit-scrollbar-button, .redeem-list::-webkit-scrollbar-button,
+    .redeem-form::-webkit-scrollbar-button, .admin-help-list::-webkit-scrollbar-button, .pa-detail::-webkit-scrollbar-button,
+    .picker-options::-webkit-scrollbar-button, .multi-options::-webkit-scrollbar-button, .wish-target-list::-webkit-scrollbar-button,
+    .filter-province-scroll::-webkit-scrollbar-button, .embed-loading::-webkit-scrollbar-button, html::-webkit-scrollbar-button { display: none; }
+    .card-info::-webkit-scrollbar-corner, .msg-list::-webkit-scrollbar-corner, .cards-overview-scroll::-webkit-scrollbar-corner,
+    .thread-msg-scroll::-webkit-scrollbar-corner, .gs-tray-list::-webkit-scrollbar-corner, .redeem-list::-webkit-scrollbar-corner,
+    .redeem-form::-webkit-scrollbar-corner, .admin-help-list::-webkit-scrollbar-corner, .pa-detail::-webkit-scrollbar-corner,
+    .picker-options::-webkit-scrollbar-corner, .multi-options::-webkit-scrollbar-corner, .wish-target-list::-webkit-scrollbar-corner,
+    .filter-province-scroll::-webkit-scrollbar-corner, .embed-loading::-webkit-scrollbar-corner, html::-webkit-scrollbar-corner { background: transparent; }
+  }
   .card-tab-left-enter-active, .card-tab-left-leave-active,
   .card-tab-right-enter-active, .card-tab-right-leave-active { transition: opacity 0.16s ease, transform 0.16s ease; will-change: opacity, transform; }
   .card-tab-left-enter-from { opacity: 0; transform: translateX(18px); }
