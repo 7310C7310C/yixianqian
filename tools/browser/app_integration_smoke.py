@@ -449,7 +449,7 @@ def change_password(page, current: str, new: str) -> None:
 
 
 def run_anonymous(browser, width: int, height: int, base_url: str, out_dir: Path) -> list[str]:
-    context = browser.new_context(viewport={"width": width, "height": height}, locale="zh-CN")
+    context = browser.new_context(viewport={"width": width, "height": height}, locale="zh-CN", bypass_csp=True)
     page = context.new_page()
     errors = attach_error_capture(page)
     tag = str(width)
@@ -502,7 +502,7 @@ def run_viewport(browser, width: int, height: int, base_url: str, cookie: str,
     for title in titles:
         insert_notification(user_legacy_id, title)
 
-    context = browser.new_context(viewport={"width": width, "height": height}, locale="zh-CN")
+    context = browser.new_context(viewport={"width": width, "height": height}, locale="zh-CN", bypass_csp=True)
     if not live_sse:
         context.route("**/legacy/api/notifications/stream", lambda route: route.abort())
     context.add_cookies([{
@@ -690,7 +690,7 @@ def run_polling_fallback(browser, base_url: str, cookie: str, user_legacy_id: st
                          out_dir: Path) -> list[str]:
     """SSE 被阻断时，12s 轮询仍应更新红点。"""
     title = f"{TITLE_PREFIX}-poll-{int(time.time())}"
-    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
+    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN", bypass_csp=True)
     context.route("**/legacy/api/notifications/stream", lambda route: route.abort())
     context.add_cookies([{
         "name": "yxq_session", "value": cookie, "url": base_url,
@@ -729,7 +729,7 @@ def run_bootstrap_fallback(browser, base_url: str, cookie: str, out_dir: Path) -
     这里把文档里的 __YXQ_BOOTSTRAP__ 改写成 null 并挂起 /legacy/api/home，
     断言先出现骨架、放行后骨架消失且 tabbar 可见。
     """
-    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
+    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN", bypass_csp=True)
     context.add_cookies([{
         "name": "yxq_session",
         "value": cookie,
@@ -774,7 +774,7 @@ def run_bootstrap_fallback(browser, base_url: str, cookie: str, out_dir: Path) -
 def _boot_failure_case(browser, base_url: str, cookie: str, out_dir: Path,
                        abort_pattern: str, label: str, shot: str) -> list[str]:
     """中断一个关键脚本，断言显示 .boot-fail 且没有 pageerror（不是白屏、不是崩栈）。"""
-    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
+    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN", bypass_csp=True)
     context.add_cookies([{
         "name": "yxq_session",
         "value": cookie,
@@ -826,7 +826,7 @@ def run_mutual_wechat_prefill(browser, base_url: str, cookie: str, out_dir: Path
     批次4 起壳内 bootstrap 不再携带 my_wechat/their_wechat（PII 落盘口径），
     所以这里把 likes 接口替换成固定 payload，验证「进入互喜页仍能显示并填写微信号」。
     """
-    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN")
+    context = browser.new_context(viewport={"width": 390, "height": 844}, locale="zh-CN", bypass_csp=True)
     context.add_cookies([{
         "name": "yxq_session",
         "value": cookie,
