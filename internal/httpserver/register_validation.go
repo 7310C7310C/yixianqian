@@ -1,18 +1,14 @@
 package httpserver
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/7310C7310C/yixianqian/internal/pii"
 )
 
 var (
@@ -51,9 +47,13 @@ func validateWechatID(raw string) (string, error) {
 // form is expanded to 18 digits first, so one card cannot register twice by
 // alternating between the two spellings.
 func idCardHash(secret, plain string) string {
-	mac := hmac.New(sha256.New, idCardKey(secret))
-	mac.Write([]byte(normalizeIDCardForHash(plain)))
-	return hex.EncodeToString(mac.Sum(nil))
+	return pii.Hash(secret, normalizeIDCardForHash(plain))
+}
+
+// legacyIDCardHash is the pre-split digest, used only to keep duplicate
+// detection working while cmd/piirotate catches up.
+func legacyIDCardHash(secret, plain string) string {
+	return pii.LegacyHash(secret, normalizeIDCardForHash(plain))
 }
 
 // validateChineseIDCard accepts the 18-digit (checksum verified) and legacy
@@ -165,48 +165,19 @@ func idCard18ChecksumValid(id string) bool {
 	return id[17] == idCardCheckDigit(id[:17])
 }
 
-func idCardKey(secret string) []byte {
-	sum := sha256.Sum256([]byte("yixianqian/id-card/v1:" + secret))
-	return sum[:]
-}
-
-// sealIDCard stores the identity number encrypted with AES-256-GCM. The key is
-// derived from the deployment secret, so no plaintext ID ever reaches Postgres
-// or logs. The nonce is prefixed to the ciphertext.
+// sealIDCard stores the identity number encrypted with AES-256-GCM. The
+// encryption key is domain-separated from the dedupe HMAC key in internal/pii.
 func sealIDCard(secret, plain string) ([]byte, error) {
-	block, err := aes.NewCipher(idCardKey(secret))
+	sealed, err := pii.Seal(secret, plain)
 	if err != nil {
-		return nil, fmt.Errorf("register: create id cipher: %w", err)
+		return nil, fmt.Errorf("register: %w", err)
 	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("register: create id gcm: %w", err)
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("register: id nonce: %w", err)
-	}
-	return gcm.Seal(nonce, nonce, []byte(plain), nil), nil
+	return sealed, nil
 }
 
 func openIDCard(secret string, sealed []byte) (string, error) {
-	block, err := aes.NewCipher(idCardKey(secret))
-	if err != nil {
-		return "", fmt.Errorf("register: create id cipher: %w", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("register: create id gcm: %w", err)
-	}
-	if len(sealed) < gcm.NonceSize() {
-		return "", errors.New("register: id ciphertext too short")
-	}
-	nonce, ciphertext := sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():]
-	plain, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return "", fmt.Errorf("register: open id ciphertext: %w", err)
-	}
-	return string(plain), nil
+	plain, _, err := pii.Open(secret, sealed)
+	return plain, err
 }
 
 func registrationStatusText(status string) (heading, message string) {

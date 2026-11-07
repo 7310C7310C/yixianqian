@@ -86,6 +86,11 @@ func (a *App) legacyAdminAPI(perms []string,
 			legacyError(w, http.StatusUnauthorized, "未登录")
 			return
 		}
+		if !a.adminSessionFresh(r) {
+			// Keep the v1 SPA contract: "未登录" triggers its login/cleanup path.
+			legacyError(w, http.StatusUnauthorized, "未登录")
+			return
+		}
 		access, err := a.loadAdminAccess(r.Context(), user)
 		if err != nil {
 			a.logger(r).Error("legacy admin access failed", "error", err, "user_id", user.ID)

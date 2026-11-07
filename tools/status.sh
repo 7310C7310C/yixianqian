@@ -9,10 +9,21 @@ DB=${YXQ_DB:-yixianqian_staging}
 
 line() { printf '%-12s %s\n' "$1" "$2"; }
 
-if health=$(curl -fsS --max-time 5 "$BASE_URL/healthz" 2>/dev/null); then
+# Public /healthz no longer exposes the build version (fingerprint). On
+# server1, read the direct loopback endpoint so `make status` can still align
+# healthz.version with deployed.sha.
+HEALTH_URL=${YXQ_HEALTH_URL:-}
+if [ -z "$HEALTH_URL" ]; then
+  if [ -f "$ROOT/deployed.sha" ] || [ -d "$ROOT/src/.git" ]; then
+    HEALTH_URL=http://127.0.0.1:8093/healthz
+  else
+    HEALTH_URL=$BASE_URL/healthz
+  fi
+fi
+if health=$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null); then
   line healthz "$health"
 else
-  line healthz "unreachable ($BASE_URL/healthz)"
+  line healthz "unreachable ($HEALTH_URL)"
 fi
 
 if [ ! -f "$ROOT/deployed.sha" ] && [ ! -d "$ROOT/src/.git" ]; then

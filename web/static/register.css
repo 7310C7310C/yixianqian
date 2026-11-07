@@ -674,3 +674,17 @@ textarea::placeholder {
 .register-angel-option input[type="checkbox"]:disabled {
   pointer-events: none;
 }
+
+.register-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.register-consent input[type="checkbox"] {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}

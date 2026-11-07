@@ -15,8 +15,8 @@ sources: []
 
 | 项 | 值 | 来源 |
 |---|---|---|
-| Go（canonical） | `1.24` | `go.mod` |
-| CI Go | `1.24.x` | `.github/workflows/ci.yml` |
+| Go（canonical） | `1.25` | `go.mod` |
+| CI Go | `1.25.x` | `.github/workflows/ci.yml` |
 | module | `github.com/7310C7310C/yixianqian` | `go.mod` |
 
 ## 2. 命令入口与 flags
@@ -28,6 +28,8 @@ sources: []
 | `cmd/facebackfill` | `-limit` | int | `0` | 最多处理多少张照片（按 media_id 去重）；0=全部 | `cmd/facebackfill/main.go` |
 | `cmd/facebackfill` | `-user` | string | `""` | 只处理指定 legacy user id，例如 U-0006 | `cmd/facebackfill/main.go` |
 | `cmd/facebackfill` | `-workers` | int | `2` | 并发检测数（1-8） | `cmd/facebackfill/main.go` |
+| `cmd/migrate` | — | — | — | — | `cmd/migrate/main.go` |
+| `cmd/piirotate` | `-dry-run` | bool | `false` | verify and count without writing | `cmd/piirotate/main.go` |
 | `cmd/regionfix` | `-apply` | bool | `false` | write repairs (default: dry-run) | `cmd/regionfix/main.go` |
 | `cmd/regionfix` | `-backup-table` | string | `""` | create this users region backup table before -apply (required with -apply) | `cmd/regionfix/main.go` |
 | `cmd/regionfix` | `-limit` | int | `0` | inspect at most N users (0 = all) | `cmd/regionfix/main.go` |
@@ -223,6 +225,7 @@ sources: []
 | POST | `/logout` | `internal/httpserver/routes.go` |
 | POST | `/media/upload` | `internal/httpserver/routes.go` |
 | GET | `/media/{id}` | `internal/httpserver/routes.go` |
+| GET | `/metrics` | `internal/httpserver/routes.go` |
 | GET | `/password` | `internal/httpserver/admin_routes.go` |
 | POST | `/password` | `internal/httpserver/admin_routes.go` |
 | GET | `/profile/photo/{id}` | `internal/httpserver/profile_routes.go` |
@@ -241,8 +244,8 @@ sources: []
 | `/admin` | 40 |
 | `/api` | 28 |
 | `/legacy` | 90 |
-| 其他 | 25 |
-| **合计** | **183** |
+| 其他 | 26 |
+| **合计** | **184** |
 
 ## 4. 环境变量（key 集合对比）
 
@@ -250,11 +253,15 @@ sources: []
 |---|---|---|
 | `ACTIVATION_TTL` | 是 | 是 |
 | `ACTIVITY_ROSTER_ENABLED` | 是 | 是 |
+| `ADMIN_SESSION_TTL` | 是 | 是 |
 | `APP_ENV` | 是 | 是 |
+| `AUDIT_RETENTION_DAYS` | 是 | 是 |
 | `AUTO_MIGRATE` | 是 | 是 |
 | `BASE_URL` | 是 | 是 |
 | `CSRF_SECRET` | 是 | 是 |
 | `DATABASE_URL` | 是 | 是 |
+| `DB_MAX_CONNS` | 是 | 是（注释默认值） |
+| `DB_MIN_CONNS` | 是 | 是（注释默认值） |
 | `FACE_MODEL_PATH` | — | 是（注释默认值） |
 | `FACE_PROBE_CMD` | 是 | 是 |
 | `FACE_PROBE_TIMEOUT` | 是 | 是 |
@@ -274,6 +281,7 @@ sources: []
 | `MEDIA_THUMB_SIZE` | 是 | 是 |
 | `PHOTO_DAILY_LIMIT` | 是 | 是 |
 | `PHOTO_QUOTA_TZ` | 是 | 是 |
+| `PII_SECRET` | 是 | 是 |
 | `R2_ACCESS_KEY_ID` | 是 | 是 |
 | `R2_BUCKET` | 是 | 是 |
 | `R2_ENDPOINT` | 是 | 是 |
@@ -315,6 +323,8 @@ sources: []
 | 0011 | `0011_photo_upload_daily.sql` | 照片上传每日配额（PM 2026-10-28，决策 44）：每账号每自然日最多 N 张。 |
 | 0012 | `0012_site_assets.sql` | 站点公开资产（当前：小天使二维码）。PM 2026-10-29：注册页展示二维码， |
 | 0013 | `0013_message_inbox_broadcast.sql` | 消息中心改版：动态可清空、收到留言的已读游标、管理员全员图文消息。 |
+| 0014 | `0014_privacy_consent.sql` | 0014: explicit sensitive-PII consent at registration (PIPL 14/17). |
+| 0015 | `0015_pii_rotation.sql` | 0015: persistent PII key-rotation marker. cmd/piirotate writes this row in |
 
 ## 6. make targets
 
@@ -363,6 +373,8 @@ sources: []
 | 路径 | Go package | 源码说明 |
 |---|---|---|
 | `cmd/facebackfill` | main | Command facebackfill 批量补齐迁移照片的本地人脸检测结果。 |
+| `cmd/migrate` | main | Command migrate applies embedded migrations once, outside the server |
+| `cmd/piirotate` | main | Command piirotate re-encrypts and re-hashes ID-card rows written with the |
 | `cmd/regionfix` | main | Command regionfix normalizes users.city / native_place / church_location to |
 | `cmd/seed` | main | Command seed creates the P0 test account and prints a one-time activation URL. |
 | `cmd/server` | main | — |
@@ -376,6 +388,7 @@ sources: []
 | `internal/httpserver` | httpserver | — |
 | `internal/matching` | matching | Package matching implements the legacy grouping algorithm. |
 | `internal/media` | media | — |
+| `internal/pii` | pii | Package pii owns the ID-card encryption and dedupe-hash key derivation. |
 | `internal/platform` | platform | — |
 | `internal/regions` | regions | Package regions serves the mainland China province/city/area cascade used by |
 | `internal/tencentface` | tencentface | Package tencentface 实现腾讯云「照片内容合规判定」：先做图像标签 |

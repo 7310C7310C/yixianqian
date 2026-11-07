@@ -103,6 +103,8 @@ spa-check-node:
 build:
 	mkdir -p bin
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/server ./cmd/server
+	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/migrate ./cmd/migrate
+	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/piirotate ./cmd/piirotate
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/seed ./cmd/seed
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/token ./cmd/token
 	$(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o bin/facebackfill ./cmd/facebackfill

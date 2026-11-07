@@ -39,7 +39,7 @@ sources: []
 
 ## 3. 架构硬约束
 
-- 后端 Go 1.24（以 `go.mod` 为准）；单 binary 模块化单体；PostgreSQL 16；R2 私有桶。
+- 后端 Go 1.25（以 `go.mod` 为准）；单 binary 模块化单体；PostgreSQL 16；R2 私有桶。
 - 公开入口固定 server2（香港）TLS relay，回源 server1；DNS 不直指 server1，不开 Cloudflare 橙云。
 - 用户端复用 v1 Vue 3 + Vant SPA；Go 提供 `/legacy/api/*`、session 与媒体代理。
 - 管理台 Go `html/template` SSR，只经用户 SPA 同源 iframe；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`；受权媒体串流为例外。

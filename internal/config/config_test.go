@@ -38,6 +38,18 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.SessionTTL != 720*time.Hour {
 		t.Fatalf("session ttl = %v", cfg.SessionTTL)
 	}
+	if cfg.AdminSessionTTL != 8*time.Hour {
+		t.Fatalf("admin session ttl = %v", cfg.AdminSessionTTL)
+	}
+	if cfg.DBMaxConns != 20 || cfg.DBMinConns != 2 {
+		t.Fatalf("db pool defaults: %d/%d", cfg.DBMaxConns, cfg.DBMinConns)
+	}
+	if !cfg.ActivityRosterDisabled {
+		t.Fatal("activity roster should default to count-only")
+	}
+	if cfg.AuditRetentionDays != 180 {
+		t.Fatalf("audit retention = %d", cfg.AuditRetentionDays)
+	}
 	if cfg.ActivationTTL != 24*time.Hour {
 		t.Fatalf("activation ttl = %v", cfg.ActivationTTL)
 	}
@@ -336,6 +348,30 @@ func TestTencentFaceConfigRejectsBadValues(t *testing.T) {
 		env[key] = raw
 		if _, err := LoadFrom(envGetter(env)); err == nil {
 			t.Fatalf("expected error for %s=%q", key, raw)
+		}
+	}
+}
+
+func TestPlaceholderSecretsRejected(t *testing.T) {
+	for _, secret := range []string{
+		"dev-only-change-me-0123456789abcdef",
+		"CHANGE_ME_openssl_rand_base64_48",
+		"please-changeme-0123456789abcdef",
+	} {
+		env := minimalEnv()
+		env["SESSION_SECRET"] = secret
+		if _, err := LoadFrom(envGetter(env)); err == nil {
+			t.Fatalf("placeholder %q accepted", secret)
+		}
+	}
+}
+
+func TestTrustedProxyRejectsWholeInternet(t *testing.T) {
+	for _, proxy := range []string{"0.0.0.0/0", "::/0"} {
+		env := minimalEnv()
+		env["TRUSTED_PROXY"] = proxy
+		if _, err := LoadFrom(envGetter(env)); err == nil {
+			t.Fatalf("trusted proxy %q accepted", proxy)
 		}
 	}
 }

@@ -453,15 +453,20 @@ func (d *DB) UpdateProfile(ctx context.Context, userID int64, upd ProfileUpdate)
 }
 
 // IDCardHashInUse reports whether another account already stores this keyed
-// identity hash. The unique index remains the final guard against races.
-func (d *DB) IDCardHashInUse(ctx context.Context, hash string, excludeUserID int64) (bool, error) {
+// identity hash under the current or the pre-split key. The unique index
+// remains the final guard against races; the legacy argument closes the
+// read-during-rotation window.
+func (d *DB) IDCardHashInUse(ctx context.Context, hash, legacyHash string, excludeUserID int64) (bool, error) {
 	if strings.TrimSpace(hash) == "" {
 		return false, nil
 	}
 	var exists bool
 	err := d.pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM users WHERE id_card_hash = $1 AND id <> $2)`,
-		hash, excludeUserID).Scan(&exists)
+		`SELECT EXISTS (
+		   SELECT 1 FROM users
+		    WHERE (id_card_hash = $1 OR ($2 <> '' AND id_card_hash = $2))
+		      AND id <> $3
+		 )`, hash, legacyHash, excludeUserID).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("db: check id card hash: %w", err)
 	}

@@ -268,3 +268,29 @@ func TestIntegrationPrunePhotoQuota(t *testing.T) {
 		t.Fatalf("remaining rows = %d, want 2 (yesterday+today)", remaining)
 	}
 }
+
+func TestIntegrationPhotoQuotaRelease(t *testing.T) {
+	database, ctx := openPhotoQuotaDB(t)
+	user := photoQuotaUser(t, ctx, database)
+	day := photoQuotaDay(time.Now().UTC(), 0)
+
+	allowed, used, err := database.TakePhotoQuota(ctx, user.ID, day, 1, 10)
+	if err != nil || !allowed || used != 1 {
+		t.Fatalf("take: allowed=%v used=%d err=%v", allowed, used, err)
+	}
+	if err := database.ReleasePhotoQuota(ctx, user.ID, day, 1); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if err := database.ReleasePhotoQuota(ctx, user.ID, day, 5); err != nil {
+		t.Fatalf("release below zero: %v", err)
+	}
+	var stored int
+	if err := database.pool.QueryRow(ctx,
+		`SELECT used FROM photo_upload_daily WHERE user_id = $1 AND day = $2`,
+		user.ID, day).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != 0 {
+		t.Fatalf("stored used = %d, want 0", stored)
+	}
+}

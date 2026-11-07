@@ -49,6 +49,18 @@
   </section>
   {{end}}
 
+  <section class="card register-section">
+    <h2 data-register-text="consent.title"></h2>
+    <label class="register-consent">
+      <input type="checkbox" name="privacy_consent" value="1" required>
+      <span data-register-text="consent.privacy"></span>
+    </label>
+    <label class="register-consent">
+      <input type="checkbox" name="contact_consent" value="1">
+      <span data-register-text="consent.contact"></span>
+    </label>
+  </section>
+
   <section class="card register-submit">
     <p class="hint" data-register-text="submit.hint"></p>
     <button type="submit" class="button primary block" data-register-text="submit.button"></button>

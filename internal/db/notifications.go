@@ -311,6 +311,50 @@ func (d *DB) UnreadNotificationCount(ctx context.Context, userID int64) (int, er
 	return count, nil
 }
 
+// NotificationStreamSnapshot is the payload the SSE handler sends. One query
+// keeps the 30s fallback cheap for every online user.
+type NotificationStreamSnapshot struct {
+	Unread           int
+	UnreadMessages   int
+	UnreadNonMessage int
+	LatestID         int64
+	LatestTitle      string
+	LatestKind       string
+}
+
+// NotificationStreamSnapshot aggregates the four counts the SSE badge needs.
+func (d *DB) NotificationStreamSnapshot(ctx context.Context, userID int64) (NotificationStreamSnapshot, error) {
+	var s NotificationStreamSnapshot
+	err := d.pool.QueryRow(ctx, `
+		SELECT
+		  (SELECT count(*)::int FROM notifications
+		    WHERE user_id = $1 AND read_at IS NULL AND cleared_at IS NULL),
+		  (SELECT count(*)::int FROM messages m
+		    WHERE `+receivedMessageWhere+`
+		      AND NOT EXISTS (
+		        SELECT 1 FROM message_reads mr
+		         WHERE mr.message_id = m.id AND mr.user_id = $1)),
+		  (SELECT count(*)::int FROM notifications
+		    WHERE user_id = $1 AND read_at IS NULL AND cleared_at IS NULL
+		      AND kind NOT IN ('message', 'message_reply', 'message_sent')),
+		  COALESCE((SELECT id FROM notifications
+		             WHERE user_id = $1 AND cleared_at IS NULL
+		             ORDER BY created_at DESC, id DESC LIMIT 1), 0),
+		  COALESCE((SELECT title FROM notifications
+		             WHERE user_id = $1 AND cleared_at IS NULL
+		             ORDER BY created_at DESC, id DESC LIMIT 1), ''),
+		  COALESCE((SELECT kind FROM notifications
+		             WHERE user_id = $1 AND cleared_at IS NULL
+		             ORDER BY created_at DESC, id DESC LIMIT 1), '')`,
+		userID, MessageStatusDeleted).Scan(
+		&s.Unread, &s.UnreadMessages, &s.UnreadNonMessage,
+		&s.LatestID, &s.LatestTitle, &s.LatestKind)
+	if err != nil {
+		return NotificationStreamSnapshot{}, fmt.Errorf("db: notification stream snapshot: %w", err)
+	}
+	return s, nil
+}
+
 // MarkNotificationRead marks one notification read for its owner. It reports
 // false when the id does not belong to the user.
 func (d *DB) MarkNotificationRead(ctx context.Context, userID, notificationID int64) (bool, error) {

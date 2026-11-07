@@ -21,8 +21,11 @@ func TestValidatePassword(t *testing.T) {
 		wantErr  error
 	}{
 		{"too short", "short12", ErrPasswordTooShort},
-		{"minimum", "12345678", nil},
-		{"eight runes", "密码密码密码密码", nil},
+		{"minimum", "Tr0ub4do", nil},
+		{"eight runes", "安全密码测试一号", nil},
+		{"common", "12345678", ErrPasswordWeak},
+		{"repeated", "aaaaaaaa", ErrPasswordWeak},
+		{"sequence", "qwerty12", ErrPasswordWeak},
 		{"too long", strings.Repeat("a", MaxPasswordLength+1), ErrPasswordTooLong},
 		{"control char", "abcde123\x00", ErrPasswordInvalid},
 		{"empty", "", ErrPasswordTooShort},

@@ -62,13 +62,16 @@ M6 进入条件：上述验收项完成，`docs/PRODUCT.md` 有证据地签核�
 - **身份证门禁（原 P0）**：死锁已解除。补填入口与服务端 403 门禁已上线；
   现存一批迁移账号 `id_card_valid=false`，可在资料页自助补填。剩余是运营补填；
   但身份证门禁仍是 P0 验收项，需 PM 验收关闭。
-- **微信号同意合规**：注册当前硬编码 `contact_consent=true`，尚无显式同意步骤；
-  合规口径待 PM 决定（见 `docs/DECISIONS.md` §2.1）。
+- **同意与密钥（2026-11-07）**：注册必选 `privacy_consent` + `consent_at/version`；微信号展示单独可选。
+  身份证密钥拆 `PII_SECRET`/派生域，存量 `cmd/piirotate` 重加密；依赖升级 + CI govulncheck，公开图片解码 DoS 关闭。
 - **验收签核**：`docs/PRODUCT.md` 仍 `0/87` 未勾选，未经 PM 签核；不要从 0 推断「未做」。
 - **待 PM 验收**：消息中心/动态/广播与注册表单改版（PRODUCT B7/E7/L9）。
 - **真机与性能**：首屏遮挡已改为 hero 在 App 骨架挂载后立即交接（不再等 5–6s）；iOS/Android/微信、Via/Kiwi/荣耀真机、旧设备宽度、首屏/图片性能仍未完成 PM 复验。
-- **运维演练**：备份还原、回滚演练、安全最终审查未完成。
-- **E2E**：全流程 E2E（登录→卡片→喜欢→留言→活动→分组→结果→麦穗）未建。
+- **运维演练**：2026-11-07 已完成 staging 备份 + 还原到临时库的计数核对；
+  binary 回滚演练在本次部署后执行。安全最终审查未完成（等待 Reviewer/Auditor）。
+- **E2E**：仍缺一条覆盖「登录→卡片→喜欢→留言→活动→分组→结果→麦穗」的单一
+  Playwright 主链；现有 `tools/browser/app_integration_smoke.py` 覆盖登录/改密/
+  内嵌管理台/SSE/留言串，但不等同全链。
 - **人脸照片缺口**：部分 active 普通用户没有 `has_face=true` 照片；可通过资料页上传修复，不是死锁。
 - **内容合规历史照片**：`facebackfill` 默认不调用腾讯；历史照片未按新规则重判，
   如需纠正必须显式 `TENCENT_FACE_BACKFILL=true` 短时回填（按次计费）。

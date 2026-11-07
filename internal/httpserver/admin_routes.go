@@ -133,6 +133,11 @@ func (a *App) adminHTMLRoute(permission string, allowDocument bool, next func(ht
 		if !ok {
 			return
 		}
+		if !a.adminSessionFresh(r) {
+			a.clearSessionCookie(w)
+			a.renderError(w, r, http.StatusUnauthorized, "管理会话已过期", "请重新登录后再进入管理台。")
+			return
+		}
 		access, err := a.loadAdminAccess(r.Context(), user)
 		if err != nil {
 			a.logger(r).Error("load admin access failed", "error", err, "user_id", user.ID)
@@ -157,6 +162,11 @@ func (a *App) adminAPI(permission string, next func(http.ResponseWriter, *http.R
 		if !ok {
 			return
 		}
+		if !a.adminSessionFresh(r) {
+			a.clearSessionCookie(w)
+			writeAPIError(w, http.StatusUnauthorized, "session_expired", "管理会话已过期，请重新登录。")
+			return
+		}
 		access, err := a.loadAdminAccess(r.Context(), user)
 		if err != nil {
 			a.logger(r).Error("load admin access failed", "error", err, "user_id", user.ID)
@@ -173,6 +183,20 @@ func (a *App) adminAPI(permission string, next func(http.ResponseWriter, *http.R
 		}
 		next(w, r, access)
 	}
+}
+
+// adminSessionFresh caps admin access by absolute session age. The regular
+// user session may last 30 days, but an admin session is only good for
+// cfg.AdminSessionTTL (default 8h); re-login issues a new session ID.
+func (a *App) adminSessionFresh(r *http.Request) bool {
+	if a.cfg.AdminSessionTTL <= 0 {
+		return true
+	}
+	s, ok := currentSession(r)
+	if !ok {
+		return false
+	}
+	return a.clock.Now().Sub(s.CreatedAt) <= a.cfg.AdminSessionTTL
 }
 
 func containsString(values []string, want string) bool {
@@ -1119,7 +1143,7 @@ func (a *App) handleAdminRoleAssign(w http.ResponseWriter, r *http.Request, acce
 		return
 	}
 	assign := action == "assign"
-	changed, err := a.db.AssignAdminRole(r.Context(), user.ID, roleCode, assign)
+	changed, err := a.db.AssignAdminRoleAs(r.Context(), access.User.ID, user.ID, roleCode, assign)
 	if err != nil {
 		a.renderAdminRoleError(w, r, err)
 		return
@@ -1145,6 +1169,8 @@ func (a *App) renderAdminRoleError(w http.ResponseWriter, r *http.Request, err e
 	case errors.Is(err, db.ErrLastSuperAdmin):
 		a.renderError(w, r, http.StatusConflict, "无法移除最后一位最高管理员",
 			"系统必须保留至少一位最高管理员。请先指派另一位。")
+	case errors.Is(err, db.ErrAdminForbidden):
+		a.renderError(w, r, http.StatusForbidden, "权限不足", "只有最高管理员可以指派角色。")
 	default:
 		a.logger(r).Error("assign admin role failed", "error", err)
 		a.renderError(w, r, http.StatusInternalServerError, "操作失败", "系统暂时无法处理，请稍后再试。")
@@ -1643,13 +1669,15 @@ func (a *App) apiAdminRoleAssign(w http.ResponseWriter, r *http.Request, access 
 		return
 	}
 	assign := body.Action == "assign"
-	changed, err := a.db.AssignAdminRole(r.Context(), user.ID, strings.TrimSpace(body.Role), assign)
+	changed, err := a.db.AssignAdminRoleAs(r.Context(), access.User.ID, user.ID, strings.TrimSpace(body.Role), assign)
 	if err != nil {
 		switch {
 		case errors.Is(err, db.ErrNotFound):
 			writeAPIError(w, http.StatusNotFound, "not_found", "找不到角色或用户。")
 		case errors.Is(err, db.ErrLastSuperAdmin):
 			writeAPIError(w, http.StatusConflict, "last_super_admin", "不能移除最后一位最高管理员。")
+		case errors.Is(err, db.ErrAdminForbidden):
+			writeAPIError(w, http.StatusForbidden, "super_admin_required", "只有最高管理员可以指派角色。")
 		default:
 			a.logger(r).Error("assign admin role failed", "error", err)
 			writeAPIError(w, http.StatusInternalServerError, "internal_error", "系统暂时无法处理。")

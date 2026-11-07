@@ -43,7 +43,8 @@ func run() error {
 	defer stop()
 
 	openCtx, cancelOpen := context.WithTimeout(ctx, 10*time.Second)
-	database, err := db.Open(openCtx, cfg.DatabaseURL)
+	database, err := db.Open(openCtx, cfg.DatabaseURL,
+		db.WithPoolSize(cfg.DBMaxConns, cfg.DBMinConns))
 	cancelOpen()
 	if err != nil {
 		return err
@@ -132,6 +133,7 @@ func run() error {
 	}
 
 	logger.Info("shutting down")
+	app.ShutdownSSE()
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -254,6 +256,14 @@ func cleanupLoop(ctx context.Context, database *db.DB, logger *slog.Logger, cfg 
 			logger.Warn("photo quota prune failed", "error", err)
 		} else if rows > 0 {
 			logger.Info("photo quota pruned", "rows", rows)
+		}
+		if cfg.AuditRetentionDays > 0 {
+			cutoff := time.Now().AddDate(0, 0, -cfg.AuditRetentionDays)
+			if rows, err := database.PruneAuditLog(cleanupCtx, cutoff); err != nil {
+				logger.Warn("audit log prune failed", "error", err)
+			} else if rows > 0 {
+				logger.Info("audit log pruned", "rows", rows)
+			}
 		}
 		sessions, tokens, err := database.CleanupExpired(cleanupCtx)
 		if err != nil {

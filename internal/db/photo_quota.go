@@ -64,6 +64,23 @@ func takePhotoQuota(ctx context.Context, q queryRower, userID int64, day time.Ti
 	return false, current, nil
 }
 
+// ReleasePhotoQuota returns n reservations after a post-reservation failure
+// (attach failed, profile photo limit reached, etc.). It never goes below zero.
+func (d *DB) ReleasePhotoQuota(ctx context.Context, userID int64, day time.Time, n int) error {
+	if n <= 0 {
+		return nil
+	}
+	_, err := d.pool.Exec(ctx, `
+		UPDATE photo_upload_daily
+		   SET used = GREATEST(used - $3::integer, 0)
+		 WHERE user_id = $1 AND day = $2`,
+		userID, day, n)
+	if err != nil {
+		return fmt.Errorf("db: release photo quota: %w", err)
+	}
+	return nil
+}
+
 // PrunePhotoQuota deletes quota rows older than before. v1 kept only today and
 // yesterday, so callers pass yesterday's date (in the quota timezone).
 func (d *DB) PrunePhotoQuota(ctx context.Context, before time.Time) (int64, error) {

@@ -32,6 +32,7 @@ REPO=${YXQ_REPO:-7310C7310C/yixianqian}
 BRANCH=${YXQ_BRANCH:-main}
 SERVICE=${YXQ_SERVICE:-yixianqian-next-test}
 SVC_USER=${YXQ_SERVICE_USER:-yxq}
+ENV_FILE=${YXQ_ENV_FILE:-$ROOT/config/staging.env}
 MIN_FREE_MB=${YXQ_MIN_FREE_MB:-1500}
 HEALTH_TIMEOUT=${YXQ_HEALTH_TIMEOUT:-40}
 FAIL_BACKOFF=${YXQ_FAIL_BACKOFF:-900}
@@ -43,6 +44,10 @@ GH_BIN=${YXQ_GH_BIN:-gh}
 LOG_MAX_BYTES=${YXQ_LOG_MAX_BYTES:-20971520}
 GO_BIN=${YXQ_GO_BIN:-go}
 GOFMT_BIN=${YXQ_GOFMT_BIN:-gofmt}
+PG_DUMP_BIN=${YXQ_PG_DUMP:-pg_dump}
+PSQL_BIN=${YXQ_PSQL:-psql}
+PII_MARKER_FILE=${YXQ_PII_MARKER:-$ROOT/.pii_rotated}
+PII_ROTATED=0
 
 DRY_RUN=0
 FORCE=0
@@ -56,6 +61,68 @@ log() {
 }
 
 die() { log "错误：$*"; exit 2; }
+
+# load_env_file exports KEY=value lines from staging.env into the current shell.
+# It is used only by root during deploy; no value is printed or logged.
+load_env_file() {
+  [[ -r "$ENV_FILE" ]] || return 1
+  set -a
+  while IFS= read -r line; do
+    case "$line" in ''|'#'*) continue ;; esac
+    key=${line%%=*}
+    value=${line#*=}
+    export "$key=$value"
+  done <"$ENV_FILE" || { set +a; return 1; }
+  set +a
+  return 0
+}
+
+# pii_marker_state is the persistent counterpart of PII_ROTATED. It is safe
+# to call after load_env_file; a missing table (pre-0015) means "not rotated".
+pii_marker_state() {
+  # 0 = rotated, 1 = confirmed not rotated, 2 = unknown (fail closed).
+  # A local marker survives a DB outage.
+  [[ -f "$PII_MARKER_FILE" ]] && return 0
+  [[ -n ${DATABASE_URL:-} ]] || return 2
+  local table_exists has_row svc
+  svc=$(mktemp /tmp/yxq-pg.XXXXXX) || return 2
+  write_pg_service "$svc" || { rm -f "$svc"; return 2; }
+  table_exists=$(PGSERVICEFILE="$svc" PGSERVICE=yxq "$PSQL_BIN" -Atc \
+    "SELECT to_regclass('pii_rotation') IS NOT NULL" 2>/dev/null) || { rm -f "$svc"; return 2; }
+  if [[ $table_exists != t ]]; then
+    # Table missing = migration 0015 not applied = definitely not rotated.
+    rm -f "$svc"
+    return 1
+  fi
+  has_row=$(PGSERVICEFILE="$svc" PGSERVICE=yxq "$PSQL_BIN" -Atc \
+    "SELECT EXISTS (SELECT 1 FROM pii_rotation)" 2>/dev/null) || { rm -f "$svc"; return 2; }
+  rm -f "$svc"
+  [[ $has_row == t ]] && return 0
+  return 1
+}
+
+# write_pg_service converts DATABASE_URL into a root-only libpq service file,
+# so pg_dump never receives the DSN (and any password) in its argv.
+write_pg_service() {
+  local out=$1
+  DATABASE_URL="$DATABASE_URL" python3 - >"$out" <<'PY'
+import os, urllib.parse
+u = urllib.parse.urlparse(os.environ["DATABASE_URL"])
+q = urllib.parse.parse_qs(u.query)
+def emit(key, value):
+    if value:
+        print(f"{key}={urllib.parse.unquote(str(value))}")
+print("[yxq]")
+emit("dbname", u.path.lstrip("/"))
+emit("host", q.get("host", [None])[0] or u.hostname)
+emit("port", u.port)
+emit("user", u.username)
+emit("password", u.password)
+for key in ("sslmode", "connect_timeout", "sslcert", "sslkey", "sslrootcert", "options", "application_name"):
+    emit(key, q.get(key, [None])[0])
+PY
+  chmod 600 "$out"
+}
 
 usage() {
   sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -337,6 +404,13 @@ check_gate() {
 }
 
 rollback() {
+  local marker_state
+  if pii_marker_state; then marker_state=0; else marker_state=$?; fi
+  if [[ ${PII_ROTATED:-0} == 1 ]] || [[ $marker_state == 0 ]] ||
+     { [[ $marker_state == 2 ]] && [[ -n ${PII_SECRET:-} ]]; }; then
+    log "拒绝回滚：PII 已完成轮换或无法确认轮换状态，旧二进制无法识别新 hash；请恢复备份或修好新二进制"
+    return 1
+  fi
   log "开始回滚：用 server.prev 覆盖 server 并重启 $SERVICE"
   if [[ ! -s $BIN/server.prev ]]; then
     log "回滚失败：$BIN/server.prev 不存在或为空，需人工介入"
@@ -419,11 +493,12 @@ print_plan() {
   log "DRY-RUN 计划（不执行任何改动）："
   log "  1) cd $SRC && git reset --hard $REMOTE"
   log "  2) $GOFMT_BIN -l .（必须为空）+ $GO_BIN vet ./..."
-  log "  3) build server/seed/token/facebackfill → bin/*.next（version=staging-$SHORT）"
+  log "  3) build server/migrate/piirotate/seed/token/facebackfill/thumbwarm → bin/*.next（version=staging-$SHORT）"
   log "  4) cp bin/server bin/server.prev；mv bin/server.next bin/server；chown $SVC_USER:$SVC_USER；chmod 755"
-  log "  5) systemctl restart $SERVICE"
-  log "  6) 轮询 $HEALTH_URL 等待 version=staging-$SHORT（最多 ${HEALTH_TIMEOUT}s）"
-  log "  7) 成功写 deployed.sha；失败 cp server.prev → server 并重启回滚，不写 deployed.sha"
+  log "  5) 先跑 bin/migrate（+ PII_SECRET 时 bin/piirotate），失败不 restart"
+  log "  6) systemctl restart $SERVICE"
+  log "  7) 轮询 $HEALTH_URL 等待 version=staging-$SHORT（最多 ${HEALTH_TIMEOUT}s）"
+  log "  8) 成功写 deployed.sha；失败 cp server.prev → server 并重启回滚，不写 deployed.sha"
   log "DRY-RUN 结束：共 $count 个变更文件，无任何实际动作"
 }
 
@@ -597,7 +672,7 @@ main() {
   fi
 
   local VERSION="staging-$SHORT"
-  log "构建 $VERSION（server/seed/token/facebackfill/thumbwarm）"
+  log "构建 $VERSION（server/migrate/piirotate/seed/token/facebackfill/thumbwarm）"
   local app
   if ! (cd "$SRC" && "$GO_BIN" build -buildvcs=false -trimpath \
         -ldflags "-X github.com/7310C7310C/yixianqian/internal/platform.Version=$VERSION" \
@@ -607,7 +682,7 @@ main() {
     record_failure "build server"
     exit 1
   fi
-  for app in seed token facebackfill thumbwarm; do
+  for app in migrate piirotate seed token facebackfill thumbwarm; do
     if ! (cd "$SRC" && "$GO_BIN" build -buildvcs=false -trimpath -o "$BIN/$app.next" "./cmd/$app"); then
       log "构建 $app 失败，不切换"
       rm -f "$BIN"/server.next "$BIN"/*.next
@@ -631,23 +706,108 @@ main() {
   fi
   cp -f "$BIN/server" "$BIN/server.prev"
 
+  # Validate the env file before switching binaries. If it is missing or
+  # unreadable, leave bin/server as the old binary so a later systemd restart
+  # cannot load new code against an un-migrated schema.
+  if [[ ! -f "$ENV_FILE" ]]; then
+    log "未找到 $ENV_FILE：不切换二进制（fail-closed）"
+    rm -f "$BIN"/*.next
+    record_failure "migrate env missing"
+    exit 1
+  fi
+  if ! load_env_file; then
+    log "读取 $ENV_FILE 失败：不切换二进制（fail-closed）"
+    rm -f "$BIN"/*.next
+    record_failure "migrate env unreadable"
+    exit 1
+  fi
+
   log "切换二进制并重启 $SERVICE"
   mv -f "$BIN/server.next" "$BIN/server"
-  for app in seed token facebackfill thumbwarm; do
+  for app in migrate piirotate seed token facebackfill thumbwarm; do
     mv -f "$BIN/$app.next" "$BIN/$app"
   done
 
-  if ! systemctl restart "$SERVICE"; then
-    log "systemctl restart 失败，回滚"
-    rollback || true
-    record_failure "restart 失败"
-    exit 1
+  # AUTO_MIGRATE=false 后，schema 变更必须先于新二进制启动。迁移只前滚；
+  # 失败就不切换（旧二进制仍在跑，additive migration 通常兼容）。
+  if [[ -n ${PII_SECRET:-} ]]; then
+    # Rotating while the old binary is still serving creates a window where
+    # old code writes legacy hashes into a new-hash table. Stop first, take a
+    # consistent backup, rotate in one transaction, then start only the new
+    # binary. The backup is root-only because it contains PII.
+    log "停止 $SERVICE（轮换期间不允许旧二进制写库）"
+    if ! systemctl stop "$SERVICE"; then
+      log "停止服务失败，不轮换"
+      rollback || true
+      record_failure "stop before piirotate"
+      exit 1
+    fi
+    mkdir -p -m 700 "$ROOT/backups"
+    chmod 700 "$ROOT/backups"
+    dump="$ROOT/backups/piirotate-$SHORT-$(date +%Y%m%d-%H%M%S).dump"
+    pgsvc="$ROOT/backups/.pg_service.$$"
+    log "PII 轮换前备份数据库到 $dump"
+    if ! (
+      umask 077
+      write_pg_service "$pgsvc" || exit 1
+      PGSERVICEFILE="$pgsvc" PGSERVICE=yxq "$PG_DUMP_BIN" -Fc -f "$dump"
+    ) || [[ ! -s $dump ]]; then
+      rm -f "$pgsvc"
+      log "数据库备份失败或为空，不轮换、不重启"
+      rollback || true
+      record_failure "pii backup"
+      exit 1
+    fi
+    rm -f "$pgsvc"
+    chmod 600 "$dump"
+    log "运行数据库迁移（$BIN/migrate）"
+    if ! "$BIN/migrate"; then
+      log "迁移失败，重启旧二进制"
+      rollback || true
+      record_failure "migrate"
+      exit 1
+    fi
+    log "运行 PII 轮换（$BIN/piirotate）"
+    if ! "$BIN/piirotate"; then
+      log "PII 轮换失败，重启旧二进制（事务已回滚）"
+      rollback || true
+      record_failure "piirotate"
+      exit 1
+    fi
+    PII_ROTATED=1
+    : >"$PII_MARKER_FILE"
+    chmod 600 "$PII_MARKER_FILE" 2>/dev/null || true
+    log "PII 轮换完成；启动新二进制"
+    if ! systemctl start "$SERVICE"; then
+      log "PII 已轮换，拒绝回滚旧二进制；服务未启动，需人工介入"
+      record_failure "start after piirotate"
+      exit 1
+    fi
+  else
+    log "未设置 PII_SECRET：跳过轮换，仅运行迁移"
+    if ! "$BIN/migrate"; then
+      log "迁移失败，回滚二进制"
+      rollback || true
+      record_failure "migrate"
+      exit 1
+    fi
+    if ! systemctl restart "$SERVICE"; then
+      log "systemctl restart 失败，回滚"
+      rollback || true
+      record_failure "restart 失败"
+      exit 1
+    fi
   fi
 
   if ! wait_health_version "$VERSION"; then
     local got
     got=$(health_probe 2>/dev/null || true)
     log "健康检查失败：期望 version=$VERSION status=ok，实际 '${got:-无响应}'"
+    if [[ ${PII_ROTATED:-0} == 1 ]]; then
+      log "PII 已轮换，拒绝回滚旧二进制；请修好新二进制或从 $ROOT/backups 恢复"
+      record_failure "healthz after piirotate"
+      exit 1
+    fi
     rollback || true
     record_failure "healthz 未匹配"
     exit 1

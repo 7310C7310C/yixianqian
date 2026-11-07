@@ -21,7 +21,10 @@ import (
 const (
 	defaultTrustedProxy    = "45.125.16.205"
 	defaultSessionTTL      = 720 * time.Hour
+	defaultAdminSessionTTL = 8 * time.Hour
 	defaultActivationTTL   = 24 * time.Hour
+	defaultDBMaxConns      = 20
+	defaultDBMinConns      = 2
 	defaultMediaMaxBytes   = 10 << 20
 	defaultMediaCacheBytes = 256 << 20
 	defaultThumbSize       = 512
@@ -48,13 +51,20 @@ type Config struct {
 	DatabaseURL         string
 	SessionSecret       string
 	CSRFSecret          string
+	PIISecret           string
 	SessionCookieName   string
 	SessionCookieSecure bool
 	SessionTTL          time.Duration
-	TrustedProxies      []string
-	AutoMigrate         bool
+	// AdminSessionTTL caps the age of a session used for /admin routes. It is
+	// shorter than the user session because admin actions are higher impact.
+	AdminSessionTTL time.Duration
+	DBMaxConns      int
+	DBMinConns      int
+	TrustedProxies  []string
+	AutoMigrate     bool
 	// ActivityRosterDisabled hides the signup roster behind a count-only view.
-	// Zero value keeps the v1 behaviour (roster visible to logged-in users).
+	// Default false (count-only) is the privacy-preserving behaviour; set
+	// ACTIVITY_ROSTER_ENABLED=true to restore the v1 roster.
 	ActivityRosterDisabled bool
 
 	R2Endpoint        string
@@ -111,6 +121,9 @@ type Config struct {
 
 	LogLevel  slog.Level
 	LogFormat string
+
+	// AuditRetentionDays controls audit_log pruning. 0 disables pruning.
+	AuditRetentionDays int
 }
 
 // Load reads configuration from the process environment.
@@ -133,6 +146,7 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		DatabaseURL:       get("DATABASE_URL", ""),
 		SessionSecret:     get("SESSION_SECRET", ""),
 		CSRFSecret:        get("CSRF_SECRET", ""),
+		PIISecret:         get("PII_SECRET", ""),
 		SessionCookieName: get("SESSION_COOKIE_NAME", "yxq_session"),
 		R2Endpoint:        get("R2_ENDPOINT", ""),
 		R2Region:          get("R2_REGION", "auto"),
@@ -151,6 +165,18 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	}
 	if cfg.CSRFSecret != "" && len(cfg.CSRFSecret) < 32 {
 		errs = append(errs, errors.New("config: CSRF_SECRET must be at least 32 characters when set"))
+	}
+	if isPlaceholderSecret(cfg.SessionSecret) {
+		errs = append(errs, errors.New("config: SESSION_SECRET still looks like a placeholder; generate with openssl rand -base64 48"))
+	}
+	if cfg.CSRFSecret != "" && isPlaceholderSecret(cfg.CSRFSecret) {
+		errs = append(errs, errors.New("config: CSRF_SECRET still looks like a placeholder; generate with openssl rand -base64 48"))
+	}
+	if cfg.PIISecret != "" && len(cfg.PIISecret) < 32 {
+		errs = append(errs, errors.New("config: PII_SECRET must be at least 32 characters when set"))
+	}
+	if cfg.PIISecret != "" && isPlaceholderSecret(cfg.PIISecret) {
+		errs = append(errs, errors.New("config: PII_SECRET still looks like a placeholder; generate with openssl rand -base64 48"))
 	}
 
 	base, err := url.Parse(cfg.BaseURL)
@@ -176,7 +202,7 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	} else {
 		cfg.AutoMigrate = v
 	}
-	if v, err := parseBool(getenv("ACTIVITY_ROSTER_ENABLED"), true); err != nil {
+	if v, err := parseBool(getenv("ACTIVITY_ROSTER_ENABLED"), false); err != nil {
 		errs = append(errs, fmt.Errorf("config: ACTIVITY_ROSTER_ENABLED: %w", err))
 	} else {
 		cfg.ActivityRosterDisabled = !v
@@ -195,8 +221,33 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	if cfg.SessionTTL <= 0 || cfg.SessionTTL > 365*24*time.Hour {
 		errs = append(errs, errors.New("config: SESSION_TTL must be between 1s and 8760h"))
 	}
+	if v, err := parseDuration(getenv("ADMIN_SESSION_TTL"), defaultAdminSessionTTL); err != nil {
+		errs = append(errs, fmt.Errorf("config: ADMIN_SESSION_TTL: %w", err))
+	} else {
+		cfg.AdminSessionTTL = v
+	}
+	if cfg.AdminSessionTTL <= 0 || cfg.AdminSessionTTL > 24*time.Hour {
+		errs = append(errs, errors.New("config: ADMIN_SESSION_TTL must be between 1s and 24h"))
+	}
 	if cfg.ActivationTTL <= 0 || cfg.ActivationTTL > 30*24*time.Hour {
 		errs = append(errs, errors.New("config: ACTIVATION_TTL must be between 1s and 720h"))
+	}
+
+	if v, err := parseInt64(getenv("DB_MAX_CONNS"), defaultDBMaxConns); err != nil {
+		errs = append(errs, fmt.Errorf("config: DB_MAX_CONNS: %w", err))
+	} else {
+		cfg.DBMaxConns = int(v)
+	}
+	if cfg.DBMaxConns < 1 || cfg.DBMaxConns > 200 {
+		errs = append(errs, errors.New("config: DB_MAX_CONNS must be between 1 and 200"))
+	}
+	if v, err := parseInt64(getenv("DB_MIN_CONNS"), defaultDBMinConns); err != nil {
+		errs = append(errs, fmt.Errorf("config: DB_MIN_CONNS: %w", err))
+	} else {
+		cfg.DBMinConns = int(v)
+	}
+	if cfg.DBMinConns < 0 || cfg.DBMinConns > cfg.DBMaxConns {
+		errs = append(errs, errors.New("config: DB_MIN_CONNS must be between 0 and DB_MAX_CONNS"))
 	}
 
 	if v, err := parseInt64(getenv("MEDIA_MAX_BYTES"), defaultMediaMaxBytes); err != nil {
@@ -358,6 +409,12 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("config: TRUSTED_PROXY: %w", err))
 	} else {
 		for _, p := range trusted {
+			// 0.0.0.0/0 or ::/0 trusts every direct peer, which turns
+			// X-Real-IP into an attacker-controlled rate-limit key.
+			if p.Bits() == 0 {
+				errs = append(errs, fmt.Errorf("config: TRUSTED_PROXY must not trust the whole internet (%s)", p))
+				continue
+			}
 			cfg.TrustedProxies = append(cfg.TrustedProxies, p.String())
 		}
 	}
@@ -370,6 +427,14 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("config: LOG_LEVEL: %w", err))
 	}
 	cfg.LogLevel = level
+	if v, err := parseInt64(getenv("AUDIT_RETENTION_DAYS"), 180); err != nil {
+		errs = append(errs, fmt.Errorf("config: AUDIT_RETENTION_DAYS: %w", err))
+	} else {
+		cfg.AuditRetentionDays = int(v)
+	}
+	if cfg.AuditRetentionDays < 0 || cfg.AuditRetentionDays > 3650 {
+		errs = append(errs, errors.New("config: AUDIT_RETENTION_DAYS must be between 0 and 3650"))
+	}
 
 	// The endpoint may be given as https://host or bare host. R2_SECURE wins
 	// when explicitly set; otherwise the scheme decides, defaulting to true.
@@ -403,6 +468,15 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 // ValidateServer checks the additional settings required by cmd/server.
 func (c Config) ValidateServer() error {
 	var errs []error
+	if c.IsProduction() && c.AutoMigrate {
+		errs = append(errs, errors.New("config: AUTO_MIGRATE must be false in production; run cmd/migrate as a release step"))
+	}
+	if c.AppEnv != "development" && c.PIISecret == "" {
+		errs = append(errs, errors.New("config: PII_SECRET is required outside development; run cmd/piirotate after setting it"))
+	}
+	if c.PIISecret != "" && c.PIISecret == c.SessionSecret {
+		errs = append(errs, errors.New("config: PII_SECRET must differ from SESSION_SECRET"))
+	}
 	if c.R2Endpoint == "" {
 		errs = append(errs, errors.New("config: R2_ENDPOINT is required for the server"))
 	}
@@ -435,9 +509,37 @@ func (c Config) CSRFKey() []byte {
 	return sum[:]
 }
 
+// PIIKey returns the root secret for ID-card encryption/hashing. A dedicated
+// PII_SECRET is preferred; falling back to SESSION_SECRET keeps tests and
+// pre-rotation installs working until cmd/piirotate has been run.
+func (c Config) PIIKey() string {
+	if c.PIISecret != "" {
+		return c.PIISecret
+	}
+	return c.SessionSecret
+}
+
 // IsProduction reports whether production-only defaults should apply.
 func (c Config) IsProduction() bool {
 	return c.AppEnv == "production" || c.AppEnv == "prod"
+}
+
+// isPlaceholderSecret catches the values people copy from .env.example or
+// scaffolding. Length checks alone accept them (the example is 35 chars).
+func isPlaceholderSecret(s string) bool {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return false
+	}
+	for _, marker := range []string{
+		"dev-only", "change-me", "changeme", "change_me",
+		"replace-me", "your-secret", "example-secret", "placeholder",
+	} {
+		if strings.Contains(s, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeEndpoint(raw string) (host string, fromScheme bool, secure bool, err error) {

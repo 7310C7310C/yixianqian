@@ -71,8 +71,10 @@ func (d *DB) GetPasswordHash(ctx context.Context, userID int64) (string, error) 
 	return hash, nil
 }
 
-// RecordFailedLogin increments the failure counter and applies a lockout when
-// the threshold is reached. Failures older than windowSeconds are discarded.
+// RecordFailedLogin increments the failure counter and applies an exponential
+// backoff once the threshold is reached: 1s, 2s, 4s ... capped at lockFor.
+// Failures older than windowSeconds are discarded. A correct password is still
+// accepted while locked, so an attacker cannot permanently lock a victim out.
 func (d *DB) RecordFailedLogin(ctx context.Context, userID int64, threshold int, lockFor, window time.Duration) (int, *time.Time, error) {
 	var count int
 	var lockedUntil *time.Time
@@ -88,7 +90,9 @@ func (d *DB) RecordFailedLogin(ctx context.Context, userID int64, threshold int,
 		 SET failed_login_count = cur.base + 1,
 		     last_failed_at = now(),
 		     locked_until = CASE WHEN cur.base + 1 >= $2
-		                         THEN now() + make_interval(secs => $3)
+		                         THEN now() + make_interval(secs => LEAST(
+		                              $3,
+		                              power(2::double precision, (cur.base + 1 - $2)::double precision)))
 		                         ELSE u.locked_until END,
 		     updated_at = now()
 		 FROM cur

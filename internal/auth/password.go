@@ -24,6 +24,7 @@ var (
 	ErrPasswordTooShort = errors.New("auth: password must be at least 8 characters")
 	ErrPasswordTooLong  = errors.New("auth: password must be at most 128 characters")
 	ErrPasswordInvalid  = errors.New("auth: password contains control characters")
+	ErrPasswordWeak     = errors.New("auth: password is too common or predictable")
 	ErrPasswordHash     = errors.New("auth: malformed password hash")
 )
 
@@ -59,7 +60,61 @@ func ValidatePassword(password string) error {
 			return ErrPasswordInvalid
 		}
 	}
+	if isWeakPassword(password) {
+		return ErrPasswordWeak
+	}
 	return nil
+}
+
+// commonPasswords is deliberately small: it catches the passwords people
+// actually pick when a form only enforces length. It is not a substitute for a
+// full breach-corpus check, but it adds no startup dependency or network call.
+var commonPasswords = map[string]struct{}{
+	"12345678": {}, "123456789": {}, "1234567890": {}, "11111111": {},
+	"00000000": {}, "88888888": {}, "66666666": {}, "123123123": {},
+	"password": {}, "passw0rd": {}, "p@ssw0rd": {}, "qwertyui": {},
+	"qwerty12": {}, "1q2w3e4r": {}, "asdfghjk": {}, "zxcvbnm1": {},
+	"abc12345": {}, "a1234567": {}, "iloveyou": {}, "admin123": {},
+	"letmein1": {}, "welcome1": {}, "sunshine": {}, "princess": {},
+}
+
+var sequentialRuns = []string{
+	"0123456789",
+	"abcdefghijklmnopqrstuvwxyz",
+	"qwertyuiop",
+	"asdfghjkl",
+	"zxcvbnm",
+}
+
+func isWeakPassword(password string) bool {
+	lower := strings.ToLower(strings.TrimSpace(password))
+	if _, ok := commonPasswords[lower]; ok {
+		return true
+	}
+	runes := []rune(lower)
+	if len(runes) == 0 {
+		return false
+	}
+	// aaaaaaaa / 11111111
+	same := true
+	for _, r := range runes[1:] {
+		if r != runes[0] {
+			same = false
+			break
+		}
+	}
+	if same {
+		return true
+	}
+	// 12345678, abcdefgh, qwertyui, ... (at least 6 in a row)
+	for _, seq := range sequentialRuns {
+		for i := 0; i+6 <= len(seq); i++ {
+			if strings.Contains(lower, seq[i:i+6]) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TempPasswordLength is long enough for a one-time login without relying on

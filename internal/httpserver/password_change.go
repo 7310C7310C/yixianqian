@@ -35,6 +35,14 @@ func (a *App) applyPasswordChange(w http.ResponseWriter, r *http.Request, user d
 	if err := auth.ValidatePassword(password); err != nil {
 		return passwordChangeFail(http.StatusBadRequest, passwordPolicyMessage(err))
 	}
+	// 当前密码校验是 Argon2id（64 MiB）；没有独立限流时，被盗会话可以
+	// 无限次试当前密码。与改手机号的验证共用同一 10 次/15 分钟桶。
+	if a.profilePasswordLimiter != nil {
+		if ok, retry := a.profilePasswordLimiter.Allow("password_change:" + strconv.FormatInt(user.ID, 10)); !ok {
+			w.Header().Set("Retry-After", retryAfterSeconds(int(retry.Seconds())+1))
+			return passwordChangeFail(http.StatusTooManyRequests, "尝试次数过多，请稍后再试。")
+		}
+	}
 	hash, err := a.db.GetPasswordHash(r.Context(), user.ID)
 	if errors.Is(err, db.ErrNotFound) {
 		return passwordChangeFail(http.StatusConflict, "尚未设定密码，请使用启用链接。")

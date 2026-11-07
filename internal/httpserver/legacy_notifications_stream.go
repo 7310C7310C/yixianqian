@@ -39,6 +39,11 @@ func (a *App) handleLegacyNotificationsStream(w http.ResponseWriter, r *http.Req
 	if !a.legacyMessageViewGate(w, r, user) {
 		return
 	}
+	if !a.acquireSSE(user.ID) {
+		legacyError(w, http.StatusTooManyRequests, "通知连接数过多，请关闭其他页面后重试")
+		return
+	}
+	defer a.releaseSSE(user.ID)
 	// logging middleware 包装了 ResponseWriter，不能直接断言 http.Flusher；
 	// ResponseController 会沿 Unwrap 找到底层连接。
 	rc := http.NewResponseController(w)
@@ -54,29 +59,18 @@ func (a *App) handleLegacyNotificationsStream(w http.ResponseWriter, r *http.Req
 
 	ctx := r.Context()
 	snapshot := func() (legacyNotificationStreamPayload, error) {
-		unread, err := a.db.UnreadNotificationCount(ctx, user.ID)
+		s, err := a.db.NotificationStreamSnapshot(ctx, user.ID)
 		if err != nil {
 			return legacyNotificationStreamPayload{}, err
 		}
-		unreadMessages, err := a.db.CountUnreadReceivedMessages(ctx, user.ID)
-		if err != nil {
-			return legacyNotificationStreamPayload{}, err
-		}
-		unreadNonMessage, err := a.db.UnreadNonMessageNotificationCount(ctx, user.ID)
-		if err != nil {
-			return legacyNotificationStreamPayload{}, err
-		}
-		rows, err := a.db.ListNotifications(ctx, user.ID, 1)
-		if err != nil {
-			return legacyNotificationStreamPayload{}, err
-		}
-		payload := legacyNotificationStreamPayload{Unread: unread, UnreadMessages: unreadMessages, UnreadNonMessage: unreadNonMessage}
-		if len(rows) > 0 {
-			payload.LatestID = rows[0].ID
-			payload.LatestTitle = rows[0].Title
-			payload.LatestKind = rows[0].Kind
-		}
-		return payload, nil
+		return legacyNotificationStreamPayload{
+			Unread:           s.Unread,
+			UnreadMessages:   s.UnreadMessages,
+			UnreadNonMessage: s.UnreadNonMessage,
+			LatestID:         s.LatestID,
+			LatestTitle:      s.LatestTitle,
+			LatestKind:       s.LatestKind,
+		}, nil
 	}
 	emit := func(payload legacyNotificationStreamPayload) error {
 		raw, err := json.Marshal(payload)
@@ -135,6 +129,11 @@ func (a *App) handleLegacyNotificationsStream(w http.ResponseWriter, r *http.Req
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-a.sseShutdown:
+			// 发布/重启前主动让浏览器重连，而不是等 10s Shutdown 超时后硬断。
+			_, _ = fmt.Fprint(w, "event: reconnect\ndata: {}\n\n")
+			_ = rc.Flush()
 			return
 		case <-notifications:
 			if !refresh() {

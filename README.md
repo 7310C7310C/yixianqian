@@ -24,7 +24,7 @@ server1（洛杉矶）—— nginx + Go app（127.0.0.1:8093）
   └── Cloudflare R2（私有桶，仅 app 代理读取）
 ```
 
-- 后端是 Go 1.24 模块化单体；PostgreSQL 是唯一权威数据源。
+- 后端是 Go 1.25 模块化单体；PostgreSQL 是唯一权威数据源。
 - R2 只存媒体，桶不公开；浏览器只拿应用路径 `/media/{id}`。
 - 用户端复用 v1 SPA；Go 提供旧形状兼容 API、session 与媒体代理。
 - 管理台是 Go `html/template` SSR；浏览器顶层 `/admin` 一律 303 到 `/?admin=1`，由 SPA 自动打开同源 iframe overlay。受权媒体串流是显式例外。
@@ -33,7 +33,7 @@ server1（洛杉矶）—— nginx + Go app（127.0.0.1:8093）
 
 ## 本地开发
 
-前置：Go 1.24、PostgreSQL 16、Python 3；媒体需要一个 R2 或 S3 兼容 bucket（不配置则上传/读取会失败）。
+前置：Go 1.25、PostgreSQL 16、Python 3；媒体需要一个 R2 或 S3 兼容 bucket（不配置则上传/读取会失败）。
 
 ```sh
 cp .env.example .env

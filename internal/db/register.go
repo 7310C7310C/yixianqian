@@ -75,10 +75,13 @@ type RegisterParams struct {
 	IDCardCipher    []byte
 	IDCardLast4     string
 	IDCardHash      string
-	ContactConsent  bool
-	ReferralSource  string
-	IsForChild      string
-	PasswordHash    string
+	// LegacyIDCardHash is only used during the key-split transition to detect
+	// duplicates written before cmd/piirotate. Empty after rotation.
+	LegacyIDCardHash string
+	ContactConsent   bool
+	ReferralSource   string
+	IsForChild       string
+	PasswordHash     string
 }
 
 func marshalStringList(values []string) string {
@@ -145,6 +148,20 @@ func (d *DB) CreateRegisteredUserWithQuota(ctx context.Context, p RegisterParams
 // insertRegisteredUserTx writes the account row and its credential; the caller
 // owns the transaction and must commit it.
 func insertRegisteredUserTx(ctx context.Context, tx pgx.Tx, p RegisterParams) (User, error) {
+	if p.IDCardHash != "" {
+		var exists bool
+		if err := tx.QueryRow(ctx,
+			`SELECT EXISTS (
+			   SELECT 1 FROM users
+			    WHERE id_card_hash = $1
+			       OR ($2 <> '' AND id_card_hash = $2)
+			 )`, p.IDCardHash, p.LegacyIDCardHash).Scan(&exists); err != nil {
+			return User{}, fmt.Errorf("db: check id card before register: %w", err)
+		}
+		if exists {
+			return User{}, ErrIDCardConflict
+		}
+	}
 	u, err := scanUser(tx.QueryRow(ctx,
 		`INSERT INTO users (
 		   legacy_user_id, phone, name, nickname, gender, birthday, height_cm, education,
@@ -154,7 +171,8 @@ func insertRegisteredUserTx(ctx context.Context, tx pgx.Tx, p RegisterParams) (U
 		   live_with_parents, personality, self_traits, self_hobbies, self_sports,
 		   mbti, partner_criteria, partner_traits, partner_hobbies, partner_sports,
 		   wechat, id_card_ciphertext, id_card_last4, id_card_hash, contact_consent,
-		   referral_source, is_for_child, status, account_status, registered_at
+		   referral_source, is_for_child, status, account_status, registered_at,
+		   privacy_consent_at, privacy_consent_version
 		 ) VALUES (
 		   'U-' || nextval('user_no_seq'), $1, $2, $3, $4, $5, $6, $7,
 		   $8, $9, $10, $11, $12,
@@ -162,7 +180,7 @@ func insertRegisteredUserTx(ctx context.Context, tx pgx.Tx, p RegisterParams) (U
 		   $26, $27::jsonb, $28::jsonb, $29::jsonb,
 		   $30::jsonb, $31, $32::jsonb, $33::jsonb, $34::jsonb,
 		   $35, $36, $37, $38, $39,
-		   $40, $41, 'active', 'pending', now()
+		   $40, $41, 'active', 'pending', now(), now(), 'v1'
 		 ) RETURNING `+userColumns,
 		p.Phone, p.Name, p.Nickname, p.Gender, p.Birthday, p.HeightCM, p.Education,
 		p.BaptismalName, p.Church, p.ChurchLocation, p.ChurchGroup, p.NativePlace,

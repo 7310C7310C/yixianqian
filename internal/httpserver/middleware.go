@@ -64,7 +64,7 @@ func securityPolicyWithQuery(path string, query url.Values) string {
 	if path == "/" || path == "/app" {
 		return "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors " + frameAncestors + "; " +
 			"img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; " +
-			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; object-src 'none'"
+			"script-src 'self' 'unsafe-inline'; object-src 'none'"
 	}
 	// /register creates blob: previews for selected photos; every other
 	// scan-safe page keeps the stricter data:-only image policy.
@@ -116,6 +116,13 @@ func (a *App) withLogging(next http.Handler) http.Handler {
 		status := sw.status
 		if status == 0 {
 			status = http.StatusOK
+		}
+		a.metricRequests.Add(1)
+		switch {
+		case status >= 500:
+			a.metric5xx.Add(1)
+		case status >= 400:
+			a.metric4xx.Add(1)
 		}
 		log := a.logger(r).With(
 			"method", r.Method,

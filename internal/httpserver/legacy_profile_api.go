@@ -177,8 +177,9 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 			upd.Birthday = &birthdayLocal
 			birthdayFromID = true
 		}
-		hash := idCardHash(a.cfg.SessionSecret, normalized)
-		inUse, uerr := a.db.IDCardHashInUse(r.Context(), hash, user.ID)
+		hash := idCardHash(a.cfg.PIIKey(), normalized)
+		legacyHash := legacyIDCardHash(a.cfg.SessionSecret, normalized)
+		inUse, uerr := a.db.IDCardHashInUse(r.Context(), hash, legacyHash, user.ID)
 		if uerr != nil {
 			legacyServerError(a, w, r, uerr, "id card uniqueness check failed")
 			return
@@ -187,7 +188,7 @@ func (a *App) handleLegacyProfileUpdate(w http.ResponseWriter, r *http.Request) 
 			legacyErrorCode(w, http.StatusConflict, "id_card_taken", "此身份证号已被其他账号使用")
 			return
 		}
-		sealed, serr := sealIDCard(a.cfg.SessionSecret, normalized)
+		sealed, serr := sealIDCard(a.cfg.PIIKey(), normalized)
 		if serr != nil {
 			legacyServerError(a, w, r, serr, "id card encrypt failed")
 			return
@@ -407,6 +408,7 @@ func (a *App) handleLegacyProfilePhotoUpload(w http.ResponseWriter, r *http.Requ
 	photo, err := a.db.AddProfilePhoto(r.Context(), user.ID, saved.ID)
 	if err != nil {
 		a.discardMedia(r, user.ID, saved.ID)
+		a.releasePhotoQuota(r, user.ID)
 		if errors.Is(err, db.ErrPhotoLimit) {
 			legacyError(w, http.StatusBadRequest,
 				fmt.Sprintf("最多只能上传 %d 张照片", db.MaxProfilePhotos))

@@ -707,6 +707,7 @@ func (a *App) handleProfilePhotoUpload(w http.ResponseWriter, r *http.Request, a
 	photo, err := a.db.AddProfilePhoto(r.Context(), user.ID, saved.ID)
 	if err != nil {
 		a.discardMedia(r, user.ID, saved.ID)
+		a.releasePhotoQuota(r, user.ID)
 		if !errors.Is(err, db.ErrPhotoLimit) {
 			a.logger(r).Error("attach profile photo failed", "error", err, "user_id", user.ID)
 		}

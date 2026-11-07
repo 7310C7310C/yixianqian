@@ -18,6 +18,7 @@ var (
 
 	ErrLastSuperAdmin         = errors.New("db: cannot remove or disable the last super admin")
 	ErrAdminPrivileged        = errors.New("db: actor may not manage this admin account")
+	ErrAdminForbidden         = errors.New("db: actor is not allowed to assign admin roles")
 	ErrAdminUserNotReviewable = errors.New("db: user is not awaiting review")
 	ErrAdminUserPending       = errors.New("db: pending user must be reviewed before enabling")
 	ErrAdminUserRejected      = errors.New("db: rejected user must be approved before enabling")

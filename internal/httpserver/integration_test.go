@@ -452,20 +452,13 @@ func TestIntegrationHTTPFlow(t *testing.T) {
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("fifth attempt status = %d", resp.StatusCode)
 	}
-	resp = loginClient.postForm("/login", url.Values{
-		"csrf_token": {loginCSRF}, "phone": {phone}, "password": {password},
-	})
-	if resp.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("locked login status = %d", resp.StatusCode)
-	}
-	if err := database.ResetLoginFailures(ctx, user.ID); err != nil {
-		t.Fatal(err)
-	}
+	// Exponential backoff must not lock the legitimate user out: a correct
+	// password during the backoff window still signs in.
 	resp = loginClient.postForm("/login", url.Values{
 		"csrf_token": {loginCSRF}, "phone": {phone}, "password": {password},
 	})
 	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
-		t.Fatalf("login status=%d location=%q", resp.StatusCode, resp.Header.Get("Location"))
+		t.Fatalf("correct password during lock status=%d location=%q", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	if loginClient.sessionCookie() == "" {
 		t.Fatal("login did not set session cookie")

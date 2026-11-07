@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -44,6 +45,17 @@ func insertAudit(ctx context.Context, ex sqlExecutor, e AuditEntry) error {
 		return fmt.Errorf("db: insert audit: %w", err)
 	}
 	return nil
+}
+
+// PruneAuditLog deletes audit rows older than the retention cutoff. The table
+// is append-only for the retention window; pruning runs in the hourly cleanup
+// loop, not in request handlers.
+func (d *DB) PruneAuditLog(ctx context.Context, before time.Time) (int64, error) {
+	tag, err := d.pool.Exec(ctx, `DELETE FROM audit_log WHERE created_at < $1`, before)
+	if err != nil {
+		return 0, fmt.Errorf("db: prune audit log: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // sanitizeText replaces invalid UTF-8 and truncates on a rune boundary so

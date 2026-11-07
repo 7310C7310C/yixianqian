@@ -798,14 +798,40 @@ func (d *DB) ListAdminAssignments(ctx context.Context) ([]AdminAssignment, error
 	return out, rows.Err()
 }
 
-// AssignAdminRole grants or removes one role. Removing super_admin from the
-// last holder is rejected inside a transaction that locks the role row.
+// AssignAdminRole is the test/bootstrap path without an actor check. Production
+// HTTP handlers must use AssignAdminRoleAs.
 func (d *DB) AssignAdminRole(ctx context.Context, userID int64, roleCode string, assign bool) (bool, error) {
+	return d.assignAdminRole(ctx, 0, userID, roleCode, assign)
+}
+
+// AssignAdminRoleAs grants or removes one role after verifying inside the same
+// transaction that actorID is an active super_admin.
+func (d *DB) AssignAdminRoleAs(ctx context.Context, actorID, userID int64, roleCode string, assign bool) (bool, error) {
+	return d.assignAdminRole(ctx, actorID, userID, roleCode, assign)
+}
+
+func (d *DB) assignAdminRole(ctx context.Context, actorID, userID int64, roleCode string, assign bool) (bool, error) {
 	tx, err := d.pool.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("db: begin assign role: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	if actorID > 0 {
+		var allowed bool
+		if err := tx.QueryRow(ctx,
+			`SELECT EXISTS (
+			   SELECT 1 FROM admin_user_roles ur
+			   JOIN admin_roles r ON r.id = ur.role_id
+			   JOIN users u ON u.id = ur.user_id
+			   WHERE ur.user_id = $1 AND r.code = $2 AND u.status = 'active'
+			 )`, actorID, adminSuperAdminRoleCode).Scan(&allowed); err != nil {
+			return false, fmt.Errorf("db: check role actor: %w", err)
+		}
+		if !allowed {
+			return false, ErrAdminForbidden
+		}
+	}
 
 	var roleID int64
 	err = tx.QueryRow(ctx,

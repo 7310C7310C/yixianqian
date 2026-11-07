@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,11 +34,16 @@ type App struct {
 	// 命中/未命中计数（运维观察用，不参与逻辑）。
 	thumbCacheHits   atomic.Int64
 	thumbCacheMisses atomic.Int64
-	tpl              *Templates
-	log              *slog.Logger
-	csrf             *auth.CSRF
-	trusted          []netip.Prefix
-	clock            platform.Clock
+	// 轻量 Prometheus 指标（无外部依赖）：请求量、错误量、SSE 连接数。
+	metricRequests atomic.Int64
+	metric4xx      atomic.Int64
+	metric5xx      atomic.Int64
+	metricSSE      atomic.Int64
+	tpl            *Templates
+	log            *slog.Logger
+	csrf           *auth.CSRF
+	trusted        []netip.Prefix
+	clock          platform.Clock
 
 	// faceProbe 在照片上传后同步运行；失败只记日志，不阻断上传。
 	faceProbe face.Probe
@@ -66,6 +72,12 @@ type App struct {
 	// notifier 为 SSE 通知流提供 LISTEN/NOTIFY 唤醒；database 为 nil 的
 	// 纯 handler 单测里保持 nil，流退回 15 秒兜底轮询。
 	notifier *db.NotificationHub
+
+	// SSE 连接登记：限制单账号并发流，并让 Shutdown 主动通知客户端重连。
+	sseMu       sync.Mutex
+	sseConns    map[int64]int
+	sseShutdown chan struct{}
+	sseStopOnce sync.Once
 
 	// homeInflight/cardsInflight 合并同一用户同一查询的并发重复构建。
 	homeInflight  inflightGroup
@@ -180,6 +192,8 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 		faceSem:                     make(chan struct{}, maxConcurrentFaceProbes),
 		registrationFaceProbeBudget: maxRegistrationFaceProbeBudget,
 		notifier:                    notifier,
+		sseConns:                    make(map[int64]int),
+		sseShutdown:                 make(chan struct{}),
 	}
 	app.photoGrants = newPhotoGrantStore(defaultPhotoGrantTTL, defaultPhotoGrantMaxViewers,
 		defaultPhotoGrantMaxTargets, app.clock.Now)
@@ -189,9 +203,41 @@ func New(cfg config.Config, database *db.DB, store media.Store, logger *slog.Log
 // Close releases background resources owned by the app. Callers that build an
 // App in tests must call it so the LISTEN connection does not outlive the DB.
 func (a *App) Close() {
+	a.ShutdownSSE()
 	if a.notifier != nil {
 		a.notifier.Close()
 	}
+}
+
+// ShutdownSSE tells connected SSE handlers to send a reconnect event and
+// return, so http.Server.Shutdown does not have to wait for the full timeout
+// and force-close every stream.
+func (a *App) ShutdownSSE() {
+	a.sseStopOnce.Do(func() { close(a.sseShutdown) })
+}
+
+const maxSSEConnsPerUser = 3
+
+func (a *App) acquireSSE(userID int64) bool {
+	a.sseMu.Lock()
+	defer a.sseMu.Unlock()
+	if a.sseConns[userID] >= maxSSEConnsPerUser {
+		return false
+	}
+	a.sseConns[userID]++
+	a.metricSSE.Add(1)
+	return true
+}
+
+func (a *App) releaseSSE(userID int64) {
+	a.sseMu.Lock()
+	defer a.sseMu.Unlock()
+	if n := a.sseConns[userID]; n > 1 {
+		a.sseConns[userID] = n - 1
+	} else {
+		delete(a.sseConns, userID)
+	}
+	a.metricSSE.Add(-1)
 }
 
 // acquireGate bounds expensive in-process work (Argon2, image decode). The

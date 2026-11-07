@@ -300,9 +300,13 @@ func registerCopyStatic(data registerPageData) map[string]string {
 		"region.area":           "区 / 县",
 		"submit.hint": "送出后状态为「待审核」，小天使/管理员审核通过后会以站内通知告知。" +
 			"审核期间请勿重复提交。",
-		"submit.button":  "送出注册资料",
-		"submit.altHint": "已经填过？",
-		"submit.altCta":  "登录查看审核状态",
+		"consent.title": "同意与告知",
+		"consent.privacy": "我已阅读并单独同意：平台可处理我的身份证、手机号、微信号、照片等个人信息，" +
+			"用于实名审核、活动保险与婚恋匹配。我知悉这些信息属于敏感个人信息，可随时联系小天使撤回同意。",
+		"consent.contact": "我同意在双方相互喜欢并确认交换后，向对方展示我的微信号（可选）。",
+		"submit.button":   "送出注册资料",
+		"submit.altHint":  "已经填过？",
+		"submit.altCta":   "登录查看审核状态",
 	}
 	if data.HasAngelQR {
 		m["field.angel_ack.qrHint"] = "长按图片可保存到手机；添加小天使请备注「真实姓名」。"
@@ -533,6 +537,11 @@ type registerInput struct {
 	ReferralSource  string
 	IsForChild      string
 	Password        string
+	// PrivacyConsent is the explicit sensitive-PII consent required by the
+	// registration form. ContactConsent is the optional WeChat-sharing opt-in;
+	// it must not be bundled with the privacy consent.
+	PrivacyConsent bool
+	ContactConsent bool
 }
 
 func registerFormErr(field, message string) *registerFormError {
@@ -807,6 +816,12 @@ func parseRegisterInput(values url.Values) (registerInput, *registerFormError) {
 	if !acked {
 		return in, registerFormErr("angel_ack", "请确认已加小天使微信号并备注真实姓名。")
 	}
+
+	in.PrivacyConsent = values.Get("privacy_consent") == "1"
+	if !in.PrivacyConsent {
+		return in, registerFormErr("privacy_consent", "请阅读并单独同意个人信息处理告知。")
+	}
+	in.ContactConsent = values.Get("contact_consent") == "1"
 
 	in.Password = values.Get("password")
 	if in.Password != values.Get("password_confirm") {

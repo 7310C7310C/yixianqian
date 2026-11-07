@@ -31,9 +31,10 @@ assert_empty_or_absent() { [[ ! -s $1 ]] && ok "$2" || bad "$2" "$1 非空：$(c
 SB=''
 setup() {
   SB=$(mktemp -d /tmp/yxq-autodeploy-test.XXXXXX)
-  mkdir -p "$SB/root/bin" "$SB/fakebin" "$SB/home"
+  mkdir -p "$SB/root/bin" "$SB/root/config" "$SB/fakebin" "$SB/home"
   printf 'OLD-BINARY\n' >"$SB/root/bin/server"
   printf 'OLD-SEED\n' >"$SB/root/bin/seed"
+  printf 'AUTO_MIGRATE=false\nDATABASE_URL=postgres://test/test\n' >"$SB/root/config/staging.env"
   : >"$SB/log"
 
   # 假远端 + 工作副本
@@ -84,7 +85,18 @@ EOF
 #!/usr/bin/env bash
 printf 'Filesystem 1M-blocks Used Available Capacity Mounted on\n/dev/vda2 58000 50000 %s 95%% /\n' "${DF_FREE_MB:-5000}"
 EOF
-  cat >"$SB/fakebin/gh" <<'EOF'
+  cat >"$SB/fakebin/pg_dump" <<'EOF'
+#!/usr/bin/env bash
+SB=$(cd "$(dirname "$0")/.." && pwd)
+printf 'pg_dump %s\n' "$*" >>"$SB/pg_dump.log"
+[[ ${PG_DUMP_FAIL:-0} == 1 ]] && exit 1
+out=''; prev=''
+for a in "$@"; do [[ $prev == -f ]] && out=$a; prev=$a; done
+[[ -n $out ]] && printf 'FAKE-DUMP\n' >"$out"
+exit 0
+EOF
+
+cat >"$SB/fakebin/gh" <<'EOF'
 #!/usr/bin/env bash
 SB=$(cd "$(dirname "$0")/.." && pwd)
 printf 'gh %s\n' "$*" >>"$SB/gh.log"
@@ -153,6 +165,8 @@ run_ad() {
     YXQ_GH_BIN="$SB/fakebin/gh" \
     YXQ_GO_BIN="$SB/fakebin/go" \
     YXQ_GOFMT_BIN="$SB/fakebin/gofmt" \
+    YXQ_PG_DUMP="$SB/fakebin/pg_dump" \
+    ${PG_DUMP_FAIL:+PG_DUMP_FAIL="$PG_DUMP_FAIL"} \
     GH_CI="${GH_CI:-ok}" \
     GH_CI_STATUS="${GH_CI_STATUS:-completed}" \
     GH_CI_CONCL="${GH_CI_CONCL:-success}" \
@@ -388,6 +402,56 @@ assert_contains "范围内代码提交均含 Reviewed-By" "$SB/log" "S16 部署�
 assert_contains "DRY-RUN 计划" "$SB/log" "S16 打印部署计划"
 assert_empty_or_absent "$SB/go.log" "S16 未构建"
 assert_empty_or_absent "$SB/systemctl.log" "S16 未重启"
+
+# 17) PII_SECRET 存在：必须先备份、stop、migrate、piirotate，再 start 新二进制
+C17=$(commit_new code 'PII rotate deploy')
+printf 'PII_SECRET=test-pii-secret-0123456789abcdef0123456789abcdef\n' >>"$SB/root/config/staging.env"
+reset_run_logs
+: >"$SB/pg_dump.log"
+write_health "staging-${C17:0:7}"
+run_ad
+rc=$?
+assert_eq 0 "$rc" "S17 PII 轮换部署退出码 0"
+assert_contains "PII 轮换前备份" "$SB/log" "S17 先备份"
+assert_contains "停止 yxq-test" "$SB/log" "S17 停止旧服务"
+assert_contains "运行 PII 轮换" "$SB/log" "S17 执行轮换"
+assert_contains "systemctl stop yxq-test" "$SB/systemctl.log" "S17 先 stop"
+assert_contains "systemctl start yxq-test" "$SB/systemctl.log" "S17 后 start"
+assert_eq 0 "$(grep -c 'systemctl restart' "$SB/systemctl.log")" "S17 不再 restart"
+assert_eq "$C17" "$(cat "$SB/root/deployed.sha")" "S17 deployed.sha 已更新"
+
+# 18) PII 轮换成功后健康失败：拒绝回滚旧 binary
+C18=$(commit_new code 'PII rotate health fail')
+reset_run_logs
+write_health "staging-${C17:0:7}" # 新版本永远不匹配
+run_ad
+rc=$?
+assert_eq 1 "$rc" "S18 轮换后健康失败退出码 1"
+assert_contains "拒绝回滚" "$SB/log" "S18 拒绝回滚旧 binary"
+assert_eq 0 "$(grep -c 'systemctl restart' "$SB/systemctl.log")" "S18 未 restart 回滚"
+assert_eq "$C17" "$(cat "$SB/root/deployed.sha")" "S18 deployed.sha 未变"
+
+# 19) env 文件缺失：切换二进制之前就失败，bin/server 保持旧内容
+C19=$(commit_new code 'env missing before switch')
+printf 'SENTINEL-BINARY\n' >"$SB/root/bin/server"
+mv "$SB/root/config/staging.env" "$SB/root/config/staging.env.bak"
+reset_run_logs
+run_ad
+rc=$?
+assert_eq 1 "$rc" "S19 env 缺失退出码 1"
+assert_eq "SENTINEL-BINARY" "$(cat "$SB/root/bin/server")" "S19 未切换 server"
+assert_empty_or_absent "$SB/systemctl.log" "S19 未重启服务"
+mv "$SB/root/config/staging.env.bak" "$SB/root/config/staging.env"
+
+# 20) 新进程 + 本地轮换标记存在 + 备份失败：rollback 必须拒绝旧 binary
+C20=$(commit_new code 'marker new process rollback')
+reset_run_logs
+write_health "staging-${C20:0:7}"
+PG_DUMP_FAIL=1 run_ad
+rc=$?
+assert_eq 1 "$rc" "S20 备份失败退出码 1"
+assert_contains "拒绝回滚" "$SB/log" "S20 标记存在拒绝回滚"
+assert_eq 0 "$(grep -c 'systemctl restart' "$SB/systemctl.log")" "S20 未 restart 回滚"
 
 echo
 printf '总计：%d PASS / %d FAIL\n' "$PASS" "$FAIL"

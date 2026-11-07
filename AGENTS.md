@@ -50,7 +50,7 @@ sources:
 3. **commit**：简体中文；带 `Docs:` 或 `Docs-Impact: none（理由）`；改 `docs/PRODUCT.md` 必须带 `PM-Approved: <摘要>`。
 4. **push**：常规/高风险须在 push 前拿到独立 Reviewer 对本地 commit 的 PASS；低风险快速通道（纯文案/样式/排序/静态资源，不涉 auth/权限/数据/API/schema/支付）可自测 + smoke 后直接 push，并在 commit 说明范围与风险。
 5. **CI 绿**：最近一次**代码**提交的 `lint-build`/`unit`/`integration`（docs-only 不触发 CI）；`integration` 三库并行（`internal/db` + httpserver 按测试名奇偶分片）。`Docs` 每次 push 跑 stale：命中 `sources` 的文件必须在**同一提交**更新对应文档，trailer 不豁免；旧 commit 的 Docs 红不会因后续 docs-only 提交消失。
-6. **自动部署**：`yxq-autodeploy.timer` 每 60 秒检查 `origin/main`；CI + Docs 绿后构建/重启/health，失败自动回滚。代码提交必须带 `Reviewed-By:` trailer；docs-only 豁免。
+6. **自动部署**：`yxq-autodeploy.timer` 每 60 秒检查 `origin/main`；CI + Docs 绿后构建/重启/health，失败自动回滚。部署前先跑 `bin/migrate`（`AUTO_MIGRATE=false`），迁移失败不切换。CI 的 `lint-build` 含 `govulncheck`（Go 1.25）；代码提交必须带 `Reviewed-By:` trailer；docs-only 豁免。
 7. **部署后 smoke**：先跑 `make status`，以 `/healthz` 的 `version=staging-<sha>` 对齐最近一次**代码**部署提交；docs-only 只推进 `deployed.sha`，不重启。
 8. **批次报告**：改动、证据、部署状态、残余风险；历史留在 commit message。
 

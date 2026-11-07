@@ -20,7 +20,7 @@ const maxFormBytes = 64 << 10
 const (
 	loginFailureThreshold = 5
 	loginFailureWindow    = 15 * time.Minute
-	loginLockDuration     = 15 * time.Minute
+	loginLockDuration     = 5 * time.Minute
 )
 
 // handleLoginPage redirects the retired standalone login page to the landing
@@ -88,11 +88,6 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		a.renderLogin(w, r, http.StatusTooManyRequests, "rate", phoneRaw, next)
 		return
 	}
-	if ok, retry := a.loginPhoneLimiter.Allow("phone:" + phone); !ok {
-		w.Header().Set("Retry-After", retryAfterSeconds(int(retry.Seconds())+1))
-		a.renderLogin(w, r, http.StatusTooManyRequests, "rate", phoneRaw, next)
-		return
-	}
 	if utf8.RuneCountInString(password) > auth.MaxPasswordLength {
 		if !a.acquireHash(w, r) {
 			return
@@ -123,12 +118,13 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.Locked(a.clock.Now()) {
-		w.Header().Set("Retry-After", retryAfterSeconds(int(loginLockDuration.Seconds())))
-		a.audit(r, &user.ID, "auth.login.locked", "user", strconv.FormatInt(user.ID, 10),
-			map[string]any{"reason": "lockout_active"})
-		a.renderLogin(w, r, http.StatusTooManyRequests, "locked", phoneRaw, next)
-		return
+	wasLocked := user.Locked(a.clock.Now())
+	var lockRemaining time.Duration
+	if wasLocked && user.LockedUntil != nil {
+		lockRemaining = user.LockedUntil.Sub(a.clock.Now())
+		if lockRemaining < 0 {
+			lockRemaining = 0
+		}
 	}
 
 	hash, err := a.db.GetPasswordHash(ctx, user.ID)
@@ -161,6 +157,30 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !valid {
+		// While a backoff window is active, do not extend it: otherwise an
+		// attacker who knows the phone number can keep the victim locked
+		// forever. A correct password above still signs in.
+		if wasLocked {
+			// Count attempts even while locked, but do not extend the lock.
+			// A correct password never reaches this branch.
+			if ok, retry := a.loginPhoneLimiter.Allow("phone:" + phone); !ok {
+				w.Header().Set("Retry-After", retryAfterSeconds(int(retry.Seconds())+1))
+				a.renderLogin(w, r, http.StatusTooManyRequests, "rate", phoneRaw, next)
+				return
+			}
+			w.Header().Set("Retry-After", retryAfterSeconds(int(lockRemaining.Seconds())+1))
+			a.audit(r, &user.ID, "auth.login.locked", "user", strconv.FormatInt(user.ID, 10),
+				map[string]any{"reason": "lockout_active"})
+			a.renderLogin(w, r, http.StatusTooManyRequests, "locked", phoneRaw, next)
+			return
+		}
+		// 手机号维度只对“密码错误”计数；正确密码在上面直接通过。这样知道
+		// 手机号的人不能靠持续错误尝试把受害者挡在门外。
+		if ok, retry := a.loginPhoneLimiter.Allow("phone:" + phone); !ok {
+			w.Header().Set("Retry-After", retryAfterSeconds(int(retry.Seconds())+1))
+			a.renderLogin(w, r, http.StatusTooManyRequests, "rate", phoneRaw, next)
+			return
+		}
 		count, lockedUntil, ferr := a.db.RecordFailedLogin(ctx, user.ID,
 			loginFailureThreshold, loginLockDuration, loginFailureWindow)
 		if ferr != nil {
@@ -170,7 +190,8 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"reason": "bad_password", "failed_count": count})
 		a.logger(r).Warn("login failed", "reason", "bad_password", "user_id", user.ID)
 		if ferr == nil && lockedUntil != nil && lockedUntil.After(a.clock.Now()) {
-			w.Header().Set("Retry-After", retryAfterSeconds(int(loginLockDuration.Seconds())))
+			retry := int(lockedUntil.Sub(a.clock.Now()).Seconds()) + 1
+			w.Header().Set("Retry-After", retryAfterSeconds(retry))
 			a.renderLogin(w, r, http.StatusTooManyRequests, "locked", phoneRaw, next)
 			return
 		}
@@ -493,6 +514,8 @@ func passwordPolicyMessage(err error) string {
 		return fmt.Sprintf("密码最多 %d 个字元。", auth.MaxPasswordLength)
 	case errors.Is(err, auth.ErrPasswordInvalid):
 		return "密码含有不允许的控制字元。"
+	case errors.Is(err, auth.ErrPasswordWeak):
+		return "密码太常见或太有规律，请换一个。"
 	default:
 		return "密码不符合规则。"
 	}

@@ -20,10 +20,16 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 		a.logger(r).Error("health check failed", "error", err)
 	}
 
-	writeJSON(w, status, map[string]string{
-		"status":  overall,
-		"db":      dbStatus,
-		"version": platform.Version,
-		"time":    time.Now().UTC().Format(time.RFC3339),
-	})
+	w.Header().Set("Cache-Control", "no-store")
+	body := map[string]string{
+		"status": overall,
+		"db":     dbStatus,
+	}
+	// 版本与时间只给本机直连（自动部署/运维探针）。公网请求经 nginx 一定带
+	// X-Real-IP；不把构建指纹和服务器时间免费交给扫描器。
+	if r.Header.Get("X-Real-IP") == "" {
+		body["version"] = platform.Version
+		body["time"] = time.Now().UTC().Format(time.RFC3339)
+	}
+	writeJSON(w, status, body)
 }

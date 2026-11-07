@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -22,9 +24,10 @@ var migrationNameRE = regexp.MustCompile(`^(\d{4})_([a-z0-9_]+)\.sql$`)
 const migrationLockKey int64 = 0x7958514D4947
 
 type migration struct {
-	version int64
-	name    string
-	body    string
+	version  int64
+	name     string
+	body     string
+	checksum string
 }
 
 // Migrate applies pending embedded migrations in version order. Each file runs
@@ -64,26 +67,34 @@ func (d *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 	if _, err := conn.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version bigint PRIMARY KEY,
 		name text NOT NULL,
+		checksum text NOT NULL DEFAULT '',
 		applied_at timestamptz NOT NULL DEFAULT now()
 	)`); err != nil {
 		return fmt.Errorf("db: create schema_migrations: %w", err)
 	}
+	if _, err := conn.Exec(ctx,
+		`ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum text NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("db: add schema_migrations checksum: %w", err)
+	}
 
-	rows, err := conn.Query(ctx, "SELECT version, name FROM schema_migrations")
+	rows, err := conn.Query(ctx, "SELECT version, name, checksum FROM schema_migrations")
 	if err != nil {
 		return fmt.Errorf("db: read schema_migrations: %w", err)
 	}
 	applied := make(map[int64]string)
+	checksums := make(map[int64]string)
 	for rows.Next() {
 		var (
-			v    int64
-			name string
+			v        int64
+			name     string
+			checksum string
 		)
-		if err := rows.Scan(&v, &name); err != nil {
+		if err := rows.Scan(&v, &name, &checksum); err != nil {
 			rows.Close()
 			return fmt.Errorf("db: scan schema_migrations: %w", err)
 		}
 		applied[v] = name
+		checksums[v] = checksum
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -103,6 +114,16 @@ func (d *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 						"Recreate it (dropdb/createdb) and rerun migrations; see docs/runbooks/staging.md §8",
 					m.version, name, m.version, m.name)
 			}
+			if recorded := checksums[m.version]; recorded != "" && recorded != m.checksum {
+				return fmt.Errorf("db: migration %04d_%s was modified after it was applied (checksum mismatch)", m.version, m.name)
+			}
+			if checksums[m.version] == "" {
+				if _, err := conn.Exec(ctx,
+					`UPDATE schema_migrations SET checksum = $1 WHERE version = $2`,
+					m.checksum, m.version); err != nil {
+					return fmt.Errorf("db: backfill migration checksum %d: %w", m.version, err)
+				}
+			}
 			continue
 		}
 		start := time.Now()
@@ -115,7 +136,9 @@ func (d *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 			_ = tx.Rollback(ctx)
 			return fmt.Errorf("db: apply migration %04d_%s: %w", m.version, m.name, err)
 		}
-		if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations (version, name) VALUES ($1, $2)", m.version, m.name); err != nil {
+		if _, err := tx.Exec(ctx,
+			"INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)",
+			m.version, m.name, m.checksum); err != nil {
 			_ = tx.Rollback(ctx)
 			return fmt.Errorf("db: record migration %d: %w", m.version, err)
 		}
@@ -157,7 +180,11 @@ func loadMigrations() ([]migration, error) {
 		if strings.TrimSpace(string(body)) == "" {
 			return nil, fmt.Errorf("db: migration %q is empty", e.Name())
 		}
-		out = append(out, migration{version: version, name: match[2], body: string(body)})
+		sum := sha256.Sum256(body)
+		out = append(out, migration{
+			version: version, name: match[2], body: string(body),
+			checksum: hex.EncodeToString(sum[:]),
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
 	return out, nil

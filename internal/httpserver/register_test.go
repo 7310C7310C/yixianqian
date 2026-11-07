@@ -78,6 +78,8 @@ func validRegisterValues(t *testing.T, phone, idCard, birthday string) url.Value
 		"is_for_child":             {"不是，我为自己报名"},
 		"referral_source":          {"朋友介绍"},
 		"angel_ack":                {registerAngelAck},
+		"privacy_consent":          {"1"},
+		"contact_consent":          {"1"},
 		"password":                 {"register-pass-123"},
 		"password_confirm":         {"register-pass-123"},
 	}
@@ -245,6 +247,7 @@ func TestParseRegisterInputRejectsInvalidFields(t *testing.T) {
 		{"bad option", func(v url.Values) { v.Set("gender", "其他") }, "选项不正确"},
 		{"bad multi", func(v url.Values) { v["self_traits"] = []string{"不存在"} }, "选项不正确"},
 		{"missing ack", func(v url.Values) { v.Del("angel_ack") }, "小天使"},
+		{"missing privacy consent", func(v url.Values) { v.Del("privacy_consent") }, "单独同意"},
 		{"mismatched password", func(v url.Values) { v.Set("password_confirm", "different-123") }, "不一致"},
 		{"short password", func(v url.Values) { v.Set("password", "short"); v.Set("password_confirm", "short") }, "至少需要 8"},
 		{"bad height", func(v url.Values) { v.Set("height_cm", "99") }, "身高"},

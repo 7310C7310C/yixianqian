@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-03
+last_verified: 2026-11-07
 sources:
   - deploy/**
   - .env.example
@@ -49,7 +49,7 @@ server1 的 `yxq-autodeploy.timer` 每 60 秒检查 `origin/main`：
 - 不同 → 要求该范围代码提交的 CI（`lint-build`/`unit`/`integration`）与 Docs 均 success；
   `integration` 用三个独立测试库并行跑 `internal/db` 与按测试名奇偶分片的
   `internal/httpserver`（各 `-p 1 -race`）；`lint-build` 不装 HEIC 转换器。
-  再执行 gofmt/vet → 构建 5 个 binary（server/seed/token/facebackfill/thumbwarm）→ 备份 `server.prev` → 切换 → restart → 轮询 `/healthz`。
+  再执行 gofmt/vet → 构建 7 个 binary（server/migrate/piirotate/seed/token/facebackfill/thumbwarm）→ 备份 `server.prev` → 切换 → **先跑 `bin/migrate`**（`AUTO_MIGRATE=false`，失败不重启）→ 若 `PII_SECRET` 存在：备份 DB → stop → migrate → piirotate → start → 轮询 `/healthz`；轮换成功后禁止回滚旧二进制。
 - 失败不写 `deployed.sha`；切换后失败自动用 `server.prev` 回滚并重启。
 - 部署闸：代码提交必须含 `Reviewed-By: <reviewer>`；docs-only 豁免；`--force` 仅限回滚/热修。
 - 仅文档提交（`docs/`、`*.md`、`.team/`）：只推进 `deployed.sha`，不构建、不重启。
@@ -312,3 +312,36 @@ python3 tools/migrate_testapp.py \
 - `TRUSTED_PROXY=127.0.0.1`；server2 设 `X-Real-IP`，server1 nginx 转传。
 - app 目前在 LA，staging 延迟不代表最终；上线前搬 HK app server，server2 只改 upstream。
 - 生产切换、DNS 切换、删数据、凭证/权限变更必须 PM 明确批准；v1 保持可回滚。
+- nginx access log 在 `/var/log/nginx/yxq-next.access.log`；`/metrics` 仅 `127.0.0.1` 可访问。
+  边缘限流 `limit_req 30r/s burst=60` + `limit_conn 20`，先看 access log 再调，不要直接关。
+- `AUTO_MIGRATE=false` 后迁移由 autodeploy 在切换二进制后、restart 前执行；手工部署时先跑：
+  `systemd-run --wait --pipe -p EnvironmentFile=/opt/yixianqian-next/config/staging.env /opt/yixianqian-next/bin/migrate`。
+
+## 10. 备份/还原与回滚演练（cutover 前必做）
+
+```sh
+# 1) 备份（在 server1，root；不要把 dump 提交进 repo）
+TS=$(date +%Y%m%d-%H%M%S); mkdir -p /var/backups/yxq-db
+runuser -u postgres -- pg_dump -Fc yixianqian_staging > /var/backups/yxq-db/staging-$TS.dump
+
+# 2) 还原到临时库并核对
+runuser -u postgres -- createdb yxq_restore_check
+runuser -u postgres -- pg_restore -d yxq_restore_check /var/backups/yxq-db/staging-$TS.dump
+runuser -u postgres -- psql -d yxq_restore_check -Atc \
+  "select (select count(*) from users), (select count(*) from media), (select max(version) from schema_migrations)"
+# 与 staging 源库计数一致后 dropdb yxq_restore_check
+
+# 3) binary 回滚演练（staging）：部署后保留 bin/server.prev
+systemctl stop yixianqian-next-test
+cp bin/server.prev bin/server && systemctl start yixianqian-next-test
+curl -fsS http://127.0.0.1:8093/healthz
+# 再切回新 binary：cp bin/server.next bin/server（部署脚本会保留 .next 时）
+```
+
+- schema 只增不改；回滚 binary 不回滚 schema。迁移有 checksum，改名/改内容会被 `bin/migrate` 拒绝。
+- 身份证密钥轮换（`PII_SECRET`）：autodeploy 会 stop → pg_dump（root-only）→ migrate →
+  piirotate → start；`pii_rotation` 持久标记写入后，脚本拒绝回滚 pre-split binary。
+  手工轮换时按同一顺序，并先 `bin/piirotate -dry-run` 核对 rotated/already。轮换成功后
+  `/opt/yixianqian-next/.pii_rotated` 本地标记 + DB `pii_rotation` 双保险；DB 不可达时
+  脚本按 fail-closed 拒绝旧 binary 回滚。staging 存量行数用
+  `select count(*) from users where id_card_ciphertext is not null` 核对。

@@ -28,6 +28,19 @@ func WithQueryTracer(tracer pgx.QueryTracer) OpenOption {
 	}
 }
 
+// WithPoolSize overrides the default pool bounds. Callers validate the
+// relationship (1 <= min <= max) at the config boundary.
+func WithPoolSize(maxConns, minConns int) OpenOption {
+	return func(cfg *pgxpool.Config) {
+		if maxConns > 0 {
+			cfg.MaxConns = int32(maxConns)
+		}
+		if minConns >= 0 {
+			cfg.MinConns = int32(minConns)
+		}
+	}
+}
+
 // Open parses the DSN and creates a pool. It does not connect eagerly.
 func Open(ctx context.Context, dsn string, opts ...OpenOption) (*DB, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
