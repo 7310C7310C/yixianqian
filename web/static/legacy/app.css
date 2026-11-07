@@ -1181,6 +1181,11 @@
      子页没有底栏，但 #app 仍预留 60px+safe 底栏空间：用负 margin 收回来，
      否则内容区底部会留一条空白带（PM 反馈）。 */
   .cards-overview-page { height: var(--yxq-vh, 100vh); margin-bottom: calc(-60px - env(safe-area-inset-bottom)); display: flex; flex-direction: column; background: #f7f8fa; position: relative; z-index: 1; }
+  /* 牵线 ⇄ 全览 跟手过场：整屏裁切。进入时目标页盖上来；返回时全览页滑走，露出垫在下面的牵线（含底栏预览）。 */
+  .ov-peek-clip { position: fixed; inset: 0; z-index: 1200; overflow: hidden; pointer-events: none; background: transparent; }
+  .ov-peek-clip--back { z-index: 0; background: #f7f8fa; }
+  .ov-peek { position: absolute; inset: 0; background: #f7f8fa; will-change: transform; }
+  .van-theme-dark .ov-peek-clip--back, .van-theme-dark .ov-peek { background: #111; }
   .ov-head { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 10px 10px 10px 6px; padding-top: calc(10px + constant(safe-area-inset-top)); padding-top: calc(10px + env(safe-area-inset-top)); background: #fff; border-bottom: 1px solid #f2f3f5; }
   .ov-back, .ov-refresh { flex-shrink: 0; width: 42px; height: 42px; border: 0; padding: 0; border-radius: 50%; background: transparent; color: #323233; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .ov-back:active, .ov-refresh:active { background: #f2f3f5; }
@@ -1218,9 +1223,6 @@
   .ov-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.5); }
   .ov-dot.active { background: #fff; }
   .ov-liked { position: absolute; right: 8px; bottom: 8px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.42); color: #ff8fa0; font-size: 12px; line-height: 22px; text-align: center; }
-  .ov-pull-hint { position: absolute; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 14px; border-radius: 999px; background: rgba(0,0,0,0.62); color: #fff; font-size: 12px; line-height: 1.4; pointer-events: none; white-space: nowrap; }
-  .ov-pull-hint--top { top: calc(env(safe-area-inset-top) + 58px); }
-  .ov-pull-hint--bottom { bottom: calc(env(safe-area-inset-bottom) + 26px); }
   .ov-state { padding: 56px 20px; text-align: center; color: #969799; }
   .ov-state-icon { font-size: 40px; margin-bottom: 10px; }
   .ov-state-text { font-size: 14px; line-height: 1.6; }

@@ -1,6 +1,6 @@
 <div key="cards_overview" class="cards-overview-page">
   <div class="ov-head">
-    <button type="button" class="ov-back" aria-label="返回牵线" @click="handleBack">
+    <button type="button" class="ov-back" aria-label="返回牵线" @click="closeCardsOverview">
       <van-icon name="arrow-left"></van-icon>
     </button>
     <div class="ov-head-main">
@@ -14,7 +14,6 @@
       <van-icon name="replay" :class="{ 'ov-spin': overviewLoading }"></van-icon>
     </button>
   </div>
-  <div v-if="ovPullHint" class="ov-pull-hint" :class="'ov-pull-hint--' + ovPullHint">{{ ovPullHint === 'top' ? '继续下拉回到牵线' : '继续上滑回到牵线' }}</div>
   <div class="cards-overview-scroll" @scroll.passive="onOverviewScroll" @wheel.passive="cancelOvGridScroll"
     @touchstart="onOverviewPullStart" @touchmove="onOverviewPullMove" @touchend="onOverviewPullEnd" @touchcancel="onOverviewPullCancel">
     <div v-if="overviewError && !overviewItems.length" class="ov-state">

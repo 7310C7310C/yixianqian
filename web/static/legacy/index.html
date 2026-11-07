@@ -311,6 +311,24 @@
 <page-host :key="page" :page="page"></page-host>
 </Transition>
 </div>
+<!-- 牵线 ⇄ 全览 跟手过场：返回时先垫一层牵线（含底栏预览），再把全览页跟手滑走 -->
+<div v-if="ovPeekBackdrop" class="ov-peek-clip ov-peek-clip--back" aria-hidden="true">
+  <div class="ov-peek">
+    <page-host key="ov-peek-back" page="cards"></page-host>
+    <van-tabbar :model-value="'cards'" fixed safe-area-inset-bottom active-color="#ff6b81" inactive-color="#969799">
+      <van-tabbar-item name="cards" icon="like-o" class="tab-heart-live">牵线</van-tabbar-item>
+      <van-tabbar-item name="likes" icon="chat-o" :badge="unreadBadge">消息</van-tabbar-item>
+      <van-tabbar-item name="home" icon="home-o">活动</van-tabbar-item>
+      <van-tabbar-item name="profile" icon="user-o">我的</van-tabbar-item>
+    </van-tabbar>
+  </div>
+</div>
+<!-- 进入全览：目标页整屏跟手盖上来 -->
+<div v-if="ovPeekPage" class="ov-peek-clip" aria-hidden="true">
+  <div ref="ovPeekEl" class="ov-peek">
+    <page-host :key="'ov-peek-' + ovPeekPage" :page="ovPeekPage"></page-host>
+  </div>
+</div>
 <!-- 管理员指令弹窗 -->
 <van-popup v-model:show="showAdminHelp" position="bottom" round style="max-height:75vh;">
   <div class="admin-help-panel">

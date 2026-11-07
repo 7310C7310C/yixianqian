@@ -160,6 +160,60 @@ def touch_drag(page, selector: str, dy: int) -> bool:
     )
 
 
+def touch_drag_start(page, selector: str, dy: int) -> bool:
+    """按下并拖到中途；保留起始坐标，供 touch_drag_finish 继续同一手势。"""
+    return page.evaluate(
+        """({sel, dy}) => {
+            const el = document.querySelector(sel);
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            const x = r.left + r.width * 0.5;
+            const y = r.top + Math.min(r.height * 0.4, 120);
+            window.__ovDragStart = {x: x, y: y};
+            const mk = (cy) => new Touch({identifier: 5, target: el, clientX: x, clientY: cy});
+            const fire = (type, cy, active) => el.dispatchEvent(new TouchEvent(type, {
+                bubbles: true, cancelable: true,
+                touches: active ? [mk(cy)] : [],
+                changedTouches: [mk(cy)],
+            }));
+            fire('touchstart', y, true);
+            fire('touchmove', y + dy, true);
+            return true;
+        }""",
+        {"sel": selector, "dy": dy},
+    )
+
+
+def touch_drag_finish(page, selector: str, dy: int) -> bool:
+    """完成 touch_drag_start 的手势（同一组起始坐标，元素滚动/位移也不影响）。"""
+    return page.evaluate(
+        """({sel, dy}) => {
+            const el = document.querySelector(sel);
+            const st = window.__ovDragStart;
+            if (!el || !st) return false;
+            const mk = (cy) => new Touch({identifier: 5, target: el, clientX: st.x, clientY: cy});
+            const fire = (type, cy, active) => el.dispatchEvent(new TouchEvent(type, {
+                bubbles: true, cancelable: true,
+                touches: active ? [mk(cy)] : [],
+                changedTouches: [mk(cy)],
+            }));
+            fire('touchmove', st.y + dy, true);
+            fire('touchend', st.y + dy, false);
+            return true;
+        }""",
+        {"sel": selector, "dy": dy},
+    )
+
+
+def wait_real_page(page, selector: str, label: str) -> None:
+    """等真正的页面挂上，并等跟手过场预览层撤掉（预览层里也有 page-host，不能只看类名）。"""
+    page.wait_for_selector(".tab-main > " + selector, timeout=15000)
+    try:
+        page.wait_for_selector(".ov-peek-clip", state="detached", timeout=5000)
+    except PlaywrightTimeoutError:
+        raise SmokeFailure(f"{label}: 跟手过场预览层未撤掉") from None
+
+
 def apply_overview_filter(page, placeholder: str, value: str) -> None:
     page.locator(".ov-filter").click()
     page.wait_for_selector(".filter-title", timeout=5000)
@@ -399,7 +453,7 @@ def main() -> int:
 
                 # ---- 4. 再点一次进入全览 ----
                 tap_cards_again(page)
-                page.wait_for_selector(".cards-overview-page", timeout=10000)
+                wait_real_page(page, ".cards-overview-page", label)
                 if page.locator(".van-tabbar").count():
                     raise SmokeFailure("全览子页不应显示底栏")
                 title = page.locator(".ov-title").inner_text()
@@ -1132,40 +1186,58 @@ def main() -> int:
                 # ---- 8. 全览到顶继续下拉 / 到底继续上滑 → 回牵线 ----
                 page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); if (el) el.scrollTop = 0; }")
                 page.wait_for_timeout(200)
-                touch_drag(page, ".cards-overview-scroll", 120)
-                page.wait_for_selector(".cards-page", timeout=10000)
-                if page.locator(".cards-overview-page").count():
+                touch_drag_start(page, ".cards-overview-scroll", 60)
+                peek = page.evaluate(
+                    """() => ({
+                        cards: document.querySelectorAll('.ov-peek-clip--back .cards-page').length,
+                        ov: document.querySelectorAll('.ov-peek-clip--back .cards-overview-page').length,
+                    })"""
+                )
+                if peek["cards"] != 1 or peek["ov"] != 0:
+                    raise SmokeFailure(f"返回牵线的垫层页面错误：{peek}")
+                touch_drag_finish(page, ".cards-overview-scroll", 120)
+                wait_real_page(page, ".cards-page", label)
+                if page.locator(".tab-main > .cards-overview-page").count():
                     raise SmokeFailure("全览到顶下拉未回到牵线")
                 notes.append(f"{label}: 全览到顶继续下拉回牵线")
 
                 # 重新进入全览，模拟已加载到底后上滑回牵线。
                 page.locator(".van-tabbar-item").filter(has_text="牵线").first.click()
-                page.wait_for_selector(".cards-overview-page", timeout=10000)
+                wait_real_page(page, ".cards-overview-page", label)
                 page.wait_for_selector(".ov-tile[data-uid]", timeout=15000)
                 page.evaluate("() => { const p = window.yxqRootProxy; if (p) p.overviewHasMore = false; }")
                 page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); if (el) el.scrollTop = el.scrollHeight; }")
                 page.wait_for_timeout(300)
                 touch_drag(page, ".cards-overview-scroll", -120)
-                page.wait_for_selector(".cards-page", timeout=10000)
-                if page.locator(".cards-overview-page").count():
+                wait_real_page(page, ".cards-page", label)
+                if page.locator(".tab-main > .cards-overview-page").count():
                     raise SmokeFailure("全览到底上滑未回到牵线")
                 notes.append(f"{label}: 全览到底继续上滑回牵线")
                 page.screenshot(path=str(out_dir / f"back-{label}.png"))
 
                 # ---- 10.8 牵线页纵向滑动（上/下）进入全览 ----
                 page.wait_for_selector(".swipe-card", timeout=10000)
-                touch_drag(page, ".swipe-card", 140)
-                page.wait_for_selector(".cards-overview-page", timeout=10000)
-                if not page.locator(".ov-title").count():
+                touch_drag_start(page, ".swipe-card", 70)
+                peek = page.evaluate(
+                    """() => ({
+                        ov: document.querySelectorAll('.ov-peek-clip:not(.ov-peek-clip--back) .cards-overview-page').length,
+                        cards: document.querySelectorAll('.ov-peek-clip:not(.ov-peek-clip--back) .cards-page').length,
+                    })"""
+                )
+                if peek["ov"] != 1 or peek["cards"] != 0:
+                    raise SmokeFailure(f"进入全览的预览页错误：{peek}")
+                touch_drag_finish(page, ".swipe-card", 140)
+                wait_real_page(page, ".cards-overview-page", label)
+                if not page.locator(".tab-main > .cards-overview-page .ov-title").count():
                     raise SmokeFailure("牵线页下滑未进入全览")
                 notes.append(f"{label}: 牵线页下滑进入全览")
                 page.locator(".ov-back").click()
-                page.wait_for_selector(".cards-page", timeout=10000)
+                wait_real_page(page, ".cards-page", label)
                 touch_drag(page, ".swipe-card", -140)
-                page.wait_for_selector(".cards-overview-page", timeout=10000)
+                wait_real_page(page, ".cards-overview-page", label)
                 notes.append(f"{label}: 牵线页上滑进入全览")
                 page.locator(".ov-back").click()
-                page.wait_for_selector(".cards-page", timeout=10000)
+                wait_real_page(page, ".cards-page", label)
 
                 # ---- 11. 回归：牌堆「反馈」仍可打开（openFeedbackDialog 改签名）----
                 # 牌堆首位通常是本人卡（没有反馈按钮），先切到下一张。

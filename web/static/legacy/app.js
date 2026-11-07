@@ -267,6 +267,8 @@ const PageHost = {
         if (key === '__root') return root;
         if (key === '__cache') return cache;
         if (key === '__tick') return tick.value;
+        // 预览层用同一个 page-host 渲染非当前页：必须读 prop，不能被根状态 page 遮住。
+        if (key === '__page') return props.page;
         return root[key];
       },
       set(_, key, value) { root[key] = value; return true; },
@@ -277,7 +279,8 @@ const PageHost = {
   },
   render() {
     void this.__tick;
-    const renderPage = window.__YXQ_PAGES__ && window.__YXQ_PAGES__[this.page];
+    const pageName = this.__page;
+    const renderPage = window.__YXQ_PAGES__ && window.__YXQ_PAGES__[pageName];
     if (typeof renderPage !== 'function') {
       // 无文字骨架：点击/深链时 chunk 未就绪也不出现「加载中...」；tabbar 点击则由
       // guardTabChange 保留当前页直到 chunk 就绪，正常路径不会看到这个骨架。
@@ -314,12 +317,23 @@ const yxqApp = createApp({
       if (root) root.classList.toggle('native-admin', !!v);
     }, { immediate: true });
     const page = ref('cards');
-    let overviewEntryDir = '';   // 'up' | 'down'：牵线页纵向滑动进入全览的过场方向
+    // —— 牵线 ⇄ 全览：跟手拖拽过场（进入时目标页盖上来；返回时当前页滑走露出牵线）——
+    const ovPeekPage = ref('');        // 进入全览时的目标页预览（page-host）
+    const ovPeekBackdrop = ref(false); // 返回牵线时垫在下面的牵线预览
+    const ovPeekEl = ref(null);        // 进入预览层（跟手 translateY）
+    let ovPeekDir = 'up';              // 'up' 从底部上推 / 'down' 从顶部下拉
+    let ovPeekH = 0;                   // 内容区高度缓存（手势门槛）
+    let ovPeekTimer = 0;
+    let ovPeekFallback = 0;
+    let ovPeekAnimating = false;
+    let ovPeekCommit = false;          // 本次 page 切换由过场完成：跳过默认页面转场
+    let overviewPreloadedForEntry = false;
+    const ovPeekReduce = () => { try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } };
     // 四 Tab / 子页流畅过渡：按 tab 顺序与子页层级自动选动画
     const pageTransition = ref('tab-transition');
     const TAB_ORDER = ['cards','likes','home','profile'];
     function pickTransition(nv, ov){
-      if (nv === 'cards_overview' && overviewEntryDir) return overviewEntryDir === 'up' ? 'ov-rise' : 'ov-drop';
+      if (ovPeekCommit) return 'vp-none';   // 跟手动画已经到位：真实页面直达，不再叠默认转场
       if(!ov) return 'tab-transition';
       const isTab = p => TAB_ORDER.includes(p);
       const isSub = p => subPages.includes(p);
@@ -632,6 +646,11 @@ const yxqApp = createApp({
       applyPageScroll(target);
       if(target > 0 && readScrollY() < target - 2) retryPageScroll(targetPage, target);
       if (targetPage === 'message_thread') setTimeout(scrollThreadToHighlight, 30);
+      // 跟手过场：目标页已经挂上，撤掉预览层（比固定延时更稳，切换再慢也不会闪）。
+      if (ovPeekPage.value === targetPage || (ovPeekBackdrop.value && targetPage === 'cards')) {
+        ovPeekCommit = false;
+        ovPeekCleanup();
+      }
     }
     // Vant 弹层（van-popup / van-dialog）锁滚动只给 body 加 van-overflow-hidden；
     // 本页 html 带 overflow-x: clip，按规范会阻止 body 的 overflow 传播到视口，
@@ -646,6 +665,18 @@ const yxqApp = createApp({
     watch(page, (nv, ov) => {
       if(nv !== ov){ pageTransition.value = pickTransition(nv, ov); rememberScroll(ov); }
     }, {flush: 'sync'});
+    // 跟手过场到达目标页后，等真实页面挂稳再撤预览（vp-none 切换没有动画，拆早了会闪一帧）。
+    watch(page, (nv, ov) => {
+      if(nv === ov) return;
+      if(!ovPeekPage.value && !ovPeekBackdrop.value) return;
+      const entering = !!ovPeekPage.value && nv === ovPeekPage.value;
+      const returning = !!ovPeekBackdrop.value && nv === 'cards';
+      if(entering || returning){
+        ovPeekWaitRealPage(entering ? 'cards_overview' : 'cards', 0);
+        return;
+      }
+      ovPeekCleanup();
+    });
 
     // 活动
     const activities = ref([]);
@@ -797,7 +828,6 @@ const yxqApp = createApp({
     let ovSwallowClick = false;  // 只吞掉滑动本身产生的 click（下一次手势开始即清）
     let ovClickGuardPending = false;   // touchend 直接开卡后的一次性 click 保护（只吞补发的第一下）
     let ovClickGuardTimer = 0;
-    const ovPullHint = ref('');  // 全览顶部/底部继续滑动的提示
     let ovPull = null;
     // touchend 直接开卡后浏览器可能补发 click（落到新浮层上会误关）：短暂吃掉。
     try {
@@ -3318,6 +3348,179 @@ const yxqApp = createApp({
       };
       requestAnimationFrame(tick);
     }
+    // —— 跟手过场几何/动画 ——
+    function ovPeekFullH() {
+      return (window.innerHeight || 0) || document.documentElement.clientHeight || 1;
+    }
+    function ovPeekContentH() {
+      if (ovPeekH > 0) return ovPeekH;
+      const bar = document.querySelector('.van-tabbar');
+      const barH = bar ? bar.getBoundingClientRect().height : 60;
+      ovPeekH = Math.max(240, ovPeekFullH() - barH);
+      return ovPeekH;
+    }
+    function ovPeekThreshold() {
+      return Math.min(110, ovPeekContentH() * 0.16);
+    }
+    function ovPeekSetIn(off, animate) {
+      const el = ovPeekEl.value;
+      if (!el) return;
+      el.style.transition = animate && !ovPeekReduce() ? 'transform 240ms cubic-bezier(.32,.72,0,1)' : 'none';
+      el.style.transform = 'translate3d(0,' + Math.round(off) + 'px,0)';
+    }
+    function ovPeekSetOut(off, animate) {
+      const el = document.querySelector('.tab-main > .cards-overview-page');
+      if (!el) return;
+      el.style.transition = animate && !ovPeekReduce() ? 'transform 240ms cubic-bezier(.32,.72,0,1)' : 'none';
+      el.style.transform = 'translate3d(0,' + Math.round(off) + 'px,0)';
+    }
+    function ovPeekCleanup() {
+      const wasBackdrop = ovPeekBackdrop.value;
+      ovPeekAnimating = false;
+      ovPeekCommit = false;
+      if (ovPeekTimer) { clearTimeout(ovPeekTimer); ovPeekTimer = 0; }
+      if (ovPeekFallback) { clearTimeout(ovPeekFallback); ovPeekFallback = 0; }
+      ovPeekPage.value = '';
+      ovPeekBackdrop.value = false;
+      ovPeekH = 0;
+      // 返回提交后旧全览页正在离场：不要复位它的 transform，否则会在新页挂上之前闪出来。
+      if (page.value === 'cards_overview' || !wasBackdrop) {
+        const pageEl = document.querySelector('.tab-main > .cards-overview-page');
+        if (pageEl) { pageEl.style.transition = ''; pageEl.style.transform = ''; }
+      }
+      const el = ovPeekEl.value;
+      if (el) { el.style.transition = ''; el.style.transform = ''; }
+    }
+    function ovPeekWaitRealPage(target, tries) {
+      // 只有真实目标页挂上后才撤预览；等待期间旧页/新页都被预览遮住，不会闪。
+      if (!ovPeekPage.value && !ovPeekBackdrop.value) return;
+      const sel = target === 'cards' ? '.cards-page' : '.cards-overview-page';
+      if (document.querySelector('.tab-main > ' + sel)) { ovPeekCleanup(); return; }
+      if ((tries || 0) > 180) { ovPeekCleanup(); return; }
+      requestAnimationFrame(() => ovPeekWaitRealPage(target, (tries || 0) + 1));
+    }
+    function ovPeekSnapBack() {
+      if (!ovPeekPage.value && !ovPeekBackdrop.value) return;
+      ovPeekAnimating = true;
+      if (ovPeekPage.value) ovPeekSetIn((ovPeekDir === 'up' ? 1 : -1) * ovPeekFullH(), true);
+      else ovPeekSetOut(0, true);
+      if (ovPeekTimer) clearTimeout(ovPeekTimer);
+      ovPeekTimer = setTimeout(() => { ovPeekTimer = 0; ovPeekAnimating = false; ovPeekCleanup(); }, ovPeekReduce() ? 0 : 260);
+    }
+    function ovBeginEnterPeek(dir) {
+      if (ovPeekPage.value || ovPeekBackdrop.value) return;
+      ovPeekAnimating = false;
+      ovPeekCommit = false;
+      ovPeekDir = dir === 'down' ? 'down' : 'up';
+      ovPeekPage.value = 'cards_overview';
+      ovPeekH = 0;
+      if (!overviewLoading.value) loadCardsOverview(true);   // 预览阶段取数：拖到位时网格已就绪
+      nextTick(() => {
+        if (!ovPeekPage.value) return;
+        ovPeekSetIn((ovPeekDir === 'up' ? 1 : -1) * ovPeekFullH(), false);
+      });
+    }
+    function ovFollowEnterPeek(dy) {
+      if (!ovPeekPage.value || ovPeekAnimating) return;
+      let off = (ovPeekDir === 'up' ? 1 : -1) * ovPeekFullH() + dy;
+      if ((ovPeekDir === 'up' && off < 0) || (ovPeekDir === 'down' && off > 0)) off *= 0.32;
+      ovPeekSetIn(off, false);
+    }
+    function ovCommitEnterPeek() {
+      if (page.value !== 'cards') { ovPeekCommit = false; ovPeekCleanup(); return; }
+      ovPeekCommit = true;
+      overviewPreloadedForEntry = true;
+      page.value = 'cards_overview';
+    }
+    function ovReleaseEnterPeek(dy, vel) {
+      if (!ovPeekPage.value || ovPeekAnimating) return;
+      const travel = ovPeekDir === 'up' ? -dy : dy;
+      const toward = ovPeekDir === 'up' ? -vel : vel;
+      const commit = travel >= ovPeekThreshold() || (travel > 44 && toward > 0.45);
+      ovPeekAnimating = true;
+      ovPeekSetIn(commit ? 0 : (ovPeekDir === 'up' ? 1 : -1) * ovPeekFullH(), true);
+      if (ovPeekTimer) clearTimeout(ovPeekTimer);
+      ovPeekTimer = setTimeout(() => {
+        ovPeekTimer = 0;
+        ovPeekAnimating = false;
+        if (commit) ovCommitEnterPeek(); else ovPeekCleanup();
+      }, ovPeekReduce() ? 0 : 260);
+    }
+    function ovAutoEnterPeek(dir) {
+      if (ovPeekPage.value || ovPeekBackdrop.value) return;
+      ovPeekAnimating = false;
+      ovPeekCommit = false;
+      ovPeekDir = dir === 'down' ? 'down' : 'up';
+      ovPeekPage.value = 'cards_overview';
+      ovPeekH = 0;
+      if (!overviewLoading.value) loadCardsOverview(true);
+      nextTick(() => {
+        if (!ovPeekPage.value) return;
+        const el = ovPeekEl.value;
+        if (!el) return;
+        ovPeekSetIn((ovPeekDir === 'up' ? 1 : -1) * ovPeekFullH(), false);
+        void el.offsetHeight;   // 先落一帧初始位置，后面的 transition 才会动
+        ovPeekAnimating = true;
+        ovPeekSetIn(0, true);
+        if (ovPeekTimer) clearTimeout(ovPeekTimer);
+        ovPeekTimer = setTimeout(() => {
+          ovPeekTimer = 0;
+          ovPeekAnimating = false;
+          ovCommitEnterPeek();
+        }, ovPeekReduce() ? 0 : 260);
+      });
+    }
+    function ovBeginReturnPeek(dir) {
+      if (ovPeekPage.value || ovPeekBackdrop.value) return;
+      ovPeekAnimating = false;
+      ovPeekCommit = false;
+      ovPeekDir = dir === 'up' ? 'up' : 'down';
+      ovPeekBackdrop.value = true;
+      ovPeekH = 0;
+      if (!cards.value.length) loadCards();
+      nextTick(() => { if (ovPeekBackdrop.value) ovPeekSetOut(0, false); });
+    }
+    function ovFollowReturnPeek(dy) {
+      if (!ovPeekBackdrop.value || ovPeekAnimating) return;
+      const full = ovPeekFullH();
+      let off = dy;
+      if (ovPeekDir === 'down' && off > full - 1) off = full - 1;
+      if (ovPeekDir === 'up' && off < 1 - full) off = 1 - full;
+      if (ovPeekDir === 'down' && off < 0) off *= 0.22;
+      if (ovPeekDir === 'up' && off > 0) off *= 0.22;
+      ovPeekSetOut(off, false);
+    }
+    function ovCommitReturnPeek() {
+      if (page.value !== 'cards_overview') { ovPeekCleanup(); return; }
+      // 旧页自己的 transform transition 会被 Vue 当成 leave 时长；提交前清掉，切页才是即时的。
+      const pageEl = document.querySelector('.tab-main > .cards-overview-page');
+      if (pageEl) pageEl.style.transition = 'none';
+      ovPeekCommit = true;
+      hist.back();
+      if (ovPeekFallback) clearTimeout(ovPeekFallback);
+      ovPeekFallback = setTimeout(() => {
+        ovPeekFallback = 0;
+        if (page.value === 'cards_overview') {
+          ovPeekCommit = false;
+          ovPeekSetOut(0, true);
+          ovPeekTimer = setTimeout(() => { ovPeekTimer = 0; ovPeekCleanup(); }, ovPeekReduce() ? 0 : 260);
+        }
+      }, 600);
+    }
+    function ovReleaseReturnPeek(dy, vel) {
+      if (!ovPeekBackdrop.value || ovPeekAnimating) return;
+      const travel = ovPeekDir === 'down' ? dy : -dy;
+      const toward = ovPeekDir === 'down' ? vel : -vel;
+      const commit = travel >= ovPeekThreshold() || (travel > 44 && toward > 0.45);
+      ovPeekAnimating = true;
+      ovPeekSetOut(commit ? (ovPeekDir === 'down' ? 1 : -1) * ovPeekFullH() : 0, true);
+      if (ovPeekTimer) clearTimeout(ovPeekTimer);
+      ovPeekTimer = setTimeout(() => {
+        ovPeekTimer = 0;
+        ovPeekAnimating = false;
+        if (commit) ovCommitReturnPeek(); else ovPeekCleanup();
+      }, ovPeekReduce() ? 0 : 260);
+    }
     function onOverviewPullStart(e) {
       cancelOvGridScroll();
       const el = e.currentTarget;
@@ -3325,7 +3528,7 @@ const yxqApp = createApp({
       if (!t) return;
       const atTop = el.scrollTop <= 0;
       const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
-      ovPull = { x: t.clientX, y: t.clientY, atTop, atBottom, active: false, decided: false, dy: 0 };
+      ovPull = { x: t.clientX, y: t.clientY, atTop, atBottom, active: false, decided: false, dy: 0, dir: '', lastY: t.clientY, lastT: Date.now(), vy: 0 };
     }
     function onOverviewPullMove(e) {
       const g = ovPull;
@@ -3337,33 +3540,55 @@ const yxqApp = createApp({
       if (!g.decided) {
         if (Math.abs(dy) < 10 && Math.abs(dx) < 10) return;
         g.decided = true;
-        if (Math.abs(dx) >= Math.abs(dy)) { ovPull = null; ovPullHint.value = ''; return; }
+        if (Math.abs(dx) >= Math.abs(dy)) { ovPull = null; return; }
+        if (g.atTop && dy > 0) g.dir = 'down';
+        else if (g.atBottom && !overviewHasMore.value && dy < 0) g.dir = 'up';
+        else { ovPull = null; return; }
+        g.active = true;
+        g.lastY = t.clientY; g.lastT = Date.now(); g.vy = 0;
+        ovBeginReturnPeek(g.dir);
       }
-      if (g.atTop && dy > 0) {
-        // 已到顶：继续下拉回牵线
-        g.active = true; g.dy = dy;
-        ovPullHint.value = dy > 45 ? 'top' : '';
-        if (e.cancelable) e.preventDefault();
-      } else if (g.atBottom && !overviewHasMore.value && dy < 0) {
-        // 已到底且无更多：继续上滑回牵线
-        g.active = true; g.dy = dy;
-        ovPullHint.value = dy < -45 ? 'bottom' : '';
-        if (e.cancelable) e.preventDefault();
-      }
+      if (!g.active) return;
+      g.dy = dy;
+      const now = Date.now();
+      const dts = now - g.lastT;
+      if (dts > 0) { g.vy = (t.clientY - g.lastY) / dts; g.lastY = t.clientY; g.lastT = now; }
+      ovFollowReturnPeek(dy);
+      if (e.cancelable) e.preventDefault();
     }
     function onOverviewPullEnd() {
       const g = ovPull;
       ovPull = null;
-      ovPullHint.value = '';
       if (!g || !g.active) return;
-      if ((g.atTop && g.dy > 70) || (g.atBottom && g.dy < -70 && !overviewHasMore.value)) handleBack();
+      ovReleaseReturnPeek(g.dy, g.vy);
     }
-    function onOverviewPullCancel() { ovPull = null; ovPullHint.value = ''; }
+    function onOverviewPullCancel() {
+      const g = ovPull;
+      ovPull = null;
+      if (g && g.active) ovPeekSnapBack();
+    }
     function openCardsOverview(dir) {
       if (page.value !== 'cards') return;
-      overviewEntryDir = dir === 'up' || dir === 'down' ? dir : '';
-      page.value = 'cards_overview';
-      if (overviewEntryDir) setTimeout(() => { overviewEntryDir = ''; }, 600);
+      ovAutoEnterPeek(dir === 'down' ? 'down' : 'up');
+    }
+    function closeCardsOverview() {
+      if (page.value !== 'cards_overview') { handleBack(); return; }
+      if (ovPeekPage.value || ovPeekBackdrop.value) return;
+      ovBeginReturnPeek('down');
+      nextTick(() => {
+        if (!ovPeekBackdrop.value) return;
+        const el = document.querySelector('.tab-main > .cards-overview-page');
+        if (!el) { handleBack(); return; }
+        void el.offsetHeight;   // 先落一帧初始位置，后面的 transition 才会动
+        ovPeekAnimating = true;
+        ovPeekSetOut(ovPeekFullH(), true);
+        if (ovPeekTimer) clearTimeout(ovPeekTimer);
+        ovPeekTimer = setTimeout(() => {
+          ovPeekTimer = 0;
+          ovPeekAnimating = false;
+          ovCommitReturnPeek();
+        }, ovPeekReduce() ? 0 : 260);
+      });
     }
     function markCardsTabPress() {
       cardsTabWasActive = page.value === 'cards';
@@ -4141,12 +4366,13 @@ const yxqApp = createApp({
     }
     function onCardVertStart(e) {
       const t = (e.touches && e.touches[0]) || e;
-      cardVertGesture = { x: t.clientX, y: t.clientY, target: e.target, active: false, decided: false };
+      cardVertGesture = { x: t.clientX, y: t.clientY, target: e.target, active: false, decided: false, dir: '', lastY: t.clientY, lastT: Date.now(), vy: 0 };
     }
     function onCardVertMove(e) {
       const g = cardVertGesture;
       if (!g) return;
       const t = (e.touches && e.touches[0]) || e;
+      if (!t) return;
       const dx = t.clientX - g.x;
       const dy = t.clientY - g.y;
       if (!g.decided) {
@@ -4155,21 +4381,31 @@ const yxqApp = createApp({
         if (Math.abs(dx) >= Math.abs(dy)) { cardVertGesture = null; return; }   // 横向：切卡/照片
         if (cardVertCanScroll(cardVertScroller(g.target), dy)) { cardVertGesture = null; return; }
         g.active = true;
+        g.dir = dy < 0 ? 'up' : 'down';
+        g.lastY = t.clientY; g.lastT = Date.now(); g.vy = 0;
+        ovBeginEnterPeek(g.dir);
       }
+      if (!g.active) return;
+      const now = Date.now();
+      const dts = now - g.lastT;
+      if (dts > 0) { g.vy = (t.clientY - g.lastY) / dts; g.lastY = t.clientY; g.lastT = now; }
+      ovFollowEnterPeek(dy);
+      if (e.cancelable) e.preventDefault();
     }
     function onCardVertEnd(e) {
       const g = cardVertGesture;
       cardVertGesture = null;
       if (!g || !g.active) return;
       const t = (e.changedTouches && e.changedTouches[0]) || e;
-      const dx = t.clientX - g.x;
       const dy = t.clientY - g.y;
-      if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
-        photoDidSwipe = true;   // 防止 touchend 后的 click 打开大图
-        openCardsOverview(dy < 0 ? 'up' : 'down');
-      }
+      photoDidSwipe = true;   // 纵向拖拽后浏览器补发的 click 不再打开大图
+      ovReleaseEnterPeek(dy, g.vy);
     }
-    function onCardVertCancel() { cardVertGesture = null; }
+    function onCardVertCancel() {
+      const g = cardVertGesture;
+      cardVertGesture = null;
+      if (g && g.active) ovPeekSnapBack();
+    }
     // —— 图片区：鼠标拖动切换照片 ——
     let photoMouseDown = false;
     let photoMouseStartX = 0, photoMouseStartY = 0, photoMouseStartTime = 0;
@@ -6382,7 +6618,9 @@ const yxqApp = createApp({
       if (p === 'home') loadActivities();
       if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
       if (p === 'cards_overview') {
-        if (overviewReturnPending) {
+        if (overviewPreloadedForEntry) {
+          overviewPreloadedForEntry = false;   // 过场预览已取数：不重置，避免到位后闪骨架
+        } else if (overviewReturnPending) {
           overviewReturnPending = false;
           restoreOverviewScroll(overviewScrollTop);
         } else {
@@ -8575,7 +8813,8 @@ const yxqApp = createApp({
       ovLiked, ovCanLike, ovCanPraise, ovPraised, ovSimple, ovOpenFeedback,
       closeOverviewCard, onOverviewSheetClosed, ovCardDragStart, ovCardDragMove, ovCardDragEnd, ovCardDragCancel, ovCardDragStyle,
       ovRecalcPhotoPosition, ovPhotoPosition, ovCardIndex, ovCardSlide, ovCloseDir, ovCardMainStart, ovCardMainEnd, ovCardMainCancel,
-      ovPullHint, onOverviewPullStart, onOverviewPullMove, onOverviewPullEnd, onOverviewPullCancel, cancelOvGridScroll,
+      ovPeekPage, ovPeekBackdrop, ovPeekEl, closeCardsOverview,
+      onOverviewPullStart, onOverviewPullMove, onOverviewPullEnd, onOverviewPullCancel, cancelOvGridScroll,
       markCardsTabPress, onCardsTabTap,
       sharpPhotos, sharpReady, onSharpLoad,
       showSwipeGuide, closeSwipeGuide,

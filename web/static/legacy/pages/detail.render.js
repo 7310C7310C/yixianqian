@@ -356,7 +356,7 @@ function render(_ctx, _cache) {
         type: "button",
         class: "ov-back",
         "aria-label": "返回牵线",
-        onClick: _cache[0] || (_cache[0] = (...args) => (_ctx.handleBack && _ctx.handleBack(...args)))
+        onClick: _cache[0] || (_cache[0] = (...args) => (_ctx.closeCardsOverview && _ctx.closeCardsOverview(...args)))
       }, [
         _createVNode(_component_van_icon, { name: "arrow-left" })
       ]),
@@ -390,12 +390,6 @@ function render(_ctx, _cache) {
         }, null, 8 /* PROPS */, ["class"])
       ])
     ]),
-    (_ctx.ovPullHint)
-      ? (_openBlock(), _createElementBlock("div", {
-          key: 0,
-          class: _normalizeClass(["ov-pull-hint", 'ov-pull-hint--' + _ctx.ovPullHint])
-        }, _toDisplayString(_ctx.ovPullHint === 'top' ? '继续下拉回到牵线' : '继续上滑回到牵线'), 3 /* TEXT, CLASS */))
-      : _createCommentVNode("v-if", true),
     _createElementVNode("div", {
       class: "cards-overview-scroll",
       onScrollPassive: _cache[12] || (_cache[12] = (...args) => (_ctx.onOverviewScroll && _ctx.onOverviewScroll(...args))),
