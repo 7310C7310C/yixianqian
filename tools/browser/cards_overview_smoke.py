@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -161,7 +162,7 @@ def touch_drag(page, selector: str, dy: int) -> bool:
 
 
 def touch_drag_start(page, selector: str, dy: int) -> bool:
-    """按下并拖到中途；保留起始坐标，供 touch_drag_finish 继续同一手势。"""
+    """按下并拖到中途；保留起始坐标与元素，供 touch_drag_move/finish 继续同一手势。"""
     return page.evaluate(
         """({sel, dy}) => {
             const el = document.querySelector(sel);
@@ -169,7 +170,7 @@ def touch_drag_start(page, selector: str, dy: int) -> bool:
             const r = el.getBoundingClientRect();
             const x = r.left + r.width * 0.5;
             const y = r.top + Math.min(r.height * 0.4, 120);
-            window.__ovDragStart = {x: x, y: y};
+            window.__ovDragStart = {x: x, y: y, el: el};
             const mk = (cy) => new Touch({identifier: 5, target: el, clientX: x, clientY: cy});
             const fire = (type, cy, active) => el.dispatchEvent(new TouchEvent(type, {
                 bubbles: true, cancelable: true,
@@ -184,15 +185,32 @@ def touch_drag_start(page, selector: str, dy: int) -> bool:
     )
 
 
-def touch_drag_finish(page, selector: str, dy: int) -> bool:
-    """完成 touch_drag_start 的手势（同一组起始坐标，元素滚动/位移也不影响）。"""
+def touch_drag_move(page, dy: int) -> bool:
+    """在手势中途再发一次 move（坐标基于 touch_drag_start 保存的起点）。"""
     return page.evaluate(
-        """({sel, dy}) => {
-            const el = document.querySelector(sel);
+        """({dy}) => {
             const st = window.__ovDragStart;
-            if (!el || !st) return false;
-            const mk = (cy) => new Touch({identifier: 5, target: el, clientX: st.x, clientY: cy});
-            const fire = (type, cy, active) => el.dispatchEvent(new TouchEvent(type, {
+            if (!st || !st.el) return false;
+            const mk = (cy) => new Touch({identifier: 5, target: st.el, clientX: st.x, clientY: cy});
+            st.el.dispatchEvent(new TouchEvent('touchmove', {
+                bubbles: true, cancelable: true,
+                touches: [mk(st.y + dy)],
+                changedTouches: [mk(st.y + dy)],
+            }));
+            return true;
+        }""",
+        {"dy": dy},
+    )
+
+
+def touch_drag_finish(page, selector: str, dy: int) -> bool:
+    """完成 touch_drag_start 的手势（同一元素与起始坐标，元素滚动/位移也不影响）。"""
+    return page.evaluate(
+        """({dy}) => {
+            const st = window.__ovDragStart;
+            if (!st || !st.el) return false;
+            const mk = (cy) => new Touch({identifier: 5, target: st.el, clientX: st.x, clientY: cy});
+            const fire = (type, cy, active) => st.el.dispatchEvent(new TouchEvent(type, {
                 bubbles: true, cancelable: true,
                 touches: active ? [mk(cy)] : [],
                 changedTouches: [mk(cy)],
@@ -201,8 +219,15 @@ def touch_drag_finish(page, selector: str, dy: int) -> bool:
             fire('touchend', st.y + dy, false);
             return true;
         }""",
-        {"sel": selector, "dy": dy},
+        {"dy": dy},
     )
+
+
+def parse_motion(style: str) -> tuple[float, float]:
+    """从 inline transform 里取 translateY / scale。"""
+    my = re.search(r"translate3d\(\s*-?0(?:px)?\s*,\s*(-?[\d.]+)px\s*,\s*-?0(?:px)?\s*\)", style or "")
+    ms = re.search(r"scale\(([\d.]+)\)", style or "")
+    return (float(my.group(1)) if my else 0.0, float(ms.group(1)) if ms else 1.0)
 
 
 def wait_real_page(page, selector: str, label: str) -> None:
@@ -1187,6 +1212,18 @@ def main() -> int:
                 page.evaluate("() => { const el = document.querySelector('.cards-overview-scroll'); if (el) el.scrollTop = 0; }")
                 page.wait_for_timeout(200)
                 touch_drag_start(page, ".cards-overview-scroll", 60)
+                page.wait_for_timeout(50)
+                early = page.evaluate(
+                    """() => {
+                        const el = document.querySelector('.tab-main > .cards-overview-page');
+                        return el ? el.style.transform : '';
+                    }"""
+                )
+                ey, _ = parse_motion(early)
+                if abs(ey) < 5:
+                    raise SmokeFailure(f"第一次拖拽后全览页未跟手（被初始状态覆盖）：{early}")
+                touch_drag_move(page, 100)
+                page.wait_for_timeout(50)
                 peek = page.evaluate(
                     """() => ({
                         cards: document.querySelectorAll('.ov-peek-clip--back .cards-page').length,
@@ -1195,6 +1232,17 @@ def main() -> int:
                 )
                 if peek["cards"] != 1 or peek["ov"] != 0:
                     raise SmokeFailure(f"返回牵线的垫层页面错误：{peek}")
+                motion = page.evaluate(
+                    """() => {
+                        const page = document.querySelector('.ov-peek-clip--back .cards-page');
+                        const bar = document.querySelector('.ov-peek-clip--back .van-tabbar');
+                        return {page: page ? page.style.transform : '', bar: bar ? bar.style.transform : ''};
+                    }"""
+                )
+                py, ps = parse_motion(motion["page"])
+                by, _ = parse_motion(motion["bar"])
+                if abs(py) < 5 or ps >= 0.999 or abs(by) < 5:
+                    raise SmokeFailure(f"返回时牵线页/底栏未真正跟手：{motion}")
                 touch_drag_finish(page, ".cards-overview-scroll", 120)
                 wait_real_page(page, ".cards-page", label)
                 if page.locator(".tab-main > .cards-overview-page").count():
@@ -1218,6 +1266,18 @@ def main() -> int:
                 # ---- 10.8 牵线页纵向滑动（上/下）进入全览 ----
                 page.wait_for_selector(".swipe-card", timeout=10000)
                 touch_drag_start(page, ".swipe-card", 70)
+                page.wait_for_timeout(50)
+                early = page.evaluate(
+                    """() => {
+                        const el = document.querySelector('.tab-main > .cards-page');
+                        return el ? el.style.transform : '';
+                    }"""
+                )
+                ey, _ = parse_motion(early)
+                if abs(ey) < 5:
+                    raise SmokeFailure(f"第一次拖拽后牵线页未跟手（被初始状态覆盖）：{early}")
+                touch_drag_move(page, 110)
+                page.wait_for_timeout(50)
                 peek = page.evaluate(
                     """() => ({
                         ov: document.querySelectorAll('.ov-peek-clip:not(.ov-peek-clip--back) .cards-overview-page').length,
@@ -1226,6 +1286,17 @@ def main() -> int:
                 )
                 if peek["ov"] != 1 or peek["cards"] != 0:
                     raise SmokeFailure(f"进入全览的预览页错误：{peek}")
+                motion = page.evaluate(
+                    """() => {
+                        const page = document.querySelector('.tab-main > .cards-page');
+                        const bar = document.querySelector('.tab-main ~ .van-tabbar');
+                        return {page: page ? page.style.transform : '', bar: bar ? bar.style.transform : ''};
+                    }"""
+                )
+                py, ps = parse_motion(motion["page"])
+                by, _ = parse_motion(motion["bar"])
+                if abs(py) < 5 or ps >= 0.999 or abs(by) < 5:
+                    raise SmokeFailure(f"进入时牵线页/底栏未真正跟手：{motion}")
                 touch_drag_finish(page, ".swipe-card", 140)
                 wait_real_page(page, ".cards-overview-page", label)
                 if not page.locator(".tab-main > .cards-overview-page .ov-title").count():

@@ -58,7 +58,7 @@ import (
 // 114 gave the 「已结束」 tag a neutral dark background; 115 softened it to a muted rose
 // chip; 116 uses a red-family chip with white text after PM feedback on the light theme.
 // 135 refreshes unread counts from read-all/clear responses.
-const assetVersion = "162"
+const assetVersion = "164"
 
 // MediaView is the minimal media representation exposed to templates.
 type MediaView struct {

@@ -33,7 +33,7 @@
     "2026-11-06：全览滑后立点（touchend 直接开卡）、顶/底回牵线、浮层底部上滑收卡、浮层左右滑切卡+网格自动定位、收起不闪回；app.min 实测 58,962B（含切卡过场/草稿守卫/加载回调守门）→ baseline 53,140→53,605、budget 58,454→58,965；page chunks 实测 53,101B → baseline 48,150→48,275、budget 52,965→53,102；critical CSS 8,732B 不变。",
     "2026-11-06：上滑收卡时 popup 也向上离场（方向与手势一致）；app.min 实测 58,997B → baseline 53,605→53,635、budget 58,965→58,998；page chunks 实测 53,127B → baseline 48,275→48,300、budget 53,102→53,130；critical CSS 8,732B 不变。",
     "2026-11-06：全览网格自动定位改为 rAF 平滑滚动（跟随切卡/打开，不再瞬跳）；app.min 实测 59,225B（定位改到打开时立即触发）→ baseline 53,635→53,842、budget 58,998→59,226；page chunks 实测 53,154B → baseline 48,300→48,325、budget 53,130→53,157；critical CSS 8,732B 不变。",
-    "2026-11-07：牵线⇄全览改为跟手拖拽过场（进入时全览页跟手盖上来、返回时全览页滑走露出牵线；点 tab/返回键走同一动画，去掉顶部/底部提示条）；shell 实测 30,797B → baseline 27,978→28,000、budget 30,776→30,800；app.min 实测 60,199B（预览改用 prop.page + 目标页挂载后才撤层）→ baseline 53,842→54,729、budget 59,226→60,201；initial_render 实测 26,434B（预算内不变）；page chunks 实测 53,074B（预算内不变）；critical CSS 8,732B 不变。"
+    "2026-11-07：牵线⇄全览改为跟手拖拽过场（进入时全览页跟手盖上来、返回时全览页滑走露出牵线；点 tab/返回键走同一动画，去掉顶部/底部提示条）；shell 实测 30,797B → baseline 27,978→28,000、budget 30,776→30,800；app.min 实测 60,591B（牵线页跟手位移+缩放、底栏同步；首帧 follow 挂载后补上）→ baseline 53,842→55,085、budget 59,226→60,593；initial_render 实测 26,434B（预算内不变）；page chunks 实测 53,074B（预算内不变）；critical CSS 8,732B 不变。"
   ],
   "limits": {
     "shell_gzip": {
@@ -43,8 +43,8 @@
     },
     "app_min_gzip": {
       "label": "app.min.js",
-      "baseline_bytes": 54729,
-      "budget_bytes": 60201
+      "baseline_bytes": 55085,
+      "budget_bytes": 60593
     },
     "initial_render_gzip": {
       "label": "app.render.js（根 + cards）",
