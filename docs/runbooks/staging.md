@@ -316,6 +316,8 @@ python3 tools/migrate_testapp.py \
   边缘限流 `limit_req 30r/s burst=60` + `limit_conn 20`，先看 access log 再调，不要直接关。
 - `AUTO_MIGRATE=false` 后迁移由 autodeploy 在切换二进制后、restart 前执行；手工部署时先跑：
   `systemd-run --wait --pipe -p EnvironmentFile=/opt/yixianqian-next/config/staging.env /opt/yixianqian-next/bin/migrate`。
+  维护命令（migrate/piirotate/pg_dump/psql）以 root 运行；staging DSN 的 `user=yxq` 是
+  Unix socket peer，autodeploy 只把该精确 token 改写为 `user=root`，应用 systemd env 不变。
 
 ## 10. 备份/还原与回滚演练（cutover 前必做）
 
