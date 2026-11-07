@@ -239,6 +239,20 @@ def wait_real_page(page, selector: str, label: str) -> None:
         raise SmokeFailure(f"{label}: 跟手过场预览层未撤掉") from None
 
 
+def assert_no_card_enter_anim(page, label: str) -> None:
+    """回到牵线后，卡片应直接在最终位置出现；不能重播上一次切卡的 slide-in 动画。"""
+    state = page.evaluate(
+        """() => {
+            const el = document.querySelector('.tab-main > .cards-page .swipe-card');
+            return el ? {cls: el.className, anim: getComputedStyle(el).animationName} : null;
+        }"""
+    )
+    if not state:
+        raise SmokeFailure(f"{label}: 回到牵线后找不到卡片")
+    if "slide-in-" in state["cls"] or state["anim"] != "none":
+        raise SmokeFailure(f"{label}: 回到牵线后卡片仍在播进入动画：{state}")
+
+
 def apply_overview_filter(page, placeholder: str, value: str) -> None:
     page.locator(".ov-filter").click()
     page.wait_for_selector(".filter-title", timeout=5000)
@@ -1245,9 +1259,24 @@ def main() -> int:
                     raise SmokeFailure(f"返回时牵线页/底栏未真正跟手：{motion}")
                 touch_drag_finish(page, ".cards-overview-scroll", 120)
                 wait_real_page(page, ".cards-page", label)
+                assert_no_card_enter_anim(page, label)
                 if page.locator(".tab-main > .cards-overview-page").count():
                     raise SmokeFailure("全览到顶下拉未回到牵线")
                 notes.append(f"{label}: 全览到顶继续下拉回牵线")
+                # 页内切卡动画仍保留；320ms 后方向类清掉，避免下次回到牵线重播。
+                page.keyboard.press("ArrowRight")
+                page.wait_for_timeout(80)
+                inpage = page.evaluate(
+                    """() => {
+                        const el = document.querySelector('.tab-main > .cards-page .swipe-card');
+                        return el ? {cls: el.className, anim: getComputedStyle(el).animationName} : null;
+                    }"""
+                )
+                if not inpage or "slide-in-" not in inpage["cls"]:
+                    raise SmokeFailure(f"页内切卡动画丢失：{inpage}")
+                page.wait_for_timeout(400)
+                assert_no_card_enter_anim(page, label + " 切卡后")
+                notes.append(f"{label}: 页内切卡动画保留，回到牵线不重播")
 
                 # 重新进入全览，模拟已加载到底后上滑回牵线。
                 page.locator(".van-tabbar-item").filter(has_text="牵线").first.click()
@@ -1304,6 +1333,7 @@ def main() -> int:
                 notes.append(f"{label}: 牵线页下滑进入全览")
                 page.locator(".ov-back").click()
                 wait_real_page(page, ".cards-page", label)
+                assert_no_card_enter_anim(page, label)
                 touch_drag(page, ".swipe-card", -140)
                 wait_real_page(page, ".cards-overview-page", label)
                 notes.append(f"{label}: 牵线页上滑进入全览")

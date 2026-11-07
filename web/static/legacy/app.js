@@ -3009,6 +3009,13 @@ const yxqApp = createApp({
       return [...regionProvinces.value].sort((a, b) => (order.get(a.code) ?? 999) - (order.get(b.code) ?? 999));
     });
     const slideDir = ref('');
+    let slideDirTimer = 0;
+    // 切卡动画只对「页内切卡」生效：320ms 后清掉方向，避免回到牵线时重新播放进入动画。
+    function setSlideDir(dir) {
+      slideDir.value = dir;
+      if (slideDirTimer) clearTimeout(slideDirTimer);
+      slideDirTimer = setTimeout(() => { slideDirTimer = 0; slideDir.value = ''; }, 320);
+    }
     const hasActiveFilter = computed(() => filterIsActive(filter.value));
     const ovHasActiveFilter = computed(() => filterIsActive(overviewFilter.value));
     function buildFilterQuery(f) {
@@ -4264,7 +4271,7 @@ const yxqApp = createApp({
       if (dir < 0) {
         // 下一张
         if (cardIndex.value < n - 1) {
-          slideDir.value = 'right';
+          setSlideDir('right');
           cardIndex.value += 1;
           photoIndex.value = 0;
           photoSlideDir.value = '';
@@ -4278,7 +4285,7 @@ const yxqApp = createApp({
             loadMoreCards().then(() => {
               if (cardIndex.value < cards.value.length - 1) {
                 cardIndex.value += 1;
-                slideDir.value = 'right';
+                setSlideDir('right');
               }
             }).catch(() => {});
           }
@@ -4292,7 +4299,7 @@ const yxqApp = createApp({
       } else if (dir > 0) {
         // 上一张
         if (cardIndex.value > 0) {
-          slideDir.value = 'left';
+          setSlideDir('left');
           cardIndex.value -= 1;
           photoIndex.value = 0;
           photoSlideDir.value = '';
@@ -4303,7 +4310,7 @@ const yxqApp = createApp({
             loadPrevPage().then((prep) => {
               if (prep > 1) {
                 cardIndex.value = prep - 1;
-                slideDir.value = 'left';
+                setSlideDir('left');
                 trimCardsWindow();
               }
             }).catch(() => {});
@@ -6683,7 +6690,12 @@ const yxqApp = createApp({
       if (p === 'group_roster' && gaDetailId.value) loadGroupRoster(true);
       if (p === 'checkin' && gaDetailId.value) loadSigninRoster(true);
       if (p === 'home') loadActivities();
-      if (p === 'cards') { if (old && old !== 'cards') prevPage.value = old; loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState(); }
+      if (p === 'cards') {
+        if (old && old !== 'cards') prevPage.value = old;
+        // 从全览/其它页回到牵线：卡片直接以最终位置出现，不重播上一次切卡的进入动画。
+        if (old !== 'cards') { if (slideDirTimer) { clearTimeout(slideDirTimer); slideDirTimer = 0; } slideDir.value = ''; }
+        loadCards(); maybeShowActivityPromo(); maybeShowUpdateNotes(); loadPraiseState();
+      }
       if (p === 'cards_overview') {
         if (overviewPreloadedForEntry) {
           overviewPreloadedForEntry = false;   // 过场预览已取数：不重置，避免到位后闪骨架
