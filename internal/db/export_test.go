@@ -14,3 +14,11 @@ func (d *DB) SetSessionLastSeen(ctx context.Context, sessionID int64, at time.Ti
 	}
 	return nil
 }
+
+// SetSessionExpiresAt is a test-only seam for sliding-expiry tests.
+func (d *DB) SetSessionExpiresAt(ctx context.Context, sessionID int64, at time.Time) error {
+	if _, err := d.pool.Exec(ctx, `UPDATE sessions SET expires_at = $2 WHERE id = $1`, sessionID, at); err != nil {
+		return fmt.Errorf("db: set session expires at: %w", err)
+	}
+	return nil
+}

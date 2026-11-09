@@ -134,7 +134,7 @@ func (a *App) adminHTMLRoute(permission string, allowDocument bool, next func(ht
 			return
 		}
 		if !a.adminSessionFresh(r) {
-			a.clearSessionCookie(w)
+			a.revokeStaleAdminSession(w, r)
 			a.renderError(w, r, http.StatusUnauthorized, "管理会话已过期", "请重新登录后再进入管理台。")
 			return
 		}
@@ -163,7 +163,7 @@ func (a *App) adminAPI(permission string, next func(http.ResponseWriter, *http.R
 			return
 		}
 		if !a.adminSessionFresh(r) {
-			a.clearSessionCookie(w)
+			a.revokeStaleAdminSession(w, r)
 			writeAPIError(w, http.StatusUnauthorized, "session_expired", "管理会话已过期，请重新登录。")
 			return
 		}
@@ -185,18 +185,31 @@ func (a *App) adminAPI(permission string, next func(http.ResponseWriter, *http.R
 	}
 }
 
-// adminSessionFresh caps admin access by absolute session age. The regular
-// user session may last 30 days, but an admin session is only good for
-// cfg.AdminSessionTTL (default 8h); re-login issues a new session ID.
+// adminSessionFresh caps admin access by absolute session age when
+// cfg.AdminSessionTTL > 0. Zero (the default) disables the extra cap; the
+// regular session then remains valid until password change or logout.
 func (a *App) adminSessionFresh(r *http.Request) bool {
-	if a.cfg.AdminSessionTTL <= 0 {
-		return true
-	}
 	s, ok := currentSession(r)
 	if !ok {
 		return false
 	}
+	if a.cfg.AdminSessionTTL <= 0 {
+		return true
+	}
 	return a.clock.Now().Sub(s.CreatedAt) <= a.cfg.AdminSessionTTL
+}
+
+// revokeStaleAdminSession ends the whole session when the optional admin age
+// cap rejects it. Clearing only the cookie leaves the token valid: an in-flight
+// response or another tab can restore it and re-enter the "expired → re-login
+// → expired" loop. Revoking also forces the SPA to re-authenticate cleanly.
+func (a *App) revokeStaleAdminSession(w http.ResponseWriter, r *http.Request) {
+	if s, ok := currentSession(r); ok {
+		if err := a.db.RevokeSessionByID(r.Context(), s.ID); err != nil {
+			a.logger(r).Warn("revoke stale admin session failed", "error", err, "session_id", s.ID)
+		}
+	}
+	a.clearSessionCookie(w)
 }
 
 func containsString(values []string, want string) bool {

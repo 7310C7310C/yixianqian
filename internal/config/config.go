@@ -19,9 +19,12 @@ import (
 )
 
 const (
-	defaultTrustedProxy    = "45.125.16.205"
-	defaultSessionTTL      = 720 * time.Hour
-	defaultAdminSessionTTL = 8 * time.Hour
+	defaultTrustedProxy = "45.125.16.205"
+	// Sessions live until the password changes: a long TTL keeps the cookie
+	// (and DB row) valid across long gaps, and the middleware slides the
+	// expiry forward on use. Password changes still revoke other sessions.
+	defaultSessionTTL      = 87600 * time.Hour // 10 years
+	defaultAdminSessionTTL = time.Duration(0)  // 0 disables the extra admin cap
 	defaultActivationTTL   = 24 * time.Hour
 	defaultDBMaxConns      = 20
 	defaultDBMinConns      = 2
@@ -55,8 +58,9 @@ type Config struct {
 	SessionCookieName   string
 	SessionCookieSecure bool
 	SessionTTL          time.Duration
-	// AdminSessionTTL caps the age of a session used for /admin routes. It is
-	// shorter than the user session because admin actions are higher impact.
+	// AdminSessionTTL optionally caps the absolute age of a session used for
+	// /admin routes. Zero (the default) disables the extra cap: admin access
+	// follows the normal session lifetime and password-change revocation.
 	AdminSessionTTL time.Duration
 	DBMaxConns      int
 	DBMinConns      int
@@ -218,16 +222,16 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	} else {
 		cfg.ActivationTTL = v
 	}
-	if cfg.SessionTTL <= 0 || cfg.SessionTTL > 365*24*time.Hour {
-		errs = append(errs, errors.New("config: SESSION_TTL must be between 1s and 8760h"))
+	if cfg.SessionTTL <= 0 || cfg.SessionTTL > 87600*time.Hour {
+		errs = append(errs, errors.New("config: SESSION_TTL must be between 1s and 87600h"))
 	}
 	if v, err := parseDuration(getenv("ADMIN_SESSION_TTL"), defaultAdminSessionTTL); err != nil {
 		errs = append(errs, fmt.Errorf("config: ADMIN_SESSION_TTL: %w", err))
 	} else {
 		cfg.AdminSessionTTL = v
 	}
-	if cfg.AdminSessionTTL <= 0 || cfg.AdminSessionTTL > 24*time.Hour {
-		errs = append(errs, errors.New("config: ADMIN_SESSION_TTL must be between 1s and 24h"))
+	if cfg.AdminSessionTTL < 0 || cfg.AdminSessionTTL > 24*time.Hour {
+		errs = append(errs, errors.New("config: ADMIN_SESSION_TTL must be 0 (disabled) or between 1s and 24h"))
 	}
 	if cfg.ActivationTTL <= 0 || cfg.ActivationTTL > 30*24*time.Hour {
 		errs = append(errs, errors.New("config: ACTIVATION_TTL must be between 1s and 720h"))

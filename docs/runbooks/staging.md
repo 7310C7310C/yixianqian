@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-07
+last_verified: 2026-11-10
 sources:
   - deploy/**
   - .env.example
@@ -97,7 +97,7 @@ curl -sS https://next.nantou.love/healthz
 ```
 
 - `-buildvcs=false`：源码归 `yxq`，root build 时避免 VCS ownership 失败。
-- `staging.env` 由 systemd `EnvironmentFile` 读取（root 600）；CLI 用 `staging.cli.env`（yxq 600）。
+- `staging.env` 由 systemd `EnvironmentFile` 读取（root 600）；CLI 用 `staging.cli.env`（yxq 600）。会话默认不再显式覆盖：`SESSION_TTL` 默认 10 年、`ADMIN_SESSION_TTL=0`（关闭 8h 上限）；回滚旧 binary 时保持不设置这两行即可恢复 30d/8h 默认。
 - DB migration 由 server 启动时自动套用；migration 只增不改。
 - 部署失败保留 `server.prev`；回滚见 §3。
 

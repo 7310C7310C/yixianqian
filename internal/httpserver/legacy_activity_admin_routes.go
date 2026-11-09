@@ -88,6 +88,9 @@ func (a *App) legacyAdminAPI(perms []string,
 		}
 		if !a.adminSessionFresh(r) {
 			// Keep the v1 SPA contract: "未登录" triggers its login/cleanup path.
+			// Revoke + clear: clearing only the cookie would leave the token
+			// valid, so a restored/in-flight cookie could re-enter the loop.
+			a.revokeStaleAdminSession(w, r)
 			legacyError(w, http.StatusUnauthorized, "未登录")
 			return
 		}

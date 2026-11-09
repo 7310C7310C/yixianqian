@@ -35,10 +35,10 @@ func TestLoadDefaults(t *testing.T) {
 	if !cfg.AutoMigrate {
 		t.Fatal("auto migrate should default on")
 	}
-	if cfg.SessionTTL != 720*time.Hour {
+	if cfg.SessionTTL != 87600*time.Hour {
 		t.Fatalf("session ttl = %v", cfg.SessionTTL)
 	}
-	if cfg.AdminSessionTTL != 8*time.Hour {
+	if cfg.AdminSessionTTL != 0 {
 		t.Fatalf("admin session ttl = %v", cfg.AdminSessionTTL)
 	}
 	if cfg.DBMaxConns != 20 || cfg.DBMinConns != 2 {
@@ -188,10 +188,23 @@ func TestPhotoQuotaConfig(t *testing.T) {
 	}
 }
 
+func TestAdminSessionTTLZeroDisablesCap(t *testing.T) {
+	env := minimalEnv()
+	env["ADMIN_SESSION_TTL"] = "0"
+	cfg, err := LoadFrom(envGetter(env))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.AdminSessionTTL != 0 {
+		t.Fatalf("admin session ttl = %v, want 0", cfg.AdminSessionTTL)
+	}
+}
+
 func TestInvalidSettings(t *testing.T) {
 	cases := map[string]string{
 		"SESSION_COOKIE_SECURE": "maybe",
 		"SESSION_TTL":           "soon",
+		"ADMIN_SESSION_TTL":     "-1s",
 		"ACTIVATION_TTL":        "0s",
 		"MEDIA_MAX_BYTES":       "1",
 		"MEDIA_THUMB_SIZE":      "99999",

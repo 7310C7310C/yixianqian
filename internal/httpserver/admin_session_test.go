@@ -23,3 +23,17 @@ func TestAdminSessionFresh(t *testing.T) {
 		t.Fatal("9h session should be expired")
 	}
 }
+
+func TestAdminSessionFreshDisabled(t *testing.T) {
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	app := &App{cfg: config.Config{AdminSessionTTL: 0}, clock: fixedClock{at: now}}
+	r := httptest.NewRequest("GET", "/admin", nil)
+	if app.adminSessionFresh(r) {
+		t.Fatal("anonymous request must not be admin-fresh")
+	}
+
+	old := r.WithContext(withSession(r.Context(), &db.Session{CreatedAt: now.Add(-30 * 24 * time.Hour)}))
+	if !app.adminSessionFresh(old) {
+		t.Fatal("ADMIN_SESSION_TTL=0 must disable the extra admin cap")
+	}
+}

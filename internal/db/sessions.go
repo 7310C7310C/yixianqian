@@ -72,6 +72,32 @@ func (d *DB) TouchSession(ctx context.Context, sessionID int64, minInterval time
 	return nil
 }
 
+// ExtendSession slides an active session's expiry forward to now()+ttl when
+// less than half the lifetime remains. The threshold is evaluated with the
+// database clock, so app/DB skew cannot turn this into a write per request.
+// Expired, revoked, missing and disabled-user sessions are not extended.
+func (d *DB) ExtendSession(ctx context.Context, sessionID int64, ttl time.Duration) (time.Time, error) {
+	var expiresAt time.Time
+	err := d.pool.QueryRow(ctx,
+		`UPDATE sessions s
+		    SET expires_at = now() + make_interval(secs => $2)
+		  WHERE s.id = $1
+		    AND s.revoked_at IS NULL
+		    AND s.expires_at > now()
+		    AND s.expires_at < now() + make_interval(secs => $3)
+		    AND EXISTS (SELECT 1 FROM users u
+		                 WHERE u.id = s.user_id AND u.status = 'active')
+		  RETURNING s.expires_at`,
+		sessionID, ttl.Seconds(), ttl.Seconds()/2).Scan(&expiresAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, ErrNotFound
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("db: extend session: %w", err)
+	}
+	return expiresAt, nil
+}
+
 // RevokeSessionByID revokes one session idempotently.
 func (d *DB) RevokeSessionByID(ctx context.Context, sessionID int64) error {
 	_, err := d.pool.Exec(ctx,

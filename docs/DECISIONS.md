@@ -3,7 +3,7 @@
 <!-- doc-meta
 owner: maintainer
 status: current
-last_verified: 2026-11-06
+last_verified: 2026-11-10
 sources: []
 -->
 
@@ -121,9 +121,14 @@ sources: []
 - 依赖：Go 1.25 + pgx 5.9.2 / x/image 0.45 / x/text 0.41；CI 跑 govulncheck。why：`/register` 在匿名阶段解码用户图片，x/image 解码器 OOM/panic 是公开 DoS 面。
 - 身份证密钥：`PII_SECRET` 独立于 `SESSION_SECRET`，AES 与去重 HMAC 使用不同派生钥；`cmd/piirotate` 先备份再一次性重加密。why：单钥跨用途 + 泄露后全量 PII 失守。
 - 注册同意：`privacy_consent` 必选、落 `privacy_consent_at/version`；微信号展示同意（`contact_consent`）单独可选，不再硬编码 true。
-- 管理台：`ADMIN_SESSION_TTL` 默认 8h；超龄会话要求重新登录。why：管理台与用户同源同 cookie，缩短被盗会话窗口。
+- 管理台：`ADMIN_SESSION_TTL` 默认 0（不额外限制）；见 §8。why：管理台与用户同源同 cookie；8h 绝对年龄会把仍有效的用户会话判成 401，而 `/login` 对已登录用户 303 回 `/`，形成「过期→重新登录→再过期」死循环（2026-11-10 PM 报障）。
 - 登录锁定：5 次后指数退避（1s…5min），锁定期间正确密码仍可登录且不延长锁定。why：防止知道手机号的人定向永久锁号。
 - SSE：4 条快照查询合并为 1 条；单账号最多 3 条流；Shutdown 主动发 `reconnect`。why：在线用户空转查询与部署硬断。
 - 活动名单：`ACTIVITY_ROSTER_ENABLED` 默认 false（只显示人数）。why：婚恋资料默认最小暴露；需要公开名单时显式打开。
 - 迁移：生产 `AUTO_MIGRATE=false`，autodeploy 先跑 `bin/migrate`；`schema_migrations` 存 sha256。why：DDL 与发布解耦，改名/改内容可检测。
 - 不做：缩短媒体缓存（PM 决定保持缩略图 24h/原图 1h）；管理台独立子域（需要 DNS/TLS，另批）；HSTS preload（不可逆承诺）。
+
+## 8. 2026-11-10 会话保持（PM 要求）
+- 决策：用户 session 默认 `SESSION_TTL=87600h`（10 年），剩余不足一半时按 DB 时钟滑动续期；活跃请求在非公开缓存响应上刷新 cookie（认证响应强制 `private, no-store`，媒体除外），覆盖浏览器 400 天持久 cookie 上限。`ADMIN_SESSION_TTL` 默认 0（取消 8h 上限）。密码变更/管理员重置临时密码仍撤销其他 session；退出登录仍撤销当前 session。
+- why：PM 要求「不要过期，除非密码变更」；实际是管理台 8h 上限 + `/login` 对有效用户 session 303，重新登录无法发生。安全权衡：cookie 被盗后长期有效，需更短窗口时显式设 TTL；401 判会话失效必须同时撤销 session 并清 cookie；完全 400 天不打开站点仍会被浏览器清 cookie。
+- 验证：`TestAdminSessionFreshDisabled`、`TestIntegrationLegacyAdminStaleSessionClearsCookie`、`TestIntegrationSlidingSessionRefreshesCookie`、`TestIntegrationSessionCookieNotOnPublicCache`、`TestIntegrationExtendSession`；staging 部署后复测 9h 旧 session 管理 API 200 且重登录可达。

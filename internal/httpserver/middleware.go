@@ -155,6 +155,87 @@ func (a *App) withRecover(next http.Handler) http.Handler {
 	})
 }
 
+// refreshesSessionCookie keeps Set-Cookie off high-volume media responses.
+// The SPA's HTML/API requests around them refresh the same cookie, so active
+// users stay well below the browser's 400-day persistent-cookie cap.
+func refreshesSessionCookie(path string) bool {
+	return !strings.HasPrefix(path, "/cards/photo/") &&
+		!strings.HasPrefix(path, "/profile/photo/") &&
+		!strings.HasPrefix(path, "/media/")
+}
+
+// sessionCookieRefreshWriter defers the Set-Cookie refresh until the handler
+// has chosen its headers. It never appends a refresh after the handler already
+// set/cleared the session cookie (login, logout, stale-admin 401), so the
+// handler's cookie stays last. Authenticated responses are marked
+// private/no-store: attaching a session token to a public-cacheable response
+// would let a shared cache replay the token. 304s are left untouched because
+// they carry no body and the next 200/API response refreshes the cookie.
+type sessionCookieRefreshWriter struct {
+	http.ResponseWriter
+	name        string
+	refresh     func()
+	wroteHeader bool
+}
+
+func (w *sessionCookieRefreshWriter) WriteHeader(code int) {
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
+	if code != http.StatusNotModified {
+		markPrivateNoStore(w.Header())
+		if !w.hasSessionCookie() {
+			w.refresh()
+		}
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *sessionCookieRefreshWriter) Write(p []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *sessionCookieRefreshWriter) Flush() {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	// The immediate wrapper may not expose Flusher (statusWriter only has
+	// Unwrap); ResponseController walks Unwrap to the real connection.
+	_ = http.NewResponseController(w.ResponseWriter).Flush()
+}
+
+func (w *sessionCookieRefreshWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *sessionCookieRefreshWriter) hasSessionCookie() bool {
+	for _, sc := range w.Header().Values("Set-Cookie") {
+		if strings.HasPrefix(sc, w.name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+// markPrivateNoStore keeps a session-bearing response out of shared caches
+// without dropping directives such as SSE's no-transform. Existing no-store
+// or private directives are left untouched (exact header assertions depend on
+// them); only public/uncacheable headers are strengthened.
+func markPrivateNoStore(h http.Header) {
+	cc := h.Get("Cache-Control")
+	lower := strings.ToLower(cc)
+	if strings.Contains(lower, "no-store") || strings.Contains(lower, "private") {
+		return
+	}
+	if cc == "" || strings.Contains(lower, "public") {
+		h.Set("Cache-Control", "private, no-store")
+		return
+	}
+	h.Set("Cache-Control", cc+", private, no-store")
+}
+
 func (a *App) withSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -179,6 +260,41 @@ func (a *App) withSession(next http.Handler) http.Handler {
 					a.logger(r).Debug("touch session failed", "error", err)
 				}
 				cancel()
+
+				// Sliding expiry: once less than half the configured lifetime
+				// remains, push expires_at to now()+TTL. The DB re-checks the
+				// threshold with its own clock, so app/DB skew cannot turn this
+				// into a write per request. Revoked sessions (password change
+				// elsewhere) still fail GetSession and are cleared below.
+				if a.cfg.SessionTTL > 0 && a.clock.Now().Add(a.cfg.SessionTTL/2).After(sess.ExpiresAt) {
+					extendCtx, extendCancel := context.WithTimeout(ctx, 2*time.Second)
+					newExpiry, extendErr := a.db.ExtendSession(extendCtx, sess.ID, a.cfg.SessionTTL)
+					extendCancel()
+					if extendErr != nil {
+						if !errors.Is(extendErr, db.ErrNotFound) {
+							a.logger(r).Debug("extend session failed", "error", extendErr)
+						}
+					} else {
+						sess.ExpiresAt = newExpiry
+					}
+				}
+
+				// Chromium/Firefox cap persistent cookies at 400 days, so a
+				// 10-year Max-Age by itself would still drop active users at
+				// day 400. Re-issue the same token on authenticated non-media
+				// responses via a writer that waits for the handler's headers
+				// (see sessionCookieRefreshWriter). Media stays header-light
+				// because the SPA/API requests around it refresh the cookie.
+				if refreshesSessionCookie(path) {
+					baseWriter := w
+					w = &sessionCookieRefreshWriter{
+						ResponseWriter: baseWriter,
+						name:           a.cfg.SessionCookieName,
+						refresh: func() {
+							a.setSessionCookie(baseWriter, cookie.Value, sess.ExpiresAt)
+						},
+					}
+				}
 
 				if sess.MustChangePassword && !passwordChangePathAllowed(path) {
 					if strings.HasPrefix(path, "/api/") {
